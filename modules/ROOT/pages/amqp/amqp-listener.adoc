@@ -1,0 +1,98 @@
+= To Listen For New Messages
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: amqp, connector, consume, message, source, listener
+:toc:
+:toc-title:
+
+The Listener source in the AMQP connector provides the ability to consume Messages as they arrive to an AMQP Queue.
+
+== Listening for New Messages
+The syntax to listen for new messages from a Queue is:
+
+[source,xml,linenums]
+----
+<amqp:listener config-ref="config" queueName="targetQueue"/>
+----
+
+The source above will listen for new messages in the queue identified by the `queueName` parameter, returning a `AmqpMessage` each time a AMQP Message is available in the Queue.
+
+The _AmqpMessage_ will have:
+
+* The message's content as payload.
+* The message's metadata in the message attributes.
+
+By default, the Message consumed will be ACKed only when the execution of the flow receiving the message completes successfully.
+If instead, an error occurs during the execution of the flow, the Session will be recovered and the Message will be redelivered according to the recoverStrategy.
+
+For more information regarding a Message ACK, see xref:amqp/amqp-ack.adoc[How To Handle Message Acknowledgement].
+
+
+== Configuring Message Throughput
+
+When extra processing power is needed, the AMQP Listener allows you to configure the `numberOfConsumers` that a given listener will use to consume messages concurrently.
+By default, each listener will use four consumers that will produce messages concurrently, each using a separate channel. Since each consumer will wait for the Message to be processed, that means that you'll have a maximum of four messages in-flight at the same time.
+If you need to increase the concurrent message processing, just increase the `numberOfConsumers` in the Listener. Each consumer will use a different channel.
+
+== Mime Types and Encoding
+
+The AMQP Connector does its best to auto determine a Message’s mime type (`contentType`) based on the `contentType` property of the message. However, there are cases in which that best guess is not enough, and you need first-hand knowledge of the Message’s content.
+
+In such cases, you can force that content type to a particular value by using the `contentType` parameter.
+
+The same process works for encoding. By default, the connector will assume that the runtime’s default encoding matches the one in the Message if no other information is provided. You can set this by using the `inboundEncoding` parameter.
+
+== Declaring a Queue in the AMQP Listener
+
+By default, the `consume` operation will fail in case the defined queue does not exist with an `AMQP:QUEUE_NOT_FOUND` error.
+
+For cases where the queue has to be declared, a definition for the entity should be referenced or defined inline so that the queue is declared.
+
+[source,xml,linenums]
+----
+<amqp:listener config-ref="Amqp_Config" queueName="testQueue">
+	<amqp:fallback-queue-definition removalStrategy="SHUTDOWN" exchangeToBind="echangeToBind" />
+</amqp:listener>
+----
+
+Notice that in the definition of the queue a binding can be created using the parameter `exchangeToBind`.
+
+The queue can also be defined as a high level element:
+
+[source,xml,linenums]
+----
+<amqp:queue-definition name="targetQueueDefinition" exchangeToBind="testExchange" />
+
+<amqp:listener config-ref="Amqp_Config" queueName="testQueue" fallbackQueueDefinition="targetQueueDefinition">
+----
+
+== How to avoid changing the AMQP Topography
+
+You can set the `createFallbackQueue` global config to prevent changes to the AMQP topography resulting from the definition of fallback queues, see xref:amqp/amqp-topography.adoc[How to Avoid Changing the AMQP Topography].
+
+== Replying to Incoming Messages
+
+When an incoming AMQP Message declares a REPLY_TO property, the AMQP Listener will automatically produce a response *when the Message is processed successfully*, meaning that no error occurs during the flow execution.
+In that case, when the flow is completed a response will be published to the exchange specified in the processed Message property. In case of error, the recover strategy will be applied and a response will not be sent to the REPLY_TO property till the message is successfully processed.
+
+== Recover Strategy in Case of Error
+
+In case an error occurs, the `recoverStrategy` will be applied.
+By default, the `recoverStrategy` is set to `REQUEUE`, which means that the message will be sent to the `queue` where it was consumed from and other AMQP consumer will potentially retrieved it.
+In case `NO_REQUEUE` is set, for example:
+
+[source,xml,linenums]
+----
+<amqp:listener config-ref="Amqp_Config" queueName="testQueue" recoverStrategy="NO_REQUEUE">
+	<amqp:fallback-queue-definition removalStrategy="SHUTDOWN" exchangeToBind="exchangeToBindToQueue" />
+</amqp:listener>
+----
+
+The message will be directly sent to the same consumer that retrived it.
+`NONE` as the defined `recoverStrategy` will not perform any action.
+
+
+== See Also
+
+* xref:amqp/amqp-consume.adoc[To Consume Messages]

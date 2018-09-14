@@ -1,0 +1,401 @@
+= Microsoft Dynamics GP Connector
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+_Select_
+
+The Microsoft Dynamics GP connector enables Mule applications to interact with the Microsoft Dynamics Great Plains (GP) Web Services.
+
+== Prerequisites
+
+This document assumes that you are familiar with Microsoft Dynamics GP, Mule, Anypoint Connectors, Anypoint Studio, Mule concepts, elements in a Mule flow, and Global Elements.
+
+To use this connector, you need:
+
+* Microsoft Dynamics GP instance.
+* Valid credentials for a Kerberos connection.
+* MuleSoft Enterprise License.
+
+== What's New in this Connector
+
+Support for Mule 4 has been added.
+
+=== Compatibility
+
+[%header%autowidth.spread]
+|===
+|Application/Service|Version
+|Mule Runtime|EE 4.1.0 or later
+|Anypoint Studio|7.1 or later
+|Java|JDK 8
+|===
+
+== To Connect in Design Center
+
+. In Design Center, click a trigger such as an HTTP Listener or Scheduler.
+. To create an HTTP global element for the connector, set the path where your Mule application listens:
++
+image::ms-dynamics/ms-dynamics-gp-path.png[Set the path]
++
+. Click Edit and set these fields:
++
+image::ms-dynamics/ms-dynamics-gp-http.jpg[Trigger options]
++
+[%header%autowidth.spread]
+|===
+|Field |Description
+|Protocol | Protocol selected for the HTTP endpoint, it can be HTTP or HTTPS (secure).
+|Host| IP address where your Mule application listens for requests.
+|Port| Port address where your Mule application listens for requests.
+|Base Path| An optional base path, the Mule application listens to the base path + path.
+|===
++
+. Select the plus sign next to the trigger to add a component.
+. Select the connector as a component.
+. Select the operation:
++
+image::ms-dynamics/ms-dynamics-gp-operations.png[operations]
++
+. Configure the global element for the connector:
++
+image::ms-dynamics/ms-dynamics-gp-connector-config.png[connector config]
++
+[%header%autowidth.spread]
+|===
+|Field |Description
+|Username | `+https://msdn.microsoft.com/en-us/library/windows/desktop/aa380525(v=vs.85).aspx+` - User Principal Name of the Dynamics GP user to authenticate.
+|Password | The password for the user to connect to Dynamics GP.
+|Endpoint URL | Base URL where the SOAP services are exposed in this format: `+http://<Server>:<WebServicePort>/Dynamics/GPService/GPService+`.
+|SPN | The service principal name that identifies the service instance.
+|Login Conf. Location | Path to the Kerberos login module.
+|Krb5 Conf. Location | Path to the Kerberos configuration file.
+|===
+
+Sample Kerberos configuration file:
+
+[source,text,linenums]
+----
+[libdefaults]
+default_realm = MYREALM.COM
+
+[realms]
+MYREALM.COM = {
+ kdc = mydomaincontroller.myrealm.com
+ default_domain = MYREALM.COM
+}
+
+[domain_realm]
+.myrealm.com = MYREALM.COM
+myrealm.com = MYREALM.COM
+----
+
+*Note:* The realm and default_domain are case-sensitive and must be specified exactly as defined in the Active Directory. Receiving an error during Test Connection stating “Message stream modified (41)” is an indication that the domain name is not correctly formed.
+
+More information on how to create the Kerberos configuration file can be found in the http://web.mit.edu/kerberos/krb5-devel/doc/admin/conf_files/krb5_conf.html[MIT Kerberos documentation on krb5.conf].
+
+The Kerberos login module (Krb5LoginModule) can be tuned with scenario-specific configurations by defining a JAAS login configuration file. Following is a sample of the JAAS login configuration file for the Kerberos login module:
+
+[source,text,linenums]
+----
+Kerberos {
+    com.sun.security.auth.module.Krb5LoginModule required
+    debug=true
+    refreshKrb5Config=true;
+};
+----
+
+More information on how to create the JAAS login configuration file for the Kerberos login module can be found in the https://docs.oracle.com/javase/8/docs/jre/api/security/jaas/spec/com/sun/security/auth/module/Krb5LoginModule.html[Class Krb5LoginModule Java documentation].
+
+== Connect in Anypoint Studio 7
+
+You can use this connector in Anypoint Studio by adding it as a dependency in your Mule application.
+
+== To Install this Connector
+
+. In Anypoint Studio, click the Exchange icon in the Studio task bar.
+. Click Login in Anypoint Exchange.
+. Search for the connector and click Install.
+. Follow the prompts to install the connector.
+
+When Studio has an update, a message displays in the lower right corner, which you can click to install the update. After updating, update Maven pom.xml file dependencies to the new version.
+
+You can also verify that the connector was added as a Maven dependency:
+
+. Open your Mule project in Anypoint Studio.
+. Add the connector as a dependency in the pom.xml file:
++
+[source,xml,linenums]
+----
+<dependency>
+  <groupId>com.mulesoft.connectors</groupId>
+  <artifactId>mule-microsoft-dynamics-gp-connector</artifactId>
+  <version>2.0.0</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+=== Configure in Studio
+
+. Drag and drop the connector operation to the Studio Canvas (they are the same that are in Design Center).
+. Configure the global element for the connector (just like in Design Center):
++
+image::ms-dynamics/ms-dynamics-gp-anypoint-config.png[anypoint config]
+
+
+== Use Case: Studio
+
+* <<use-case-1,Create Customer>>
+* <<use-case-2,Get Customer>>
+* <<use-case-3,Update Customer>>
+* <<use-case-4,Delete Customer>>
+* <<use-case-5,Get Customer List>>
+
+[[use-case-1]]
+=== Create Customer
+
+image::ms-dynamics/ms-dynamics-gp-create-customer.png[create customer use case flow]
+
+. From the Mule Palette drag an HTTP Listener element to the canvas and use the default configuration but with the path set to /createCustomer.
+. Drag a Transform Message element next to the HTTP Listener and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+ns ns0 http://schemas.microsoft.com/dynamics/gp/2010/01
+ns ns01 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.Common
+ns ns02 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.GP
+ns xsi http://www.w3.org/2001/XMLSchema-instance
+---
+{
+	ns0#CreateCustomer: {
+		ns0#customer: {
+			ns02#Key: {
+				ns02#Id: attributes.queryParams.customerKeyID
+			},
+			ns02#Name: attributes.queryParams.customerName
+		},
+		ns0#context: {
+			ns01#OrganizationKey @(xsi#"type": "ns01:CompanyKey") : {
+				ns01#Id: attributes.queryParams.companyKeyID
+			}
+		}
+	}
+}
+----
++
+. Drag a Microsoft Dynamics GP connector next to the Transform Message.
+. Set its configuration and fill in the required fields, this applies to any other Dynamics GP connectors that are dragged into the flows.
+. Select the operation Create Entity. Pick the Customer entity from the drop-down list. Leave the Input Reference as it is.
+. Drag a Set Payload element next to the Connector and set its value to `Success`.
+
+[[use-case-2]]
+=== Get Customer
+
+image::ms-dynamics/ms-dynamics-gp-get-customer.png[get customer use case flow]
+
+. From the Mule Palette, drag an HTTP Listener element to the canvas and use the default configuration but with the path set to /getCustomer.
+. Drag a Transform Message element next to the HTTP Listener and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+ns ns0 http://schemas.microsoft.com/dynamics/gp/2010/01
+ns ns01 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.GP
+ns ns02 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.Common
+ns xsi http://www.w3.org/2001/XMLSchema-instance
+---
+{
+	ns0#GetCustomerByKey: {
+		ns0#key: {
+			ns01#Id: attributes.queryParams.customerKeyID
+		},
+		ns0#context: {
+			ns02#OrganizationKey @(xsi#"type": "ns02:CompanyKey") : {
+				ns02#Id: attributes.queryParams.companyKeyID
+			}
+		}
+	}
+}
+----
++
+. Drag a Microsoft Dynamics GP connector next to the Transform Message.
+. Select the operation Get Entity By Key. Pick the Customer entity from the drop-down list. Leave the Input Reference as it is.
+. Drag a Transform Message next to the connector and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
+
+[[use-case-3]]
+=== Update Customer
+
+image::ms-dynamics/ms-dynamics-gp-update-customer.png[update customer use case flow]
+
+. From the Mule Palette, drag an HTTP Listener element to the canvas and use the default configuration but with the path set to /updateCustomer.
+. Drag a Transform Message element next to the HTTP Listener and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+ns ns0 http://schemas.microsoft.com/dynamics/gp/2010/01
+ns ns01 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.Common
+ns ns02 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.GP
+ns xsi http://www.w3.org/2001/XMLSchema-instance
+---
+{
+	ns0#GetCustomerByKey: {
+		ns0#key: {
+			ns02#Id: attributes.queryParams.keyId
+		},
+		ns0#context: {
+			ns01#OrganizationKey @(xsi#"type": "ns01:CompanyKey") : {
+				ns01#Id: attributes.queryParams.companyKeyID
+			}
+		}
+	}
+}
+----
++
+. Create a variable called 'updatedComment' on this Transform Message with this value:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	comment1: payload.customer.comment1
+}
+----
++
+. Drag a Microsoft Dynamics GP connector next to the Transform Message.
+. Select the Get Entity By Key operation. Pick the Customer entity from the drop-down list. Leave the Input Reference as it is.
+. Drag a Transform Message element next to the Connector and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+%dw 2.0
+output application/xml
+ns ns0 http://schemas.microsoft.com/dynamics/gp/2010/01
+ns ns01 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.Common
+ns ns02 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.GP
+ns xsi http://www.w3.org/2001/XMLSchema-instance
+---
+{
+	ns0#UpdateCustomer: {
+		ns0#customer: {
+			ns02#Comment1: vars.comment1,
+			ns02#Key: {
+				ns02#Id: payload.key.id
+			},
+			ns02#Name: payload.name
+		},
+		ns0#context: {
+			ns01#OrganizationKey @(xsi#"type": "ns01:CompanyKey") : {
+				ns01#Id: attributes.queryParams.companyKeyID
+			}
+		}
+	}
+}
+----
++
+. Drag a Microsoft Dynamics GP connector next to the Transform Message.
+. Select the Update Entity operation. Pick the Customer entity from the drop-down list. Leave the Input Reference as it is.
+. Drag a Set Payload element next to the connector and set its value to `Success`.
+
+[[use-case-4]]
+=== Delete Customer
+
+image::ms-dynamics/ms-dynamics-gp-delete-customer.png[delete customer use case flow]
+
+. From the Mule Palette, drag an HTTP Listener element to the canvas and use the default configuration but with the path set to /deleteCustomer.
+. Drag a Transform Message element next to the HTTP Listener and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+ns ns0 http://schemas.microsoft.com/dynamics/gp/2010/01
+ns ns01 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.GP
+ns ns02 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.Common
+ns xsi http://www.w3.org/2001/XMLSchema-instance
+---
+{
+	ns0#DeleteCustomer: {
+		ns0#key: {
+			ns01#Id: attributes.queryParams.customerKeyID
+		},
+		ns0#context: {
+			ns02#OrganizationKey @(xsi#"type": "ns02:CompanyKey") : {
+				ns02#Id: attributes.queryParams.companyKeyID
+			}
+		}
+	}
+}
+----
++
+. Drag a Microsoft Dynamics GP connector next to the Transform Message.
+. Select the Delete Entity. Pick the Customer entity from the drop-down list. Leave the Input Reference as it is.
+. Drag a Set Payload element next to the connector and set its value to `Success`.
+
+[use-case-5]
+=== Get Customer List
+
+image::ms-dynamics/ms-dynamics-gp-get-customer-list.png[get customer list use case flow]
+
+. From the Mule Palette, drag an HTTP Listener element to the canvas and use the default configuration but with the path set to /getCustomerList.
+. Drag a Transform Message element next to the HTTP Listener and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+ns ns0 http://schemas.microsoft.com/dynamics/gp/2010/01
+ns ns01 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.Common
+ns ns02 http://schemas.datacontract.org/2004/07/Microsoft.Dynamics.GP
+ns xsi http://www.w3.org/2001/XMLSchema-instance
+---
+{
+	ns0#GetCustomerList: {
+		ns0#criteria: {
+			ns02#Name: {
+				ns01#Like: attributes.queryParams.like
+			}
+		},
+		ns0#context: {
+			ns01#OrganizationKey @(xsi#"type": "ns01:CompanyKey") : {
+				ns01#Id: attributes.queryParams.companyKeyID
+			}
+		}
+	}
+}
+----
++
+. Drag a Microsoft Dynamics GP connector next to the Transform Message.
+. Select the Get Entity List. Pick the Customer entity from the drop-down list. Leave the Input Reference as it is.
+. Drag a Transform Message next to the connector and add:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
+
+
+== See Also
+
+* https://forums.mulesoft.com[MuleSoft Forum].
+* https://support.mulesoft.com[Contact MuleSoft Support].

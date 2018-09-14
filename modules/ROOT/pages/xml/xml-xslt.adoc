@@ -1,0 +1,172 @@
+= XSLT Transformations with the XML Module
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: XML, xpath, xslt
+
+The `<xml-module:xslt-transform>` element can take an input XML document and transform it using an XSL style sheet.
+
+Note that though MuleSoft supports the XSLT standard, DataWeave is capable of achieving the same use cases and is the recommended tool for extracting and transforming XML documents.
+
+Consider the following input document:
+
+.Input Example
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<cities>
+    <city name="milan"  country="italy"   pop="5"/>
+    <city name="paris"  country="france"  pop="7"/>
+    <city name="munich" country="germany" pop="4"/>
+    <city name="lyon"   country="france"  pop="2"/>
+    <city name="venice" country="italy"   pop="1"/>
+</cities>
+----
+
+You can transform it like this:
+
+.XSLT Transformation Script
+[source,xml,linenums]
+----
+<xml-module:xslt-transform>
+    <xml-module:xslt><![CDATA[
+    <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="2.0">
+
+        <xsl:template match="/">
+            <table>
+            <tr>
+                <th>Country</th>
+                <th>City List</th>
+                <th>Population</th>
+            </tr>
+            <xsl:for-each-group select="cities/city" group-by="@country">
+                <tr>
+                    <td>
+                        <xsl:value-of select="@country"/>
+                    </td>
+                    <td>
+                        <xsl:value-of select="current-group()/@name" separator=", "/>
+                    </td>
+                    <td>
+                        <xsl:value-of select="sum(current-group()/@pop)"/>
+                    </td>
+                </tr>
+            </xsl:for-each-group>
+            </table>
+        </xsl:template>
+    </xsl:stylesheet>
+]]></xml-module:xslt>
+</xml-module:xslt-transform>
+----
+
+The script above will output the following document:
+
+.Output
+[source,xml,linenums]
+----
+<table>
+    <tr>
+        <th>Country</th>
+        <th>City List</th>
+        <th>Population</th>
+    </tr>
+    <tr>
+        <td>italy</td>
+        <td>milan, venice</td>
+        <td>6</td>
+    </tr>
+    <tr>
+        <td>france</td>
+        <td>paris, lyon</td>
+        <td>9</td>
+    </tr>
+    <tr>
+        <td>germany</td>
+        <td>munich</td>
+        <td>4</td>
+    </tr>
+</table>
+----
+
+Although by default this operation looks for the input document at the message payload level, you can supply your own input. For example, imagine that the cities were a JSON array inside the payload. You could first transform it to XML before  running the XSL transformation, for example:
+
+.XSLT Transformation Script
+[source,xml,linenums]
+----
+<xml-module:xslt-transform>
+    <xml-module:content><![CDATA[
+                %dw 2.0
+                input payload application/json encoding='UTF-8'
+                output application/xml encoding='UTF-8'
+                ---
+                payload.cities
+    ]]></xml-module:content>
+    <xml-module:xslt><![CDATA[
+        // THE XSLT
+    ]]></xml-module:xslt>
+</xml-module:xslt-transform>
+----
+
+== Externalizing the XSL Style Sheet to a Separate File
+
+To avoid embedding the XSLT script in your Mule app, you can pass it to the module through a file, for example:
+
+[source,xml,linenums]
+----
+<xml-module:xslt-transform>
+    <xml-module:xslt>${file::xlst/cities.xslt}</xml-module:xslt>
+</xml-module:xslt-transform>
+----
+
+In a more complex use case, the script you use might depend on some external condition. For example, imagine a multi-tenant integration in which the  transformation to use depends on a `userId`:
+
+[source,xml,linenums]
+----
+<flow name="multitenantExample">
+    <http:listener path="transform" allowedMethods="POST" config-ref="httpListener" /> // 1
+    <file:read path="#['xslt/$(attributes.queryParam.userId).xslt']" target="xslt" />
+    <xml-module:xslt-transform>
+        <xml-module:xslt>#[vars.xslt]</xml-module:xslt>
+    </xml-module:xslt-transform>
+</flow>
+----
+
+. This flow is triggered through an HTTP request.
+. Assuming that the `userId` is provided as a query parameter, the example uses the File connector to read the file that contains the correct XSL and store it in a variable.
+. The example executes a transformation using an expression to point to the XSL sheet obtained through the Read operation.
+
+Note that the HTTP and File connectors are simply used as examples. They are not required to perform similar use cases.
+
+== Using Context Properties
+
+The XML module, like the XSL language, provides context properties that can pass parameters to the transformation. In this example, the `<xml-module:context-properties/>` element contains a DataWeave expression that  constructs an arguments map.
+
+[source,xml,linenums]
+----
+<xml-module:xslt-transform>
+    <xml-module:xslt><![CDATA[
+    <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="3.0">
+        <xsl:output method="xml"/>
+
+        <xsl:param name="vtn" /> // <1>
+        <xsl:template match="/parameter">
+            <param><xsl:value-of select="$vtn"/></param> // <2>
+        </xsl:template>
+    </xsl:stylesheet>
+]]></xml-module:xslt>
+    <xml-module:context-properties>#[{'vtn' : 'some value'}] // <3> </xml-module:context-properties>
+</xml-module:xslt-transform>
+----
+
+. The XSL style sheet declares a `param` called `vtn`.
+. The style sheet references the assigned value of the `param` using the `$` prefix.
+. The example use the `context-properties` parameter to pass the values in.
+
+
+== Output Mime Type
+
+The most common use case for XSLT is to output a new XML document. However, XSLT can produce documents in other formats, such as JSON, CSV, or simply a text or number value. Because of this, the produced value will not have any specific mime type assigned. It is recommended that you specify one using the `outputMimeType` parameter.
+
+== See Also
+
+xref:xml/xml-module.adoc[XML Module]

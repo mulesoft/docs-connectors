@@ -1,0 +1,190 @@
+= Java Module Argument Transformation
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: Java, custom code, transformation, arguments
+
+*Available since version 1.1*
+
+The Java Module transforms the arguments given to a Java invocation when they don't exactly
+match the type expected by the java method but there is a way to infer how to transform the
+given parameter to what the method expects.
+
+== When Will The Arguments Be Transformed?
+
+For every parameter given, the module will check whether its type matches the type
+expected by the method for that parameter or not. If it is not what the method expects, the
+module will try to transform it to what is expected.
+
+== Simple Example of Argument Transformation
+
+This is a simple example where one of the arguments is transformed:
+
+The static method 'min' from the 'Math' class will be called, it expects
+to receive two `int` parameters, the call will be made with a Number and a String
+
+[source,xml,linenums]
+----
+<flow name="calculateMinimum">
+  <java:invoke-static class="java.lang.Math" method="min(int,int)" >
+    <java:args>#[{
+        'arg0': 5,
+        'arg1' : "3"
+      }]
+    </java:args>
+  </java:invoke-static>
+</flow>
+----
+
+In this case 'arg1' would have been passed as a String, but it is transformed into an int
+before calling the java method.
+
+== Custom POJO Passed to the Module as a Map
+
+Previously, when working with custom POJOs, the user had to explicitly declare in the DataWeave
+expression to what type the data should be transformed. Now, the Java Module automatically
+recognizes what is the expected type for a given argument and tries to transform the given
+data to the expected type. Here is an example of when a Map parameter is transformed
+into a custom POJO by the module.
+
+Here is the class of the POJO:
+
+[source,java,linenums]
+----
+public class Car {
+  private String doors;
+  private String wheels;
+  private String engine;
+
+  public String getDoors() {
+    return doors;
+  }
+
+  public String getWheels() {
+    return wheels;
+  }
+
+  public String getEngine() {
+    return engine;
+  }
+}
+----
+
+A Java class declares a static method that receives an instance of the POJO defined above:
+
+[source,java,linenums]
+----
+public class CarUtils {
+  public static String describeCar(Car car) {
+    return "This are the car has: " + car.getEngine() + "," + car.getWheels() + "," + car.getDoors();
+  }
+}
+----
+
+Mule flow where said static method is invoked:
+
+[source,xml,linenums]
+----
+<flow name="describeCarFlow">
+    <java:invoke-static class="CarUtils" method="describeCar(Car)" >
+        <java:args>
+            #[{
+            'car': {
+                'doors' : "Four doors",
+                'engine' : "120 Horse power engine",
+                'wheels' : "17 Inch chromed rims"
+            }
+            }]
+        </java:args>
+    </java:invoke-static>
+</flow>
+----
+
+The mule operation is receiving a Map named car whose key and values can be mapped to a
+Car instance. This Map will be transformed into such instance before the invocation of
+the java method. Without this improvement the invocation would fail stating that the arguments
+passed to the java method did not match its signature.
+
+== Collections And Map
+
+The Module will check that every element of the Collection and every entry of the map honors
+the Java Generic declared by the Method Signature. If any element fails this check, the whole
+Collection or Map will have to be created and repopulated with the transformed elements.
+[WARNING]
+The Java method will be called with another instance of the Collection or
+Map if a transformation is needed(not the same as the one passed in the Mule flow). This
+is particularly important if the method called is expected to add or remove elements in
+the Collection or Map and the ability to reference this Collection or Map after the invocation is needed.
+
+== Example Where a List is Transformed
+
+This is an example where the List given to the operation needs to be transformed and
+a new List with the transformed items will be passed to the java method.
+
+This is the java class that declares a static method:
+
+[source,java,linenums]
+----
+public class IntegerUtils {
+  public static Integer sumNumbers(List<Integer> numbers) {
+    return numbers.stream().mapToInt(i -> i.intValue()).sum();
+  }
+}
+----
+
+This is how it is invoked in a mule flow:
+
+[source,xml,linenums]
+----
+<flow name="sumListOfNumbers">
+  <java:invoke-static class="IntegerUtils" method="sumNumbers(List)">
+    <java:args>
+      #[{
+        'numbers' : [1, "5", 4, "8", 3]
+      }]
+    </java:args>
+  </java:invoke-static>
+</flow>
+----
+
+Notice that the list given in the flow has some two String objects which will have
+to be transformed to Integer.
+
+== Example Where a Map is Transformed
+
+This is an example where the Map given to the operation needs to be transformed and
+a new Map with the transformed keys and values will be passed to the java method.
+
+This is the java class that declares a static method:
+
+[source,java,linenums]
+----
+public class MapUtils {
+  public static Integer sumMapValues(Map<String, Integer> map) {
+    return map.keySet().stream().mapToInt(i -> i.intValue()).sum();
+  }
+}
+----
+
+This is how it is invoked in a mule flow:
+
+[source,xml,linenums]
+----
+<flow name="sumValuesOnMap">
+  <java:invoke-static class="MapUtils" method="sumMapValues(Map)">
+    <java:args>
+      #[{
+        'map' :{
+          'books': "22",
+          'pencils': 33,
+          'pens': 12
+        }
+      }]
+    </java:args>
+  </java:invoke-static>
+</flow>
+----
+
+This Map contains values that does not comply with the generics imposed in the Java
+method. Because of this, a new instanced with the transformed key and values will be
+used to call the method.

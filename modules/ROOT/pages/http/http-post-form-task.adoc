@@ -1,0 +1,176 @@
+= To Post a Form
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+// NOT UPDATED YET khahn 7.14.2017
+
+Below is an example of an HTTP request produced by submitting a form:
+
+[source,text,linenums]
+----
+POST /submitform HTTP/1.1
+
+User-Agent: Mule/3.6
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 32
+
+firstname=Aaron&lastname=Aguilar+Acevedo&yearborn=1999
+----
+
+. Create a flow with an HTTP Listener Connector, set the *Path* to `submitform`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. After the HTTP Connector, add a *Choice router*.
+. On the first choice of the router, add a *Set Payload* element. Set its Value field to the following expression:
++
+
+----
+Sorry #[payload.'firstname'], you're too young to register.
+----
+
++
+Notice that this expression refers to one of the form parameters included in the request: `firstname`. After being received by the connector, it exists in the mule message payload as an item in a map.
+. On the Choice router, configure the condition for that path to be the following expression:
++
+
+----
+#[server.dateTime.year-18 < payload.'yearborn']
+----
+
++
+Once again, this expression refers to one of the incoming form parameters, `yearborn`.
+. Complete the flow by adding another *Set Payload* element in the default path of the Choice router. Set its Value field to:
++
+
+[source,text,linenums]
+----
+Registration has been carried out successfully! Welcome #[payload.'firstname'] #[payload.'lastname']!
+----
+
++
+image::<missing>http-listener-connector-7f39f.png[set payload]
+....
+[tab,title="XML Editor"]
+....
+For example:
+
+. Create an `<http:listener>` global configuration, set the *host* to localhost and the *port* to 8081
+. Create a flow with an `<http:listener>` connector. Reference your connector to the global element you just created, set the path to `submitform`.
++
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+    <flow name="RegisterUser">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="submitform" doc:name="HTTP"/>
+
+    </flow>
+----
+
+. After the HTTP Connector, add a Choice scope with two alternative paths. Set the first to be executed when the following MEL expression is true:
++
+
+[source,text,linenums]
+----
+#[server.dateTime.year-18 &lt; payload.'yearborn']
+----
+
++
+Note that `yearborn` is one of the form parameters that is expected from incoming requests.
++
+
+[source,xml,linenums]
+----
+<choice doc:name="Choice">
+            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
+
+            </when>
+            <otherwise>
+
+            </otherwise>
+        </choice>
+----
+
+. Add a set-payload element on each alternative path, one to return a rejection notice, the other to return a success message. In both, refer to the fields of the incoming form parameters to construct the message.
++
+
+[source,xml,linenums]
+----
+<choice doc:name="Choice">
+            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
+                <set-payload value="Sorry #[payload.'firstname'], you're too young to register." doc:name="Too young"/>
+            </when>
+            <otherwise>
+                <set-payload value="Registration has been carried out successfully! Welcome #[payload.'firstname'] #[payload.'lastname']!" doc:name="Success"/>
+            </otherwise>
+        </choice>
+----
+....
+------
+
+=== Requests with a x-www-form-urlencoded Type Body - Full XML Code
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+    <flow name="RegisterUser">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="submitform" doc:name="HTTP"/>
+        <choice doc:name="Choice">
+            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
+                <set-payload value="Sorry #[payload.'firstname'], you're too young to register." doc:name="Too young"/>
+            </when>
+            <otherwise>
+                <set-payload value="Registration has been carried out successfully! Welcome #[payload.'firstname'] #[payload.'lastname']!" doc:name="Success"/>
+            </otherwise>
+        </choice>
+    </flow>
+</mule>
+----
+
+// if you copy/paste the doc in the XML editor, change the left angle bracket to &lt;
+
+The above example expects to receive a POST request from http://localhost:8081/submitform with a body that contains the following form parameters: `firstname, lastname, yearborn`
+
+[source,text,linenums]
+----
+POST /submitform HTTP/1.1
+
+User-Agent: Mule/3.6
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 32
+
+firstname=Aaron&lastname=Aguilar+Acevedo&yearborn=1999
+----
+
+[TIP]
+====
+To send an HTTP request that contains form parameters, the easiest way is to use a browser extension such as Postman (Google Chrome), or the http://curl.haxx.se/[curl] command line utility. +
+If using Postman, make sure your form parameters are sent with the type `x-www-form-urlencoded`
+
+image::<missing>submit+form+aaron.png[submit+form+aaron]
+====
+
+When the request is received by the connector, it creates a Mule Message that contains a Map type payload with the following key/value pairs in it:
+
+`firstname: Aaron` +
+`lastname: Aguilar Acevedo` +
+`yearborn: 1999`
+
+[NOTE]
+Notice how, in the case of the `lastname` parameter, whilst the value is encoded on the HTTP request (`Aguilar+Acevedo)`, the connector automatically decodes it for you when placing it in the Mule Message.
+
+On any of the remaining blocks on the flow, you can easily access the value of the elements in the Map payload by using MEL expressions to refer to their corresponding keys.
+
+In the example above, the value matching the `yearborn` key is obtained via the expression `#[payload.'yearborn']`. Depending on its value, one of two different paths is followed. The first path sets the payload to a message that rejects the registration, referencing the value matching the `firstname` key through a similar MEL expression; the second path accepts the registration and welcomes the user by name, referencing the `firstname` and `lastname` values.

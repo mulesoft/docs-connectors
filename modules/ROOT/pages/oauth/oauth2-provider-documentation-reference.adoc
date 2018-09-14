@@ -1,0 +1,374 @@
+= OAuth2 Provider Module Documentation Reference
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+[[oauth2-provider-reference]]
+
+The OAuth2 Provider Module allows a Mule Application to be configured as an Authentication Manager in an OAuth2 Dance.
+With this role, the application will be able to authenticate previously registered clients, grant tokens and validate them or register and delete clients, all during the execution of a flow.
+
+
+[WARNING]
+The following documentation assumes a basic knowledge of the OAuth2 authorization protocol. If you are not familiar with it, the RFC specification can be found in: https://tools.ietf.org/html/rfc6749[RFC6749] +
+Also, if the app should behave as the *Client in the OAuth2 Dance*, then the xref:oauth/oauth-documentation.adoc[OAuth Module] should be used.
+
+Since the OAuth dance is done through HTTP, the OAuth2 Provider makes use of the xref:http/http-connector.adoc[Mule HTTP Connector].
+As a consequence, apart from the definition of an OAuth2 provider configuration , the mule application must also have an HTTP Listener configuration to be used by the provider.
+
+Once configured, the provider works as follows:
+
+Two HTTP endpoints are created for listening to Authentication Code and Token request as stated by the OAuth2 definition. Those will work independently from the mule application and will respond via HTTP. +
+Apart from that, the provider defines an operation: <<validate-token>> that can check if a token is authorized. That operation can be added anywhere in a flow to control it's execution. If the token is indeed authorized,
+the flow will keep executing, setting token information in the payload, otherwise, a *TOKEN_UNAUTHORIZED* error will be raised. It's up to the developer to add that operation in parts of the application that need token authorization. +
+Also, since token validation is almost always going to be used together with an HTTP Listener, in case it fails, the listener's response mechanism can handle that error and properly respond to the requester. Additional logic can be added handling that type of Error. +
+Lastly, additional operations are provided to add or delete clients and to revoke tokens in case it's needed.
+
+
+== Configurations
+
+[[general-configuration]]
+=== General Configuration
+
+[source,xml,linenums]
+----
+ <oauth2-provider:config name="OAuth2Provider"
+                         listenerConfig="httpListenerConfig"
+                         resourceOwnerSecurityProvider="resourceOwnerSecurityProvider"
+                         clientSecurityProvider="clientSecurityProvider"
+                         supportedGrantTypes="AUTHORIZATION_CODE"
+                         scopes="USER,ADMIN"
+                         defaultScopes="USER"
+                         clientStore="clientObjectStore">
+         <oauth2-provider:client-validation-rate-limiter>
+            <oauth2-provider:period-rate-limiter duration="600"
+                                                 durationTimeUnit="SECONDS"
+                                                 maximumFailureCount="5"/>
+         </oauth2-provider:client-validation-rate-limiter>
+         <oauth2-provider:token-config path="/token"
+                                       tokenStore="tokenObjectStore"
+                                       tokenTtl="86400"
+                                       tokenTtlTimeUnit="SECONDS">
+            <oauth2-provider:refresh-token-strategy>
+                <oauth2-single-refresh-token objectStore="refreshTokenObjectStore"/>
+            </oauth2-provider:refresh-token-strategy>
+         </oauth2-provider:token-config>
+         <oauth2-provider:authorization-config loginPage="static/auth.html"
+                                               path="/authorize"
+                                               objectStore="authorizationCodeObjectStore"/>
+         <oauth2-provider:clients>
+             <oauth2-provider:client clientId="clientId1"
+                                     clientName="someClient"
+                                     secret="clientSecret1"
+                                     principal="clusr"
+                                     description="Some test client"
+                                     type="CONFIDENTIAL">
+                 <oauth2-provider:client-redirect-uris>
+                     <oauth2-provider:client-redirect-uri value="http://fake/redirect"/>
+                 </oauth2-provider:client-redirect-uris>
+                 <oauth2-provider:client-authorized-grant-types>
+                     <oauth2-provider:client-authorized-grant-type value="AUTHORIZATION_CODE"/>
+                 </oauth2-provider:client-authorized-grant-types>
+                 <oauth2-provider:client-scopes>
+                     <oauth2-provider:client-scope value="USER"/>
+                 </oauth2-provider:client-scopes>
+             </oauth2-provider:client>
+         </oauth2-provider:clients>
+     </oauth2-provider:config>
+----
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Name | String | The name for the OAuth2 Provider | {nbsp}| *x*{nbsp}
+| Provider Name | String | The name supplied to the customers of the API. This is used for some responses of the OAuth2 API | Same as Name | {nbsp}
+| Listener Config | String | The name of an Http Listener Config to reference. It'll handle the token and authorization endpoints | {nbsp} | *x*{nbsp}
+| Resource Owner Security Provider | String | A reference to the Security Provider used to authenticate resource owners. Not needed if only CLIENT_CREDENTIALS grant type is used | {nbsp} | {nbsp}
+| Client Security Provider | String | A reference to the Security Provider used to authenticate clients. Not needed if only public clients or private clients with secrets are used | {nbsp} | {nbsp}
+| Token Generator Strategy | String | A reference to a Token Generator Strategy used to create the tokens that will be granted as access tokens. | Default strategy that will generate UUID encoded tokens | {nbsp}
+| Client Store | Object Store | A reference to a globally defined object store or a definition of a private object store. It's used to store the registered clients information | Object Store created by the Object Store Manager | {nbsp}
+| Grant Types | String | A comma separated list of supported grant types. Possible values are: AUTHORIZATION_CODE,IMPLICIT,RESOURCE_OWNER_PASSWORD_CREDENTIALS or CLIENT_CREDENTIALS | AUTHORIZATION_CODE | {nbsp}
+| Scopes | String | A comma separated list of supported scopes | {nbsp} | {nbsp}
+| Default Scopes | String | A comma separated list of scopes to apply to clients if they don't define their own | {nbsp} | {nbsp}
+| Client Validation Rate Limiter | Client Validation Rate Limiter | Rate limiter to control access to validate client operations. It will control that failures calls within a certain period do not exceed a maximum count. After that number of failures is reached, the requests will be rejected | Period rate limiter with duration = 600 secs and maximum failure count = 5 | {nbsp}
+| Authorization Config | Authorization Config | Configuration related to authorization code handling | {nbsp} | {nbsp}
+| Token Config | Token Config | Configuration related to token handling | {nbsp} | {nbsp}
+|===
+
+
+=== Security Providers
+
+As seen in the <<general-configuration>>, two security providers should be defined in the application to be later referenced by the OAuth2 Configuration element.
+
+One way of doing this is by using the Spring Framework, defining both security providers and then using the xref:spring/spring-module.adoc[Spring Module] to add them to the Mule Security Manager as so:
+
+[source,xml,linenums]
+----
+<spring:security-manager>
+    <spring:delegate-security-provider name="clientSecurityProvider"
+                                       delegate-ref="clientAuthenticationManager"/>
+    <spring:delegate-security-provider name="resourceOwnerSecurityProvider"
+                                       delegate-ref="resourceOwnerAuthenticationManager"/>
+</spring:security-manager>
+----
+
+=== Client Validation Rate Limiter
+
+Allows to configure a mechanism to prevent the continuous client validation when it's using invalid credentials.
+
+As for this moment, only a  `period-rate-limiter` is implemented that handles rate limiting based on a time period.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Duration | Number | The time to wait before resetting the rate limiter. That means that during time intervals of _duration_ length, every time a client validation fails, it will be added to the failure count | 600 | {nbsp}
+| Duration Time Unit | Time Unit | The time unit for the duration attribute | SECONDS | {nbsp}
+| Maximum Failure Count | Number | Maximum number of failures allowed within the period before preemptively rejecting requests | 5 | {nbsp}
+|===
+
+
+=== Authorization Code Configuration
+
+Configuration related to authorization code handling and the authorization endpoint.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Login Page | String | Relative file path to the web page for the resource owner to provide it's credentials  | www-static/auth.html | {nbsp}
+| Path | String | The Url relative path to the authorization endpoint in the HTTP server for listening to authorization requests | /authorize | {nbsp}
+| Authorization Code Store | Object Store | A reference to a globally defined object store or a definition of a private object store. It's used to store generated authorization codes | A persistent object store created from the ObjectStoreManager with an entry TTL of 600 SECONDS | {nbsp}
+|===
+
+=== Token Configuration
+
+Configuration related to token handling and the token endpoint.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Path | String | The Url relative path to the token endpoint in the HTTP server for listening to token requests | /token | {nbsp}
+| Token Store | Object Store | A reference to a globally defined object store or a definition of a private object store. It's used to store generated tokens | A persistent object store with an entry TTL of 86400 SECONDS | {nbsp}
+| Token Ttl | Number | The time for a granted token to be considered valid after granting it. The value should be the same as the entryTtl of the token store if a custom one is configured | 86400 | {nbsp}
+| Token Ttl Time Unit | Time Unit | The Time Unit to use for the token TTL. It should be the same as the entryTtlTimeUnit of the token store if a custom one was configured | SECONDS | {nbsp}
+| Refresh Token Strategy | Refresh Token Strategy | Configures how refresh tokens should be handled in every refresh token request | No Refresh Token | {nbsp}
+|===
+
+==== Refresh Token Strategy
+
+The refresh token strategy configures how refresh tokens are granted and how they should be handled every time a refresh token request is executed.
+
+===== No Refresh Token
+
+There will be no refresh token granted with every access token. As a consequence,  when a refresh token request comes, it will always be rejected.
+
+===== Single Refresh Token
+
+For every new access token that is granted, a single refresh token will be associated with it. That same refresh token should be used every time the access token is refreshed.
+
+====== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Object Store | Object Store | A reference to a globally defined object store or a definition of a private object store. It's used to store generated refresh tokens | A persistent object store created from the ObjectStoreManager with an entry TTL of 86400 SECONDS | {nbsp}
+|===
+
+===== Multiple Refresh Token
+
+A new refresh token will be generated every time a refresh token request is executed. After that, the previous refresh token will be invalidated.
+
+====== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Object Store | Object Store | A reference to a globally defined object store or a definition of a private object store. It's used to store generated refresh tokens | A persistent object store created from the ObjectStoreManager with an entry TTL of 86400 SECONDS | {nbsp}
+|===
+
+=== Clients
+[source,xml,linenums]
+----
+<oauth2-provider:clients>
+    <oauth2-provider:client clientId="clientId1"
+                            clientName="someClient"
+                            secret="clientSecret1"
+                            principal="clusr"
+                            description="Some test client"
+                            type="CONFIDENTIAL">
+        <oauth2-provider:client-redirect-uris>
+            <oauth2-provider:client-redirect-uri value="http://fake/redirect"/>
+        </oauth2-provider:client-redirect-uris>
+        <oauth2-provider:client-authorized-grant-types>
+            <oauth2-provider:client-authorized-grant-type value="AUTHORIZATION_CODE"/>
+        </oauth2-provider:client-authorized-grant-types>
+        <oauth2-provider:client-scopes>
+            <oauth2-provider:client-scope value="USER"/>
+        </oauth2-provider:client-scopes>
+    </oauth2-provider:client>
+</oauth2-provider:clients>
+----
+
+All the registered clients that are authorized to request tokens. The list can be modified in runtime by the <<create-client>> and <<delete-client>> operations.
+
+Each registered client will have an entry with the following information.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Config | String | The name of a globally defined OAuth Provider configuration to use for token validation | {nbsp}| *x*{nbsp}
+| Client Id | String | The Id to assign to the created client | {nbsp} | *x*{nbsp}
+| Client Name | String | The client friendly name | {nbsp} | {nbsp}
+| Principal | String | For some security providers, the clientId can't be used for the client username. In those cases, the client's principal is used for authentication | {nbsp} | {nbsp}
+| Description | String | A short description of a client | {nbsp} | {nbsp}
+| Type | Client Type | The type of the client. Allowed values are PUBLIC (Clients incapable of maintaining the confidentiality of their credentials) or CONFIDENTIAL (Clients capable of maintaining the confidentiality of their credentials). | PUBLIC | {nbsp}
+| Secret | String | The client's secret (password) used for authentication. | {nbsp} | Only if the client type is CONFIDENTIAL
+| Client Redirect Uris | Redirect Uri | One or multiple redirect Uris to use for the client's requests | Empty List | {nbsp}
+| Client Authorized Grant Types | Authorized Grant Type | Authorized grant types that will be allowed for the client. Valid values are: AUTHORIZATION_CODE,REFRESH_TOKEN, TOKEN, PASSWORD, CLIENT_CREDENTIALS. | Empty List | {nbsp}
+| Client Scopes | Client Scope |  One or multiple client scopes for which the client will be able to request tokens . If none provided, the default scopes of the <<general-configuration>> will be used | Empty List | {nbsp}
+|===
+
+Keep in mind that for Client Redirect Uris, Client Authorized Grant Types or Client Scopes, each new value should be given in a new XML tag as shown in the example below:
+
+`<oauth2-provider:client-redirect-uri value="http://fake/redirect"/>`
+
+`<oauth2-provider:client-authorized-grant-type value="AUTHORIZATION_CODE"/>`
+
+`<oauth2-provider:client-scope value="USER"/>`
+
+
+== Operations
+
+[[validate-token]]
+=== Validate Token
+[source,xml,linenums]
+----
+<oauth2-provider:validate-token config="OAuthProviderConfiguration"
+                                token="#[vars.accessToken]"
+                                scopes="#[vars.scopes]"
+                                resourceOwnerRoles=#[vars.resourceOwnerRoles]/>
+----
+
+Validates that the given token was granted and is in a valid state. Also, if defined, checks that the token scopes or resource owner roles match the provided ones.
+
+If the token provided is valid then the operation will set the payload as a JSON with the following information.
+[options="header"]
+|===
+| Key | Value | Always
+| expires_in | time remaining for the token to be considered invalid, in seconds | yes
+| scope | space separated scopes associated with the token | yes
+| client_id | Id of the client that requested this token | only if present
+| username | Username of the resource owner that authorized this token to be requested | only if present
+|===
+
+In case you want to preserve the payload set before executing the operation, the attributes _target_ and _targetValue_ can be used to set this JSON information in a variable instead of overwriting the payload.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Config | String | The name of a globally defined OAuth Provider configuration to use for token validation | {nbsp}| *x*{nbsp}
+| Token | Expression | The expression that resolves to the token that will be validated. The default location to look for the token is in the first value of the 'authorization' HTTP header | #[(attributes.headers['authorization'] splitBy ' ')[1]] | {nbsp}
+| Scopes | Expression | An expression that resolves to a list of scopes to enforce when validating the token | Empty List | {nbsp}
+| Resource Owner Roles | Expression |  An expression that resolves to a list of resource owner roles to enforce when validating the token | Empty List | {nbsp}
+|===
+
+
+==== Raises
+* OAUTH2-PROVIDER:TOKEN_UNAUTHORIZED(OAUTH_SERVER_SECURITY)
++
+{nbsp} When the token being validated is not valid.
+
+
+[[revoke-token]]
+=== Revoke Token
+
+[source,xml,linenums]
+----
+<oauth2-provider:revoke-token  config="OAuthProviderConfiguration"
+                               token="#[vars.token]"/>
+----
+
+Revokes an existing access token and the associated refresh token. Either of them can be provided to revoke both.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Config | String | The name of a globally defined OAuth Provider configuration to use for token validation | {nbsp}| *x*{nbsp}
+| Token | String | Token to be revoked | {nbsp} | *x*{nbsp}
+|===
+
+==== Raises
+* OAUTH2-PROVIDER:INVALID_TOKEN(OAUTH_SERVER_SECURITY)
++
+{nbsp} When the token to be revoked is not a valid one.
+
+[[create-client]]
+=== Create Client
+[source,xml,linenums]
+----
+<oauth2-provider:create-client config="OAuthProviderConfiguration"
+                               clientId="#[payload.clientId]"
+                               clientName="#[payload.clientName]"
+                               principal="#[payload.clientPrincipal]"
+                               description="#[payload.clientDescription]"
+                               type="#[payload.clientType]"
+                               secret="#[payload.clientSecret]"
+                               redirectUris="#[payload.redirectUris]"
+                               authorizedGrantType="#[payload.authorizedGrantTypes]"
+                               scopes="#[payload.scopes]"
+                               failIfPresent="false"/>
+----
+
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Config | String | The name of a globally defined OAuth Provider configuration to use for token validation | {nbsp}| *x*{nbsp}
+| Client Id | String | The Id to assign to the created client | {nbsp} | *x*{nbsp}
+| Client Name | String | The client friendly name | {nbsp} | {nbsp}
+| Principal | String | For some security providers, the clientId can't be used for the client username. In those cases, the client's principal is used for authentication | {nbsp} | {nbsp}
+| Description | String | A short description of a client | {nbsp} | {nbsp}
+| Type | Client Type | The type of the client. Allowed values are PUBLIC (Clients incapable of maintaining the confidentiality of their credentials) or CONFIDENTIAL (Clients capable of maintaining the confidentiality of their credentials). | PUBLIC | {nbsp}
+| Secret | String | The client's secret (password) used for authentication. | {nbsp} | Only if the client type is CONFIDENTIAL
+| Redirect Uris | Expression | An expression that resolves to a list of redirect uris used for when the client makes requests to the OAuth Provider | Empty List | {nbsp}
+| Authorized Grant Types | Expression | An expression that resolves to a list of the authorized grant types that the client can use to request a token. Valid values are: AUTHORIZATION_CODE,REFRESH_TOKEN, TOKEN, PASSWORD, CLIENT_CREDENTIALS. | Empty List | {nbsp}
+| Scopes | Expression |  An expression that resolves to a list of supported scopes by the client. If none provided, the default scopes of the <<general-configuration>> will be used | Empty List | {nbsp}
+| Fail if Present | Boolean | Defines what to do if the a client with the same Id is already registered. If true, an error will be raised. Otherwise, the client will be updated | false | {nbsp}
+|===
+
+==== Raises
+* OAUTH2-PROVIDER:CLIENT_ALREADY_EXISTS(OAUTH_SERVER_SECURITY)
++
+{nbsp} If a client already exists with the same client ID, and the flag: failIfPresent is set to true
+* INVALID_CONFIGURATION
++
+{nbsp} If the provided parameters are not valid, as having an authorizationGrantType of AUTHORIZATION_CODE and no redirect uri.
+
+[[delete-client]]
+=== Delete Client
+
+Deletes the client with the given Id. As a consequence, any new request that comes from the deleted client will be rejected and tokens granted to that client will no longer be valid.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|===
+| Name | Type | Description | Default Value | Required
+| Config | String | The name of a globally defined OAuth Provider configuration to use for token validation | {nbsp} | *x*{nbsp}
+| Client Id | String | The Id of the client to be deleted | {nbsp} | *x* {nbsp}
+|===
+
+==== Raises
+* OAUTH2-PROVIDER:NO_SUCH_CLIENT(OAUTH_SERVER_SECURITY)
++
+{nbsp} If the client to be deleted does not exist.
+
+
+[[see_also]]
+== See Also
+xref:oauth/oauth-documentation.adoc[OAuth Module Documentation] +
+xref:4.1@mule4-runtime::migration-oauth2-provider.adoc[OAuth2 Provider Migration Guide]

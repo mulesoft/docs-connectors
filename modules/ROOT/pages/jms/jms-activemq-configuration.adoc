@@ -1,0 +1,253 @@
+= Configuring an ActiveMQ Connection
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: jms, connector, jms_1.0.2b, jms_1.1, jms_2.0, activemq
+
+== Connecting To ActiveMQ
+
+Support for ActiveMQ 5 is provided out of the box by the connector using the
+`active-mq-connection`. With this connection, you can use both JMS 1.1 (the default)
+or JMS 1.0.2b specs, and configure all the general connection parameters for JMS,
+as well as the custom parameters only present in ActiveMQ.
+
+Once we declare the `active-mq-connection`, all that's left to do is set up the
+connection factory with our custom configuration. Every parameter in the connection
+comes with a default value, meaning that you are required to configure only the
+parameters relevant for your use case. Also, the ActiveMQ connection exposes
+parameters that are exclusive of ActiveMQ implementation, like `initialRedeliveryDelay`.
+
+An example of a simple configuration of an ActiveMQ connection would be:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+ <jms:active-mq-connection >
+  <jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+ </jms:active-mq-connection>
+</jms:config>
+----
+
+[[on-memory-broker]]
+== On Memory Broker
+
+By default the ActiveMQ Connector uses a On Memory Broker, this makes it
+easy to start building an application without needing to configure a connection
+against a external broker.
+
+Default URL: `vm://localhost?broker.persistent=false&broker.useJmx=false`
+
+On Memory Broker is required to configure both <<activemq-client-lib,ActiveMQ Client>>
+and <<activemq-broker-lib,ActiveMQ Broker>> libraries.
+
+== SSL Connections
+
+*Since JMS 1.3.0*
+
+ActiveMQ Connections can be configured with SSL configurations, this enables
+the connector to establish secure and encrypted connections against the ActiveMQ Broker.
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+   <tls:context>
+    <tls:trust-store
+      path="client.ts"
+      password="password" />
+    <tls:key-store
+      path="client.ks"
+      password="password"
+      keyPassword="password"
+      alias="client" />
+   </tls:context>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+image::jms/jms-ssl.png[JMS ActiveMQ SSL Configuration]
+
+Also the connector can reference Global TLS Context configurations, so you can
+reuse and share the same TLS Context between connectors like HTTP.
+
+[source,xml,linenums]
+----
+<!--  HTTP Requester Configuration -->
+<http:request-config name="HTTP_Request_configuration">
+  <http:request-connection tlsContext="TLS_Context" />
+</http:request-config>
+
+<!--  JMS Configuration -->
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection tlsContext="TLS_Context"/>
+</jms:config>
+
+<!--  Reusable TLS Context -->
+<tls:context name="TLS_Context">
+ <tls:trust-store
+  path="client.ts"
+  password="password" />
+<tls:key-store
+  path="client.ks"
+  password="password"
+  keyPassword="password"
+  alias="client" />
+</tls:context>
+----
+
+== Delivery Handling
+
+[[poison-messages]]
+=== Avoiding Poison Messages
+
+When a message cannot be processed correctly, it's not acknowledged. The message
+is redelivered again, probably not processing correctly again, and this
+cycle executes indefinitely.
+
+To prevent this case, where a message can't be handled and is redelivered constantly
+forever, "Poison Messages", a Max Redelivery configuration can be done to set
+a max number of times that a message can be delivered to the application.
+
+.In this example a message redelivers at max 10 times.
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration maxRedelivery="10"/>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+By default, the JMS Connector uses a `maxRedelivery` of 0, this means that messages
+won't be redelivered, and doesn't matter if the message is recovered or rolled back
+from a transaction.
+
+If the message has persistent delivery set, ActiveMQ sends the message to
+the DLQ.QUEUE (Dead Letter Queue).
+
+=== Advanced Redelivery
+
+ActiveMQ lets users have a client side redelivery configuration. You can also
+configure the <<poison-messages,max times redelivery of a message>>
+and how fast the connector is required to redeliver the message.
+
+*initialRedeliveryDelay* : In milliseconds, how much time to wait until the message
+is redelivered for the first time.
+*redeliveryDelay* : In milliseconds, how much time to wait until the message
+is redelivered after the first redeliver.
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration
+      redeliveryDelay="100"
+      initialRedeliveryDelay="1000"/>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+== Object Serialization
+
+Since ActiveMQ 5.12.2 and 5.13.0, ActiveMQ restricts the classes that can be serialized
+and deserialized to prevent the execution of a malicious payload that can exploit
+the host system.
+
+=== Trusted Packages
+
+By default ActiveMQ, the connector only allows the JDK/JRE provided classes, but if you
+need to exchange object messages, you need to add packages your applications are
+using:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration >
+      <jms:trusted-packages >
+        <jms:trusted-package value="com.mulesoft.someapp" />
+        <jms:trusted-package value="com.mulesoft.someapp.model" />
+      </jms:trusted-packages>
+    </jms:factory-configuration>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+image::jms/jms-trusted-packages.png[JMS ActiveMQ Trusted Packages]
+
+In this example the JMS Connector only allows users to consume and produce ObjectMessages
+compliant with the `com.mulesoft.someapp` and `com.mulesoft.someapp.model` packages.
+
+=== Trust All Packages
+
+Another way to enable the serialization of more classes is to enable the `trustAllPackages`
+configuration, this recovers the old behavior of allowing any object to
+be serialized and deserialized. This is totally disallowed to prevent
+malicious attacks.
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration trustAllPackages="true"/>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+== Configuring Required Libraries
+
+image::jms/jms-libs.gif[Configuring Required JMS Libraries]
+
+[[activemq-client-lib]]
+=== ActiveMQ Client
+
+The ActiveMQ Client Library is the only required to use ActiveMQ Connections, and is
+needed to connect again to a broker.
+
+[source,xml,linenums]
+----
+<dependency>
+ <groupId>org.apache.activemq</groupId>
+ <artifactId>activemq-client</artifactId>
+ <version>5.15.4</version>
+</dependency>
+----
+
+[[activemq-broker-lib]]
+=== ActiveMQ Broker
+
+The ActiveMQ Broker can create an <<on-memory-broker,On Memory Broker>>.
+
+[source,xml,linenums]
+----
+<dependency>
+ <groupId>org.apache.activemq</groupId>
+ <artifactId>activemq-broker</artifactId>
+ <version>5.15.4</version>
+</dependency>
+----
+
+=== ActiveMQ KahaDB
+
+The ActiveMQ KahaDB is required when using an <<on-memory-broker,On Memory Broker>>
+but also is required to have persistent message delivery.
+
+[source,xml,linenums]
+----
+<dependency>
+ <groupId>org.apache.activemq</groupId>
+ <artifactId>activemq-kahadb-store</artifactId>
+ <version>5.15.4</version>
+</dependency>
+----
+
+== See Also
+
+* xref:jms/jms-consume.adoc[How Consume Messages]
+* xref:jms/jms-publish.adoc[How Publish Messages]
+* xref:jms/jms-listener.adoc[How Listen For New Messages]
+* xref:jms/jms-publish-consume.adoc[How Listen For A Reply]
+* xref:jms/jms-ack.adoc[Handling Message Acknowledgement]
+* xref:jms/jms-transactions.adoc[Handling Transactions in JMS]
+* xref:jms/jms-performance.adoc[JMS Tuning For Performance]
+* xref:jms/jms-documentation.adoc[JMS Connector Technical Reference]

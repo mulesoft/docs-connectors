@@ -1,0 +1,134 @@
+= To Set the Error Status Code and Reason Phrase
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+// NOT UPDATED YET khahn 7/14/2017
+
+. Create a flow with an HTTP Listener Connector, set the *Path* to `login`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. In the HTTP Connector's properties editor, in the Response Settings section, set the *Status Code* to 500 and the *Reason* to `Login Successful`
+. In the Error Response Settings section, set the Status Code to `\#[errorStatusCode]` and the reason to `#[errorReasonPhrase]`
+. After the HTTP Connector, add a *Message* *Filter*. Click the edit button next to the Nested Filter field and assign it the following value:
++
+
+[source,text,linenums]
+----
+#[message.inboundProperties.'http.query.params'.user == 'mule']
+----
+
+. After the filter, add a Set Payload element and set its *Value* field to `Log in Successful!`
+. Add a *Rollback Exception Strategy* to the Error Handling section of your flow.
+. Add two Variable transformers in this exception strategy. Configure the first to set the variable `errorStatusCode` to `404`, the second to set `errorReasonPhrase` to `Requested user does not exist`  +
++
+image::<missing>http-listener-connector-a2a90.png[status code and reason flow]
+....
+[tab,title="XML Editor"]
+....
+For example:
+
+. Create an `<http:listener>` global configuration, set the *host* to localhost and the *port* to 8081
++
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+----
+
+. Create a flow with an `<http:listener>` connector. Reference your connector to the global element you just created, set the path to `login`. Add two child elements to the connector: `http:response-builder` and `http:error-response-builder`.
++
+
+[source,xml,linenums]
+----
+<flow name="customResponseFlow">
+    <http:listener config-ref="HTTP_Listener_Configuration" path="login" doc:name="HTTP">
+            <http:response-builder reasonPhrase="Log in Successful" statusCode="500"/>
+            <http:error-response-builder statusCode="#[errorStatusCode]" reasonPhrase="#[errorReasonPhrase]"/>
+    </http:listener>
+</flow>
+----
+
+. After the HTTP connector, add a message filter, set it to evaluate the expression `#[message.inboundProperties.'http.query.params'.user == 'mule']`
++
+
+[source,xml,linenums]
+----
+<message-filter throwOnUnaccepted="true" doc:name="Fail if person does not exists">
+            <expression-filter expression="#[message.inboundProperties.'http.query.params'.user == 'mule']"/>
+        </message-filter>
+----
+
+. Add a set payload after your filter to add a success message to the response's body:
++
+
+[source,xml,linenums]
+----
+<set-payload value="Log in Successful!" doc:name="Set Payload"/>
+----
+
+. Add a rollback exception strategy to deal with the request in case the filter is not successfully passed:
++
+
+[source,xml,linenums]
+----
+<rollback-exception-strategy  doc:name="Rollback Exception Strategy">
+
+</rollback-exception-strategy>
+----
+
+. Inside your rollback strategy, add two set variable elements, one to set the value of `errorStatusCode` and the other to set the value of `errorReasonPhrase`. Note that these are the variables you set up in the HTTP Listener's `error-response-builder`.
++
+
+[source,xml,linenums]
+----
+<rollback-exception-strategy  doc:name="Rollback Exception Strategy">
+        <set-variable variableName="errorStatusCode" value="404" doc:name="Set status code"/>
+        <set-variable variableName="errorReasonPhrase" value="Requested user does not exist" doc:name="Set reason phrase"/>
+</rollback-exception-strategy>
+----
+....
+------
+
+=== Status Code and Reason - Full XML Code
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+    <flow name="customResponseFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="login" doc:name="HTTP">
+            <http:response-builder reasonPhrase="Log in Successful" statusCode="500"/>
+            <http:error-response-builder statusCode="#[errorStatusCode]" reasonPhrase="#[errorReasonPhrase]"/>
+        </http:listener>
+        <message-filter throwOnUnaccepted="true" doc:name="Fail if person does not exists">
+            <expression-filter expression="#[message.inboundProperties.'http.query.params'.user == 'mule']"/>
+        </message-filter>
+        <set-payload value="Log in Successful!" doc:name="Set Payload"/>
+        <rollback-exception-strategy  doc:name="Rollback Exception Strategy">
+                <set-variable variableName="errorStatusCode" value="404" doc:name="Set status code"/>
+                <set-variable variableName="errorReasonPhrase" value="Requested user does not exist" doc:name="Set reason phrase"/>
+        </rollback-exception-strategy>
+    </flow>
+</mule>
+----
+
+
+The above example expects to receive requests in the address http://localhost:8081/login/, these requests must contain a query parameter named *user*. Depending on the value of this parameter, one of two things may occur:
+
+* When `user=mule` the filter evaluates to true, a set payload element sets the message payload to a success message, the HTTP Connector then sets the *Status Code* and *Reason* as `500 Log in Successful!`
+* When `user=anythingElse` the filter evaluates to false, the exception strategy is then called. In it, the variables that are assigned to the Error Status Code and the Error Reason in the HTTP Connector are assigned the values `404 Requested user does not exist`
+
+[TIP]
+Note that in either case, the request response is not displayed as the response body, so it won't be visible if you make your request throug a browser window. +
+ +
+To be able to view the status code and explanation of a an HTTP request, you can use a browser extension such as Postman (Google Chrome), or the http://curl.haxx.se/[curl] command line utility.
+
+[NOTE]
+If status code or reason phrase are defined as outbound properties and they are also defined in the HTTP Listener Connector, then the later takes precedence.

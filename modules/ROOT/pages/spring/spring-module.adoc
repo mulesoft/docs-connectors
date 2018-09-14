@@ -1,0 +1,206 @@
+= Working with the Spring Module
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+The Spring module allows Mule apps to make use of the Spring Framework.
+
+== To Configure the Spring Module
+
+. Add the following configuration:
++
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:spring="http://www.mulesoft.org/schema/mule/spring"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/spring
+        http://www.mulesoft.org/schema/mule/spring/current/mule-spring.xsd">
+
+    <spring:config name="springConfig" files="beans.xml" doc:id="8623553f-16f6-45d9-acef-e23764e05bf8" />
+
+</mule>
+----
++
+. Put the `beans.xml` file in `src/main/resources`.
++
+Note that the Spring configuration must be valid. Here is an example:
++
+[source,xml,linenums]
+----
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:context="http://www.springframework.org/schema/context"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+
+    xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-4.1.xsd
+        http://www.springframework.org/schema/jdbc
+        http://www.springframework.org/schema/jdbc/spring-jdbc-4.1.xsd
+        http://www.springframework.org/schema/context
+        http://www.springframework.org/schema/context/spring-context-4.1.xsd">
+
+    <jdbc:embedded-database id="dataSource" type="DERBY">
+        <jdbc:script location="classpath:db/sql/create-db.sql" />
+        <jdbc:script location="classpath:db/sql/insert-data.sql" />
+    </jdbc:embedded-database>
+
+</beans>
+----
+
+IMPORTANT: The beans files used with the Spring Module must be exported, if not the application won't start. See xref:4.1@mule4-runtime::how-to-export-resources.adoc[How to Export Resources].
+
+== To Use Spring Objects in Mule Components
+
+You can use Spring objects in Mule configuration components, for instance, to point to the Derby data source created with Spring beans:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+      xmlns:spring="http://www.mulesoft.org/schema/mule/spring"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/spring
+        http://www.mulesoft.org/schema/mule/spring/current/mule-spring.xsd
+        http://www.mulesoft.org/schema/mule/db
+        http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+
+    <spring:config name="springConfig" files="beans.xml" doc:id="8623553f-16f6-45d9-acef-e23764e05bf8" />
+
+    <db:config name="derbyConfig" doc:name="Database Config" doc:id="06993a86-2062-4c9a-b9a9-a663ff6b2eed" >
+        <db:derby-connection database="datasource" create="true" />
+    </db:config>
+</mule>
+----
+
+== To Use Spring Properties Placeholders
+
+Properties defined by Spring properties placeholders cannot be used within the Mule app configuration, only in Spring configuration files. However, properties defined in Mule through `<configuration-properties/>` can be used within Spring configuration files.
+
+== Limitations over spring objects
+
+* Spring objects cannot implement Mule API lifecycle methods.
+* Spring objects cannot be injected with Mule API services. The only service that can be used is the `org.mule.runtime.api.artifact.Registry`, which can be used to access any other service within the Mule API. This can be accomplished by using `@PostConstruct` over a method to initialize the object and retrieve the Mule API service.
+
+== To Use Spring Security as a Security Manager
+
+The Spring module supports the use of Spring security as a Security Manager in Mule apps.
+
+In the Spring configuration file, an Authentication Manager must be defined, for example:
+
+[source,xml,linenums]
+----
+<beans xmlns="http://www.springframework.org/schema/beans"
+  xmlns:context="http://www.springframework.org/schema/context"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+  xmlns:ss="http://www.springframework.org/schema/security"
+
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-4.1.xsd
+    http://www.springframework.org/schema/jdbc
+    http://www.springframework.org/schema/jdbc/spring-jdbc-4.1.xsd
+    http://www.springframework.org/schema/context
+    http://www.springframework.org/schema/context/spring-context-4.1.xsd
+    http://www.springframework.org/schema/security
+    http://www.springframework.org/schema/security/spring-security-4.1.xsd">
+
+  <ss:authentication-manager alias="authenticationManager">
+    <ss:authentication-provider>
+      <ss:user-service id="userService">
+        <ss:user name="admin" password="admin" authorities="ROLE_ADMIN" />
+        <ss:user name="joe" password="secret" authorities="ROLE_ADMIN" />
+        <ss:user name="anon" password="anon" authorities="ROLE_ANON" />
+        <ss:user name="user" password="password" authorities="ROLE_ANON" />
+        <ss:user name="ross" password="ross" authorities="ROLE_ANON" />
+        <ss:user name="marie" password="marie" authorities="ROLE_ANON" />
+      </ss:user-service>
+    </ss:authentication-provider>
+  </ss:authentication-manager>
+
+</beans>
+----
+
+You can define a Security Manager within a Mule app that makes use of the Spring Authentication Manager like this:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule
+  xmlns:spring="http://www.mulesoft.org/schema/mule/spring"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-current.xsd
+    http://www.mulesoft.org/schema/mule/core
+    http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/spring
+    http://www.mulesoft.org/schema/mule/spring/current/mule-spring.xsd">
+
+  <spring:config name="springConfig" files="beans.xml" doc:id="8623553f-16f6-45d9-acef-e23764e05bf8" />
+
+  <spring:security-manager>
+    <spring:delegate-security-provider name="memory-provider" delegate-ref="authenticationManager" />
+  </spring:security-manager>
+
+</mule>
+----
+
+== To Validate Authentication Using the Spring Authorization Filter
+
+The Spring module adds support for a filter that will fail if the authentication cannot be validated using the Mule Security Manager, for example:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns:db="http://www.mulesoft.org/schema/mule/db"
+  xmlns:spring="http://www.mulesoft.org/schema/mule/spring"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-current.xsd
+    http://www.mulesoft.org/schema/mule/core
+    http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/spring
+    http://www.mulesoft.org/schema/mule/spring/current/mule-spring.xsd
+    http://www.mulesoft.org/schema/mule/db      http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+    http://www.mulesoft.org/schema/mule/http
+    http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+  <spring:config name="springConfig" files="beans.xml" doc:id="8623553f-16f6-45d9-acef-e23764e05bf8" />
+
+  <spring:security-manager>
+    <spring:delegate-security-provider name="memory-provider" delegate-ref="authenticationManager" />
+  </spring:security-manager>
+
+  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="75a02b96-91d0-4850-899c-1af6578a6d09" >
+      <http:listener-connection host="0.0.0.0" port="9090" />
+  </http:listener-config>
+
+  <flow name="spring-exampleFlow" doc:id="a70ad320-475c-42db-be69-a589589c93c7" >
+    <http:listener config-ref="HTTP_Listener_config" path="/" doc:name="Listener" doc:id="37ac75b8-9c40-492b-97fa-9e1d2a0c708f" />
+    <http:basic-security-filter realm="mule" />
+      <spring:authorization-filter requiredAuthorities="ROLE_ADMIN" doc:id="64de0fab-6550-4ac3-b91c-543dd61a9a06" />
+  </flow>
+</mule>
+----
+
+The `http:basic-security-filter` tries to authenticate the user using basic authentication. If the request is authenticated successfully, Mule will retrieve the username and use it in the Spring `authorization-filter` to search for that user and try to authorize the request against the authority ROLE_ADMIN.
+
+== See Also
+
+* xref:4.1@mule4-runtime::configuring-properties.adoc[About Property Placeholders in Mule Apps]

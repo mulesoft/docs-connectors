@@ -1,0 +1,68 @@
+= Example: Working With Throwables
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: Java, Throwable, error
+:toc:
+:toc-title:
+
+toc::[]
+
+The Java module exposes useful functions to deal with Throwable instances.
+
+IMPORTANT: These functions have been available since version 1.2.0.
+
+== Checking for a Cause
+
+You can check whether a Throwable was caused by a certain type of Exception using the `isCausedBy` function.
+
+For example, if invoking the tax calculation method example fails, it is possible to check whether it was given an invalid argument (such as a negative value) or whether it was given a `null` one, assuming those are failures the method declares.
+
+[source,xml,linenums]
+----
+<java:new class="com.foo.TaxCalculator"
+  constructor="TaxCalculator()"
+  target="taxCalculator"/>
+<java:invoke instance="#[vars.taxCalculator]"
+  class="com.foo.TaxCalculator"
+  method="calculate(Long)">
+    <java:args>#[{price: payload.price}]</java:args>
+</java:invoke>
+<error-handler>
+    <on-error-continue when="#[Java::isCausedBy(error.cause, 'java.lang.IllegalArgumentException')]">
+        <set-payload value="You can't have negative prices."/>
+    </on-error-continue>
+    <on-error-continue type="#[Java::isCausedBy(error.cause, 'java.lang.NullPointerException')]">
+        <set-payload value="There is no price."/>
+    </on-error-continue>
+</error-handler>
+----
+
+== Obtaining a Root Cause
+
+You can also obtain the root cause of a Throwable, disregarding any exception wrapping, with the `getRootCause` function.
+
+In the following example, all tax calculation errors are handled by another class, which takes the root cause of the Throwable.
+
+[source,xml,linenums]
+----
+<java:new class="com.foo.TaxCalculator"
+  constructor="TaxCalculator()"
+  target="taxCalculator"/>
+<java:invoke instance="#[vars.taxCalculator]"
+  class="com.foo.TaxCalculator"
+  method="calculate(Long)">
+    <java:args>#[{price: payload.price}]</java:args>
+</java:invoke>
+<error-handler>
+    <on-error-continue>
+      <java:invoke-static class="com.foo.FailureHandler" method="handle(Throwable)">
+          <java:args>#[{cause: Java::getRootCause(error.cause)}]</java:args>
+      </java:invoke-static>
+    </on-error-continue>
+</error-handler>
+----
+
+== See also
+
+xref:4.1@mule4-runtime::mule-error-concept.adoc[About the Mule Error]
