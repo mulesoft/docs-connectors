@@ -1,0 +1,94 @@
+= Listen For New Messages
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+The Subscriber source in the Anypoint MQ connector provides the ability to consume messages as they arrive to the destination. Tuning the subscriber behavior is done from within a connector's configuration. 
+
+== Message Prefetch
+
+By default, a connector provides a configuration that optimizes maximum message throughput. This means that when message `prefetch` is enabled, the maximum `fetchSize` is possible.
+
+IMPORTANT: When using `prefetch` mode, the subscriber attempts to keep a local buffer of three times the `fetchSize` filled at any given time, meaning that it makes as many service calls as needed (with up to three concurrent calls) to retrieve messages and make them available to the buffer. Messages are then taken from the local buffer and dispatched to the flow for processing.
+
+The buffer is most likely to never be full in that Mule accepts many messages very fast and uses as many threads as possible to process them concurrently.
+Not all the requests to the service may provide the maximum number of messages possible defined by the *fetchSize*, so more than three requests may be necessary to fill the buffer in cases of low load.
+
+Prefetch can be tuned using the configuration element:
+
+[source,console,linenums]
+----
+<anypoint-mq:default-subscriber-config name="defaultPrefetchConfig" 
+                                       fetchSize="5" 
+                                       fetchTimeout="1000" 
+                                       frequency="4000">
+    <anypoint-mq:connection url="${providerUrl}" clientId="${clientId}" clientSecret="${clientSecret}"/>
+</anypoint-mq:default-subscriber-config>
+
+<flow name="prefetchedListener">
+    <anypoint-mq:subscriber config-ref="defaultPrefetchConfig" destination="${invoiceQueue}"/> 
+    
+    <!-- Message processing-->
+</flow>
+----
+
+In this example, reducing the amount of messages retrieved per API call reduces the buffer size, effectively having a buffer of 15 messages instead of the 30 that are preserved by default.
+
+Other parameters like `fetchTimeout` and `frequency`  modify the behavior of the subscriber when the queue is empty and when the connector is waiting for a message to arrive.
+
+For details on how each parameter works, see the xref:anypoint-mq/anypoint-mq-connector-reference.adoc#configurations[Connector Reference].
+
+=== Buffer, Acknowledgment, and Acknowledgement Timeout
+
+While in the buffer, messages are kept as in-flight for the broker, so no redelivery occurs as long as needed for the message to be dispatched to the flow, or until the subscriber is stopped and the buffer cleared.
+Once dispatched, a message remains in-flight until the `acknowledgementTimeout` elapses.
+
+By default, a consumed message is ACKed only when the execution of the flow receiving the message completes successfully. If an error occurs during the execution of the flow, the session recovers and the message is redelivered.
+
+For more information regarding a message ACK, see xref:anypoint-mq/anypoint-mq-ack.adoc[How to Handle Message Acknowledgment].
+
+
+== Poll for New Messages
+
+To have more control on how many messages are consumed by each subscriber, you can use a *polling* configuration, thus polling for messages from the service at a fixed rate.
+
+This behavior is achieved effectively by disabling `prefetch` by setting a `fetchSize` of zero. When using the polling mode, the connector always attempts to fetch 10 messages per request, where each request is done at the fixed rate defined by the `pollingTime`. No overlapping requests are executed and only one request per poll is handled by the service.
+
+The syntax to listen for new messages from a queue at a fixed rate is:
+
+[source,console,linenums]
+----
+<anypoint-mq:default-subscriber-config name="pollingConfig" 
+                                       fetchSize="0" 
+                                       pollingTime="1000"    
+                                       acknowledgementTimeout="5000">
+    <anypoint-mq:connection url="${providerUrl}" 
+                                      clientId="${clientId}" 
+                                      clientSecret="${clientSecret}"/>
+</anypoint-mq:default-subscriber-config>
+
+<flow name="prefetchedListener">
+    <anypoint-mq:subscriber config-ref="pollingConfig" destination="${invoiceQueue}"/> 
+    
+    <!-- Message processing-->
+</flow>
+----
+
+This source tries to retrieve 10 messages from the queue identified by the destination every 1 second, 
+and then dispatches each to the flow as a `MuleMessage`. In this case, the message remains as in-flight for 5 seconds.
+
+The MuleMessage has:
+
+* The message's content as payload.
+* The message's metadata in the message attributes.
+
+By default, the message consumed is ACKed only when the execution of the flow receiving the message completes successfully.
+If instead, an error occurs during the execution of the flow, the session is recovered and the message is redelivered.
+
+For more information regarding a message ACK, see xref:anypoint-mq/anypoint-mq-ack.adoc[How to Handle Message Acknowledgment].
+
+
+== See Also
+
+* xref:anypoint-mq/anypoint-mq-consume.adoc[Consume Messages]
+* xref:anypoint-mq/anypoint-mq-ack.adoc[Use Topic Subscriptions]
