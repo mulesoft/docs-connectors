@@ -4,3 +4,128 @@ include::_attributes.adoc[]
 endif::[]
 
 Release Notes: xref:release-notes::connector/connector-http.adoc[HTTP Connector Release Notes]
+
+The HTTP connector allows declaring HTTP servers that can listen to
+requests and trigger flows, as well as HTTP clients that can communicate with any
+HTTP service. This means that the HTTP connector effectively allows you to both
+expose and consume HTTP based APIs. In fact, the HTTP connector powers APIkit
+and RESTConnect.
+
+The connector also supports HTTPS (TLS) connectivity, provides easy ways to serve static
+resources and secure servers as well as handling a number of client authentication schemes.
+
+== Setting up a server
+
+HTTP servers allow exposing services for users or applications to consume. They
+receive data in the form of HTTP requests and return a response. For the connector,
+this means triggering flows when a request is received and answering back once the
+flow finishes. This is all handled by the HTTP listener, a source the connector provides.
+
+HTTP servers are declared by first defining a listener connection, which defines the
+host and port where HTTP requests will be received.
+
+[source,xml,linenums]
+----
+<http:listener-config name="serverConfig">
+  <http:listener-connection protocol="https" host="localhost" port="8081"/>
+</http:listener-config>
+----
+
+Then you can choose specific resource paths to trigger flows, so that when a request
+is received matching that path, your flow will run.
+
+[source,xml,linenums]
+----
+<flow name="hello">
+    <http:listener path="greet" config-ref="serverConfig"/>
+    <set-payload value="Hello, world!"/>
+</flow>
+
+<flow name="bye">
+    <http:listener path="excuse" config-ref="serverConfig"/>
+    <set-payload value="Goodbye, world!"/>
+</flow>
+----
+
+In the examples above, an HTTP server is set up in port `8081` with endpoints
+`greet` and `excuse` triggering different flows. So, calling `http://localhost:8081/greet`
+will return `Hello, world!` while calling `http://localhost:8081/excuse` will
+return `Goodbye, world!`.
+
+The received HTTP request data is shared with the flow upon triggering and responses
+can be customized.
+
+[source,xml,linenums]
+----
+<flow name="hello">
+  <http:listener path="greet" config-ref="serverConfig">
+    <http:response >
+      <http:body >#[payload ++ ' I am an HTTP server.']></http:body>
+    </http:response>
+  </http:listener>
+  <set-payload value="#['Hello, ' ++ (attributes.queryParams.name default 'world') ++ '!']" />
+</flow>
+----
+
+Considering the example above, now calling `http://localhost:8081/greet?name=Ana`
+will return `Hello, Ana! I am an HTTP server.` while calling `http://localhost:8081/greet`
+will return `Hello, world! I am an HTTP server.`.
+
+You can find a complete overview of the HTTP listener features xref:http/http-listener-ref.adoc[here].
+
+== Consuming a service with a client
+
+HTTP clients allow sending request to HTTP services and handling their response. For
+the connector, this means executing a request and returning the answer. This is
+handled by the HTTP request, an operation that the connector provides.
+
+HTTP clients don't necessarily need to be declared, though this is recommended to
+reuse configurations. If you don't declare them, you'll need to specify the entire
+URL where the request should be sent each time you need to send one. Though this
+is useful for quick requests, if you will be doing several requests on different
+API resources, it is best to declare the client specifying the host to connect to.
+
+[source,xml,linenums]
+----
+<http:request-config name="clientConfig">
+  <http:request-connection host="localhost" port="8081"/>
+</http:request-config>
+----
+
+Then, each request you do will only need to feature the path where it should go.
+
+[source,xml,linenums]
+----
+<flow name="helloAndBye">
+  <http:request method="GET" path="greet" config-ref="clientConfig"/>
+  <logger level="INFO" message="#[payload]"/>
+  <http:request method="GET" path="excuse" config-ref="clientConfig" />
+  <logger level="INFO" message="#[payload]"/>
+</flow>
+----
+
+In the examples above we consume the service we exposed before. When our flow
+executes it will log out:
+
+```
+Hello, world! I am an HTTP server.
+Goodbye, world!
+```
+
+The response data is shared with the flow and the request can be customized.
+
+[source,xml,linenums]
+----
+<flow name="helloAndBye">
+  <http:request method="GET" path="greet" config-ref="clientConfig"/>
+  <logger level="INFO" message="#['Received a ' ++ attributes.status code ++ ' response with body: {' ++ payload ++ '}']"/>
+</flow>
+----
+
+When the flow above executes, for example, it will log out:
+
+```
+Received a 200 response with body: {Hello, HTTP client! I am an HTTP server.}
+```
+
+You can find a complete overview of the HTTP request features xref:http/http-request-ref.adoc[here].
