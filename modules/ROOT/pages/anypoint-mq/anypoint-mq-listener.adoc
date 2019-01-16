@@ -3,7 +3,7 @@ ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 
-The Subscriber source in the Anypoint MQ connector provides the ability to consume messages as they arrive to the destination. Tuning the subscriber behavior is done from within a connector's configuration. 
+The Subscriber source in the Anypoint MQ connector provides the ability to consume messages as they arrive to the destination. Tuning the subscriber behavior is done from within a connector's configuration.
 
 == Message Prefetch
 
@@ -18,16 +18,16 @@ Prefetch can be tuned using the configuration element:
 
 [source,console,linenums]
 ----
-<anypoint-mq:default-subscriber-config name="defaultPrefetchConfig" 
-                                       fetchSize="5" 
-                                       fetchTimeout="1000" 
+<anypoint-mq:default-subscriber-config name="defaultPrefetchConfig"
+                                       fetchSize="5"
+                                       fetchTimeout="1000"
                                        frequency="4000">
     <anypoint-mq:connection url="${providerUrl}" clientId="${clientId}" clientSecret="${clientSecret}"/>
 </anypoint-mq:default-subscriber-config>
 
 <flow name="prefetchedListener">
-    <anypoint-mq:subscriber config-ref="defaultPrefetchConfig" destination="${invoiceQueue}"/> 
-    
+    <anypoint-mq:subscriber config-ref="defaultPrefetchConfig" destination="${invoiceQueue}"/>
+
     <!-- Message processing-->
 </flow>
 ----
@@ -58,23 +58,23 @@ The syntax to listen for new messages from a queue at a fixed rate is:
 
 [source,console,linenums]
 ----
-<anypoint-mq:default-subscriber-config name="pollingConfig" 
-                                       fetchSize="0" 
-                                       pollingTime="1000"    
+<anypoint-mq:default-subscriber-config name="pollingConfig"
+                                       fetchSize="0"
+                                       pollingTime="1000"
                                        acknowledgementTimeout="5000">
-    <anypoint-mq:connection url="${providerUrl}" 
-                                      clientId="${clientId}" 
+    <anypoint-mq:connection url="${providerUrl}"
+                                      clientId="${clientId}"
                                       clientSecret="${clientSecret}"/>
 </anypoint-mq:default-subscriber-config>
 
 <flow name="prefetchedListener">
-    <anypoint-mq:subscriber config-ref="pollingConfig" destination="${invoiceQueue}"/> 
-    
+    <anypoint-mq:subscriber config-ref="pollingConfig" destination="${invoiceQueue}"/>
+
     <!-- Message processing-->
 </flow>
 ----
 
-This source tries to retrieve 10 messages from the queue identified by the destination every 1 second, 
+This source tries to retrieve 10 messages from the queue identified by the destination every 1 second,
 and then dispatches each to the flow as a `MuleMessage`. In this case, the message remains as in-flight for 5 seconds.
 
 The MuleMessage has:
@@ -86,6 +86,141 @@ By default, the message consumed is ACKed only when the execution of the flow re
 If instead, an error occurs during the execution of the flow, the session is recovered and the message is redelivered.
 
 For more information regarding a message ACK, see xref:anypoint-mq/anypoint-mq-ack.adoc[How to Handle Message Acknowledgment].
+
+
+== Circuit Breaker Capability
+
+Since version 2.1.0, the MQ Connector subscriber provides out of the box a circuit breaking capability, allowing the user to have more control on how the connector deals with errors occured while processing a consumed message.
+
+=== What's a Circuit Breaker?
+
+In any scenario in which we need to connect to a service, we are required to consider what happens when the external service fails. A common pattern to deal with downtime of an external service is the Circuit Breaker, which allows the system to stop making requests that are doomed to fail, also allowing the external service to recover under a reduced load.
+The Circuit Breaker will go through three different states (Closed, Open, Half Open), changing the behavior of the application based on the current state. (A formal definition of the Circuit Breaker pattern may be found https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker[here])
+
+Taking this to a Mule 4 application using Anypoint MQ means that we have a mule flow with an MQ subscriber that consumes messages from a Queue and tries to process it using at some point an external service. When this service is not available and the request fails, an error will be propagated to the flow, in which case we either let it propagate and complete the processing of the message as a _failure_, or we do some custom error handling of the message (like sending it to a DLQ).
+Our problem then resides in the fact that when the external service is not available, every attempt to process a message will result in a failure, forcing the application in a loop of consuming messages that are not going to succeed, something that we could avoid if the subscriber is notified of the error in a way that prevents it from consuming more messages for a certain period.
+
+
+=== How does it work?
+
+The circuit breaker capability provided by the `anypoint-mq:subscriber` will be bound to the error handling mechanism that Mule provides out of the box, using the errors notification mechanism to keep count of errors related to our external service which we'll refer to occurences of this errors as "circuit failures". Any error can be bound to be considered a circuit failure, for example you can bound `HTTP:TIMEOUT`, `FTP:SERVICE_NOT_AVAILABLE`, or even a custom error from your application like `ORG:EXTERNAL_ERROR`.
+
+Every time a mule flow completes its execution with an error, the subscriber will check if the error is one of the `onErrorTypes` that indicate an external service error, counting consecutive occurences until the `errorsThreshold` is reached. When the `errorsThreshold` is reached, _the circuit will be tripped_, effectively stopping the poll for new messages for a configurable `tripTimeout`. Messages will be consumed again on the next poll where the tripTimeout has evicted.
+By default, circuit breaking feature will be disabled.
+
+=== States Overview
+
+image::mq-subscriber-states-view.png[caption="Circuit Breaker States Overview"]
+
+
+- Closed
+
+    This is the starting state, where the subscriber will retrieve messages normally from MQ based on its configuration, effectively working as if the Circuit Breaker is not present.
+
+- Closed-Open Transition
+
+    When the amount of failures occurred one after the other during message processing, without any success in between the failures, reaches the `errorsThreshold` value, then the circuit breaker will trip and transition to an _open_ state.
+    At this point, messages that were already dispatched to the flow will complete its processing (either if the result is success or failure).
+    Messages kept locally, which are in-flight for the broker but haven't been dispatched yet, will be NACKed, effectively returning to the Queue for redelivery to other consumer.
+
+- Open
+
+    In this state, the subscriber won't attempt to retrieve messages, skipping the iterations silently until the `tripTimeout` is reached.
+
+- Half Open
+
+    Once the `tripTimeout` has elapsed, the subscriber will go to a _half open_ state meaning that in the next poll for messages, it will retrieve __a single message_ from the service and use that message to check if the system has recovered before going back to the normal, _closed_, state.
+    When single message is successfully fetch, dispatched to the flow and its processing completes with a success, then the subscriber will go back to normal, immediately attempting to fetch more messages.
+    In case the mule flow processing fails with one of the expected `onErrorTypes`, the circuit will go back to an Open state, resetting the `tripTimeout` timer.
+
+=== Configuring the Circuit Breaker
+
+The circuit breaker will be configured as part of the `anypoint-mq:default-subscriber-config`. Under the Advanced tab, enable the Circuit Breaker group and populate the following fields as needed:
+
+
+- onErrorTypes: The error types whose occurrence during the flow execution will count as a failure in the circuit. An error occurence counts only when the flow is completed with an error propagation. By default all the errors will count as a "circuit failure".
+
+- errorsThreshold: How many errors, of those listed in the `onErrorTypes` parameter, have to occur for the circuit to be opened.
+
+- tripTimeout: How long will the circuit remain open once the `errorsThreshold` is reached.
+
+- circuitName: The name of the circuit that will be bounded to this configuration. By default each Queue will have it's own circuit associated.
+
+image::mq-subscriber-cb-config-tab.png[caption="Circuit Breaker Configuration Tab"]
+
+==== Circuit Configuration for a Single Subscriber
+
+Let's start with an scenario of having a single `anypoint-mq:subscriber` consuming messages from a Queue and posting them to another service using its REST API. In this example, we want to stop processing messages after 5 requests to the external service result in a timeout. Once that happens, we'll wait for 30 seconds for the service to recover before retrying with a new message.
+
+For this we only need one config with the desired circuit breaker parameters:
+
+[source,console,linenums]
+----
+<anypoint-mq:default-subscriber-config name="ConfigWithCircuit" >
+   	<anypoint-mq:connection url="${providerUrl}" clientId="${clientId}" clientSecret="${clientSecret}"/>
+<anypoint-mq:circuit-breaker
+           onErrorTypes="HTTP:TIMEOUT" // <1>
+           errorsThreshold="5" // <2>
+           tripTimeout="30" // <3>
+           tripTimeoutUnit="SECONDS"/>
+</anypoint-mq:default-subscriber-config>
+
+<flow name="subscribe">
+   <anypoint-mq:subscriber config-ref="ConfigWithCircuit" destination="${subscriberQueue}"/> // <4>
+    <http:request config-ref="RequesterConfig" path="/external" method="POST"/> // <5>
+</flow>
+----
+
+<1> First you configure the error types that will be considered to trip the circuit, meaning that when this errors occur an `errorsThreshold` amount of times, the polling will stop.
+<2> Then we set the threshold of how many _consequent_ messages have to occur to consider the circuit is in a failure state.
+<3> Once the circuit is tripped because the `errorsThreshold` is reached, then we need to configure how long to wait before polling new messages.
+<4> On the subscriber, we just need to reference the config with the circuit breaker.
+<5> Finally, we find the operation that can throw the error expected by the `onErrorTypes` parameters.
+
+It's important to notice that any other error not listed in the `onErrorTypes` parameter will be ignored by the circuit breaker. For this example, things like `HTTP:BAD_REQUEST` will be ignored.
+
+
+====  Sharing The Same Circuit From Different Queues
+
+In many cases we have a single common service between the processing of messages from different Queues. For this case, we need to configure the `circuitName` parameter to bind both subscribers to a single circuit:
+
+
+[source,console,linenums]
+----
+<anypoint-mq:default-subscriber-config name="ConfigWithCircuit" >
+   	<anypoint-mq:connection url="${providerUrl}" clientId="${clientId}" clientSecret="${clientSecret}"/>
+<anypoint-mq:circuit-breaker
+           circuitName="InvoiceProcess" // <1>
+           onErrorTypes="FTP:RETRY_EXHAUSTED, HTTP:SERVICE_UNAVAILABLE" // <2>
+           errorsThreshold="10"
+           tripTimeout="5"
+           tripTimeoutUnit="MINUTES"/>
+</anypoint-mq:default-subscriber-config>
+
+<flow name="subscribe">
+    <anypoint-mq:subscriber  config-ref="ConfigWithCircuit" destination="${reservationsQueue}"/> // <3>
+    <flow-ref name="invoiceProcess">
+</flow>
+
+<flow name="otherSubscribe">
+    <anypoint-mq:subscriber  config-ref="ConfigWithCircuit" destination="${paymentsQueue}"/> // <3>
+    <flow-ref name="invoiceProcess">
+</flow>
+
+<sub-flow name="invoiceProcess">
+  <ftp:write path="${auditFolder}" config-ref="ftp-config"/> // <4>
+  <http:request config-ref="requestConfig" path="/external"/> // <5>
+</sub-flow>
+
+----
+
+<1> Setting the `circuitName` parameter allows us to share a common circuit breaker on multiple Queues
+<2> In this case we will consider two different errors that can affect the processing of messages from the subscriber, passing them as a CSV list.
+<3> On both subscribers we need to reference the config with the circuit breaker configuration.
+<4> This component may throw an `FTP:RETRY_EXHAUSTED` error, along with many others. Only the `FTP:RETRY_EXHAUSTED` error will be taken to account by the circuit breaker.
+<5> Same as before, the HTTP connector may throw an `HTTP:SERVICE_UNAVAILABLE` preventing the message to be processed.
+
+For this scenario, both subscribers will stop polling for messages as soon as the error count reaches the `errorsThreshold="10"` value, couting both `FTP:RETRY_EXHAUSTED` and `HTTP:SERVICE_UNAVAILABLE` kind of errors. When the `tripTimeout` is evicted, _one_ of the subscribers will poll for one message and use it to test the circuit, enabling the polling for _both_ subscribers if the processing of that message succeds.
 
 
 == See Also
