@@ -2,9 +2,6 @@
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
-:keywords: SFTP, connector, matcher, directory, listener
-
-
 
 Release Notes: xref:release-notes::connector/connector-sftp.adoc[SFTP Connector Release Notes]
 
@@ -63,6 +60,101 @@ include::partial$common-note-mule4.adoc[]
 
 //INCLUDED IN FTP, SFTP, FILE
 include::partial$common-file-attributes.adoc[]
+
+== Poll a Directory
+
+Poll a directory to look for new files to process. Because Mule 4 no longer has a polling message source (like the old Mule 3 transport did), you can achieve poll by combining a `<scheduler />` element with the `<sftp:list>` element.
+
+[source,xml,linenums]
+----
+<flow name="poll">
+  <scheduler>
+      <scheduling-strategy>
+          <fixed-frequency frequency="1000"/>
+      </scheduling-strategy>
+  </scheduler>
+  <sftp:list directoryPath="~/dropFolder" />
+  <foreach>
+<sflow-ref name="processFile" />
+<sftp:delete path="#[attributes.path]" />
+</foreach>
+</flow>
+---- 
+
+In this example a flow lists the contents of a folder once per second. It processes the files one by one and then deletes each processed file. 
+
+Note: Unlike the old Mule 3 transport which automatically deleted or moved the file when the flow ended, now you have to manually do that. This gives a much higher level of control, especially in failure scenarios. You could even choose to do more things just as moving, renaming, sending to an external system, etc, and even change that behavior depending on other conditions or failures.
+
+== Match Filter 
+
+Another common scenario when listing files, is the need for only consider files which match with certain criteria. 
+
+For that, a `<sftp:matcher>` element exists. This element defines the possible criteria to use to either accept or reject a file. 
+
+Matcher definition:
+ 
+[source,xml,linenums]
+----
+<sftp:matcher
+filename-pattern="a?*.{htm,html,pdf}"
+path-pattern="a?*.{htm,html,pdf}"
+createdSince="2019-06-03T13:21:58+00:00"
+createdUntil="2019-07-03T13:21:58+00:00"
+updatedSince="2019-05-03T13:21:58+00:00"
+updatedUntil="2019-06-03T13:21:58+00:00"
+accessedSince="2019-06-03T13:21:58+00:00"
+accessedUntil="2019-06-03T13:21:58+00:00"
+directory="true|false"
+regularFile="true|false"
+symbolicLink="true|false"
+minSize="0"
+maxSize="1024" />
+----
+
+All these attributes are optional and all are ignored if not provided. Also, they all relate to each other under an AND operator. 
+
+Individual attributes:
+
+* accessedSince: Inclusive lower boundary for the file access stamp expressed as either a DateTime instance or a String in ISO-8601 format.
+* accessedUntil: Inclusive upper boundary for the file access stamp expressed as either a DateTime instance or a String in ISO-8601 format.
+* createdSince: Inclusive lower boundary for the file creation stamp expressed as either a DateTime instance or a String in ISO-8601 format.
+* createdUntil: Inclusive upper boundary for the file creation stamp expressed as either a DateTime instance or a String in ISO-8601 format.
+* directory: Match only if the file is a directory.
+* filename-pattern: Similar to the current filename pattern filter but more powerful. Glob expressions and regex are supported. Glob is the default. You can select which one to use by setting a prefix. For example: `glob:*.{java, js}` , regex:`[0-9]_test.csv`
+* maxSize: Inclusive upped boundary for the file size expressed in bytes.
+* minSize: Inclusive lower boundary for the file size expressed in bytes.
+* path-pattern: Same as filename-pattern but applies over the entire file path. Not just a filename.
+* regularFile: Match only if the file is a regular file.
+* symbolicLink: Match only if the file is a symbolic link.
+* updatedSince: Inclusive lower boundary for the file modification stamp expressed as either a DateTime instance or a String in ISO-8601 format.
+* updatedUntil: Inclusive upper boundary for the file modification stamp expressed as either a DateTime instance or a String in ISO-8601 format.
+
+The file matcher can either be used as a named top level elemen, allowing it to be reused, or as an inner element proprietary to a particular component. 
+
+For example, here are the two ways of using it: 
+
+Example of top level, reusable matcher (not available in Flow Designer):
+ 
+[source,xml,linenums]
+----
+<sftp:matcher name="smallFileMatcher" maxSize="100" />
+<sflow name="smallFiles">
+<sftp:list path="~/smallfiles" matcher="smallFileMatcher" />
+...
+</flow>
+---- 
+
+Example of inner, not reusable, matcher:
+ 
+[source,xml,linenums]
+----
+<flow name="smallFiles">
+<sftp:list path="~/smallfiles" matcher="smallFileMatcher">
+<sftp:matcher maxSize="100" />
+</sftp:list>
+...
+</flow>
+----
 
 [[see_also]]
 == See Also
