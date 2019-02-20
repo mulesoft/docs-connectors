@@ -65,7 +65,7 @@ But what if you do not want to wait forever to fill every batch. In that case, y
 </aggregators:size-based-aggregator>
 ----
 
-To make sure that the `aggregation-complete` route will execute once a timeout occurs, you also need to include a listener, for example:
+To make sure that the logic that processes all aggregated elements executes once a timeout occurs, you also need to include a listener, for example:
 
 [source,xml,linenums]
 ----
@@ -74,6 +74,44 @@ To make sure that the `aggregation-complete` route will execute once a timeout o
 ----
 
 Keep in mind that for this case, the data types that come from the `aggregation-complete` route and `aggregator-listener` are the same. So, for the execution of the flow `whatToDoWithAllTheseNames`, it does not matter where the data comes from.
+However,with this configuration, in the case the aggregation is complete, the flow `whatToDoWithAllTheseNames` will trigger twice. Once from the `aggregation-complete` route `flow-ref` and again from the `flow-ref` in the flow with the `aggregator-listener`.
+
+To avoid multiple executions of the same logic, the `flow-ref` followed by the `aggregator-listener` should be wrapped in a `choice` component, evaluating if the aggregation is not complete by checking the `aggregationComplete` attribute. That way, the `flow-ref` will only be called
+when a timeout triggered that flow.
+
+[source,xml,linenums]
+----
+<flow name="test-flow">
+    ...
+    <aggregators:size-based-aggregator name="personsNameAggregator"
+                                       maxSize="100"
+                                       timeout="10"
+                                       timeoutUnit="SECONDS">
+        <aggregators:content>#[vars.personName]</aggregators:content>
+        <aggregators:incremental-aggregation>
+            <choice>
+                <when expression="#[(sizeOf(payload) mod 10) == 0]">
+                    <flow-ref name="partialAction"/>
+                </when>
+            </choice>
+        </aggregators:incremental-aggregation>
+        <aggregators:aggregation-complete>
+            <flow-ref name="whatToDoWithAllTheseNames"/>
+        </aggregators:aggregation-complete>
+    </aggregators:size-based-aggregator>
+    ...
+</flow>
+
+<flow name="aggregator-listener-flow">
+    <aggregators:aggregator-listener aggregatorName="personsNameAggregator" includeTimedOutGroups="true"/>
+    <choice>
+        <when expression="#[not attributes.isAggregationComplete]">
+            <flow-ref name="whatToDoWithAllTheseNames"/>
+        </when>
+    <choice>
+</flow>
+----
+
 
 Lastly, you realize that you need to process each person according to nationality. This information comes in a variable. However, in this case, assume that you want to process every person from the same country together in the same batch.
 
