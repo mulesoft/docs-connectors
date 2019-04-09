@@ -250,6 +250,50 @@ structure is decompressed:
 In this case, you can access the extracted contents of the entries like this:
 `payload['summary.pdf']` or `payload.details['result_001.pdf']`
 
+==== Archive and Extractor Example
+
+This example reads in all the files from a folder named input, then creates a compressed archive by creating an object with the key set to the file name, and the value to the value of the read file. Next the archive is extracted, then the For-Each scope iterates over each extracted key/value and writes the file to a new output folder with the key as the new file name, and the value the corresponding extracted file content. 
+
+[source, xml, linenums]
+----
+  <flow name="archive-extract-test" >
+	<scheduler doc:name="Scheduler">
+		<scheduling-strategy >
+			<fixed-frequency frequency="15" timeUnit="SECONDS"/>
+		</scheduling-strategy>
+	</scheduler>
+	<file:list doc:name="List" config-ref="File_Config" directoryPath="input"/>
+	<set-payload value='#[output application/java
+---
+(0 to sizeOf(payload) - 1) as Array
+reduce (index, acc={}) -&gt;
+acc ++ { (payload[index].attributes.fileName): payload[index].payload}]' doc:name="Set Payload" />
+
+	<compression:archive doc:name="Archive" >
+		<compression:archiver>
+			<compression:zip-archiver />
+		</compression:archiver>
+	</compression:archive>
+
+	<compression:extract doc:name="Extract"  >
+		<compression:extractor >
+			<compression:zip-extractor />
+		</compression:extractor>
+	</compression:extract>
+
+	<foreach doc:name="For Each"  collection="payload">
+	  <file:write doc:name="Write"  config-ref="File_Config" path='#[output application/json
+---
+"output/" ++ (payload pluck $$)[0]]' >
+	    <file:content ><![CDATA[#[output application/java --- ( payload pluck $ )[0]]]]></file:content>
+	  </file:write>
+	</foreach>
+
+	<logger level="INFO" doc:name="Logger" message="#[output application/json --- payload]"/>
+  </flow>
+</mule>
+----
+
 ==== Extractor Errors
 
 If the content is not in the configured format, a `COMPRESSION:INVALID_ARCHIVE`
