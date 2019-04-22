@@ -290,6 +290,136 @@ http://www.mulesoft.org/schema/mule/redis/current/mule-redis.xsd">
 </mule>
 ----
 
+=== Use Redis connector as a custom Object Store
+
+This use case describes how the Redis Connector can be used as a custom Object Store in a mule application.
+
+. Add the Redis namespace to the Mule element:
++
+----
+xmlns:redis="http://www.mulesoft.org/schema/mule/redis"
+----
++
+. Add the location of the Redis schema referred to by the Redis namespace:
++
+[source,text,linenums]
+----
+http://www.mulesoft.org/schema/mule/redis
+http://www.mulesoft.org/schema/mule/sfdc-composite/current/mule-redis.xsd
+----
++
+. Add the HTTP namespace to the Mule element:
++
+----
+xmlns:http="http://www.mulesoft.org/schema/mule/http"
+----
++
+. Add the location of the HTTP schema referred to by the HTTP namespace:
++
+[source,text,linenums]
+----
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+----
++
+. Add the Object Store namespace to the Mule element:
++
+----
+xmlns:os="http://www.mulesoft.org/schema/mule/os"
+----
++
+. Add the location of the Object Store schema referred to by the Object Store namespace:
++
+[source,text,linenums]
+----
+http://www.mulesoft.org/schema/mule/os
+http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+----
++
+. Add a os:config element to your project, then configure it to contain a redis connection type(clustered or nonclusterd):
+This is only possible in Studio at the moment and it has to be configured through xml(no support using graphic configuration)
++
+[source,xml,linenums]
+----
+<os:config name="ObjectStore_Config">
+     <redis:nonclustered-connection host="${redis.host}"/>
+</os:config>
+----
++
+. Add a os:object-store element to your project and configure it to refference the previously created config.
++
+[source,xml,linenums]
+----
+<os:object-store name="Object_store" config-ref="ObjectStore_Config" maxEntries="1" entryTtl="60" expirationInterval="10" expirationIntervalUnit="SECONDS"/>
+----
++
+. Add a `http:listener-config` element to your project, and configure its attributes:
++
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0"
+ port="8081" doc:name="HTTP Listener Configuration"/>
+----
++
+. Add an empty flow element to your project:
++
+[source,xml,linenums]
+----
+<flow name="set-flow">
+</flow>
+----
++
+. Within the flow element, add an `http:listener` element:
++
+[source,xml,linenums]
+----
+<http:listener config-ref="HTTP_Listener_Configuration" path="/" />
+----
++
+. Within the flow element, add a `os:store` after the `http:listener` and configure it to use the previously created Object Store
++
+[source,xml,linenums]
+----
+<os:store key="#[attributes.queryParams.key]" objectStore="Object_store" failIfPresent="true" failOnNullValue="false">
+	<os:value ><![CDATA[#[attributes.queryParams.value]]]></os:value>
+</os:store>
+----
++
+. When you're done, the XML file should look like this:
++
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:redis="http://www.mulesoft.org/schema/mule/redis"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/redis http://www.mulesoft.org/schema/mule/redis/current/mule-redis.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	
+	<http:listener-config name="HTTP_Listener_config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<os:object-store name="Object_store" config-ref="ObjectStore_Config" maxEntries="1" entryTtl="60" expirationInterval="10" expirationIntervalUnit="SECONDS"/>
+    
+	<os:config name="ObjectStore_Config">
+        	<redis:nonclustered-connection host="${redis.host}"/>
+    	</os:config>
+
+	<flow name="StoreFlow" doc:id="2c8d4c96-b1d9-4a79-a70e-2cec288cb16a" >
+        <http:listener doc:name="Listener" doc:id="0b2c5018-b4f7-4091-8bc8-09531553ec4f" config-ref="HTTP_Listener_config" path="/store"/>
+        <os:store doc:name="Store" key="#[attributes.queryParams.key]" objectStore="Object_store" failIfPresent="true" failOnNullValue="false">
+		<os:value ><![CDATA[#[attributes.queryParams.value]]]></os:value>
+	</os:store>
+    	</flow>
+
+</mule>
+----
+
 == See Also
 
 * https://forums.mulesoft.com[MuleSoft Forum]
