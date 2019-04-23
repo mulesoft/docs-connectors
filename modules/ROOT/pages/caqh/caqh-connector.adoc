@@ -1,0 +1,184 @@
+// TODO: Need better business purpose in the about section
+= CAQH Connector
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: caqh, providers, healthcare, salesforce, industries, crm
+
+The Council for Affordable Quality Healthcare (CAQH) is a nonprofit that collects, stores, monitors, and validates healthcare providers’ information. CAQH ProView and DirectAssure Roster APIs enable users to retrieve information about providers in real-time for credentialing and other purposes.
+The participating organisations (PO) can use this APIs to roster providers in CAQH ProView. The MuleSoft CAQH connector facilitates simplified access to
+both CAQH ProView and DirectAssure APIs, allowing you to define complex integrations visually, for enhanced provider management and credentialing.
+
+== Prerequisites
+
+This document assumes that you are familiar with CAQH ProView and DirectAssure, Mule concepts, Anypoint Connectors,
+Anypoint Studio, the elements in a Mule flow, and Global Elements.
+The APIs use basic authentication, which is based on username and password.
+So, you also require CAQH account and credentials to use this connector.
+
+//TODO: Cover this in release notes. Where should release notes go?
+For hardware and software requirements and compatibility information, see the Connector Release Notes.
+
+To use this connector with Maven, find the `pom.xml` dependency information in the Dependency Snippets tab of this connector's page on the Anypoint Exchange.
+
+== Connector Namespace and Schema
+//TODO: Check instructions in other connector docs for this.
+
+When designing your application in the Studio, drag the connector from the palette to the Anypoint Studio canvas.
+This automatically populates the XML code with the connector namespace and schema location.
+
+* Namespace: `+http://www.mulesoft.org/schema/mule/caqh+`
+* Schema Location: `+http://www.mulesoft.org/schema/mule/caqh/current/mule-caqh.xsd+`
+
+== Connect in the Design Center
+
+// In this section, explain how to use the connector in the Design Center. Optionally, add a table explaining the configurations required for each of the operations as a part of the steps to configure the connector as a component. For example, see Cassandra and Marketo.
+. Create a new Mule Application in the Design Center.
+. Configure HTTP Listener or Scheduler as a *Trigger* on the canvas.
+. Click the *+* icon to add a new component on the canvas.
+. Select the CAQH connector as a component.
+. Select an operation from the list.
+. Configure the global element fo the connector.
+** *Address*: URL to access CAQH API.
+** *Username*: The user name to access CAQH API.
+** *Password*: Password to access CAQH API.
+. Fill in the parameters that are required for the operation.
+
+== Install CAQH Connector in Anypoint Studio
+
+. In Anypoint Studio, click the *Exchange* icon in the Studio taskbar.
+. Click *Login* in Anypoint Exchange.
+. Search for the CAQH connector and click *Install*.
+. Follow the prompts to install this connector.
+
+== Configure in Anypoint Studio
+
+. Create a new Mule project in Anypoint Studio. Ensure that you have HTTP listner configured.
+. Drag and drop the connector to the Studio Canvas.
+. Configure the Global element for the connector using the following properties.
+** *Address*: URL to access CAQH API.
+** *Username*: The user name to access CAQH API.
+** *Password*: Password to access CAQH API.
++
+You can either enter your credentials into the global configuration properties,
+or reference a configuration file that contains these values.
+For simpler maintenance and better reuse of your project,
+Mule recommends that you use a configuration file.
++
+TIP: An example configuration file for CAQH
+is available at `src/main/resources/configuration.yml`. You can add this file in the Configuration Properties of the Global Configuration Elements.
+
+. Click *Test Connection...* to ensure that your connection is successful.
+. Select any connector operation.
+
+// TODO: ALl configuration instructions are to be verified.
+
+== Use Cases
+
+The following use cases aim to demonstrate how you can use this connector to
+
+* Update Providers from Salesforce to CAQH Using ProView
+* Delete Providers from Roster Using ProView
+
+Before you begin with the use cases,
+
+. Create a Mule application and set the connector configuration properties in the configuration file in the `src/main/resources`. Here's example of such a configuration file properties:
++
+[source, yaml]
+----
+caqh:
+  address: "<url-to-access-caqh-api>"
+  user: "<username-to-access-caqh-api>"
+  password: "<password-to-access-caqh-api>"
+----
++
+. Add the configuration file for CAQH connector to the Configuration Properties of the *Global Configuration Elements*.
+
+
+=== Update Provider from Salesforce to CAQH Using ProView
+
+In the following example a Mule application queries Salesforce contacts to find a provider, updates the status of that provider in CAQH, and gets the status of the update request.
+
+image::caqh/caqh-update-provider-from-sf.png[Update Providers Flow]
+
+In your Mule Application,
+
+. Drag an HTTP Listener to the canvas and configure it.
+. From the Mule Palette, search for Salesforce connector and drag *Query* operation.
+. For the purpose of this demo, use the following query to get a contact from Salesforce.
++
+[source, sql]
+----
+SELECT firstName, LastName, Id,
+	CAQH_Provider_ID__c,
+	SF_Provider_ID__c,
+	CAQH_organization_id__c,
+	Provider_name__c,
+	caqh_batch_id__c
+from CONTACT
+where name = ':name'
+----
++
+. Select and drag Transform Message at the flow to prepare the input for the CAQH connector.
++
+[source, yaml]
+----
+output application/java
+---
+ [{
+  "caqh_provider_id": payload[0].CAQH_Provider_ID__c,
+  "organization_id": payload[0].CAQH_organization_id__c,
+  "po_provider_id": payload[0].Id,
+  "last_recredential_date": "",
+  "next_recredential_date": "05/05/2019",
+  "delegation_flag": "Y",
+  "application_type": "A",
+  "affiliation_flag": ""
+}]
+----
++
+. Next, use the `Update Providers - ProView (PUT)` connector operation after the listener and select the connector configuration that you have created.
+. In the connector configuration body, set the connector body in *General* section to `payload` and *Target Value* in the Advanced section to `#[payload]`.
+. Use another Transform Message component to add some wait time. This is because it takes a few minutes for the provider to be updated in CAQH.
++
+[source, yaml]
+----
+%dw 2.0
+import * from dw::Runtime
+output application/json
+---
+ payload
+wait 300000
+----
++
+. To check if the update request is successful, drag `Get Status - Update to Roster` operation after the Transform Message.
+. In the *General* section of the operation configuration,
+.. Set the *Batch_id* to `#[payload.batch_Id]`.
+.. Set *Target Value* in the Advanced section to `#[payload]`.
+. Add a Transform Message component at the end of the flow to transform the output message to JSON format. Set the output of the Transform Message as,
++
+[source, json]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
++
+. Run the application and point your browser to `+http://localhost:8081/update-provider+`.
+
+=== Delete Providers from Roster Using ProView
+
+In the following example a Mule application queries Salesforce contacts to find a provider, deletes that provider in CAQH using the ProView API, and gets the status of the delete request.
+
+NOTE: The delete request only sets the provider status in CAQH to `Inactive`.
+
+image::caqh/caqh-delete-provider.png[Delete Providers Flow]
+
+The procedure to implement this flow is similar to Update Provider from Salesforce to CAQH Using ProView. Use *Delete Providers - ProView (PUT)* and *Get Status - Delete from Roster* operations of CAQH connector to implement this flow.
+
+== See Also
+// TODO Add more links
+
+* https://forums.mulesoft.com[MuleSoft Forum]
+* https://support.mulesoft.com/s/knowledge[Knowledge Base Articles]
