@@ -1,79 +1,172 @@
-= HTTP Listener Configuration Reference
+= HTTP Listener Reference
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
-:keywords: anypoint studio, esb, connectors, http, https, http headers, query parameters, rest, raml
 
-The required minimum settings for the Listener operation are:
+The HTTP listener is an event source that enables you to set up an HTTP server and trigger flows when HTTP requests are received.
 
-* Host
-* Port
-* Path
+You can choose what methods the source accepts, such as GET, POST or a list of methods, and on which path to accept requests, thereby allowing the routing of requests through different flows.
 
-You can choose what methods the connector accepts, such as GET or POST. Provide a comma-separated list of the methods that the connector allows in Advanced > Allowed Methods. The default blank list allows all methods. The connector routes incoming requests based on the URL that requests the app.
+Once a request is accepted by the listener, the corresponding flow is triggered with the HTTP body as payload and the HTTP data as attributes (headers, query parameters and so on).
 
-You can configure the HTTP Listener to accept any request, or to accept only those requests addressed to a specific URI. You set the Path to limit the requests.
+When the flow finishes its execution, the HTTP listener enables you to customize the HTTP response based on whether the execution was successful or not, so that different status codes can be returned, for example.
 
-The connector passes the request body to the next element of the Mule flow as the message payload of a Mule message. Headers, query parameters, and URI parameters are passed as attributes. You can access these properties from your Mule application using DataWeave.
+== HTTP Listener Configuration
 
-In response to the request that the Listener receives, you can configure response codes and clarifications for success and error outcomes to present different error messages depending on the outcome.
+To use an HTTP listener, you need to declare a configuration with a corresponding connection. This declaration establishes the HTTP server that will listen to requests.
 
-== Setting the Host
+Additionally, you can configure a base path that applies to all listeners using the configuration.
 
-To deploy a project to CloudHub, setting Host = *0.0.0.0* is required.
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_config" basePath="api/v1">
+  <http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+----
 
-When you depoly an app locally, set Host = *localhost* for security. Using localhost listens for incoming requests generated inside the server, so the app is not vulnerable to external threats.
+=== HTTP Listener Connection
 
-Setting Host to `0.0.0.0` sets up the Listener to listen on all interfaces of the machine including the following examples:
+The connection defines the host and port where the server will be set up, as well as the protocol to use: HTTP for plain connections or HTTPS for TLS connections.
 
-* `+http://localhost:8081/mybasepath+`
-* `+http://127.0.0.1:8081/mybasepath+`
-* `+http://myhost.some.domain:8081/mybasepath+`
+To allow secure connections through HTTPS, you need to define a TLS context in the connection and provide a key store for the server. You can also provide a trust store if
+you need two-way authentication. See xref:4.1@mule-runtime::tls-configuration.adoc[TLS Configuration] for details.
 
-== Setting the Path
+[source,xml,linenums]
+----
+<http:listener-connection host="0.0.0.0" port="8081" protocol="HTTPS">
+  <tls:context>
+    <tls:trust-store path="keystore.jks" password="MyP455W0rD"/>
+  </tls:context>
+</http:listener-connection>
+----
 
-If a request matches the path of multiple Listeners, the Listener having the most specific path has precedence, regardless of the order in which the operations are defined. Only one connector handles each request.
-For example, given the following Listener configurations, the second one receives the request when you use this URL: `account/mulesoft/main-contact`
+[TIP]
+===
+To deploy a project to CloudHub, setting the host to *0.0.0.0* is required because it sets up the connection to listen on all interfaces of the machine.
 
-* Path = `account/(...)`
-* Path = `account/(...)/main-contact`
+When you deploy locally for testing purposes, setting the host to *localhost* is better because it means only requests generated locally will be received: the app is not vulnerable to external threats.
+===
 
-=== Wildcard in Path
+More advanced configurations can also define whether the connections will be persistent and if not, the timeout they will have.
 
-In the Path setting, you can use the wildcard asterisk (*) as follows:
+== HTTP Listener
 
-* To listen for incoming requests to a path within the specified base path. Use a wildcard at the end of a path.
-* To listen for all requests for a resource in a URI. Use a wildcard in the middle of a path.
+The HTTP listener is configured as an event source within flows and must reference the configuration to use and the path where it listens for requests.
 
-You can specify a partial path that ends with an asterisk, for example: `/somepath/*`. Any request succeeds that has a URL consisting of the prefix to the asterisk (`/somepath`).
+[source,xml,linenums]
+----
+<flow name="http-triggered-flow">
+  <http:listener path="/" config-ref="HTTP_Listener_config"/>
+  <set-payload value="Help! I've been triggered!"/>
+</flow>
+----
 
-Put a wildcard at the end of a path to prevent unexpected results when specific paths configured in other flows override the wildcard path. For example, the Path settings for the HTTP Listener in flows are set as follows:
+When an HTTP request matches a listener, its request data is used to trigger the flow. The body is set as the payload, while all other data from the request line to the headers are propagated as attributes.
+When the triggered flow is done, the HTTP listener uses its result to generate a proper HTTP response.
 
-* Path configured in Flow A: `/regions/*/customers`
-* Path configured in Flow B: `/regions/us/prospects`
+=== Paths
 
-A request to `/regions/us/customers` fails and is routed to flow B.
+The path of an HTTP listener can be static, which requires exact matches, or feature placeholders. Placeholders can be wildcards (`*`), which match against anything they are compared to, or parameters (`{param}`), which not only match against anything but also capture those values on a URI parameters map.
 
-Put a wildcard in the middle of a path when you want a request to succeed that has a URL consisting of the prefix and suffix to the asterisk. For example, Path = `account/\*/main-contact`. The HTTP Listener listens for every HTTP request having a URI that starts with `/account/` and ends with `/main-contact`; the segment in the middle can vary. Requests succeed from the following URLs:
+Take the following example paths for three listeners using a configuration that establishes `api/v1` as the base path:
 
-* `+http://localhost:8081/account/mulesoft/main-contact+`
-* `+http://localhost:8081/account/foo/main-contact+`
+* `account/mulesoft/main-contact`: only match the exact path request `+http://awesome-company.com/api/v1/account/mulesoft/main-contact+`
+* `account/{accountId}/main-contact`: matches all path requests structured similarly, such as `+http://awesome-company.com/api/v1/account/salesforce/main-contact+`, and save `salesforce` as the value of `accountId`.
+* `account/{accountId}/*`: matches all path requests different from `main-contact`, such as `+http://awesome-company.com/api/v1/account/mulesoft/users+`, and save `mulesoft` as the value of `accountId`.
 
-=== Using a Placeholder in a URI
+[TIP]
+Wildcards at the end of a path can help capture requests to unhandled resources to provide better error messages.
 
-You can define a path that uses a placeholder in curly braces: `{accountId}` for example, `account/{accountId}/main-contact`. The connector maps the accountId to a URI parameter attribute in the flow.
+When multiple listeners are defined, requests are always routed to the most specific one. Hence, in the previous examples, a request with `accountId: mulesoft` and suffix `main-contact` are handled by the first listener, and any different `accountId` value by the second listener instead of the third.
 
-For example, a request to `+http://localhost:8081/account/mulesoft/main-contact+` maps the URI parameter to the Mule Message that holds the key `accountId` = `mulesoft`:
+=== About Methods
 
-== Connector Mapping of Received Data
+Requests can also be routed based on the HTTP method received. By default, a listener handles all methods, but these can be restricted to the methods of your choosing, even custom ones. In the following example, `GET`, `POST` and `PUT` requests are routed to different flows.
+This is useful for restricting the visibility of data: you might allow certain users to see your data but only a few to modify it.
 
-The data received by the connector during the Listener operation is always mapped as the payload of the propagated Mule Message.
+[source,xml,linenums]
+----
+<flow name="main-contact-write">
+  <http:listener path="account/{accountId}/main-contact" allowedMethods="POST, PUT" config-ref="HTTP_Listener_config"/>
+  <!-- validate user permissions -->
+  <!-- store or update main contact for accountId -->
+</flow>
 
-=== Example of Receiving a Form
+<flow name="main-contact-read">
+  <http:listener path="account/{accountId}/main-contact" allowedMethods="GET" config-ref="HTTP_Listener_config"/>
+  <!-- fetch main contact for accountId -->
+</flow>
 
-The following example shows the mapping by the HTTP Listener operation when an HTML form is received.
+<flow name="main-contact-general">
+  <http:listener path="account/{accountId}/main-contact" config-ref="HTTP_Listener_config"/>
+  <set-payload value="#['The main contact resource does not support ' ++ attributes.method ++ ' requests.']"
+</flow>
+----
 
-The body of a request is the following HTML form:
+When multiple listeners are defined, requests are routed to the first listener matching the method, so default listeners should always be defined last.
+
+=== From HTTP Request to Mule Message
+
+The data from the HTTP request line, including the method, request path, query, and URI parameters, as well as the headers are all available as attributes within a triggered flow.
+On the other hand, the body and the `Content-Type` header are used to set up the payload and its mime type, which allows other components to inspect the payload mime type: DataWeave, for example, won't need any input information to work with an HTTP payload.
+Additionally, if an `X-Correlation-ID` or `MULE_CORRELATION_ID` (for interoperability with Mule 3) header is present, it is used to set the message's correlation ID for traceability.
+
+Consider the following HTTP request:
+
+[source,text,linenums]
+----
+POST api/v1/account/salesforce/main-contact?overwrite=true&notify=jane.doe&notify=admin HTTP/1.1
+Host: localhost:8081
+Content-Type: application/json
+Content-Length: 166
+X-Correlation-ID: 9cf32672-4f0b-4e8b-b988-40c13aae85b4
+
+{
+  "name": "John",
+  "surname": "Doe",
+  "role": "Senior Vice President",
+  "organization": "Marketing",
+  "phone": 701222369,
+  "email": "john.doe@salesforce.com"
+}
+----
+
+The message's correlation ID is `9cf32672-4f0b-4e8b-b988-40c13aae85b4` and its payload is a JSON:
+
+[source,text,linenums]
+----
+{
+  "name": "John",
+  "surname": "Doe",
+  "role": "Senior Vice President",
+  "organization": "Marketing",
+  "phone": 701222369,
+  "email": "john.doe@salesforce.com"
+}
+----
+
+An expression like `#[payload.name ++ ' ' ++ payload.surname]` returns `John Doe` because DataWeave correctly interprets the JSON data.
+
+The attributes of the message will include:
+
+* method: `POST`
+* listenerPath: `api/v1/account/{accountId}/main-contact`
+* requestPath: `api/v1/account/salesforce/main-contact`
+* relativePath: `account/salesforce/main-contact`
+* queryParams: a multi-map with entries `overwrite => true`, `notify => jane.doe` and `notify => admin`
+* uriParams: a map with entry `accountId => salesforce`
+* headers: a multi-map with entries `host => localhost:8081`, `content-type => application/json`, `content-length => 166` and `x-correlation-id => 9cf32672-4f0b-4e8b-b988-40c13aae85b4`
+
+[NOTE]
+Multi-maps are similar to maps except they allow several values for a given key. They will return the first value when using a single-value selector (`.`) but allow all values to be retrieved using the multiple-value selector (`.*`).
+
+An expression like `#['Received a ' ++ attributes.method ++ ' request for account ' ++ attributes.uriParams.accountId ++ '. The following users are notified: ' ++ (attributes.queryParams.*notify joinBy ', ')]` returns `Received a POST request for account salesforce. The following users are notified: admin, jane.doe`.
+
+See xref:http/http-documentation.adoc[HTTP Documentation Reference] for the complete and detailed listing of HTTP request attributes.
+
+==== Multipart Form Example
+
+The following example shows the manipulation of an HTTP listener event source message when an HTML form is received, such as:
 
 [source,xml,linenums]
 ----
@@ -81,102 +174,124 @@ The body of a request is the following HTML form:
         enctype="multipart/form-data"
         method="post">
 
-    What is your name? <INPUT type="text" name="name"><BR>
-    What is your request? <INPUT type="file" name="request"><BR>
-    What is your favorite color? <INPUT type="text" name="color"><BR>
+    How would you like to identify the logo? <INPUT type="text" name="name"><BR>
+    Which is the logo file? <INPUT type="file" name="logo"><BR>
+    What is the main color in the logo? <INPUT type="text" name="color"><BR>
     <INPUT type="submit" value="Send"> <INPUT type="reset">
 
 </form>
 ----
 
-The request headers are:
+The resulting HTTP request when submitting the form is a multipart one:
 
 [source,text,linenums]
 ----
-POST /accounts HTTP/1.1
+POST /api/v1/account/mulesoft/logo HTTP/1.1
+Content-Type: multipart/form-data; boundary=489691234097965980223899
 Host: localhost:8081
-Cache-Control: no-cache
-User-Agent: Mule/4.0
-Content-Type: multipart/form-data; boundary=AaB03x
+content-length: 34332
 
- --AaB03x
+--489691234097965980223899
 Content-Disposition: form-data; name="name"
 
-MuleSoft
- --AaB03x
-Content-Disposition: form-data; name="request"; filename="myrequest.png"
+Corporate Logo
+--489691234097965980223899
+Content-Disposition: form-data; name="logo"; filename="MuleSoft_logo.png"
 Content-Type: image/png
 
-
- --AaB03x
+.PNG
+.
+...
+IHDR.......L......~.....	pHYs...#...#.x.?v.. .IDATx....q.W.6.....~".N....t....t..#.....LD0T.CF0b..:.3......Q..@...q]U*y\c....
+....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%
+.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....^6.......|..P.....IEND.B`.
+--489691234097965980223899
 Content-Disposition: form-data; name="color"
 
 blue
- --AaB03x
+--489691234097965980223899--
 ----
 
-== Using DataWeave to Access the Form Data
+Each item can be accessed through the `parts` object, either by name or item number. For example, the second part can be accessed with `payload.parts.logo` or `payload.parts[1]`. The latter is useful when a name is not provided.
+Within each part, you can access its content and headers. For example, `payload.parts.color.content` returns `blue`, while `payload.parts.logo.headers.'Content-Type'` returns `application/png`.
+A very common scenario is obtaining the filename of a part. For this reason, the `Content-Disposition` header is parsed to allow an expression like `payload.parts.logo.headers.'Content-Disposition'.filename`, which in this case returns `MuleSoft_logo.png`.
 
-You access the form values using expressions that resemble these:
+See xref:4.1@mule-runtime::dataweave-formats.adoc[Formats Supported by DataWeave] to learn more about reading and writing multipart content.
 
-* Access the content of the `name` field
-+
-`#[payload.name]`
-+
-* Access the headers
-+
-`#[attributes.headers['content-type']`
+=== About HTTP Responses
 
-For more information, see "About HTTP Responses to Requests."
+After the triggered flow finishes its execution, the result is returned so that the listener can provide a response. If the flow executed successfully, a regular response is returned, but if the flow terminated with a failure, then an error response is returned.
+By default, a regular response returns a 200 status code and the message payload as the body, while an error response returns a 500 status code with the flow error's description as the body. These responses can be customized by providing the:
 
-== HTTP Custom Properties Request Line
+* Status code
+* Reason phrase
+* Headers multi-map
+* Body
 
-Besides headers and a body, an HTTP request is also composed of a request line. The HTTP request line is the content on the first line of the HTTP Request that includes the URI from the address bar of the client request. For example:
+DataWeave can be used to generate each parameter and variables can be used to propagate data from the flow.
 
-`POST /mydomain/login/?user=aaron&age=32 HTTP/1.1`  +
+In the following example, an endpoint is defined to store logos for an account:
 
-This content is transformed into the following attributes in the Mule Message:
+. When the storage is successful, a `201 Created` is returned with a body, such as `Corporate Logo has been stored as a mulesoft logo`.
+. When the storage fails, the status code is defined through the `errorCode` variable (if available) or `500` by default.
+. A custom header is added (`X-Time`) as well.
+. A body, such as `Corporate Logo could not be stored`, is returned.
+. If there is a `CONNECTIVITY` error storing the logo, for example, the returned status code would be `504`, while any other errors would result in a `500`.
 
-Property names are defined as follows:
+NOTE: While a reason phrase is not defined for error responses, the connector attempts to define one based on the status code. Thus, a `Gateway Timeout` or `Internal Server Error` is returned in the scenarios explained before.
 
-* `#[attributes.method]`
-+
-The HTTP Request method
-+
-* `#[attributes.listenerPath]`
-+
-The path: `/mydomain/login/`
-+
-* `#[attributes.queryParams.user]` and `#[attributes.queryParams.age]`
-+
-The query string values from the URI, `aaron` and `32`.
-+
-* `#[attributes.queryString]`
-+
-The query string from the URI, without parsing, `user=aaron&age=32`.
+[source,xml,linenums]
+----
+<flow name="store-logo">
+  <http:listener config-ref="HTTP_Listener_config" path="/account/{accountId}/logo">
+    <http:response statusCode="201" reasonPhrase="Created"> // 1
+      <http:body ><![CDATA[#[output text/plain --- vars.logoName ++ ' has been stored as a ' ++ vars.accountId ++ ' logo.']]]></http:body>
+    </http:response>
+    <http:error-response statusCode="#[vars.errorCode default 500]"> // 2
+      <http:body ><![CDATA[#[vars.logoName ++ ' could not be stored.']]]></http:body> // 3
+      <http:headers ><![CDATA[#[
+        output application/java
+        ---
+        {
+          "X-Time" : "50s" // 4
+        }
+      ]]]></http:headers>
+    </http:error-response>
+  </http:listener>
+  <set-variable variableName="logoName" value="#[payload.parts.name.content]" 
+  mimeType="text/plain"/>
+  <set-variable variableName="accountId" value="#[attributes.uriParams.accountId]" 
+  mimeType="text/plain"/>
+  <!-- store logo -->
+  <error-handler >
+    <on-error-propagate type="CONNECTIVITY"> // 5
+      <set-variable variableName="errorCode" value="504"/>
+    </on-error-propagate>
+  </error-handler>
+</flow>
+----
 
-When the HTTP Listener has URI parameter placeholders in its path, a Map is created with the holder name as key and the value as extracted from the request path. For example, `domain=mydomain`. The Listener path must be defined as `{domain}/login`
+==== HTTP Streaming Mode
 
-== Generating the HTTP Response
+When handling response bodies, the HTTP connector  considers the kind of data to send and use `chunked` encoding when the size is not clear (think streams with no size information). You can change this behavior using the `responseStreamingMode` options:
 
-After request processing, the message is returned to the HTTP connector to provide a response. You can customize the response body, attachment, headers, and status.
+* AUTO (default): If a size is defined for the body, the listener uses `Content-Length` encoding. Otherwise it uses `Transfer-Encoding: chunked`.
+* ALWAYS: Uses `Transfer-Encoding: chunked` regardless of any size data present.
+* NEVER: Uses `Content-Length` encoding, consuming streams if necessary to determine the data size.
 
-=== HTTP Response Body
+In the next example, the main contact data for an account always returns using `Content-Length` encoding.
 
-The HTTP Response body is generated from payload of the Mule Message after executing the flow unless explicitly configured. You can use a DataWeave script or expression to customise it.
+[source,xml,linenums]
+----
+<flow name="main-contact-read">
+  <http:listener path="account/{accountId}/main-contact" allowedMethods="GET" responseStreamingMode="NEVER" config-ref="HTTP_Listener_config"/>
+  <!-- fetch main contact for accountId -->
+</flow>
+----
 
-=== HTTP Response Headers
+== See Also
 
-The response message sent by the HTTP Listener can include HTTP headers. In Headers, enter an expression to include information in the response, for example: `#[{'Connection' : 'close' }]`. This will add a `Connection` header with `close` value to the HTTP response.
-
-=== HTTP Response Status Code and Reason Phrase
-
-You can customize the connector response to requests dynamically. For example, you can set different error status code numbers depending on the error raised by having an error handler that sets the value of a variable used to define the HTTP response status code.
-
-You can define the status code and reason phrase in the Listener, defining the ones for successful executions and the ones for failing executions.
-
-== Configuring Connection Attributes
-
-You can customize HTTP incoming connections by setting the maximum time a connection can be idle for and enabling or disabling persistent HTTP connections. In the global configuration element, check Use Persistent Connection to define whether multiple requests are handled by a single connection or not. By default, multiple requests are handled by a single connection (true).
-
-If you use a persistent connection, you can also set up the Connection Idle Timeout. This option defines the number of milliseconds that a connection can remain idle before it is closed. The default value is 30 seconds.
+* xref:http/http-documentation.adoc[HTTP Connector Technical Reference]
+* xref:http/http-troubleshooting.adoc[HTTP Connector Troubleshooting Guide]
+* xref:4.1@mule-runtime::dataweave-formats.adoc[DataWeave Formats]
+* xref:4.1@mule-runtime::tls-configuration.adoc[TLS Configuration]
