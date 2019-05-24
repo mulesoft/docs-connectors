@@ -7,55 +7,90 @@ You can invoke Java methods (either instance or static) through the `invoke` and
 
 == Invoke Instance Methods
 
-This example shows how to invoke instance methods: 
+Let's suppose we have the following Java class `TaxCalculator` which belongs to the `com.foo` package:
+
+[source,java,linenums]
+----
+package com.foo;
+
+public class TaxCalculator {
+
+    private Double percentBaseTax = 7.0;
+
+    public Double calculateTax(Double price, Double percentAdditionalTax) {
+        return price * (this.percentBaseTax + percentAdditionalTax) / 100;
+    }
+
+    public Boolean isTaxFree(Double price) {
+        if (price < 10) {
+            return true;
+        }
+        return false;
+    }
+}
+
+----
+
+IMPORTANT: The classes used with the Java Module must be exported (unless they belong to the default package). If not, the
+execution will fail with a JAVA:CLASS_NOT_FOUND error. See xref:4.1@mule-runtime::how-to-export-resources.adoc[How to
+export resources].
+
+We will show how to invoke instance methods:
 
 . First you need an instanced object to call one of its methods. You can use the xref:java/java-create-instance.adoc[`new`
-operation] from the Java module to create an instance on which a method is later
-invoked. In the example, we will create an instance of the class _TaxCalculator_ and save it
-to the target variable `taxCalculator`.
-. Use the `invoke` operation to call one of the object's methods. Like the `new` operation, `invoke` supports https://docs.mulesoft.com/mule-runtime/4.2/target-variables[target parameters]. In the example, we will call
-the _calculateTax()_ method and save its return value in the `totalTax` variable.
+operation] from the Java module to create an object on which a method is later invoked.
+. Use the `invoke` operation to call one of the object's methods. Just like the `new` operation,
+`invoke` takes a map for input parameters (if the method has them) and supports
+https://docs.mulesoft.com/mule-runtime/4.2/target-variables[target parameters].
+
+In the following example, we will create an instance of the class _TaxCalculator_ and save it
+to the target variable `taxCalculator`. Then we will call the
+_calculateTax(Double , Double)_ method which takes _price_ and _percentAdditionalTax_
+as arguments and save its return value in the `totalTax` variable.
 
 [source,xml,linenums]
 ----
 <java:new class="com.foo.TaxCalculator"
   constructor="TaxCalculator()"
   target="taxCalculator"/>
+
 <java:invoke instance="#[vars.taxCalculator]"
   class="com.foo.TaxCalculator"
-  method="calculateTax()"
-  target="totalTax" />
-----
-
-Suppose that the method now takes _price_ and _description_ arguments, we would invoke it in
-the following manner:
-
-[source,xml,linenums]
-----
-<java:new class="com.foo.TaxCalculator"
-  constructor="TaxCalculator()"
-  target="taxCalculator"/>
-<java:invoke instance="#[vars.taxCalculator]"
-  class="com.foo.TaxCalculator"
-  method="calculateTax(Integer, String)"
+  method="calculateTax(Double, Double)"
   target="totalTax">
       <java:args>#[{
-        price: 15,
-        description: 'Mulesoft T-shirt'
+        price: 25,
+        percentAdditionalTax: 2
       }]</java:args>
 </java:invoke>
 ----
 
-In Studio, the Java module provides DataSense for metadata associated with `<java:new/>`
-and for both the output value and the input arguments. For an example, see the section below: <<studio_example>>.
+In Studio, the Java module supports DataSense for the `invoke` operation, providing metadata
+for both the input arguments and the output value. In our example, DataSense discovers that
+_calculateTax_ returns a Number, so the output metadata will look like this:
 
-IMPORTANT: When configuring the method arguments in the `<java:args>` parameter,
-the keys of the map will determine how the parameters will be passed to the method. *In
-order to reference the parameters by name* (`price`, `description`, etc.),
+image::../../assets/images/java/invoke-output-metadata.png[]
+
+For a complete example of using `invoke` in Studio, see the section below: <<studio_example>>.
+
+[IMPORTANT]
+===============================
+When configuring the constructor arguments in the `args` parameter,
+the keys of the map will determine how the parameters will be passed to the constructor. *In
+order to reference the parameters by name* (`price`, `percentAdditionalTax`, etc.),
 the java class containing the Method or Constructor has to be compiled
 using https://docs.oracle.com/javase/tutorial/reflect/member/methodparameterreflection.html[the `-parameters` compiler flag].
 If the class was not compiled with this flag, then the same parameters
-should be referenced in the declared order and with the canonical names (`arg0: 15`, `arg1: 'Mulesoft T-shirt'`, etc.).
+must be referenced in the declared order and with the canonical names
+(`arg0`, `arg1`, etc.). In this case:
+[source,xml,linenums]
+----
+<java:args>#[{
+  arg0: 25,
+  arg1: 2
+}]</java:args>
+----
+===============================
 
 [TIP]
 ===============================
@@ -77,15 +112,33 @@ with the `-parameters` flag:
 ----
 ===============================
 
-== Invoke Static Methods
+== Invoke Methods with DataWeave
 
-To invoke static Java methods (they don't require an instanced object), you can directly use:
+The Java Module also has a DataWeave function (`Java::invoke`) to provide the same functionality as the
+`invoke` operation. This practice is especially helpful for methods that return `boolean`
+values. The function takes as arguments the full class name of the given object, the
+instance method to execute, the instanced object and method arguments as a map.
+
+Rather than using a Java module operation, this example embeds the DataWeave function in a
+https://docs.mulesoft.com/mule-runtime/4.1/choice-router-concept[Choice] component:
 
 [source,xml,linenums]
 ----
-<java:invoke-static
-  class="java.lang.Math"
-  method="toRadians(double)">
+<choice>
+    <when
+      expression="#[Java::invoke('com.foo.TaxCalculator', 'isTaxFree(Double)', vars.taxCalculator, {price: vars.price})]">
+        <flow-ref name="skipTax" />
+    </when>
+</choice>
+----
+
+== Invoke Static Methods
+
+To invoke static Java methods, directly use:
+
+[source,xml,linenums]
+----
+<java:invoke-static class="java.lang.Math" method="toRadians(double)">
     <java:args>#[{arg0: 180}]</java:args>
 </java:invoke-static>
 ----
@@ -360,25 +413,10 @@ INFO  2019-02-22 09:21:32 ... [event: 4c31f...] ... LoggerMessageProcessor: 7
 * `helloWorld` is the output value for *javaexamplesFlow*.
 * `7` is the output value for *javaexamplesFlow1*.
 
-== Invoke Methods with DataWeave
+== See also
 
-You can also use the `invoke` operation of the Java Module using DataWeave expressions.
-This practice is especially helpful for methods that return `boolean` values.
+xref:java/java-throwable.adoc[Example: Working With Throwable]
 
-Rather than using a Java module operation, this example uses the DataWeave
-expression in a Choice component:
+xref:java/java-argument-transformation.adoc[Java Module Argument transformation]
 
-[source,xml,linenums]
-----
-<choice>
-    <when
-      expression="#[Java::invoke('com.foo.TaxCalculator',
-      'isTaxFree(Invoice)', vars.taxCalculator,
-      {invoice: vars.invoice})]">
-        <flow-ref name="skipTax" />
-    </when>
-</choice>
-----
-
-NOTE: `vars.taxCalculator` contains an instance of `com.foo.TaxCalculator` that was  created with `<java:new/>`, as previously explained.
-
+xref:java/java-reference.adoc[Java Module Documentation Reference]

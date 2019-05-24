@@ -5,32 +5,137 @@ endif::[]
 :keywords: Java, create instance
 
 
-
-The Java Module provides a `validate-type` operation that tests whether a given object is an
+The Java Module provides a `Validate type` operation that tests whether a given object is an
 instance of a given class. It can also be configured to accept or reject SubTypes of the
-given class.
+given class. If true, the operation will not modify the payload and the flow will
+continue its execution. Otherwise, it will throw an error, interrupting the flow and passing
+control to the https://docs.mulesoft.com/mule-runtime/4.1/intro-error-handlers#error-handlers[error handler].
 
 == Validate Type Operation
 
-The following examples checks whether the variable `vars.john` belongs to the class
-`Person` of the `com.foo` package and does not accept subtypes of `Person`. If true, the
-operation will not modify the payload and the flow will continue its execution. Otherwise,
-it will throw an error, interrupting the flow.
+Assume we have defined the following Java classes:
+
+[source,java,linenums]
+----
+package com.foo;
+
+public class Person {
+
+    private String name;
+    private Integer age;
+
+    public Person() {
+        this.name = "Max Mule";
+        this.age = 10;
+    }
+
+    public Person(String name, Integer age) {
+        this.name = name;
+        this.age = age;
+    }
+}
+----
+
+And
+
+[source,java,linenums]
+----
+package com.foo;
+
+public class Employee extends Person {
+
+    private String company;
+
+    public Employee(String name, Integer age, String company) {
+        super(name, age);
+        this.company = company;
+    }
+}
+----
+
+IMPORTANT: The classes used with the Java Module must be exported (unless they belong to the default package). If not, the
+execution will fail with a JAVA:CLASS_NOT_FOUND error. See xref:4.1@mule-runtime::how-to-export-resources.adoc[How to
+export resources].
+
+To check whether an object belongs to a certain class, first we have to instance said object.
+Suppose we call the xref:java/java-create-instance.adoc[`new` operation] to create a `Employee` object and
+save it to a variable called `jane`:
 
 [source,xml,linenums]
 ----
-<java:validate-type class="com.foo.Person" instance="#[vars.john]" acceptSubtypes="false" />
+<java:new class="com.foo.Employee" constructor="Employee(String, Integer, String)" target="jane">
+    <java:args>#[{
+      name: 'Jane Avi',
+      age: 28,
+      company: Mulesoft
+    }]</java:args>
+</java:new>
 ----
 
-== Validate Type Method in DataWeave
+Now we want to check if the object stored in `vars.jane` belongs to the class
+`Employee`. We can do that with the `Validate type` operation:
 
-The Java module provides a DataWeave `isInstanceOf()` function that tests whether a given object is an instance of a given class, for example:
+[source,xml,linenums]
+----
+<java:validate-type class="com.foo.Employee" instance="#[vars.jane]" />
+----
+
+In this case our object *is* an instance of `Employee` so our flow will continue
+executing normally and the payload is not modified.
+
+=== Checking Against SubTypes (Inheritance)
+
+The `Validate type` operation has one extra parameter called `Accept subtypes`
+which indicates if the operation should accept all subclasses of the given class.
+This parameter can be True, False or an expression, and it defaults to True when omitted.
+
+Continuing with our previous example, the object in `vars.jane` belongs to the
+`Employee` class which extends the `Person` class, i.e. `Employee` is a subtype
+of `Person`. So if we were to execute the following:
+
+[source,xml,linenums]
+----
+<java:validate-type class="com.foo.Person" instance="#[vars.jane]" acceptSubtypes="true" />
+----
+
+It would resolve to true and the flow would continue normal execution.
+
+[TIP]
+===============================
+Because when omitting the `Accept subtypes` parameter it defaults to True,
+the code above is equivalent to:
+
+[source,xml,linenums]
+----
+<java:validate-type class="com.foo.Person" instance="#[vars.jane]" />
+----
+===============================
+
+However, if we were to set `Accept subtypes` to false:
+[source,xml,linenums]
+----
+<java:validate-type class="com.foo.Person" instance="#[vars.jane]" acceptSubtypes="false" />
+----
+During execution it will throw an error, interrupting the flow and passing
+control to the https://docs.mulesoft.com/mule-runtime/4.1/intro-error-handlers#error-handlers[error handler].
+
+== Validate Type Function in DataWeave
+
+The Java module provides a DataWeave `isInstanceOf()` function that returns
+true or false whether a given object is an instance of a given class. Unlike the
+`Validate type` operation, it does not throw an error when it evaluates to false. An example:
 
 [source,xml,linenums]
 ----
 <choice>
-    <when expression="#[Java::isInstanceOf(vars.john, com.foo.PrivilegedPerson)]">
-        <flow-ref name="sendToVIP" />
+    <when expression="#[Java::isInstanceOf(vars.jane, com.foo.Employee)]">
+        <flow-ref name="routeToCompany" />
     </when>
 </choice>
 ----
+
+== See also
+
+xref:java/java-invoke-method.adoc[Example: To Invoke Methods]
+
+xref:java/java-throwable.adoc[Example: Working With Throwable]
