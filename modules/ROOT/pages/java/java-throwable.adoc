@@ -6,26 +6,49 @@ endif::[]
 
 
 
-
-
 The Java module exposes useful DataWeave functions to deal with Throwable instances.
 
-IMPORTANT: These functions have been available since version 1.2.0.
+IMPORTANT: These have been available since version 1.2.0.
 
 == Checking for a Cause
 
 You can check whether a Throwable was caused by a certain type of Exception using the `isCausedBy` function.
+This is specially useful for adding logic to
+https://docs.mulesoft.com/mule-runtime/4.1/intro-error-handlers#error-handlers[error handlers].
 
-For example, if invoking the tax calculation method example fails, it is possible to check whether it was given an invalid argument (such as a negative value) or whether it was given a `null` one, assuming those are failures the method declares.
+Suppose we have the following Java class:
+
+[source,java,linenums]
+----
+package com.foo;
+
+public class TaxCalculator {
+
+	public Double calculateTax(Double price) {
+		if (price == null) {
+			throw new NullPointerException("Must provide a value for price");
+		}
+		if (price < 0) {
+			throw new IllegalArgumentException("Price must be a non-negative value, but was: " + price);
+		}
+		return price * 0.21;
+	}
+
+}
+----
+
+As we can see, the _calculateTax(Double price)_ method declares 2 different type of exceptions:
+IllegalArgumentException and NullPointerException. Suppose that the code below is part of a
+flow and that we can get an error during the execution of the
+xref:java/java-invoke-method.adoc[`invoke` operation].
+If we want to check which of the Java exceptions occurred during the failed invocation of
+the _calculateTax(Double price)_ method, we can use the `isCausedBy` function in our error
+handler and add different logic for each of the cases.
 
 [source,xml,linenums]
 ----
-<java:new class="com.foo.TaxCalculator"
-  constructor="TaxCalculator()"
-  target="taxCalculator"/>
-<java:invoke instance="#[vars.taxCalculator]"
-  class="com.foo.TaxCalculator"
-  method="calculateTax(Long)">
+<java:new class="com.foo.TaxCalculator" constructor="TaxCalculator()" target="taxCalculator"/>
+<java:invoke instance="#[vars.taxCalculator]" class="com.foo.TaxCalculator" method="calculateTax(Double)">
     <java:args>#[{price: payload.price}]</java:args>
 </java:invoke>
 <error-handler>
@@ -42,7 +65,9 @@ For example, if invoking the tax calculation method example fails, it is possibl
 
 You can also obtain the root cause of a Throwable, disregarding any exception wrapping, with the `getRootCause` function.
 
-In the following example, all tax calculation errors are handled by another class, which takes the root cause of the Throwable.
+In the following example, all tax calculation errors are handled by another class,
+which takes the root cause of the Throwable. So we use the `getRootCause` function to
+pass the root cause as an argument to the _handle(Throwable)_ method.
 
 [source,xml,linenums]
 ----
@@ -51,7 +76,7 @@ In the following example, all tax calculation errors are handled by another clas
   target="taxCalculator"/>
 <java:invoke instance="#[vars.taxCalculator]"
   class="com.foo.TaxCalculator"
-  method="calculateTax(Long)">
+  method="calculateTax(Double)">
     <java:args>#[{price: payload.price}]</java:args>
 </java:invoke>
 <error-handler>
