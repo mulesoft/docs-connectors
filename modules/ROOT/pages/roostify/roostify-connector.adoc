@@ -1,0 +1,275 @@
+= Roostify Connector
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:imagesdir: ../../assets/images/
+
+Support Category: Select
+
+Roostify enables its customers to convert completed loan applications to an optimized and intuitive digital user experience, tailored to each DBA, branch, or channel. It increases pull-through rates and provides a flexible and scalable framework for growing business requirements. Roostify's integrated platform enables faster loan closure and allows each loan officer to cultivate and manage more customers at the same time. This improves profitability as well as increases retention and referrals. 
+
+MuleSoft Roostify connector offers simplified access to 46 of Roostify's APIs to support workflows related to:
+
+* Loan Applications
+* Reference Ids
+* Tasks
+* Documents
+* Messages
+* Accounts
+* Settings
+* Service
+* User Settings
+* Webhooks
+* Webhook events
+* Status Update
+* User Management
+* State Changes
+* Desktop Underwriter Report
+* Access Control
+* Leads (Draft)
+* Offerings (Draft)
+
+== Prerequisites
+
+This document assumes that you are familiar with Roostify, Mule concepts, Anypoint connectors,
+Anypoint Studio, the elements in a Mule flow, and global elements. 
+
+The APIs use basic authentication, based on username and password. You need a Roostify account and credentials to use the connector. The username works as your account token and password as a service access token. The username and password are stored within the Authorization header in Base64-encoded string following the word Basic which when decoded follows the format of `account-token:service-access-token`.
+
+For hardware and software requirements and compatibility, see the Connector Release Notes.
+
+To use the Roostify connector with Maven, find dependency information on the *Dependency Snippets* tab of Roostify connector's page on the Anypoint Exchange.
+
+== Configure Roostify Connector in the Design Center
+
+. In the Design Center, create a Mule application.
+. On the canvas, configure HTTP Listener or Scheduler as a *trigger*.
+. Click the *+* icon to add a component.
+. Select the *Roostify Connector*.
+. Select an operation from the list.
+. Configure the connector's global element.
+** *Address*: URL to access Roostify API
+** *Username*: The user name to access Roostify API
+** *Password*: Password to access Roostify API
+** *Version*: Roostify API version. For example, this property should contain `/v1`, if the API version is `v1`.
+. Enter the parameters that are required for the operation.
+
+== Install Roostify Connector in Anypoint Studio
+
+. In Anypoint Studio, click the *Exchange* icon in the Studio taskbar.
+. Click *Login* in Anypoint Exchange.
+. Search for the Roostify connector, and click *Install*.
+. Follow the prompts to install the connector.
+
+== Connector Namespace and Schema
+
+When designing your application in the Anypoint Studio, drag the connector from the palette to the canvas.
+This action automatically populates the XML code with the connector namespace and schema location.
+
+* Namespace: `+http://www.mulesoft.org/schema/mule/roostify+`
+* Schema Location: `+http://www.mulesoft.org/schema/mule/roostify/current/mule-roostify.xsd+`
+
+== Configure Roostify Connector in Anypoint Studio
+
+. In Anypoint Studio, create a new Mule project. Ensure that you have *HTTP Listener* configured.
+. Drag the connector to the Studio Canvas.
+. Configure the connector's global element. You can either enter your credentials as global configuration properties or reference a configuration file that contains these values.
+For simpler maintenance and better reuse of your project, MuleSoft recommends that you use a configuration file.
+** *Address*: URL to access Roostify API
+** *Username*: The user name to access Roostify API
+** *Password*: Password to access Roostify API
+** *Version*: Roostify API version. For example, this property should contain `/v1`, if the API version is `v1`.
++
+TIP: An example configuration file for Roostify
+is available at `src/main/resources/configuration.yaml`. You can add this file in the Configuration Properties of the Global Configuration Elements.
++
+. To ensure that your connection is successful, Click *Test Connection*.
+. Select a connector operation.
+
+== Use Case: Create a Roostify User and a Loan Application
+
+The following use case demonstrates how you can use the Roostify connector along with Salesforce connector to:
+
+* Create a user in Roostify for a Salesforce account
+* Create a loan application for the same user in Roostify
+
+In this example, a Mule application queries Salesforce accounts and creates a user in Roostify for this account. Next step in the flow is to create a loan application for this new user in Roostify.
+
+image::roostify/roostify-create-loan-application.png[Create User and Loan Application Flow]
+
+To test this use case, 
+
+. Create a Mule application and set the connector configuration properties in the configuration file in the `src/main/resources`. For example,
++
+[source, yaml, linenums]
+----
+rsf:
+  address: "<url-to-access-roostify-api>"
+  version: "/<roostify-api-version>"
+  user: "<username-to-access-roostify-api>"
+  password: "<password-to-access-roostify-api>"
+----
++
+. Add the configuration file for the Roostify connector to the *Configuration Properties* of the *Global Configuration Elements*.
+
+To create the new Mule application flow:
+
+. Drag an HTTP Listener to the canvas and configure it.
+. From the *Palette*, search for the Salesforce connector and drag *Query* operation. To configure Salesforce operation, 
+.. Add your query in the *Salesforce query*. For the purpose of this demo, use the following query to get the account from Salesforce. 
++
+[source, sql, linenums]
+----
+SELECT Id, AccountNumber, Phone, Name FROM Account where Id = ':sfId'
+----
++
+.. In the *Parameters* section, create a parameter with `sfId` as *Name* and `attributes.queryParams.sfcId` as *Value*.
+. Select and drag Transform Message at the flow on the canvas to prepare the input for the Roostify connector. Here's an example of the output payload in the transform message.
++
+[source, json, linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	user_role: "borrower",
+	home_phone: payload.Phone[0],
+	reference_id: "Test-ref-123",
+	last_name: "Demo",
+	account_id: payload.AccountNumber[0],
+	job_title: "ADMIN",
+	first_name: payload.Name[0],
+	email: payload.Id[0] ++ "@roostify.com"
+}
+----
++
+. From Roostify operations, drag the *Create a User* connector operation after the transform message. In the configuration options,
+.. Select the connector configuration that you created. 
+.. Set the *General* section in the connector configuration to `payload`.
+.. Set the *Target Value* in the *Advanced* section to `#[payload]`.
+. From the *Mule Palette*, search and drag *Set Variable* operation after the Roostify operation, to capture the user ID returned from Roostify into a variable. In the *Settings* section of the *Set Variable* operation, set the following:
+.. *Name*: `userId`
+.. *Value*: `#[payload.id]`
+. From Roostify operations, drag *Create a Loan Application* operation. In the configuration options,
+.. Use the following example payload in the *Create loan request* of the *General* section:
++
+[source, json, linenums]
+----
+output application/json
+---
+{
+	reference_id: vars.refId,
+	application_type: "purchase",
+	loan_amount: 20000,
+	down_payment: 1000,
+	amortization_term: "30"
+}
+----
++
+.. Set the *Target Value* in the *Advanced* section to `#[payload]`.
+. Once again, from the *Mule Palette*, search and drag *Set Variable* operation after the Roostify operation, to capture the loan ID returned from Roostify into a variable. In the *Settings* section of the *Set Variable* operation, set the following:
+.. *Name*: `userId`
+.. *Value*: `#[payload.id]`
+. Use another Transform Message component to display the response in JSON format. The output payload of the transform message can be set to the following:
++
+[source, json, linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	"RSF Account Id" : payload.account_id,
+	"User Id" : vars.userId,
+	"Loan Id" : vars.loanId
+}
+----
++
+. Run the application and point your browser to `+http://localhost:8081/createLoanApplication+`.
+
+== Use Cases XML: Create a Roostify User and a Loan Application
+
+[source, xml, linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:roostify="http://www.mulesoft.org/schema/mule/roostify"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/roostify http://www.mulesoft.org/schema/mule/roostify/current/mule-roostify.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<flow name="CREATE_ROOSTIFY_USER_LOAN_APPLOCATION">
+		<http:listener doc:name="8081/createLoanApplication" config-ref="HTTP_Listener_config" path="createLoanApplication"/>
+		<salesforce:query doc:name="Get Salesforce Account" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query>SELECT Id, AccountNumber, Phone, Name  FROM Account where Id = ':sfId'</salesforce:salesforce-query>
+			<salesforce:parameters><![CDATA[#[output application/java
+---
+{
+	"sfId" : attributes.queryParams.sfcId
+}]]]></salesforce:parameters>
+
+		</salesforce:query>
+		<ee:transform doc:name="Convert to JSON">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	user_role: "borrower",
+	home_phone: payload.Phone[0],
+	reference_id: "Test-ref-123",
+	last_name: "Demo",
+	account_id: payload.AccountNumber[0],
+	job_title: "ADMIN",
+	first_name: payload.Name[0]
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="refId"><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"refId" : "Test-ref-123"
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<roostify:create-user doc:name="Create a User in Roostify" config-ref="Roostify_Config" />
+		<set-variable value="#[payload.id]" doc:name="Save User ID" variableName="userId" />
+		<roostify:creating-loan-application doc:name="Create a Loan Application in Roostify" config-ref="Roostify_Config">
+			<roostify:create-loan-request><![CDATA[#[output application/json
+---
+{
+	reference_id: vars.refId,
+	application_type: "purchase",
+	loan_amount: 20000,
+	down_payment: 1000,
+	amortization_term: "30"
+}]]]></roostify:create-loan-request>
+			
+		</roostify:creating-loan-application>
+		<set-variable value="#[payload.id]" doc:name="Save Loan ID" variableName="loanId" />
+		<ee:transform doc:name="Display Response">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"RSF Account Id" : payload.account_id,
+	"User Id" : vars.userId,
+	"Loan Id" : vars.loanId
+	
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:release-notes::connector/roostify-connector-release-notes-mule-4.adoc[Roostify Connector Release Notes]
+* https://forums.mulesoft.com[MuleSoft Forum]
+* https://support.mulesoft.com/s/knowledge[Knowledge Base Articles]
+* https://www.roostify.com/product[Roostify Product Overview]
