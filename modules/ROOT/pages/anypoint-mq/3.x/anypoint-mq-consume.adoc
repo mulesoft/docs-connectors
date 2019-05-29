@@ -1,0 +1,94 @@
+= Consume Messages
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+The Consume operation in the Anypoint MQ connector provides the ability to consume a single message at any time of the flow, from any destination, using the acknowledgment strategy that better matches your use case.
+
+=== Incoming Message Structure
+
+Every consumed message consists of two parts:
+
+* The message `payload`, which represents the value of the received message body
+* Some message `attributes` that contain metadata regarding the received message, such as the message properties, or its ID.
+
+image::anypoint-mq/3.x/amq-3x-consume-attributes.png[Anypoint MQ Message Atrributes]
+
+
+== How To Consume A Message
+
+The simplest declaration to consume a message from a queue is to drop the `consume` operation on the canvas and configure the `Queue` parameter with the name of the queue from where the message should be retrieved:
+
+image::anypoint-mq/3.x/amq-3x-consume-operation.png[Anypoint MQ Consume Operation]
+
+[source,console]
+----
+<anypoint-mq:consume config-ref="Anypoint_MQ_config" destination="myQueue"/>
+----
+
+The operation above consumes the first available message in the queue identified by the `Queue` called `myQueue`, converting it to a `MuleMessage` with the following structure:
+
+* The message's body as payload.
+* The message's metadata in the message attributes. In the attributes you may find information as the `messageId` or the `redeliveryCount`.
+
+TIP: Use a Dataweave expression in the `Queue` parameter to dynamically change the target queue from which to consume the message
+
+
+== Consumed Message Acknowledgement
+
+=== Automatic Acknowledgement
+
+By default, the `acknowledgementMode` used is `IMMEDIATE`, meaning that the message will be acknowledged as soon as it is consumed from the queue, and prior to being delivered to the Mule flow. If for some reason the acknowledgement of the message fails, then the `consume` operation will terminate with an `ANYPOINT-MQ:ACKING` error.
+
+=== Manual Acknowledgement
+
+If you want to manually control the acknowledgement of the message, then change the `acknowledgementMode` to `MANUAL`. When using the `MANUAL` acknowledgement mode, the application logic decides if and when to perform the acknowledgement of the message, using the xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[ACK] or xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[NACK] operations. 
+In order to perform the manual acknowledgement, save the value of the `ackToken` provided as part of the resulting message attributes.
+
+As part of the manual acknowledgement configuration, is important to consider the `acknowledgementTimeout` parameter, meant to control for how long is the message allowed to remain in-flight waiting to be acknowledged, before automatically returning to the queue. 
+By default, the connector will honor the time defined at queue level from the admin console with the `Message Lock Default TTL` value.
+
+WARNING: Always use an `Acknowledgement Timeout` that better suits your expected application time processing, leaving room for unexpected but possible extra delays due to external systems delay, application back-pressure due to high load, so on. For example, if the consumed message is expected to be processed within 10 seconds, the `acknowledgementTimeout` is recommended to be a minimum of 15 seconds.
+
+For more information regarding a message ACK, see xref:anypoint-mq/anypoint-mq-ack.adoc[How to Handle Message Acknowledgment].
+
+== Dealing With Empty Queues
+
+When consuming a message from a queue, we may face two different scenarios, either the queue has messages, or it is empty.
+
+First scenario is by far the most common, where a queue has messages waiting to be consumed and when the `consume` operation is executed it returns immediately with one of the messages.
+
+On the other hand, if a queue is empty, we can choose on different strategies regarding how the operation should behave: 
+
+=== Immediate Response On Empty Queue
+
+By setting the `pollingTime` parameter to `0`, the `consume` operation will return immediately *without any error* and producing a `null` message as result when the queue is empty. 
+
+=== Waiting For New Messages
+
+Anypoint MQ allows to wait for a message to arrive in certain time window. We can do so by configuring the `pollingTime` parameter to a value ranging from 1 to 20 seconds. Doing so means that the `consume` operation will wait up to the given `pollingTime` for a new message to arrive, *failing* with an `ANYPOINT-MQ:TIMEOUT` error if no message is received within the given time window.
+
+By default, the `consume` operation will wait for 10 seconds for a new message to arrive when consuming from an empty queue, failing if no message is available in that timeframe. 
+
+
+== Output Message Metadata
+
+As stated before, each message received consists of two parts:
+
+* Payload - Contains the content of a message.
+* Attributes - Contains the metadata for a message.
+
+This metadata maps all the information available in a Anypoint MQ message, including:
+
+* Message ID
+* Headers Map
+* Properties Map
+
+image::anypoint-mq/3.x/amq-3x-consume-attributes.png[Anypoint MQ Message Atrributes]
+
+See xref:anypoint-mq/3.x/anypoint-mq-connector-reference.adoc#consume[Consume] for details regarding the attributes structure.
+
+== See Also
+
+* xref:anypoint-mq/anypoint-mq-connector-reference.adoc#consume[Consume Technical Reference]
+* xref:anypoint-mq/anypoint-mq-ack.adoc[How To Handle Message Acknowledgement]
