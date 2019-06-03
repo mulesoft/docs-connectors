@@ -4,37 +4,157 @@ include::_attributes.adoc[]
 endif::[]
 :keywords: file, connector, read
 
-
-
-The File connector can read a file at any point in the flow, unlike in Mule 3, where the transport can only read files as a result of inbound endpoint polling.
-
-Here is the syntax for reading a file:
-
 [source,xml,linenums]
 ----
-<file:read path="#[path]"
+<file:read path="#[fullPath]"
   lock="true|false"
   outputEncoding="UTF-8"
   outputMimeType="application/csv; headers=false" />
 ----
 
-The operation above reads the file in the given path. It returns a `MuleMessage` with the following attributes:
+The File connector can read a file at any point in the flow, unlike in Mule 3, where the transport can only read files as a result of inbound endpoint polling.
+
+The only required parameter for the `read` operation is `path`, which is the *relative path* of the file
+you wish to read. This path is relative to the `working directory` defined in the configuration
+referenced by the `config-ref` parameter. To see an example of creating a configuration check
+xref:file/file-connector.adoc#connection_settings[this page]. If no configuration is referenced,
+the working directory defaults to the value of the `user.home` system property. If the system
+property is not set, the connector fails to initialize.
+
+Here is an example for reading a file:
+
+[source,xml,linenums]
+----
+<file:read config-ref="File_Config" path="filePath"/>
+----
+
+The `read` operation returns a `MuleMessage` with the following attributes:
 
 * The file's content as payload.
 * The file's metadata in the message attributes.
 * If the file does not exist, you receive a `FILE:ILLEGAL_PATH` error. Note that the operation does not read directories.
 
+[NOTE]
+===========
+The `read` operation (as other operations that return non-void values) supports target parameters.
+To learn more about them check the xref:4.1@mule-runtime::target-variables.adoc[Mule Runtime Target Variables document].
+===========
+
+== Configuring a relative path
+
+Suppose that you have numerous `read` operations (or any other file operations) in your app and they
+share part of their path, you can extract that base path into a
+xref:file/file-connector.adoc#connection_settings[file configuration]. Imagine that we want to access
+two files whose full paths are: `/Users/Documents/Examples/manual.txt` and `/Users/Documents/Examples/readme.txt`.
+We can define the following configuration:
+
+[source,xml,linenums]
+----
+<file:config name="File_Config" >
+    <file:connection workingDir="/Users/Documents/Examples" />
+</file:config>
+----
+
+And then we can define our `read` operations like this:
+
+[source,xml,linenums]
+----
+<file:read config-ref="File_Config" path="manual.txt" />
+...
+<file:read config-ref="File_Config" path="readme.txt" />
+----
+
 // == INCLUDE SHARED READ OP CONTENT FOR FILE, FTP, AND SFTP CONNECTORS
 include::partial$common-read-operation.adoc[]
 
+== Accessing files defined in Studio Project
+
+If you are developing your application in Studio, you can save your folders and files in the
+`resources` folder. Later on, when the app is deployed, those folders and files you defined are
+copied to the directory defined by the `${app.home}` property. Suppose we have defined a folder named
+`MyFiles` in the `resources` folder and a file named `Example.txt` inside of it.
+In Studio, we would see this in our project structure:
+
+image::file/project-resources.png[]
+
+In runtime, the path to access this file would be `${app.home}/MyFiles/Example.txt`.
+To read this file we can first define the following config:
+
+[source,xml,linenums]
+----
+<file:config name="File_Config" >
+    <file:connection workingDir="${app.home}" />
+</file:config>
+----
+
+And then configure the `read` operation like this:
+
+[source,xml,linenums]
+----
+<file:read config-ref="File_Config" path="MyFiles/Example.txt" />
+----
+
+[WARNING]
+As stated before, each time the application is deployed the contents from
+`src/main/resources` folder are copied to the `${app.home}` directory. This means that changes made
+to those files during runtime are lost once the application is stopped or redeployed. This is why we
+recommend putting files in the resource folder that you only need to *read* during your application's
+execution.
+
 == File Locking
 
-You can set a file system lock on the file when it is being read by setting the `lock` parameter to `true` (defaults to `false`). When enabled, this feature asks the operating system to lock the file, which prevents any other process (or Mule flow) from accessing that file while the lock is held. The lock is automatically released when one of the following things occurs:
+You can set a file system lock on the file when it is being read by setting the `lock` parameter
+to `true` (defaults to `false`). When enabled, this feature asks the operating system to lock
+the file, which prevents any other process from accessing that file while the
+lock is held. Because the lock is actually provided by the host file system, its behavior might
+change depending on the mounted drive and the operation system on which mule is running. Take
+that into consideration before blindly relying on this lock. The lock is automatically released
+when one of the following things occurs:
 
 * The Mule flow, which locked the file, ends.
-* The file content has been fully read.
+* The file's content has been fully read.
 
-Note that if the file is already locked by someone else, the connector will not be able to lock it, and you will receive a `FILE:FILE_LOCK` error.
+Note that if the file is already locked by someone else, the connector will not be able to lock
+it, and you will receive a `FILE:FILE_LOCK` error.
+
+An example of locking:
+[source,xml,linenums]
+----
+<file:read config-ref="File_Config" path="filePath" lock="true" />
+----
+
+== Modifying output MimeType and Encoding
+
+If you want to change the MimeType or the encoding of the payload that the `read` operation outputs,
+you can use the `outputEncoding` and `outputMimeType` parameters. For example:
+
+[source,xml,linenums]
+----
+<file:read config-ref="File_Config" path="filePath" outputEncoding="UTF-8" outputMimeType="application/csv; headers=false" />
+----
+
+== Waiting for a file
+
+If you want to read a file, but you are not sure if the file is still being written or not, you can use
+the `TimeBetweenSizeChecks` parameter (which works alongside the `TimeBetweenSizeCheckUnit` parameter).
+When enabled, Mule performs two size checks: one when the flow reaches a *point where the stream is
+consumed* (not in the `read` operation) and another check after the wait time set by the
+aforementioned parameters. The time check is not done in the `read` operation because it returns a *lazy*
+stream, so it makes sense to check only when the stream is about to be consumed.
+
+Let's see an example where we first use the `read` operation with size check parameters and then
+consume the stream it returns in a https://docs.mulesoft.com/mule-runtime/4.1/logger-component-reference[`logger` component].
+
+[source,xml,linenums]
+----
+<file:read config-ref="File_Config" path="filePath" timeBetweenSizeCheck="15" timeBetweenSizeCheckUnit="SECONDS">
+<logger level="INFO" message="#[payload]"/>
+----
+
+Note that the 15 seconds check will happen when the `logger` component is executed, not at the read operation.
+
+//TODO EXAMPLE
+
 
 //== STREAMING INCLUDE in File, FTP, and SFTP Connector docs
 include::partial$common-streaming.adoc[]
