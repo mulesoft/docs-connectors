@@ -3,35 +3,83 @@ ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 
-The List operation returns a List of Messages, where each message represents any file or folder found within the Directory Path (`directoryPath`).
 
-By default, the operation does not read or list files or folders within any sub-folders of `directoryPath`.
 
-To list files or folders within any sub-folders, you can set the `recursive` parameter to `true`.
+The List operation returns an Array of Messages, where each message represents any file
+or folder (and their attributes) found in the path pointed by the `directoryPath` parameter.
+This parameter is required and represents the *relative path* of the directory you want to list.
+This path is relative to the `working directory` defined in the configuration referenced by the
+`config-ref` parameter. To see an example of creating a configuration check
+xref:file/file-connector.adoc#connection_settings[this page]. If no configuration is referenced,
+the working directory defaults to the value of the `user.home` system property. If the system
+property is not set, the connector fails to initialize.
 
-This example lists all messages in a `directoryPath`, without listing the contents of any sub-folders. Note that the path can be absolute, or it can be relative to a Working Directory (`workingDir`) set in the File configuration (through `<file:config/>`).
+A simple example of the `list` operation:
 
 [source,xml,linenums]
 ----
-<flow name="list">
-  <file:list directoryPath="~/dropFolder" />
-  <foreach>
-    <choice>
-      <when expression="#[attributes.directory]">
-        <flow-ref name="processDirectory" />
-      </when>
-      <otherwise>
-        <logger message="Found file #[attributes.path] which content is #[payload]" />
-      </otherwise>
-    </choice>
-  </foreach>
-</flow>
+<file:list config-ref="File_Config" directoryPath="relativePath" />
 ----
 
-The example above lists the contents of a folder, then uses the For Each and Choice components to handle each directory in the list differently than it handles each file.
+This will output an Array of Mule Messages, where the `payload` is the file's contents (or null if it is
+a folder) and `attributes` corresponds to the file's (or folder's) attributes such as name, creation time,
+size, xref:file/file-documentation.adoc#LocalFileAttributes[among others]. In Studio, DataSense will show
+us the metadata for the operation's output:
+
+image::file/list-output.png[]
+
+[IMPORTANT]
+========
+The `list` operation lists both diretories and files, but for files it *also returns a lazy stream of
+the file's contents* in the payload, which can then be directly consumed by other operations. This
+means that you *do not need* to perform a
+xref:file/file-read.adoc[`read` operation] after a `list` to access the file's content. See below
+for an <<Read files returned by List,example>> of this.
+========
+
+== Read files returned by List
+
+In this example, we list all files and folders in the `directoryPath` and then, in a
+https://docs.mulesoft.com/mule-runtime/4.1/for-each-scope-concept[For Each loop], we
+check if each element is a file or a folder with a
+https://docs.mulesoft.com/mule-runtime/4.1/choice-router-concept[choice component]. If it is a file,
+then a https://docs.mulesoft.com/mule-runtime/4.1/logger-component-reference[logger] outputs it's
+path and contents. If it is a directory, we send it to another flow for processing.
+
+[source,xml,linenums]
+----
+<file:list config-ref="File_Config" directoryPath="relativePath" />
+
+<foreach>
+    <choice>
+        <when expression="#[not attributes.directory]">
+            <logger message="Found file #[attributes.path] whose content is: #[payload]" />
+        </when>
+        <otherwise>
+            <flow-ref name="process-directory" />
+        </otherwise>
+    </choice>
+</foreach>
+----
+
+Note that there is no xref:file/file-read.adoc[`read` operation] inside the `For Each` loop because,
+as mentioned before, the `list` operation already returns the file's content in the payload, but in
+a lazy manner so you don't need to worry about performance or overheads when you don't end up
+consuming the stream.
+
+== Sub folders
+
+To list files or folders within any sub-folders of the `directoryPath`, i.e. doing a recursive list, you
+can set the `recursive` parameter to true.
+
+[source,xml,linenums]
+----
+<file:list config-ref="File_Config" directoryPath="relativePath" recursive="true" />
+----
 
 == Matching
-You can use the `<file:matcher>` element to filter files based on the matching criteria you use for accepting or rejecting a file. Here is an example of file matching rules you can use:
+You can use the `<file:matcher>` element to filter files based on the matching criteria you use for
+accepting or rejecting a file. Here is an example of file matching rules you can use:
 
 .Example: File Matcher
 [source,xml,linenums]
@@ -81,6 +129,29 @@ As the next examples show, a file matcher can be a reusable element (a named top
 ----
 
 For more on the capabilities of the matcher, see xref:file/file-documentation.adoc[File Connector Documentation Reference].
+
+== Waiting for a file
+
+If you want to read a file's content returned by the `list` operation, but you are not sure if the file
+is still being written or not, you can use the `TimeBetweenSizeChecks` parameter (which works
+alongside the `TimeBetweenSizeCheckUnit` parameter). When enabled, Mule performs two size checks: one
+when the flow reaches a *point where the stream is about to be consumed* (not in the `list` operation) and another
+check after the wait time set by the aforementioned parameters. If the file's size is the same at both
+checks, then the stream is consumed successfully. Otherwise, it means that the file is still being
+written, so the stream is not consumed and the operation fails with an error. The time check is not done
+in the `list` operation because `list` returns a *lazy* stream pointing to the file's content, so it makes
+sense to do the size check only when the stream is about to be consumed.
+
+Let's see an example where we first use the `read` operation with size check parameters and then
+consume the output stream in a https://docs.mulesoft.com/mule-runtime/4.1/logger-component-reference[`logger` component].
+
+[source,xml,linenums]
+----
+<file:read config-ref="File_Config" path="filePath" timeBetweenSizeCheck="15" timeBetweenSizeCheckUnit="SECONDS">
+<logger level="INFO" message="#[payload]"/>
+----
+
+Note that the 15 seconds check will happen when the `logger` component is executed, not at the read operation. is executed, not at the read operation.
 
 //== STREAMING INCLUDE in File, FTP, and SFTP Connector docs
 include::partial$common-streaming.adoc[]
