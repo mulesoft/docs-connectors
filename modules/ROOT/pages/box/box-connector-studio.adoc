@@ -1,0 +1,202 @@
+= Box Studio Configuration - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:imagesdir: ../../assets/images/
+
+== Install Box
+
+. In Anypoint Studio, click the Exchange icon in the Studio task bar.
+. Click Login in Anypoint Exchange and supply your Anypoint Platform username and password.
+. Search for the Box connector and click .
+. Follow the prompts to install the connector.
+
+== Configure Box
+
+. Open your Mule project in Anypoint Studio.
+. Add the connector as a dependency in the pom.xml file:
++
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>com.mulesoft.connectors</groupId>
+    <artifactId>mule-box-connector</artifactId>
+    <version>4.0.0</version>
+    <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+== Use Case: Create Folder, Retrieve Folder, and Delete Folder
+
+This use case demonstrates the Create Folder, Retrieve Folder, and Delete Folder operations.
+
+. Create a new Mule Project in Anypoint Studio.
+. Add the below properties to the mule-artifact.properties file to hold your Box credentials and place it in the project's src/main/resources directory.
++
+[source,text,linenums]
+----
+config.clientId=<Client ID>
+config.clientSecret=<Client Secret>
+----
++
+. Configure the HTTP Listener by adding a new HTTP Global Element. Click the plus sign next to the Connector configuration field.
+. Configure the global element according to the table below:
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Name|HTTP_Listener_config
+|Protocol| HTTP
+|Host| localhost
+|Port| 8081
+|===
++
+. Drag an HTTP Listener onto the canvas and configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Display Name |HTTP Listener
+|Connector configuration | Select the HTTP Listener Configuration that had been created previously
+|Path |`/boxdemo`
+|===
++
+. Now set the folder properties for the folder you are going to create using a DataWeave component. Drag the DataWeave component next to the HTTP Listener and use the following script.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	parent: {
+		id: 0
+	},
+	"type": "folder",
+	name: "SampleFolder"
+}
+----
++
+. Drag the Create folder operation of the Box connector next to the DataWeave component to create a folder.
+. Configure the Box connector by adding a new Box Global Element. Click the plus sign next to the Connector configuration field.
+. Configure the global element according to the following table:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value |Comments
+|clientId |${config.clientId} |The client identifier as assigned by the authorization server when the client application was registered.
+|clientSecret |${config.clientSecret} |The client application's client secret.
+|host |api.box.com |The default value. Leave as is.
+|port |443 |The default value. Leave as is.
+|basePath |/2.0 |The default value. Leave as is.
+|protocol |HTTPS |The default value. Leave as is.
+|localCallbackPath |/callback |The default value. Leave as is.
+|localCallbackConfig |HTTP_Listener_config |Select the HTTP Listener configuration created earlier.
+|externalCallbackUrl |`+http://localhost:8081/callback+`  |Use the redirect URL that is configured in the client application.
+|localAuthorizationUrl |`+http://localhost:8081/authorize+`  |This URL needs to be hit after deploying the mule application to initiate `OAUTH2` dance.
+|authorizationUrl |`+https://account.box.com/api/oauth2/authorize+`  |The authorization URL to request for an authorization code.
+|accessTokenUrl |`+https://api.box.com/oauth2/token+`  |The access token URL to request for an access token.
+|===
++
+The corresponding XML configuration should be as follows:
++
+[source,xml,linenums]
+----
+<mule-box-connector:config name="Mule_box_connector_Config"
+ doc:name="Mule-box-connector Config"
+ property_clientId="#{config.clientId}"
+ property_clientSecret="#{config.clientSecret}"
+ property_localCallbackConfig="HTTP_Listener_config"
+ property_externalCallbackUrl="http://localhost:8081/callback" />
+----
++
+. Back in the properties editor of the Box connector, configure the parameters required for the Create folder operation:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Display Name |Create folder
+2+|Basic Settings
+|Connector configuration |Select the global Box connector element that you created.
+2+|General
+|Create folder request data |`#[payload]`
+|===
++
+. Drag a Logger component to log the newly created folder ID and configure the following properties.
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Display Name|Logger to log the created Folder ID
+2+|Generic
+|Message|Folder created with ID : `#[payload.id]`
+|===
++
+. Drag the Get folder operation of the Box connector next to the Logger component. This retrieves the folder information and configures the following properties.
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Display Name|Get folder
+2+|Basic Settings
+|Connector configuration|Select the global Box connector element that you created.
+2+|General
+|Folder id|`#[payload.id]`
+|===
++
+. Drag a Logger component to log the retrieved folder information and configure the following properties.
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Display Name|Logger to log the retrieved folder info.
+2+|Generic
+|Message|`#[payload]`
+|===
++
+. Drag the Delete folder operation of the Box connector to delete the folder that was just created and configure the following properties.
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Display Name|Delete folder
+2+|Basic Settings
+|Connector configuration|Select the global Box connector element that you created.
+2+|General
+|Folder id|`#[payload.id]`
+|===
++
+. Then, drag the DataWeave component to set the payload to display the result of the flow to the user and use the following script.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	result : "Folder got created, retrieved and deleted successfully"
+}
+----
++
+. Save and run the project as a Mule Application.
+. Use the URL `+http://localhost:8081/authorize+` from a browser which you set for `localAuthorizationUrl` in global Box configuration element to initiate `OAUTH2` dance.
++
+This displays the following page asking the Box user to either grant or deny access to the client application which reads and writes all of files and folders stored in Box.
++
+image::box/box-oauth-2-dance.png[Box OAuth 2 Dance]
++
+. Click Grant access to Box to grant the read and write permissions.
+. Open a web browser and access the URL `+http://localhost:8081/boxdemo+`.
++
+You should get a JSON response with the following content.
++
+Result: `"Folder created, retrieved, and deleted successfully"`
+
+== Next
+
+Now that you have completed ____, you can try out ______.
+
+== See Also
+
+* https://forums.mulesoft.com[MuleSoft Forum]
+* https://support.mulesoft.com/s/knowledge[Knowledge Base Articles]
