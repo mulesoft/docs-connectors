@@ -1,160 +1,182 @@
-= Anypoint M Q Connector - 3.x Migration Guide
+= Anypoint MQ Connector 3.x Migration Guide
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 
-The Anypoint MQ Connector is now presenting its latest 3.0 version, bringing a simplified configuration, standarized endpoints and non-blocking functionality, amongs other improvements.
+The Anypoint MQ Connector version 3.0 includes new features, such as simplified configuration, standardized endpoints, and non-blocking functionality.
 
+=== Global Configuration
 
-=== Global Config
-
-In the *old* 2.x version of the MQ Connector, the configuration element contained a lot of different parts, which can be categorized in:
+In the previous version of the MQ Connector, the `config` element included parameters, as shown in this example:
 
 [source,console,linenums]
 ----
-<anypoint-mq:default-subscriber-config name="Anypoint_MQ_Default_subscriber"
-									acknowledgementMode="IMMEDIATE" acknowledgementTimeout="10000" <1>
-									maxRedelivery="2" <2>
-									pollingTime="2000" fetchSize="5" fetchTimeout="5000" frequency="2000"> <3>
-		<anypoint-mq:connection clientId="${client.id}" clientSecret="${client.secret}"/> <4>
-		<anypoint-mq:circuit-breaker circuitName="InvoiceSettings" <5>
-									 onErrorTypes="JMS:TIMEOUT"
-									 errorsThreshold="10" tripTimeout="1"
-									 tripTimeoutUnit="MINUTES" />
+<anypoint-mq:default-subscriber-config
+    name="Anypoint_MQ_Default_subscriber"
+    acknowledgementMode="IMMEDIATE"
+    acknowledgementTimeout="10000" <!-- (1) -->
+    maxRedelivery="2"              <!-- (2) -->
+    pollingTime="2000"
+    fetchSize="5"                  <!-- (3) -->
+    fetchTimeout="5000"            <!-- (3) -->
+    frequency="2000">              <!-- (3) -->
+  <anypoint-mq:connection          <!-- (4) -->
+    clientId="${client.id}"
+    clientSecret="${client.secret}"/>
+  <anypoint-mq:circuit-breaker     <!-- (5) -->
+    circuitName="InvoiceSettings"
+    onErrorTypes="JMS:TIMEOUT"
+    errorsThreshold="10" tripTimeout="1"
+    tripTimeoutUnit="MINUTES" />
 </anypoint-mq:default-subscriber-config>
 ----
 
-
-.Configuration Parameters Migration
-|===
-|Element | 2.x Version Behavior | 3.x Version Equivalent
-|1 - Acknowledgement
-|Global acknowledgement settings for the MQ Subscribers
-|This will now be configured on each Subscriber instance
-
-|2 - Max Redelivery
-|Redelivery filter for MQ messages based in `redeliveryCount` header
-|Deprecated, this will no longer be available as standalone filter and should be replaced by `"DLQ + Idempotent Filter"` pattern
-
-|3 - Message Fetch
-|All parameters related to how messages are retrieved from the MQ service, including `prefeth` configuration
-|Removed from the global config, all the parameters affecting the fetching strategy are now part of each Subscriber under the `Subscriber Type` parameter
-
-|4 - Connection
-|Connection parameters
-|Idem configuration for all the connection settings
-
-|5 - Circuit Breaker
-|Circuit Breaker configuration for the MQ Subscriber
-|Removed from the global config, the Circuit Breaker instances will either be handled as a standalone element, referenced by each MQ Subscriber, or as a private Circuit Breaker for the Subscriber who declares it
-|===
-
-
-As a result, the new Config element for the MQ Connector is a stripped down version containing only the connection settings:
+In this version, the `config` element for the MQ Connector now contains only the connection settings. For example:
 
 [source,console,linenums]
 ----
 <anypoint-mq:config name="Anypoint_MQ_Config">
-	<anypoint-mq:connection clientId="${client.id}" clientSecret="${client.secret}" />
+    <anypoint-mq:connection
+        clientId="${client.id}"
+        clientSecret="${client.secret}" />
 </anypoint-mq:config>
 ----
 
+The following table describes the `config` parameter differences.
+
+[cols="20,40,40",options="header"]
+|===
+|Element | 2.x Version Behavior | 3.x Version Equivalent
+|*(1)* - Acknowledgment
+|Global acknowledgment settings for the MQ Subscribers
+|Configure for each Subscriber instance.
+
+|*(2)* - Max Redelivery
+|Redelivery filter for MQ messages located in the `redeliveryCount` header
+|Deprecated and no longer available as a standalone filter. Use `"DLQ + Idempotent Filter"` pattern instead.
+
+|*(3)* - Message Fetch
+|All parameters related to how messages are retrieved from the MQ service, including `prefetch` configuration.
+|Configure all the fetching strategy parameters on each Subscriber under the `Subscriber Type` parameter.
+
+|*(4)* - Connection
+|Connection parameters
+|Idem configuration for all the connection settings.
+
+|*(5)* - Circuit Breaker
+|Circuit Breaker configuration for the MQ Subscriber
+|Handle each Circuit Breaker instance either as a standalone element referenced by each MQ Subscriber or as a private Circuit Breaker for the Subscriber who declares it.
+|===
+
+
 === Subscriber Listener
 
-The Subscriber message source received a big revamp on how the message listening is configured. Let's see how each parameter has been affected.
+In this version, the `Subscriber` message source configuration for message listening has changed.
 
-For an in-deepth view of the new subscriber, refer to: xref:anypoint-mq/3.x/anypoint-mq-listener.adoc[Listening for Messages]
+For information about the new subscriber, see xref:anypoint-mq/3.x/anypoint-mq-listener.adoc[Listen for New Messages].
 
-==== Message Acknowledgement
+==== Message Acknowledgment
 
-In the *old* version of the connector, the `acknowledgement` mode of the subscriber was defined at config level:
+In the previous version of the connector, the `acknowledgementMode` of the subscriber was defined at the configuration level. For example:
 
 [source,console,linenums]
 ----
 <anypoint-mq:default-subscriber-config name="Anypoint_MQ_Default_subscriber"
-									acknowledgementMode="MANUAL" acknowledgementTimeout="120000">
-		<anypoint-mq:connection clientId="${client.id}" clientSecret="${client.secret}"/>
+       acknowledgementMode="MANUAL" acknowledgementTimeout="120000">
+    <anypoint-mq:connection clientId="${client.id}" clientSecret="${client.secret}"/>
 </anypoint-mq:default-subscriber-config>
 ----
 
-Now, this parameters are moved to the subscriber element itself, affecting only that single subscriber instance. The semantics of each acknowledgement parameter have not suffered any modification, so this would be an equivalent configuration of the subscriber:
+These parameters are now part of the subscriber element itself and affect only that single subscriber instance. The semantics of the acknowledgment parameters has not changed.
+Here's the equivalent configuration of the subscriber:
 
 [source,console,linenums]
 ----
-<anypoint-mq:subscriber config-ref="Anypoint_MQ_Config" destination="queue"
-						acknowledgementMode="MANUAL"
-						acknowledgementTimeout="2"
-						acknowledgementTimeoutUnit="MINUTES"/>
+<anypoint-mq:subscriber config-ref="Anypoint_MQ_Config"
+    destination="queue"
+    acknowledgementMode="MANUAL"
+    acknowledgementTimeout="2"
+    acknowledgementTimeoutUnit="MINUTES"/>
 ----
 
 ==== Prefetch Mode
 
-
-The *old* MQ Connector version shipped with the `prefetch` mode enabled by default, and all the parameters related to it needed to be set at configuration level:
+In the previous version of MQ Connector, `prefetch` mode was enabled by default and you specified all related parameters at the configuration level. For example:
 
 [source,console,linenums]
 ----
-<anypoint-mq:default-subscriber-config name="Anypoint_MQ_Default_subscriber"
-									pollingTime="2000" fetchSize="5" fetchTimeout="5000" frequency="2000">
-		<anypoint-mq:connection clientId="${client.id}" clientSecret="${client.secret}"/>
+<anypoint-mq:default-subscriber-config
+      name="Anypoint_MQ_Default_subscriber"
+      pollingTime="2000" fetchSize="5"
+      fetchTimeout="5000" frequency="2000">
+    <anypoint-mq:connection clientId="${client.id}"
+      clientSecret="${client.secret}"/>
 </anypoint-mq:default-subscriber-config>
 ----
 
-In the *new* major version, a new concept called `Subscriber Type`, from where you will be able to control the `prefetch` configuration.
+This version includes a new concept called `Subscriber Type`, in which you control the `prefetch` configuration.
 
 [source,console,linenums]
 ----
-<anypoint-mq:subscriber config-ref="Anypoint_MQ_Config" destination="queue">
-	<anypoint-mq:subscriber-type>
-		<anypoint-mq:prefetch maxBufferSize="20"/>
-	</anypoint-mq:subscriber-type>
+<anypoint-mq:subscriber config-ref="Anypoint_MQ_Config"
+    destination="queue">
+   <anypoint-mq:subscriber-type>
+     <anypoint-mq:prefetch maxBufferSize="20"/>
+   </anypoint-mq:subscriber-type>
 </anypoint-mq:subscriber>
 ----
 
+The following table describes the `prefetch` parameter differences.
 
-.Prefetch Parameters Migration
+[cols="20,30,20,30",options="header"]
 |===
-| 2.x Version Parameter | 3.x Version Equivalent
-|`fetchSize`: Declared at Config level, controls the size of the local message buffer, which is calculated as three times the `fetchSize`
-|`maxBufferSize`: Declared at Subscriber level, explicitly controls the maximum size that the local message buffer can have. This will serve as target number, attemping to fetch as many messages as needed to fill it completely.
+| 2.x Version Parameter |Description| 3.x Version Equivalent |Description
+|`fetchSize`| Declared at Config level, controls the size of the local message buffer, which is calculated as three times the `fetchSize`.
+|`maxBufferSize`| Declared at the `Subscriber` level, explicitly controls the maximum size that the local message buffer can have. This parameter serves as a target number, attempting to fetch as many messages as needed to fill it completely.
 
-|`fetchTimeout`: Controlled the time waiting for a response from the service
-|Deprecated, this will no longer be available. Connector will always use the maximum long-polling value
+|`fetchTimeout`| Controlled the time waiting for a response from the service.
+|Deprecated| This parameter is no longer available. The connector always uses the maximum long-polling value.
 
-|`frequency`: Controlled when to re-check for messages after the queue got empty
-|Deprecated, this will no longer be available. This would be handled internally by the connector, fixed at 1 second
+|`frequency`| Controlled when to recheck for messages after the queue is empty.
+|Deprecated | This parameter is no longer available. The connector now handles the frequency internally - fixed at 1 second.
 
-|`pollingTime`: Used only when `fetchSize` was `0`, effectively disabling the `prefetch` mode and moving to a `polling` mode
-|Deprecated, this has been replaced by the more powerful `polling` Subscriber Type
+|`pollingTime`| Used only when `fetchSize` was `0`, effectively disabling the `prefetch` mode and moving to a `polling` mode.
+|Deprecated| This parameter is replaced by the more powerful `polling` Subscriber Type.
 |===
-
 
 ==== Polling Mode
 
-Previous versions of the MQ Connector allowed to disable the `prefetch` mode by setting the `fetchSize` parameter to `0`, and then using the `pollingTime` as a fixed-frequency polling scheduler.
+Previous versions of the MQ Connector allowed you to disable the `prefetch` mode by setting the `fetchSize` parameter to `0` and then using the `pollingTime` as a fixed-frequency polling scheduler.
 
-In this new major version, the polling-mode of the subscriber has been simplified and normalized to what a polling-source should allow as configuration. This means that now, you'll be able to use the schedulers provided by Mule Runtime out of the box, either as `fixed-frequency` or `cron`:
+In this version, the polling mode of the subscriber has been simplified and normalized. You can now use the schedulers provided by Mule Runtime out of the box, either as `fixed-frequency` or `cron`. For example:
 
+* `fixed-frequency`
++
 [source,console,linenums]
 ----
-<anypoint-mq:subscriber config-ref="Anypoint_MQ_Config" destination="queue">
-	<anypoint-mq:subscriber-type >
-		<anypoint-mq:polling >
-			<scheduling-strategy >
-				<fixed-frequency frequency="1" timeUnit="SECONDS" />
-			</scheduling-strategy>
-		</anypoint-mq:polling>
-	</anypoint-mq:subscriber-type>
+<anypoint-mq:subscriber config-ref="Anypoint_MQ_Config"
+  destination="queue">
+   <anypoint-mq:subscriber-type >
+      <anypoint-mq:polling >
+         <scheduling-strategy >
+            <fixed-frequency frequency="1" timeUnit="SECONDS" />
+         </scheduling-strategy>
+      </anypoint-mq:polling>
+   </anypoint-mq:subscriber-type>
 </anypoint-mq:subscriber>
 ----
 
+* `cron`
++
 [source,console,linenums]
 ----
-<anypoint-mq:subscriber destination="queue" config-ref="Anypoint_MQ_Config">
+<anypoint-mq:subscriber destination="queue"
+    config-ref="Anypoint_MQ_Config">
     <anypoint-mq:subscriber-type>
         <anypoint-mq:polling>
             <scheduling-strategy>
-                <cron expression="0 * 14 * * ?" timeZone="America/Los_Angeles"/>
+                <cron expression="0 * 14 * * ?"
+                timeZone="America/Los_Angeles"/>
             </scheduling-strategy>
         </anypoint-mq:polling>
     </anypoint-mq:subscriber-type>
@@ -164,30 +186,35 @@ In this new major version, the polling-mode of the subscriber has been simplifie
 
 ==== Circuit Breaker
 
-Anothcer change took place in the declaration of the circuit breaker, now removed from the config and replaced by either a global element, or an inline declaration:
+The circuit breaker declaration is no longer in the config and is now either a global element, or an inline declaration.
 
-
-In the *old* version, we would declare it as part of the config, and then reference the config across multiple subscribers:
+In the previous version, you declared the circuit breaker as part of the config and then referenced the config across multiple subscribers. For example:
 
 [source,console,linenums]
 ----
 <anypoint-mq:default-subscriber-config name="ConfigWithCircuit" >
-   	<anypoint-mq:connection url="${providerUrl}" clientId="${clientId}" clientSecret="${clientSecret}"/>
-	<anypoint-mq:circuit-breaker
-	           circuitName="InvoiceProcess"
-	           onErrorTypes="FTP:RETRY_EXHAUSTED, HTTP:SERVICE_UNAVAILABLE"
-	           errorsThreshold="10"
-	           tripTimeout="5"
-	           tripTimeoutUnit="MINUTES"/>
+     <anypoint-mq:connection url="${providerUrl}"
+       clientId="${clientId}"
+      clientSecret="${clientSecret}"/>
+   <anypoint-mq:circuit-breaker
+       circuitName="InvoiceProcess"
+       onErrorTypes="FTP:RETRY_EXHAUSTED, HTTP:SERVICE_UNAVAILABLE"
+       errorsThreshold="10"
+       tripTimeout="5"
+       tripTimeoutUnit="MINUTES"/>
 </anypoint-mq:default-subscriber-config>
 
 <flow name="subscribe">
-    <anypoint-mq:subscriber  config-ref="ConfigWithCircuit" destination="${reservationsQueue}"/>
+    <anypoint-mq:subscriber
+        config-ref="ConfigWithCircuit"
+        destination="${reservationsQueue}"/>
     <flow-ref name="invoiceProcess">
 </flow>
 
 <flow name="otherSubscribe">
-    <anypoint-mq:subscriber  config-ref="ConfigWithCircuit" destination="${paymentsQueue}"/>
+    <anypoint-mq:subscriber
+        config-ref="ConfigWithCircuit"
+        destination="${paymentsQueue}"/>
     <flow-ref name="invoiceProcess">
 </flow>
 
@@ -197,31 +224,37 @@ In the *old* version, we would declare it as part of the config, and then refere
 </sub-flow>
 ----
 
-Now, we'll declare one standalone global element instead, and reference that global element from each subscriber, which frees us from binding a connection to the application logic circuit:
+In this version, you declare one standalone global element, and reference that global element from each subscriber, no longer binding a connection to the application logic circuit. For example:
 
 [source,console,linenums]
 ----
 
 <anypoint-mq:config name="Anypoint_MQ_Config">
-    <anypoint-mq:connection url="${providerUrl}" clientId="${clientId}" clientSecret="${clientSecret}"/>
+    <anypoint-mq:connection url="${providerUrl}"
+       clientId="${clientId}"
+       clientSecret="${clientSecret}"/>
 </anypoint-mq:config>
 
 <anypoint-mq:circuit-breaker
-           name="InvoiceProcess"
-           onErrorTypes="FTP:RETRY_EXHAUSTED, HTTP:SERVICE_UNAVAILABLE"
-           errorsThreshold="10"
-           tripTimeout="5"
-           tripTimeoutUnit="MINUTES"/>
+    name="InvoiceProcess"
+    onErrorTypes="FTP:RETRY_EXHAUSTED, HTTP:SERVICE_UNAVAILABLE"
+    errorsThreshold="10"
+    tripTimeout="5"
+    tripTimeoutUnit="MINUTES"/>
 
 <flow name="subscribe">
-    <anypoint-mq:subscriber destination="${reservationsQueue}" config-ref="Anypoint_MQ_Config"
-                            circuitBreaker="GlobalCircuit"/>
+    <anypoint-mq:subscriber
+        destination="${reservationsQueue}"
+        config-ref="Anypoint_MQ_Config"
+        circuitBreaker="GlobalCircuit"/>
     <flow-ref name="invoiceProcess">
 </flow>
 
 <flow name="otherSubscribe">
-    <anypoint-mq:subscriber destination="${paymentsQueue}" config-ref="Anypoint_MQ_Config"
-                            circuitBreaker="GlobalCircuit"/>
+    <anypoint-mq:subscriber
+        destination="${paymentsQueue}"
+        config-ref="Anypoint_MQ_Config"
+        circuitBreaker="GlobalCircuit"/>
     <flow-ref name="invoiceProcess">
 </flow>
 
@@ -234,7 +267,38 @@ Now, we'll declare one standalone global element instead, and reference that glo
 
 === Publish Operation
 
-.Publish Operation Changes
+In the previous version, `Publish` operation properties were declared like this:
+
+[source,console,linenums]
+----
+<anypoint-mq:publish config-ref="Anypoint_MQ_Default_subscriber"
+       destination="queue"
+       messageId="#[vars.messageId]" sendContentType="false">
+   <anypoint-mq:body >#[vars.messageBody]</anypoint-mq:body>
+   <anypoint-mq:properties >
+      <anypoint-mq:property key="MSG_TYPE" value="My Value"/>
+   </anypoint-mq:properties>
+</anypoint-mq:publish>
+----
+
+In this version, you can now declare the same properties as a dynamic map, subject to transformations and a dynamic number of keys, instead of having fixed keys for each message:
+
+[source,console,linenums]
+----
+<anypoint-mq:publish config-ref="Anypoint_MQ_Config"
+     destination="queue"
+     messageId="#[vars.currentId]" sendContentType="false">
+   <anypoint-mq:body >#[vars.messageBody]</anypoint-mq:body>
+   <anypoint-mq:properties ><![CDATA[#[output application/java -----
+{
+   "MSG_TYPE" : vars.msgType
+}]]]></anypoint-mq:properties>
+</anypoint-mq:publish>
+----
+
+The following table describes the `Publish` operation differences.
+
+[cols="35,30,30",options="header"]
 |===
 | Changes | 2.x Version | 3.x Version
 | Execution Type
@@ -247,65 +311,43 @@ Now, we'll declare one standalone global element instead, and reference that glo
 |===
 
 
-Regarding the properties change, what in the *old 2.x version* of the connector was declared as:
-
-[source,console,linenums]
-----
-<anypoint-mq:publish config-ref="Anypoint_MQ_Default_subscriber" destination="queue"
-					 messageId="#[vars.messageId]" sendContentType="false">
-	<anypoint-mq:body >#[vars.messageBody]</anypoint-mq:body>
-	<anypoint-mq:properties >
-		<anypoint-mq:property key="MSG_TYPE" value="My Value"/>
-	</anypoint-mq:properties>
-</anypoint-mq:publish>
-----
-
-In the *new 3.x version*, the same properties can be declared now as a dynamic map, subject to transformations a a dynamic number of keys, instead of having fixed keys for each message:
-
-[source,console,linenums]
-----
-<anypoint-mq:publish config-ref="Anypoint_MQ_Config" destination="queue"
-					messageId="#[vars.currentId]" sendContentType="false">
-	<anypoint-mq:body >#[vars.messageBody]</anypoint-mq:body>
-	<anypoint-mq:properties ><![CDATA[#[output application/java -----
-{
-	"MSG_TYPE" : vars.msgType
-}]]]></anypoint-mq:properties>
-</anypoint-mq:publish>
-----
-
-For more information look into: xref:anypoint-mq/3.x/anypoint-mq-publish.adoc[Publishing a Message]
+For more information, see xref:anypoint-mq/3.x/anypoint-mq-publish.adoc[MQ Publish Operation]
 
 === Consume Operation
 
-.Consume Operation Changes
+The following table describes the `Consume` operation differences.
+
+[cols="35,30,30",options="header"]
 |===
 | Changes | 2.x Version | 3.x Version
 | Execution Type
 | Blocking
 | Non-Blocking
 
-| Default Ackowledgement Mode
+| Default Acknowledgment Mode
 | MANUAL
 | IMMEDIATE
 |===
 
-For more information look into: xref:anypoint-mq/3.x/anypoint-mq-consume.adoc[Consuming a Message]
+For more information, see xref:anypoint-mq/3.x/anypoint-mq-consume.adoc[MQ Consume Operation].
 
 === ACK and NACK Operations
 
-The ACK and NACK operations present a major change on how the `ackToken`
+The `ACK` and `NACK` operations now use the `ackToken` string.
 
-.ACK and NACK Operation Changes
+You can obtain this new `ackToken` value from the attributes object. The `ackToken` is available only for messages that have a `MANUAL` acknowledgment mode.
+
+The following table describes the `ACK` and `NACK` operation differences.
+
+[cols="50,50",options="header"]
 |===
 | 2.x Version | 3.x Version
-| Operations received a `messageContext` parameter, whose value had to be the `attributes` element from a given message
-| Using the `ackToken` String of the message is enough to perform the ACK or NACK of a message
+| Operations received a `messageContext` parameter, whose value had to be the `attributes` element from a given message.
+| Use the `ackToken` string of the message to perform the ACK or NACK of a message.
 |===
 
-This new `ackToken` value can be obtained from the attributes object. The `ackToken` will be available only for messages that have a `MANUAL` acknowledgement mode.
 
-For more information look into: xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[Acknowledgment]
+For more information, see xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[MQ Message Acknowledgment]
 
 === Platform Compatibility
 
