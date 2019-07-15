@@ -1,4 +1,4 @@
-= MQ Message Acknowledgment
+= Anypoint MQ ACK and NACK Operations
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
@@ -10,49 +10,49 @@ The Anypoint MQ connector provides three acknowledgment configurations: Immediat
 
 === Immediate Acknowledgment
 
-Setting the `acknowledgementMode` to `IMMEDIATE` either in `anypoint-mq:subscriber` or `anypoint-mq:consume` operations causes the message to be automatically acknowledged once it is consumed, before any processing of the message by the application.
+To acknowledge messages as your app consumes them, before processing them, set the `acknowledgementMode` to `IMMEDIATE` either in the Subscriber or Consume operations.
 
-Having the message automatically acknowledged when it is received means that the message isn't redelivered if an error occurs during message processing. To handle possible message errors, you must include application logic, such as creating a dead letter queue, to handle errors without losing messages.
+Acknowledging the message automatically when it's received means that the message isn't redelivered if an error occurs during message processing. To handle errors without losing messages, use a dead letter queue.
 
 If an error occurs while trying to acknowledge the message using `IMMEDIATE` mode, an `ANYPOINT-MQ:ACKING` error is thrown.
 
 === Automatic Acknowledgment
 
-You can use the AUTO `acknowledgementMode` in the `anypoint-mq:subscriber` component to cause an automatic ACK of the received message only if the flow execution completes successfully.
+To acknowledge a received message automatically only if the flow execution completes successfully, set the `acknowledgementMode` to `AUTO` in the Subscriber operation.
 
-If an error occurs during the flow execution, causing its execution to terminate prematurely, the message is NACKed, returning to the queue for redelivery.
+If an error occurs during the flow execution, causing its execution to terminate prematurely, the message is NACKed and returns to the queue for redelivery.
 
 === Manual Acknowledgment
 
-The `MANUAL` acknowledgment mode delegates all responsibility to the application logic to decide when to perform the acknowledgment of the message, using the xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[ACK] or xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[NACK] operations.
+The `MANUAL` acknowledgment mode delegates all responsibility to the app logic to decide when to acknowledge the message, using the ACK or NACK operations.
 
-With this configuration, every message received by either the `Subscriber` or `Consume` operations has an `ackToken` value available in the Mule message `attributes` that identifies this message uniquely for a given connection.
+With this configuration, every message received by either the Subscriber or Consume operations has an `ackToken` value available in the message attributes that identifies this message uniquely for a given connection.
 
-Save this `ackToken` to use later as input to the `ACK`  or `NACK` operations.
+Save this `ackToken` to use later as input to the ACK or NACK operations.
 
 === Acknowledgment Timeout
 
-When using either `AUTO` or `MANUAL` acknowledgment modes, consider the `acknowledgementTimeout` parameter. This parameter controls how long the message is allowed to remain in-flight waiting to be acknowledged, before automatically returning to the queue.
-By default, the connector honors the time defined at the queue level (`Message Lock Default TTL` value) in the Anypoint Platform MQ console.
+When using either `AUTO` or `MANUAL` acknowledgment modes, you can use the `acknowledgementTimeout` parameter to control how long the message remains in-flight waiting to be acknowledged, before automatically returning to the queue.
 
-Always use an `acknowledgementTimeout` that suits your expected application time processing, including time for unexpected delays, such as external systems delay and application back-pressure due to high load. For example, if the consumed message is expected to be processed in 10 seconds, we recommend setting the `acknowledgementTimeout` to a minimum of 15 seconds.
+By default, the connector honors the time defined at the queue level (*Message Lock Default TTL* value) in the Anypoint Platform MQ console.
+
+When using an `acknowledgementTimeout`, consider expected app-time processing, including time for unexpected delays, such as external systems delay and app back-pressure due to high load. For example, if you expect the consumed message to be processed in 10 seconds, set the `acknowledgementTimeout` to a minimum of 15 seconds.
 
 ==== Acknowledgment Timeout with AUTO Acknowledge
 
-After the `subscriber` consumes a message, a timer starts, indicating how long the message has been in-flight for the broker waiting for acknowledgment. If the flow processing does not end with a success or failure before the `acknowledgementTimeout` limit is reached, the message automatically returns to the queue for redelivery.
+After a subscriber consumes a message, a timer starts, indicating how long the message has been in-flight for the broker waiting for acknowledgment. If the flow processing does not end with a success or failure before the `acknowledgementTimeout` limit is reached, the message automatically returns to the queue for redelivery.
 
 ==== Acknowledgment Timeout with MANUAL Acknowledge
 
-When consuming a message using `MANUAL` acknowledgment mode, both in the `subscriber` or the `consume` operation, the application must execute either an `anypoint-mq:ack` or `anypoint-mq:nack` operation using the message `ackToken` before the `acknowledgementTimeout` limit is reached. If neither operation is executed with the given token before the timeout, the message automatically returns to the queue for redelivery. Any attempt at acknowledging the message after the timeout fails due to an expired token.
-
+When consuming a message using `MANUAL` acknowledgment mode in the Subscriber or Consume operations, the app must execute either an ACK or NACK operation using the message `ackToken` before the `acknowledgementTimeout` limit is reached. If neither operation executes with the given token before the timeout, the message automatically returns to the queue for redelivery. Any attempt to acknowledge the message after the timeout limit fails due to an expired token.
 
 == Manual Acknowledgment Using the ACK Operation
 
-Acknowledging a message informs the broker that the message has been processed and thus needs to be removed from the queue, avoiding redelivery.
+Acknowledging a message informs the broker that the message has been processed and must be removed from the queue to prevent redelivery.
 
-The *acknowledgment token* of a message, available in the `ackToken` field of the Anypoint MQ Message Attributes, is a unique token for the message that must be used when performing the `anypoint-mq:ack` operation. For example:
+The acknowledgment token is a unique identifier for the message that you must use when performing the ACK operation. It is available in the `ackToken` field of the message attributes. For example:
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 <flow name="consumerWithManualAck">
     <scheduler>
@@ -79,11 +79,11 @@ The *acknowledgment token* of a message, available in the `ackToken` field of th
 </flow>
 ----
 
-WARNING: If a non-void operation is invoked during the processing of an MQ message, the payload and attributes of the Mule message are modified. To perform an ACK after processing, you must save the `ackToken` in a variable.
+If a non-void operation is invoked during message processing, the payload and attributes of the Mule message are modified. To perform an ACK operation after processing, you must save the `ackToken` in a variable.
 
-A convenient way to save the attributes for later is to use the `target` and `targetValue`  parameters to store the whole message in a variable:
+To save attributes to use later, use the `target` and `targetValue` parameters to store the whole message in a variable:
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 <flow name="consumerWithManualAck">
       <scheduler>
@@ -108,7 +108,7 @@ A convenient way to save the attributes for later is to use the `target` and `ta
         </jms:message>
     </jms:publish-consume>
 
-    <!-- Use the ackToken to acknowledge the message -->
+    <!-- Use the ackToken to ACK the message -->
     <anypoint-mq:ack ackToken="#[vars.mqMessage.attributes.ackToken]"
         config-ref="Anypoint_MQ_Config" />
 </flow>
@@ -116,10 +116,12 @@ A convenient way to save the attributes for later is to use the `target` and `ta
 
 === Execute a NACK
 
-Not-Acknowledging a message informs the broker that the message was not processed successfully and it must be returned to the queue for redelivery to any available consumer.
-The *acknowledgment token* of a message, available in the `ackToken` field of the Anypoint MQ Message Attributes, is a unique token for the message that must be used when performing the `anypoint-mq:nack` operation For example:
+Not-Acknowledging a message informs the broker that the message was not processed successfully and must return to the queue for redelivery to any available consumer.
 
-[source,console,linenums]
+The acknowledgment token is a unique identifier for the message that you must use when performing the NACK operation. It is available in the `ackToken` field of the message attributes. For example:
+
+
+[source,xml,linenums]
 ----
 <flow name="consumerWithManualAck">
     <scheduler>
@@ -139,7 +141,7 @@ The *acknowledgment token* of a message, available in the `ackToken` field of th
     <logger message="#[payload]"/>
 
     <!-- Use the ackToken to NACK the message -->
-    <anypoint-mq:ack ackToken="#[vars.mqMessage.attributes.ackToken]"
+    <anypoint-mq:nack ackToken="#[vars.mqMessage.attributes.ackToken]"
     config-ref="Anypoint_MQ_Config" />
 </flow>
 ----
@@ -147,5 +149,5 @@ The *acknowledgment token* of a message, available in the `ackToken` field of th
 
 == See Also
 
-* xref:anypoint-mq/3.x/anypoint-mq-consume.adoc[MQ Consume Operation]
-* xref:anypoint-mq/3.x/anypoint-mq-listener.adoc[MQ Listen for New Messages]
+* xref:anypoint-mq/3.x/anypoint-mq-consume.adoc[Anypoint MQ Consume Operation]
+* xref:anypoint-mq/3.x/anypoint-mq-listener.adoc[Anypoint MQ Subscriber Operation]
