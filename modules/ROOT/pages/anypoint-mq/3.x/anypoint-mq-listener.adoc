@@ -1,20 +1,20 @@
-= MQ Listen for New Messages
+= Anypoint MQ Subscriber Operation
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 
-The `Subscriber` source in the Anypoint MQ connector provides the ability to listen for new messages and consume them as they arrive at the destination. You can configure different listening strategies that enable you to tune the consumption for performance, predictability, and schedules.
+The Subscriber operation in the Anypoint MQ connector provides the ability to listen for new messages and consume them as they arrive at the destination. You can configure different listening strategies that enable you to tune the consumption for performance, predictability, and schedules.
 
 
 == Continuous Listening for New Messages
 
-By default, the Anypoint MQ subscriber works in a continuous listening mode, providing the maximum throughput by consuming messages as soon as they arrive in the queue. This is called the `prefetch` `subscriber-type` configuration. When using the `prefetch` mode, the subscriber attempts to keep a local buffer of messages full, making them available to be dispatched to the Mule flow as soon as the application can accept it.
+By default, the Anypoint MQ subscriber works in a continuous listening mode, providing the maximum throughput by consuming messages as soon as they arrive in the queue. This is called the `prefetch` `subscriber-type` configuration. When using the `prefetch` mode, the subscriber attempts to keep a local buffer of messages full, making them available to be dispatched to the Mule flow as soon as the app can accept it.
 
 For this `subscriber-type`, you configure the `maxBufferSize` parameter to specify the maximum size of the local buffer when full. This buffer size is the ideal target that the subscriber tries to fill up, effectively controlling how quickly messages are taken from the queue.
 
 image::anypoint-mq/3.x/amq-3x-subscriber-prefetch.png[Anypoint MQ Subscriber With Prefetch]
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 <anypoint-mq:subscriber doc:name="Subscriber"
      doc:id="36e89876-4b60-4574-a17b-59c6c9f6ad5a"
@@ -25,43 +25,45 @@ image::anypoint-mq/3.x/amq-3x-subscriber-prefetch.png[Anypoint MQ Subscriber Wit
 </anypoint-mq:subscriber>
 ----
 
-IMPORTANT: When a message is taken from the queue and stored in the local buffer, it appears as in-flight for any other consumer and prevents them from consuming it. The message remains in this in-flight state for as long as necessary for the application to begin the processing.
+IMPORTANT: When a consumer takes a message from the queue and stores it in the local buffer, the message appears as in-flight for any other consumer and prevents them from consuming it. The message remains in this in-flight state for as long as necessary for the app to begin the processing.
+
+When configuring the buffer size:
 
 * Use a larger buffer size for maximum performance, keeping in mind that the messages kept locally won't be available for any other consumer.
-* Reduce the buffer size to process messages as they are published to the queue.
+* Use a smaller buffer size to process messages as they are published to the queue.
 +
-The smaller buffer restricts application-level throughput and avoids blocking competing consumers.
+The smaller buffer restricts app-level throughput and avoids blocking competing consumers.
 
 When using the `prefetch` mode, the `acknowledgementTimeout` timer begins from the moment the message is dispatched to the flow - not when it is taken from the queue. The time the message remains in the local buffer doesn't count as part of the timeout.
 
 
-== Polling for New Messages
+== Poll for New Messages
 
-If your application requires more predictable and controlled message consumption, rather than maximum throughput, you can configure the `Subscriber` as a polling source. The subscriber checks for new messages in the queue at a fixed scheduling rate. Every time the poll is triggered, the subscriber retrieves up to 10 messages to be dispatched to the flow in order one by one. To do so, select the `polling` `subscriber-type`.
+If your app requires more predictable and controlled message consumption, rather than maximum throughput, you can configure the `Subscriber` as a polling source. The subscriber checks for new messages in the queue at a fixed scheduling rate. Every time the poll is triggered, the subscriber retrieves up to 10 messages to be dispatched to the flow in order one by one. To do so, select the `polling` `subscriber-type`.
 
 Messages that arrive between two polls aren't consumed immediately. Instead, they remain in the queue until the next poll of the subscriber is triggered. The queue contains up to 10 messages to be retrieved. For example, if your queue has 15 messages, one poll consumes the first 10 messages and the remaining 5 messages wait for the next poll.
 
-*IS THIS CORRECT?*
+// *IS THIS SCREENSHOT CORRECT?*
 
 The most basic subscriber declaration looks like this:
 
 image::anypoint-mq/3.x/amq-3x-subscriber-default.png[Anypoint MQ Default Subscriber]
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 <anypoint-mq:subscriber destination="myQueue" config-ref="Anypoint_MQ_Config"/>
 ----
 
 This subscriber declaration attempts to retrieve 10 messages from the declared destination every 1 second, dispatching each of the retrieved messages to the flow one by one as a `MuleMessage`.
 
-The resulting Mule message has:
+The resulting `MuleMessage` has:
 
 * The message's body as its payload.
 * The message's metadata in the message attributes.
 
 image::anypoint-mq/3.x/amq-3x-subscriber-output.png[Anypoint MQ Subscriber Output Message]
 
-You can customize the subscriber polling strategy using the standard Mule Runtime's scheduling strategies:
+You can customize the subscriber polling strategy using the standard Mule Runtime scheduling strategies:
 
 * https://docs.mulesoft.com/mule-runtime/4.1/scheduler-concept#fixed-frequency[Fixed Frequency]
 * https://docs.mulesoft.com/mule-runtime/4.1/scheduler-concept#cron-expressions[Cron Expressions]
@@ -74,7 +76,7 @@ You can customize the frequency at which the subscriber polls for new messages b
 image::anypoint-mq/3.x/amq-3x-subscriber-fixed-frequency.png[Anypoint MQ Subscriber With Custom Fixed Frequency]
 
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 <anypoint-mq:subscriber destination="myQueue"
    config-ref="Anypoint_MQ_Config">
@@ -96,7 +98,7 @@ The Anypoint MQ Subscriber can also use a `cron` scheduling strategy, which enab
 image::anypoint-mq/3.x/amq-3x-subscriber-cron.png[Anypoint MQ Subscriber With Custom Cron Strategy]
 
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 <anypoint-mq:subscriber destination="myQueue"
     config-ref="Anypoint_MQ_Config">
@@ -116,7 +118,7 @@ image::anypoint-mq/3.x/amq-3x-subscriber-cron.png[Anypoint MQ Subscriber With Cu
 
 * *Automatic*
 +
-By default, the subscriber component uses the `AUTO` `acknowledgementMode`. In this mode, the messages that the subscriber retrieves are acknowledged automatically once the flow processing of the message succeeds. This means that the subscriber receives a message, dispatches it to the flow, and waits to see how the message processing completes. It executes an ACK only when the processing completes without exceptions.
+By default, the Subscriber operation uses the `AUTO` `acknowledgementMode`. In this mode, the messages that the subscriber retrieves are acknowledged automatically once the flow processing of the message succeeds. This means that the subscriber receives a message, dispatches it to the flow, and waits to see how the message processing completes. It executes an ACK only when the processing completes without exceptions.
 +
 If the execution of the processing flow is completed with a propagated exception, the message is automatically NACKed, returning it to the queue for redelivery.
 +
@@ -130,7 +132,7 @@ For more information, see xref:anypoint-mq/3.x/anypoint-mq-ack.adoc#immediate-ac
 
 * *Manual*
 +
-To manually control the acknowledgment of the message, change the `acknowledgementMode` to `MANUAL`. When using the `MANUAL` acknowledgment mode, the application logic decides when to perform the acknowledgment of the message, using the xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[ACK] or xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[NACK] operations.
+To manually control the acknowledgment of the message, change the `acknowledgementMode` to `MANUAL`. When using the `MANUAL` acknowledgment mode, the app logic decides when to perform the acknowledgment of the message, using the xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[ACK] or xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[NACK] operations.
 +
 To perform the manual acknowledgment, save the value of the `ackToken` provided as part of the resulting message attributes.
 +
@@ -140,21 +142,21 @@ For information on acknowledgment timeouts, see xref:anypoint-mq/3.x/anypoint-mq
 
 == Circuit Breaker Capability
 
-The `Subscriber` operation provides circuit breaking capability, which enables you to control how the connector handles errors that occur while processing a consumed message.
+The Subscriber operation provides circuit breaking capability, which enables you to control how the connector handles errors that occur while processing a consumed message.
 
 For example, when connecting to an external service, you can use the circuit breaker to handle any downtime of that service. The circuit breaker allows the system to stop making requests and allows the external service to recover under a reduced load.
 
-Using Anypoint MQ in a Mule 4 application means having a Mule flow with an MQ subscriber that consumes messages from a queue and processes them using an external service. When this service isn't available:
+Using Anypoint MQ in a Mule 4 app means having a Mule flow with an MQ subscriber that consumes messages from a queue and processes them using an external service. When this service isn't available:
 
 . The request fails.
 . An error propagates.
 . Message processing completes as either a failure or as a custom error for handling the message, such as sending it to a DLQ.
 
-When the external service is not available, every attempt to process a message results in a failure, forcing the application to loop, consuming messages that cannot succeed. You can avoid this behavior by notifying the subscriber of the error in a way that prevents it from consuming more messages for a certain period.
+When the external service is not available, every attempt to process a message results in a failure, forcing the app to loop, consuming messages that cannot succeed. You can avoid this behavior by notifying the subscriber of the error in a way that prevents it from consuming more messages for a certain period.
 
 === Circuit Breaker Processes
 
-The circuit breaker capability that `Subscriber` operation provides is bound to the error handling mechanism provided by Mule. It uses the error notification mechanism to keep a count of errors related to an external service, which is known as circuit failures. You can bind any error to a circuit failure, for example you can bind `HTTP:TIMEOUT`, `FTP:SERVICE_NOT_AVAILABLE`, or even a custom error from your application, such as `ORG:EXTERNAL_ERROR`.
+The circuit breaker capability that Subscriber operation provides is bound to the error handling mechanism provided by Mule. It uses the error notification mechanism to keep a count of errors related to an external service, which is known as circuit failures. You can bind any error to a circuit failure, for example you can bind `HTTP:TIMEOUT`, `FTP:SERVICE_NOT_AVAILABLE`, or even a custom error from your app, such as `ORG:EXTERNAL_ERROR`.
 
 If a Mule flow completes its execution with an error, the subscriber checks if the error is one of the `onErrorTypes` that indicates an external service error, and counts consecutive occurrences until the `errorsThreshold` is reached. When the `errorsThreshold` is reached, the circuit trips and stops polling for new messages the duration specified by `tripTimeout`. Messages are consumed again on the next poll after the tripTimeout elapses.
 
@@ -162,7 +164,7 @@ By default, the circuit breaking feature is disabled.
 
 === Circuit Breaker States
 
-The circuit breaker has three states: Closed, Open, and Half Open. The behavior of the application changes based on the current state. See the https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker[Microsoft Circuit Breaker pattern] for more information.
+The circuit breaker has three states: Closed, Open, and Half Open. The behavior of the app changes based on the current state. See the https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker[Microsoft Circuit Breaker pattern] for more information.
 
 image::anypoint-mq/3.x/amq-3x-subscriber-states-view.png[Circuit Breaker States Diagram]
 
@@ -192,7 +194,7 @@ If Mule flow processing fails with one of the expected `onErrorTypes`, the circu
 
 === Configure the Circuit Breaker
 
-You can configure a Circuit Breaker as either a Global Circuit Breaker or as a Private Circuit Breaker.
+You can configure a Circuit Breaker as either a Global Circuit Breaker or a Private Circuit Breaker.
 
 Either way, the configuration parameters are the same:
 
@@ -219,9 +221,10 @@ Use a Global Circuit Breaker when you want to share the circuit state across mul
 
 image::anypoint-mq/3.x/amq-3x-cb-global-canvas.png[]
 
-Inside this configuration wizard, populate the following fields as needed. Once this configuration is complete, you can reference this `Circuit_breaker` declaration from any Anypoint MQ Subscriber.
+In the configuration wizard, populate the following fields as needed. Once the configuration is complete, you can reference this `Circuit_breaker` declaration from any Anypoint MQ Subscriber.
 
 To reference a circuit breaker:
+
 . Select the `subscriber` element in the canvas.
 . Click the *Advanced* tab.
 . Select *Circuit Breaker > Global Reference*, and then choose one from the list.
@@ -231,12 +234,11 @@ image::anypoint-mq/3.x/amq-3x-cb-global-ref.png[]
 
 ==== Private Circuit Breaker
 
-You declare a Private Circuit Breaker internally on a single subscriber. This "circuit" declaration is only used in the flow where the subscriber is declared, *isolated from all the other circuits*.
-
-To use this configuration, select the `subscriber` component > Advanced Tab > Circuit Breaker > Edit Inline. Here, you'll be able to populate all the fields as needed.
+You declare a Private Circuit Breaker internally on a single subscriber. This circuit declaration is  used only in the flow where the subscriber is declared, isolated from all the other circuits.
 
 To use this configuration:
-. Select the `subscriber` element in the canvas.
+
+. Select the Subscriber in the canvas.
 . Click the *Advanced* tab.
 . Select *Circuit breaker > Edit Inline*, and then choose one from the list.
 
@@ -250,7 +252,7 @@ In this example, a single subscriber consumes messages from a queue and posts th
 
 For this example, you need one config with these circuit breaker parameters:
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 
 <anypoint-mq:config name="Anypoint_MQ_Config">
@@ -273,7 +275,7 @@ For this example, you need one config with these circuit breaker parameters:
 </flow>
 
 ----
-[cols="8,92,options="noheader", frame="none"]
+[%noheader,cols="8,92,frame="none"]
 |===
 | *(1)* | Configures the error types to trip the circuit. When an error occurs for an `errorsThreshold` amount of times, polling stops.
 | *(2)* | Sets the threshold for how many consequent messages must occur to consider the circuit to be in a failure state.
@@ -288,7 +290,7 @@ The circuit breaker ignores all errors that aren't listed in the `onErrorTypes` 
 
 In many cases, there's a single common service between the processing of messages from different queues. This example configures the `circuitName` parameter to bind both subscribers to a single circuit:
 
-[source,console,linenums]
+[source,xml,linenums]
 ----
 
 <anypoint-mq:config name="Anypoint_MQ_Config">
@@ -328,7 +330,7 @@ In many cases, there's a single common service between the processing of message
 
 ----
 
-[cols="8,92,options="noheader",frame="none"]
+[%noheader,cols="8,92,frame="none"]
 |===
 | *(1)* | Sets the `name` parameter to share a common circuit breaker on multiple queues.
 | *(2)* | Identifies 2 errors that can affect the processing of messages from the subscriber and passes each as a CSV list.
@@ -341,5 +343,5 @@ For this scenario, both subscribers stop polling for messages as soon as the err
 
 == See Also
 
-* xref:anypoint-mq/3.x/anypoint-mq-consume.adoc[MQ Consume Operation]
-* xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[MQ Message Acknowledgment]
+* xref:anypoint-mq/3.x/anypoint-mq-consume.adoc[Anypoint MQ Consume Operation]
+* xref:anypoint-mq/3.x/anypoint-mq-ack.adoc[Anypoint MQ ACK and NACK Operations]
