@@ -3,37 +3,46 @@ ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 
-The Anypoint MQ connector provides different acknowledgment configurations.
+The ACK operation executes an Acknowledgment for a given Anypoint MQ Message Context indicating that the message has been consumed correctly, and then deletes the message from the in-flight status. The NACK (Not Acknowledge) tells the broker to not process the message and to return the message to the queue for redelivery to any available consumer.
+
+The Anypoint MQ connector provides three acknowledgment configurations: Immediate, Automatic, and Manual.
 
 == Immediate Acknowledgment
 
-Setting the `acknowledgementMode` to `IMMEDIATE` either in `anypoint-mq:subscriber` or `anypoint-mq:consume` operations causes the message to be automatically ACKed once it is consumed, and prior to any processing of the message by the app.
+Use the `IMMEDIATE` acknowledgment mode to acknowledge messages as your app consumes them, before processing them.
 
-Acknowledging the message automatically as it is received means that the message isn't redelivered if an error occurs during the processing of the message. To handle possible message errors, you need to handle app logic like creating a dead letter queue to handle errors without losing messages.
+Acknowledging the message automatically when it's received means that the message isn't redelivered if an error occurs during message processing. To handle errors without losing messages, use a dead letter queue.
+
 
 == Automatic Acknowledgment
 
-You can use the AUTO `acknowledgementMode` in the `anypoint-mq:subscriber` component to cause an automatic ACK of the received message - if and only if the flow execution completes successfully.
-If an error occurs during the flow execution, it causes execution to terminate prematurely, then the message is NACKed, returning the message to the queue for redelivery to occur.
+Use the `AUTO` acknowledgment mode to acknowledge a received message automatically only if the flow execution finishes successfully.
 
-After a message is consumed, either with the Subscriber or the Consume operation, an `acknowledgementTimeout` begins, indicating how long the message is in-flight for the broker waiting for an acknowledgment to occur. After this time elapses, the message automatically returns to the queue for its redelivery.
-You must perform either an `ACK` or a `NACK` on the message before the timeout expires.
+If an error occurs during flow execution, execution terminates, and the message is returned to the queue for redelivery.
 
-After a message is consumed by the Subscriber, an `acknowledgementTimeout` begins indicating how long the message is in-flight for the broker waiting for an acknowledgment to occur. If the flow processing does not end before this time has elapsed, the message automatically returns to the queue for redelivery.
 
 == Manual Acknowledgment
 
-The MANUAL `acknowledgementMode` delegates all the responsibility for performing an ACK on the message to the app logic.
+Use the `MANUAL` acknowledgment mode to delegate all responsibility to the app logic to decide when to acknowledge the message.
 
-With this configuration, every message received by either the Subscriber or `consume` operations has an `AnypointMQMessageContext` available in the Mule message `attributes` that identifies this message uniquely for a given connection.
 
-After a message is consumed by either with the Subscriber or the Consume operation, an `acknowledgementTimeout` begins, indicating how long the message is in-flight for the broker waiting for an acknowledgment to occur. After this time elapses, the message automatically returns to the Queue for its redelivery.
-You must perform either an `ACK` or a `NACK` on the message before the timeout expires.
+With this configuration, every message received has an `AnypointMQMessageContext` object in the Mule message `attributes` that identifies this message uniquely for a given connection.
 
-=== Execute an ACK
 
-Acknowledging a message commands the broker that the message has been processed and to remove the message from the queue.
-`AnypointMQMessageContext` identifies the message to pass on to the `anypoint-mq:ack` operation:
+=== Acknowledgment Timeout
+
+When using either `AUTO` or `MANUAL` acknowledgment modes, you can use the `acknowledgementTimeout` parameter to control how long the message remains in-flight waiting to be acknowledged, before automatically returning to the queue.
+
+The app must execute either an ACK or NACK operation on the message before the timeout expires.
+
+When using `acknowledgementTimeout`, consider expected app-time processing, including time for unexpected delays, such as external systems delay and app back-pressure due to high load. For example, if you expect the consumed message to be processed in 10 seconds, set the `acknowledgementTimeout` to a minimum of 15 seconds.
+
+
+=== Execute an ACK Operation
+
+Acknowledging a message informs the broker that the message has been processed and must be removed from the queue to prevent redelivery.
+
+The`AnypointMQMessageContext` object identifies the message to pass on to the `anypoint-mq:ack` operation:
 
 [source,xml,linenums]
 ----
@@ -50,9 +59,10 @@ Acknowledging a message commands the broker that the message has been processed 
 </flow>
 ----
 
-WARNING: If during the processing of an Anypoint MQ message, a non-void operation is invoked, the payload and attributes of the Mule message are modified. To do an ACK after processing, you must save the original attributes in a variable.
+If a non-void operation is invoked during message processing, the payload and attributes of the Mule message are modified. To perform an ACK operation after processing, you must save the original attributes in a variable.
 
-A convenient way to save the attributes for later is using the `target` and `targetValue`  parameters, storing the whole message in a variable:
+
+To save attributes to use later, use the `target` and `targetValue` parameters to store the whole message in a variable:
 
 [source,xml,linenums]
 ----
@@ -72,11 +82,11 @@ A convenient way to save the attributes for later is using the `target` and `tar
 </flow>
 ----
 
-=== Execute a NACK
+=== Execute a NACK Operation
 
-Applying a Not Acknowledge (NACK) operation to a message tells the broker to not process the message and to return the message to the queue for redelivery to any available consumer.
+Not acknowledging a message informs the broker that the message was not processed successfully and commands the broker to return the message to the queue for redelivery to any available consumer.
 
-The `AnypointMQMessageContext` that identifies the message is passed to the `anypoint-mq:nack` operation:
+The `AnypointMQMessageContext` object that identifies the message is passed to the `anypoint-mq:nack` operation:
 
 [source,xml,linenums]
 ----
