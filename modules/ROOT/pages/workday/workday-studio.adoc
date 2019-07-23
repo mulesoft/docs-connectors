@@ -2,27 +2,39 @@
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
+:imagesdir: ../../assets/images/
 
 You can use this connector in Anypoint Studio by adding it as a dependency in your Mule application.
 
-== Install Connector in Studio
+== Install the Connector
 
-. Open your Mule project in Anypoint Studio.
-. Add the connector as a dependency in the pom.xml file:
-+
+. In Studio, create a Mule Project.
+. Click the Exchange *(X)* icon in the Studio task bar.
+. In Exchange, click *Login* and supply your Anypoint Platform username and password.
+. In Exchange, select *All assets* and search for "Workday".
+. Select Workday, click *Add to project*.
+. Follow the prompts to install the connector.
+
+Alternatively you can install using the `pom.xml` file:
+
+In Studio, add the connector as a dependency in the `pom.xml` file:
+
 [source,xml,linenums]
 ----
 <dependency>
-  <groupId>org.mule.connectors</groupId>
+  <groupId>com.mulesoft.connectors</groupId>
   <artifactId>mule-workday-connector</artifactId>
-  <version>9.0.0</version>
+  <version>RELEASE</version>
+  <classifier>mule-plugin</classifier>
 </dependency>
 ----
 
-== Configure in Studio 7
+Studio converts `RELEASE` to the latest version.
 
-. Drag and drop the connector to the Studio Canvas.
-. Configure the Global element for the connector
+== Configure in Studio
+
+. Drag the connector to the canvas.
+. Configure the global element for the connector.
 +
 // image::<missing>configWorkdayStudio.png[config connector]
 +
@@ -31,27 +43,27 @@ You can use this connector in Anypoint Studio by adding it as a dependency in yo
 |Field |Description
 |Username |Enter the username to log in with.
 |Password |Enter the corresponding password.
-|Tenant Name | Enter the Workday Tenant ID. It usually has the suffix "pt_1" appended to it, such as "acme_pt1".
-|Host Name | Enter the host name of one of Workday’s Cloud Servers. Default value: impl-cc.workday.com.
+|Tenant Name | Enter the Workday Tenant ID. It usually has the suffix `pt_1` appended to it, such as `acme_pt1`.
+|Host Name | Enter the host name of one of Workday’s cloud servers. Default value: `impl-cc.workday.com`.
 |Custom Transport|Connection Idle Timeout and Response Timeout, and set up a proxy connection.
 |===
 
-IMPORTANT: To validate connectivity using the Test Connection button, the Workday connector uses an `Identity_Management` WSDL service with the `Get_Workday_Account_Signons_Request` operation. Ensure that your service account has permissions to operate on that service. If not, using the Test Connection fails.
+IMPORTANT: To validate connectivity using the *Test Connection* button, the Workday connector uses an `Identity_Management` WSDL service with the `Get_Workday_Account_Signons_Request` operation. Ensure that your service account has permissions to operate on that service. If not, use of *Test Connection* fails.
 You must also set the 'Transport Configuration' to 'Default http dispatcher provider'. Using the 'Bean Reference' causes an HTTP 500 Internal Server Error from Workday. 
 
 // Studio image of Configuration screen
 
 == Use Case: Studio
 
-=== Get Workday Incident Table Keys
+=== Get Workday Account Signons
 
-Create a Mule flow to get keys from the Incident table in your Workday instance.
+Create a Mule flow to get account signons in your Workday instance.
 
-// image::<missing>createPositionStudio.png[flow example]
+image::workday/createPositionStudio.png[flow example]
 
-. Create a new Mule Application on your Studio and select an HTTP Listener as a Source in the new flow.
-. Add a new HTTP Listener Configuration global element:
-.. Fill Host and port parameters with the following values:
+. Create a new Mule Application on your Studio and select an HTTP Listener as an input source in the new flow.
+. Add a new HTTP Listener to the global element:
+.. Specify the *Host* and *Port* parameters with the following values:
 +
 [%header%autowidth.spread]
 |===
@@ -60,68 +72,38 @@ Create a Mule flow to get keys from the Incident table in your Workday instance.
 |Port |8081
 |===
 +
-.. Click Save.
+.. Click *Save*.
 . Assign your new  Global configuration to your HTTP Listener.
-. Fill in HTTP Listener path with `/incident/get` value.
-. Drag and drop a new Workday component on the flow.
-. Configure the Workday connector global element with its environment values under General tab.
-. Add a transform message before the Connector and add an output like this:
+. Fill in HTTP Listener path with `/get-signons` value.
+. In your Mule Palette select Workday and then select *Identity management* component (drag to the canvas).
+. Configure the Workday connector global element with its environment values under **General** tab.
+. Under operation select **Get_Workday_Account_Signons**.
+. Add a transform message before the connector and add an output like this:
 +
-[source,raml,linenums]
+[source,dataweave,linenums]
 ----
 %dw 2.0
 output application/xml
 ns ns0 urn:com.workday/bsvc
 ---
 {
-ns0#Put_Applicant_Request @(ns0#version: "v28.0"): {
-	ns0#Applicant_Data: {
-		ns0#Personal_Data: {
-			ns0#Name_Data: {
-				ns0#Legal_Name_Data: {
-					ns0#Name_Detail_Data: {
-						ns0#Country_Reference: {
-							ns0#ID @(ns0#"type": "ISO_3166-1_Alpha-2_Code"): payload.countryIDValue
-						},
-						ns0#First_Name: payload.firstName,
-						ns0#Last_Name: payload.lastName
-					}
-				}
-			},
-			ns0#Contact_Data: {
-				ns0#Email_Address_Data: {
-					ns0#Email_Address: payload.email,
-					ns0#Usage_Data @(ns0#Public: true): {
-						ns0#Type_Data @(ns0#Primary: true): {
-							ns0#Type_Reference: {
-								ns0#ID @(ns0#"type": "Communication_Usage_Type_ID"): "Home"
-							}
-						}
-					}
-				}
-			}
+	ns0#Get_Workday_Account_Signons_Request: {
+		ns0#Request_Criteria: {
+			ns0#User_Name: ""
 		},
-		ns0#Recruiting_Data: {
-			ns0#Ineligible_for_Hire: false,
-			ns0#Positions_Considered_for_Reference: {
-				ns0#ID @(ns0#"type": "Position_ID"): payload.applicantPositionIDValue
-			}
-		},
-		ns0#Background_Check_Data: {
-			ns0#Status_Date: payload.statusDate,
-			ns0#Status_Reference: {
-				ns0#ID @(ns0#"type": "Background_Check_Status_ID"): payload.backgroundCheckStatusIDValue
-			}
+		ns0#Response_Filter: {
+			ns0#Page: 1,
+			ns0#Count: 1
 		}
 	}
 }
-}
 ----
 +
+. Fill the User_Name field with your username account value.
 . Save and run the project as a Mule Application.
-. To test the app, navigate to `+http://127.0.0.1:8081/incident/get+`
+. To test the app, navigate to `+http://127.0.0.1:8081/get-signons+`
 
-== To Increase Timeout in Studio
+== Increase Timeout in Studio
 
 Depending on connectivity conditions while using Studio, there can be a timeout while obtaining
 metadata from the Workday connector.
@@ -156,12 +138,12 @@ org.mule.tooling.client.api.exception.TimeoutException: Mule Agent REST service 
   	at org.glassfish.jersey.internal.Errors.process(Errors.java:228)
   	at org.glassfish.jersey.process.internal.RequestScope.runInScope(RequestScope.java:444)
   	at org.glassfish.jersey.client.JerseyInvocation.invoke(JerseyInvocation.java:668)
-  	at
+	...
 ----
 
 === Solution
 
-When one of these conditions occurs, increase the values for `Default Connection Timeout` and `Default Read Timeout` in Studio at Preferences > Anypoint Studio > Tooling.  Double the values, apply, and restart Studio.
+When one of these conditions occurs, increase the values for `Default Connection Timeout` and `Default Read Timeout` in Studio at *Preferences* > *Anypoint Studio* > *Tooling*.  Double the values, apply, and restart Studio.
 
 == Use Case: XML
 
@@ -169,155 +151,54 @@ When one of these conditions occurs, increase the values for `Default Connection
 ----
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:workday="http://www.mulesoft.org/schema/mule/workday"
-xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" 
+	xmlns:workday="http://www.mulesoft.org/schema/mule/workday"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http"
-	xmlns="http://www.mulesoft.org/schema/mule/core"
-	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
 	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
 	http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/http
-http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/ee/core
-http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/workday
-http://www.mulesoft.org/schema/mule/workday/current/mule-workday.xsd">
+	http://www.mulesoft.org/schema/mule/http 
+	http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+	http://www.mulesoft.org/schema/mule/workday 
+	http://www.mulesoft.org/schema/mule/workday/current/mule-workday.xsd
+	http://www.mulesoft.org/schema/mule/ee/core 
+	http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<workday:config-version-32-config name="Workday_Config_version_32" 
+	  doc:name="Workday Config version 32" >
+		<workday:basic-authentication-api-v32-connection 
+		  username="" password="" tenantName="" />
+	</workday:config-version-32-config>
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-	<configuration-properties file="mule-app.properties"/>
-	<workday:config name="Workday_Config" doc:name="Workday Config" >
-		<workday:basic-connection username="${workday.username}"
-		password="${workday.password}" tenantName="${workday.tenantName}"
-		hostName="${workday.hostName}">
-			<workday:transport >
-				<workday:default-http-message-dispatcher-provider />
-			</workday:transport>
-		</workday:basic-connection>
-	</workday:config>
-	<flow name="payroll-gbr-get-form">
-		<http:listener config-ref="HTTP_Listener_config" path="/" doc:name="/"  />
-		<parse-template location="form.html" doc:name="Parse Template"  />
-	</flow>
-	<flow name="create-position" >
-		<http:listener config-ref="HTTP_Listener_config" path="/create-position"
-		doc:name="/create-position" />
-		<logger level="INFO" doc:name="Logger" />
-		<ee:transform doc:name="Transform Message" >
+	<flow name="get-signons" >
+		<http:listener doc:name="/get-signons" 
+		  config-ref="HTTP_Listener_config" 
+		  path="/get-signons"/>
+		<ee:transform doc:name="Transform Message"  >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/xml
 ns ns0 urn:com.workday/bsvc
 ---
 {
-	ns0#Create_Position_Request @(ns0#version: "v28.0"): {
-		ns0#Business_Process_Parameters: {
-			ns0#Auto_Complete: true,
-			ns0#Run_Now: true
+	ns0#Get_Workday_Account_Signons_Request: {
+		ns0#Request_Criteria: {
+			ns0#User_Name: ""
 		},
-		ns0#Create_Position_Data: {
-			ns0#Supervisory_Organization_Reference: {
-				ns0#ID @(ns0#"type":"Organization_Reference_ID"): payload.organizationReferenceID
-			},
-			ns0#Position_Data: {
-				ns0#Job_Posting_Title: payload.jobPostingTitle
-			},
-			ns0#Position_Group_Restrictions_Data: {
-				ns0#Availability_Date: payload.availabilityDate,
-				ns0#Earliest_Hire_Date: payload.earliestHireDate
-			},
-			ns0#Edit_Assign_Organization_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			},
-			ns0#Request_Default_Compensation_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			},
-
-			ns0#Assign_Pay_Group_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			},
-			ns0#Assign_Costing_Allocation_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			}
+		ns0#Response_Filter: {
+			ns0#Page: 1,
+			ns0#Count: 1
 		}
 	}
-}]]></ee:set-payload>
-	</ee:message>
-	<ee:variables >
-	<ee:set-variable variableName="myPayload" ><![CDATA[%dw 2.0
-output application/xml
-ns ns0 urn:com.workday/bsvc
----
-{
-	ns0#Create_Position_Request @(ns0#version: "v28.0"): {
-		ns0#Business_Process_Parameters: {
-			ns0#Auto_Complete: true,
-			ns0#Run_Now: true
-		},
-		ns0#Create_Position_Data: {
-			ns0#Supervisory_Organization_Reference: {
-				ns0#ID @(ns0#"type":"Organization_Reference_ID"): payload.organizationReferenceID
-			},
-			ns0#Position_Data: {
-				ns0#Job_Posting_Title: payload.jobPostingTitle
-			},
-			ns0#Position_Group_Restrictions_Data: {
-				ns0#Availability_Date: payload.availabilityDate,
-				ns0#Earliest_Hire_Date: payload.earliestHireDate
-			},
-			ns0#Edit_Assign_Organization_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			},
-			ns0#Request_Default_Compensation_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			},
-
-			ns0#Assign_Pay_Group_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			},
-			ns0#Assign_Costing_Allocation_Sub_Process: {
-				ns0#Business_Sub_Process_Parameters: {
-					ns0#Skip: true
-				}
-			}
-		}
-	}
-}]]></ee:set-variable>
-			</ee:variables>
-		</ee:transform>
-		<workday:invoke config-ref="Workday_Config" doc:name="Staffing-Create_Position"
-		service="Staffing" operation="Create_Position">
-			<workday:message >
-				<workday:body ><![CDATA[#[vars.myPayload]]]></workday:body>
-			</workday:message>
-		</workday:invoke>
-		<ee:transform doc:name="Transform Message" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/json
-ns ns0 urn:com.workday/bsvc
----
-{
-	ID: payload.body.Create_Position_Response.Position_Reference[1]
 }]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
-		<logger level="INFO" doc:name="Logger"  />
+		<workday:identity-management operation="Get_Workday_Account_Signons" 
+		  doc:name="Identity management" config-ref="Workday_Config_version_32"/>
+		<logger level="INFO" doc:name="Logger" message="#[payload]"/>
 	</flow>
 </mule>
 ----
@@ -326,4 +207,3 @@ ns ns0 urn:com.workday/bsvc
 
 * https://forums.mulesoft.com[MuleSoft Forum]
 * https://support.mulesoft.com/s/knowledge[Knowledge Base Articles]
-
