@@ -468,6 +468,262 @@ output application/json
 </mule>
 ----
 
+== Use Case: Upload File
+Since the Mule 4 version of Box connector doesn't provide upload file operation, this use case demonstrates how to upload a file to Box.
+
+. Create a new Mule Project in Anypoint Studio
++
+. Create a folder called 'input' under src/main/resources directory
++
+. Copy the file you want to upload to the 'input' directory
++
+. Configure the HTTP Listener by adding a new HTTP Global Element. Click on the Global Elements tab at the base of the canvas. In the Global Configuration Elements screen, click Create. In the Choose Global Type wizard, expand Connector Configuration and select HTTP Listener and click Ok. In the HTTP Listener screen configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Name|HTTP_Listener_config
+|Protocol| HTTP
+|Host| localhost
+|Port| 8081
+|===
++
+. Drag an HTTP Listener onto the canvas and configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Display Name |HTTP Listener
+|Connector configuration | Select the HTTP Listener Configuration that had been created previously
+|Path |`/boxUploadFile`
+|===
++
+. Login to Box and Generate the Box developer token which is active for 60 minutes
+. Now set this Developer Token using a DataWeave component. Drag the DataWeave component next to the HTTP Listener and use the script below.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+		//Set the generated developer token here 
+var developerToken = "{developer Token}"
+---
+"Bearer " ++ developerToken
+----
++
+. Drag Set Variable onto Canvas and configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Display Name| Save developer token
+|Name |developerToken
+|Value | #[payload]
+|===
++
+. Configure the File connector by adding a new File Global Element. Click on the Global Elements tab at the base of the canvas. In the Global Configuration Elements screen, click Create. In the Choose Global Type wizard, expand Connector Configuration and select File Config and click Ok. In the File Config screen configure the following parameter:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Working Dircetory | ${mule.home}/apps/${app.name}/
+|===
++
+. Drag a Read File operation onto canvas and configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Display Name |Read File
+|Connector configuration | Select the File Configuration that had been created previously in Global Elements
+|File Path |`input/yourFileName`
+|===
++
+. Now you need to transform this payload to multipart/form-data type of request. You can also specify a folder to which will be file uploaded vby setting the ID of parent folder. Drag a DataWeave component next to the Read File component and use the script below.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output multipart/form-data
+---
+{
+  parts : { 
+  	attributes : { 
+  			headers : {
+        		"Content-Type": "application/json"},
+      		content : {
+      			"name": message.attributes.fileName ,
+	// Set the ID of the parent folder. Use "0" for the root folder.
+      	 		"parent": {
+      	 		  "id":"0"
+				}
+			}
+	},
+    file : {
+      headers : {
+        "Content-Disposition" : {
+            "name": "file",
+            "filename": message.attributes.fileName
+        }
+      },
+      content : payload
+    }
+  }
+}
+----
++
+. Configure the HTTP Request by adding a new HTTP Request Global Element. Click on the Global Elements tab at the base of the canvas. In the Global Configuration Elements screen, click Create. In the Choose Global Type wizard, expand Connector Configuration and select HTTP Request Configuration and click Ok. In the HTTP Request Configuration screen configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Name| HTTP_Request_configuration
+|Base path |/
+|Protocol | HTTP(Default)
+|Host |80
+|Port |
+|Use persistent connections| ✓
+|Max Connections|-1
+|Connection idle timeout|30000
+|Response buffer size|1024
+|TLS configuration| None
+|Proxy|None
+|Authentication|None
+|Client socket properties|None
+|Use reconnection| unchecked
+|===
++
+. Now drag a HTTP request onto canvas and configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter |Value
+|Display Name| Request - Box Upload File
+|Configuration| Select the HTTP request configuration that had been created previously in Global Elements
+|Method|POST
+|Path|
+|URL|https://upload.box.com/api/2.0/files/content
+|Body|payload
+|===
++
+. Now click we need to create Authorization header in the HTTP Request. Click on the Headers tab next to the Body in the HTTP request , click on the plus sign and configure the following parameter:
++
+[%header%autowidth.spread]
+|===
+|Name |Value
+|"Authorization"|vars.developerToken
+|===
++
+. Finally drag the DataWeave component to set the payload to display the result of the flow to the usert and use the script below.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	result : "File has been successfully created"
+}
+----
++
+. Save and run the project as a Mule application
+. Hit the URL `http://localhost:8081/boxUploadFile` in the browser. You should get a JSON response with the following content.
++
+result : `"File has been successfully created"`
+
+
+== Use Case: XML - Upload File
+
+[source,xml,lineums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:mule-box-connector="http://www.mulesoft.org/schema/mule/mule-box-connector" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/mule-box-connector http://www.mulesoft.org/schema/mule/mule-box-connector/current/mule-mule-box-connector.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config">
+		<file:connection workingDir="${mule.home}/apps/${app.name}/" /> 
+	</file:config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" >
+		<http:request-connection host="80" />
+	</http:request-config>
+	<flow name="UploadFileToBox" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/boxUploadFile" />
+		<ee:transform doc:name="Set Developer Token Variable">
+			<ee:message>
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+		//Set the generated developer token here 
+var developerToken = "{developer Token}"
+---
+"Bearer " ++ developerToken]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+			</ee:variables>
+		</ee:transform>
+		<set-variable value="#[payload]" doc:name="Save developer token" variableName="developerToken"/>
+		<file:read doc:name="Read File" config-ref="File_Config" path="input/yourFileName"/>
+		<ee:transform doc:name="Transform to multipart/form-data">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output multipart/form-data
+---
+{
+  parts : { 
+  	attributes : { 
+  			headers : {
+        		"Content-Type": "application/json"},
+      		content : {
+      			"name": message.attributes.fileName ,
+	// Set the ID of the parent folder. Use "0" for the root folder.
+      	 		"parent": {
+      	 		  "id":"0"
+				}
+			}
+	},
+    file : {
+      headers : {
+        "Content-Disposition" : {
+            "name": "file",
+            "filename": message.attributes.fileName
+        }
+      },
+      content : payload
+    }
+  }
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Request - Box Upload File" url="https://upload.box.com/api/2.0/files/content" config-ref="HTTP_Request_configuration">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.developerToken,
+	"Key" : "Value"
+}]]]></http:headers>
+		</http:request>
+		<ee:transform doc:name="Transform Response">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	result : "File has been successfully created"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+
+----
+
 == See Also
 
 * Access the xref:release-notes::connector/box-connector-release-notes.adoc[Box Connector Release Notes].
