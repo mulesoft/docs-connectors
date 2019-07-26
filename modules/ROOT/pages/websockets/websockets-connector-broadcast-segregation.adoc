@@ -1,0 +1,102 @@
+= About Websocket Connection Management Components
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: connectors, ws, wss, websocket
+
+== About WebSockets Broadcasting and Segragation
+
+=== Broadcast Operation
+
+The broadcast operation enables a socket to send a message to all other sockets:
+
+    * Subscribed to a specific group.
+    * Listening at a specific path.
+    * Of a specific type (INBOUND/OUTBOUND).
+
+The type and group parameters work in tandem, in an additive way. They are both optional and can be used separately, but when used together they act as two levels of filtering.
+
+[source,xml,linenums]
+----
+<!-- send to all active sockets connected to the /quotes endpoint -->
+<websocket:broadcast path=”/quotes” ​config-ref​=​"ws"​ />
+
+<!-- send to all INBOUND sockets connected to the /quotes endpoint -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​config-ref​="​ws"​ />
+
+<!-- send to all INBOUND sockets connected to the /quotes endpoint -->
+<websocket:broadcast path=”/quotes” ​type​=​"OUTBOUND"​ ​config-ref​=​"ws"​ />
+
+<!-- send to all INBOUND sockets connected to the /quotes endpoint, in the MARVEL and DC groups -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​groups​="​ #[['MARVEL', 'DC']]"​ ​config-ref​=​"ws"​ />
+----
+
+==== Output
+
+This operation does returns empty payload and attributes.
+
+=== Subscribe Groups
+
+This operation allows a Websocket to subscribe to one or more groups. It can be invoked on the same socket as many times as necessary, each invokation being additive over the previous ones. Repeated groups will be ignored.
+
+This is especially useful for broadcast operations in which a message can be delivered to one or more sockets associated or subscribed to a specific group (or groups).
+
+=== Unsubscribe Groups
+
+This operation allows for a Websocket to stop belonging to a group it is currently subscribed to. If a socket is unsubscribed from a group it doesn't belong to, the operation is ignored.
+
+==== Output
+
+This operation does returns empty payload and attributes.
+
+[source,xml,linenums]
+----
+<flow name="subscribeDcToMoves">
+    <websocket:on-inbound-connection path="/dcChat" config-ref="ws"/>
+
+    <websocket:unsubscribe-groups ​socketId​=​"#[attributes.socketId]" groups​=​"#[['COMICS']]"​ />
+    <logger level="INFO" message="I want movies too!" />
+    <websocket:subscribe-groups ​socketId​=​"#[attributes.socketId]" groups​=​"#[['MOVIES']]"​ />
+</flow>
+
+<flow name="dcChat">
+    <websocket:inbound-listener defaultGroups=​"#[['COMICS', 'DC']]  path="/dcChat" config-ref="ws"/>
+    <logger level="INFO" message="#['This message is for dc fans!' ++ payload]" />
+</flow>
+
+<flow name="marvelChat">
+    <websocket:inbound-listener path="/marvelChat" defaultGroups=​"#[['COMICS', 'MOVIES', 'MARVEL']] config-ref="ws"/>
+    <logger level="INFO" message="#['This message is for marvel fans!' ++ payload]" />
+</flow>
+
+<flow name="booksChat">
+    <websocket:inbound-listener path="/booksChat" defaultGroups=​"#[['BOOKS', 'HARRY POTTER', 'LOTR']] config-ref="ws"/>
+    <logger level="INFO" message="#['This message is for book fans!' ++ payload]" />
+</flow>
+
+<flow name="sendMessagesFlow">
+    <!--Send a message to all endpoints subscribed to MARVEL-->
+    <websocket:broadcast groups="#[['MARVEL']]" config-ref="ws">
+        <websocket:content>#['We're in the endgame now...']</websocket:content>
+    </websocket:broadcast>
+
+    <!--Send a message to all endpoints subscribed to DISNEY-->
+    <websocket:broadcast groups="#[['MOVIES']]" config-ref="ws">
+        <websocket:content>#['A message for movie fans!']</websocket:content>
+    </websocket:broadcast>
+
+    <!--Send a message to all endpoints-->
+    <websocket:broadcast groups="#[['MOVIES', 'BOOKS']]" config-ref="ws">
+         <websocket:content>#['Hello to all fans!']</websocket:content>
+    </websocket:broadcast>
+</flow>
+----
+
+=== Message Segregation
+
+
+== See Also
+
+* xref:http/websocket-about-websocket-connector.adoc[About Websocket Connector]
+* xref:http/websocket-connector-configuration.adoc[About Websocket Connector Configuration]
+* xref:http/websocket-connector.adoc[Websocket Connector]

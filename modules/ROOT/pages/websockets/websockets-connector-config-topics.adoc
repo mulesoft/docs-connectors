@@ -1,0 +1,214 @@
+= WebSocket Additional Configuration Information - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:imagesdir: ../../assets/images/
+
+== WebSocket Configuration
+
+
+=== Configure WebSocket Server
+
+If your application exposes a WebSocket endpoint that only accepts incoming connections, but doesn't connect to any external services, you will have to specify your connector's configuration under the <server-settings> tag, because you are configuring a WebSocket Server.
+
+WebSocket server settings require an underlying HTTP Listener Configuration, from which several connection settings will be inherited, however these settings can be overriden in the WebSocket configuration or at the operation level.
+
+Using the HTTP Listener Configuration you can specify base connection settings like a host, port, base path or you can use it to configure a TLS based connection(WSS). See below for further details on TLS Connection Configuration.
+
+[source,xml,linenums]
+----
+<http:listener-config name="httpListenerConfig" basePath="/willBeOverriddenByWSConfig">
+   <http:listener-connection host="0.0.0.0" port="80" />
+</http:listener-config>
+
+<websocket:config ​name​=​"wsServer"​> ​
+    <websocket:connection>
+    ​   <websocket:server-settings ​listenerConfig​=​"httpListenerConfig" listenerBasePath​=​"/ws"​/>
+    </websocket:connection>
+</websocket:config>
+
+<flow name="chat">
+    <websocket:inbound-listener path="/chat" config-ref="wsServer"/>
+    <logger level="INFO" message="A new message has been received! #[payload]"/>
+</flow>
+----
+
+Notice our WebSocket server settings reference the HTTP Listener Config in the listenerConfig attribute. In this example, WebSocket Inbound Listener will listen for incoming messages on localhost and port 80, which are set at the HTTP Listener Configuration. We also set basePath to "/ws", since we decided to override the HTTP basePath setting in our WebSocket configuration. To sum up, our WebSocket Inbound Listener will be listening for incoming messages at "ws://localhost:80/ws/chat".
+
+You can see that since our HTTP Listener has no reference to a TLS Configuration component, the connection will be opened using WS protocol by default.
+
+=== Configure WebSocket Client
+
+If your application will only connect to external services then you will need to provide Client Settings.
+
+[source,xml,linenums]
+----
+<websocket:config ​name​=​"wsClient"​> ​
+    <websocket:connection>
+    ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​ ​basePath​=​"/ws"​ />
+    </websocket:connection>
+</websocket:config>
+
+<flow="connectToWebSocketFlow">
+    <websocket:open-outbound-socket path="/chat" socketId="myCustomWebSocketID-123" config-ref="wsClient" />
+    </websocket:open-outbound-socket>
+
+    <logger info="INFO" message="Opened connection to external service!"/>
+</flow>
+----
+
+In this example we have initialized an Outbound Socket which references the WebSocket client configuration("wsClient") in the config-ref attribute. In this case, there is no need to reference an HTTP Configuration.
+
+In the configuration above, we chose to specify a host, port and basePath to build our WS request URI. The host parameter is optional, if not set it will be set to "localhost". The port parameter is optional, if not specified the default value will be set according to the protocol scheme, if WS is used the default value will be set to 80, if WSS is used the default will be set to 443. The basePath parameter is optional, if URI is not set it will indicate the base path for all client requests relative to the indicated host and port, if not set the default value will be set to "/".
+
+You can also specify a URL.
+
+[source,xml,linenums]
+----
+<websocket:config ​name​=​"wsClient"​> ​
+    <websocket:connection>
+    ​   <websocket:client-settings ​uri="ws://www.mulesoft.com"​ />
+    </websocket:connection>
+</websocket:config>
+----
+
+However, in this case we cannot indicate a path because the URL and Path parameters are mutually exclusive, this is because URL will indicate a full resource locator, while the Path will indicate a path relative to the host, port and basePath.
+
+=== Combined Configuration
+
+If your application will be doing both, listening for incoming connections and issuing requests to external services, you can configure server and client together.
+
+[source,xml,linenums]
+----
+<http:listener-config name="httpListenerConfig" basePath="/willBeOverriddenByWSConfig">
+   <http:listener-connection host="0.0.0.0" port="${listenerPort}" />
+</http:listener-config>
+
+<websocket:config ​name​=​"ws"​> ​
+    <websocket:connection>
+    ​   <websocket:server-settings ​listenerConfig​=​"httpListenerConfig" listenerBasePath​=​"/ws"​ />
+    ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​ ​basePath​=​"/ws"​ />
+    </websocket:connection>
+</websocket:config>
+----
+
+Now we can reference this configuration from both Inbound and Outbound sockets.
+
+[source,xml,linenums]
+----
+<flow="acceptIncomingMessagesFlow">
+    <websocket:inbound-listener ​path​=​"/quotes"​ ​config-ref​=​"ws"​ />
+    <logger info="INFO" message="I listen for incoming messages at '/quotes'!"/>
+</flow>
+
+<flow="connectToWebSocketFlow">
+    <websocket:open-outbound-socket path="/chat" config-ref="ws"/>
+    <logger info="INFO" message="I open a connection to an external service listening at path '/chat'!"/>
+</flow>
+----
+
+=== Default Parameters and Headers
+
+You can specify default headers and default query parameters in your client configuration, and they will be included in the connection request message.
+
+[source,xml,linenums]
+----
+<http:listener-config name="httpListenerConfig" basePath="/willBeOverriddenByWSConfig">
+   <http:listener-connection host="0.0.0.0" port="${listenerPort}" />
+</http:listener-config>
+
+<websocket:config ​name​=​"wsClient"​> ​
+    <websocket:connection>
+    ​   <websocket:client-settings ​host​=​"localhost" port​=​"${listenerPort}"​ ​basePath​=​"/ws"​>
+    ​       <websocket:default-headers>
+                ​<websocket:header ​key​=​"myFirstDefaultHeader"​ v​alue​=​"defaultHeader1" />
+                ​<websocket:header ​key​=​"mySecondDefaultHeader"​ v​alue​=​"defaultHeader2" />
+            ​</websocket:default-headers>
+            ​<websocket:default-query-params>
+                ​<websocket:query-param ​key​=​"myFirstDefaultQueryParam" value="query1" />
+                ​<websocket:query-param ​key​=​"mySecondDefaultQueryParam" value="query2" />
+            ​</websocket:default-query-params>
+    ​   </websocket:client-settings>
+    </websocket:connection>
+</websocket:config>
+----
+
+You can also choose to add headers or query parameters to your connect operation and they will be sent along with the default headers and parameters in the request to establish the connection.
+
+[source,xml,linenums]
+----
+<flow="connectToWebSocketFlow">
+    <websocket:open-outbound-socket path="/chat" config-ref="wsClient">
+            <websocket:headers><![CDATA[
+                    #[
+                        {
+                            chatAlias: 'Captain Marvel'
+                        }
+                    ]
+                ]]>
+            </websocket:headers>
+            <websocket:query-params><![CDATA[
+                    #[
+                        {
+                            theme: 'USA'
+                        }
+                    ]
+                ]]>
+            </websocket:query-params>
+    </websocket:open-outbound-socket>
+</flow>
+----
+
+=== TLS Configuration
+
+TLS (Transport Layer Security) allows for client/server applications to communicate through a secure channel and prevent attackers from eavesdropping or tampering with the transmitted data.
+
+TLS configuration will be inherited from the referenced HTTP Listener config. So for example, in order to configure TLS on a WebSocket listener, just point to a <http:listener-config> with TLS configured.
+
+Of course, you will first need to set up your Truststore if your application will connect to external services, or Keystore if your application will listen for incoming connections, or you can set up both.
+
+In the following example, our WebSocket Server will inherit TLS configuration from the HTTP Listener, which will in turn reference a <tls:context> to configure a key-store.
+
+[source,xml,linenums]
+----
+<tls:context name="listenerTlsContext" >
+    <tls:key-store path="tls/muleKeystore" keyPassword="mulepassword" password="mulepassword" alias="muleserver" />
+</tls:context>
+
+<http:listener-config name="listenerTlsConfig">
+    <http:listener-connection protocol="HTTPS" host="localhost" port="${listenerPort}" tlsContext="listenerTlsContext"/>
+</http:listener-config>
+
+<websocket:config name="requestConfigWithCertificate">
+    <websocket:connection>
+        <websocket:server-settings listenerConfig="listenerTlsConfig" listenerBasePath="/"/>
+    </websocket:connection>
+</websocket:config>
+----
+
+In case of a WebSocket Client, you can set up a Truststore by directly referencing the <tls:context> in the tlsConfig property.
+
+[source,xml,linenums]
+----
+<tls:context name="requestTlsContextWithCertificate" >
+    <tls:trust-store path="tls/trustStore" password="mulepassword" />
+</tls:context>
+
+<websocket:config name="requestConfigWithCertificate">
+    <websocket:connection>
+        <websocket:client-settings host="localhost" port="${listenerPort}" tlsContext="requestTlsContextWithCertificate" protocol="WSS"/>
+    </websocket:connection>
+</websocket:config>
+----
+
+The protocol parameter is optional and defaults to WS (insecure). If set to WSS, then SSL will be enabled in the connection. If a <tls:content> was specified, then that configuration will be used to create the SSL session. Otherwise, default settings will be used.
+
+== Next
+
+Now that you have completed configuration, you can try out the WebSocket xref:websockets/websocket-connector-examples.adoc[Examples].
+
+== See Also
+
+* xref:4.1@mule-runtime::tls-configuration.adoc[Configure TLS with Keystores and Truststores]
+* https://forums.mulesoft.com[MuleSoft Forum]
+* https://support.mulesoft.com/s/knowledge[Knowledge Base Articles]
