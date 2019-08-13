@@ -3,9 +3,227 @@ ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 :imagesdir: ../../assets/images/
-// Add text to introduce the example section and say what one finds
-// here and why it is helpful or necessary info.
-// Put Examples here -- You may need to obtain these from the
-// code repo /demo folder.
+
+= Example
+
+This example sends a message with metadata to an Amazon SQS queue and then receives it from the queue. This example is split into the two flows:
+
+. The first flow sends a message with metadata. Then it gets the count of the messages in the queue to validate that the message was sent.
+. The second flow receives the message and logs the message body.
+
+image::amazon/amazon-sqs-send-message-operation-demo-flow.png[Send Message Operation Flow]
+
+image::amazon/amazon-sqs-receive-delete-message-operations-demo-flow.png[Receive and Delete Message Operation Flow]
+
+== Create a Flow to Send a Message
+
+Start the flow by sending a message to the queue:
+
+. Create a new Mule project in Anypoint Studio.
+. Drag an *HTTP Connector Listener* operation onto the canvas.
+. Double-click the *Listener* to open the properties editor.
++
+image::amazon/amazon-sqs-http-config.png[]
++
+. Set the *Path* field to `/`.
+. Click *+* next to the *Connector configuration* field to add an HTTP Listener Configuration global element.
+. Leave the default values for the fields:
++
+image::amazon/amazon-sqs-http-params.png[]
++
+[%header%autowidth.spread]
+|
+=== Add a Transform Message Component to Attach the Metadata
+
+. In the Mule Palette, search for *Transform Message* and drag the component next to the *Listener*.
+. Double-click the *Transform Message* component.
+. Add this metadata data to the *Output* section:
++
+image::amazon/amazon-sqs-transform-message.png[Transform Message Component]
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	delaySeconds: 0,
+	body: "Hello World",
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}
+----
+
+=== Add and Configure the SQS Send Message Operation
+
+. In the Mule Palette, search for *Amazon SQS*.
+. Select the *Send message* operation and drag it onto the canvas, next to the *Transform Message* component.
+. Double-click the connector to open the properties editor.
+. Click *+* next to the *Connector configuration* field to add a global element.
+. Add values for the *Access Key*, *Secret Key*, and *Default Queue URL*.
+/// The original text mentioned Queue name, but I don't see that
+/// now.
+. Configure the Following fields on the properties window.
++
+image::amazon/amazon-sqs-send-message.png[Send Message Parameters]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name for the connector operation.
+|Connector Configuration |Select the global configuration you just created.
+|Message |`#[payload]`
+|===
++
+=== Add a Logger Component to print the response in the Mule Console
+
+. In the Mule Palette, search for *Logger*.
+. Drag the component onto the canvas, next to the *Send Message* component.
+. Configure the following fields:
++
+image::amazon/amazon-sqs-demo-logger.jpg[]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name for the logger.
+|Message |Sent Message: `#[payload]`
+|Level |INFO (Default)
+|===
+
+/// Do we include Sent Message in the Message field?
+
+=== Obtain the Number of Messages in the Queue
+
+. In the Mule Palette, search for *Amazon SQS*.
+. Select the *Get approximate number of messages* operation and drag it onto the canvas, next to the *Logger* component.
+. Double-click the connector to open the properties editor.
+. Click *+* next to the *Connector configuration* field to add a global element.
+. Enter values for the following fields:
++
+image::amazon/amazon-sqs-demo-get-message-count.jpg[]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|*Display Name* |Enter a name for the connector operation.
+|*Connector Configuration* |Select the global configuration you create.
+|*Queue url* |
+|===
+
+/// Which global configuration do you use - the one for the first SQS connector (Send Message?)
+
+=== Add a Logger to Print the Number in the Mule Console
+
+. In the Mule Palette, search for *Amazon SQS*.
+. Select the *Send message* operation and drag it onto the canvas, next to the *Transform Message* component.
++
+image::amazon/amazon-sqs-demo-logger2.jpg[]
+
+== Create a Flow to Receive a Message
+
+Now create another flow to receive message and log them before deleting them from the queue.
+
+. Drag an Amazon SQS connector and configure it as an inbound endpoint:
++
+image::amazon/amazon-sqs-demo-receive-messages.png[]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name for the connector operation.
+|Connector Configuration |Select the global configuration you create.
+|Number of Messages |10
+|===
++
+The Message processor's Queue URL attribute takes precedence over the Global Element Properties Queue URL. If none of the attributes belonging to Global Element Properties, including Queue Name, Queue URL, and the Message Processor's Queue URL is provided, the connector throws an exception.
++
+. Add a Logger to print the message in the Mule Console:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name of your choice.
+|Message |#[payload]
+|Level |INFO (Default)
+|===
+
+
+=== Studio XML Editor
+
+For this code to work in Anypoint Studio, you must provide Amazon Web Services credentials.  You can either replace the variables with their values in the code, or you can provide the values for each variable in the `src/main/resources/mule-artifact.properties file`.
+
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+  <configuration-properties file="mule-artifact.properties"/>
+  <sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration" doc:id="ID_VALUE">
+    <sqs:basic-connection accessKey="${sqs.accessKey}" secretKey="${sqs.secretKey}" defaultQueueName="${sqs.queueName}"/>
+  </sqs:config>
+  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="ID_VALUE">
+    <http:listener-connection host="0.0.0.0" port="8081"/>
+  </http:listener-config>
+  <flow name="sqs-send-message-operation-demo-flow" doc:id="ID_VALUE">
+    <http:listener config-ref="HTTP_Listener_config" path="/" doc:name="Listener" doc:id="ID_VALUE"/>
+    <ee:transform doc:name="Transform Message" doc:id="ID_VALUE">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	delaySeconds: 0,
+	body: "Hello World",
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <sqs:send-message config-ref="Amazon_SQS_Configuration" doc:name="Send message" doc:id="ID_VALUE" message="#[payload]"/>
+    <logger level="INFO" doc:name="Logger" doc:id="ID_VALUE" message="#[payload]"/>
+    <sqs:get-approximate-number-of-messages config-ref="Amazon_SQS_Configuration" doc:name="Get approximate number of messages" doc:id="ID_VALUE"/>
+    <logger level="INFO" doc:name="Logger" doc:id="ID_VALUE" message="#[payload]"/>
+  </flow>
+  <flow name="sqs-receive-delete-message-operations-demo-flow" doc:id="ID_VALUE">
+    <sqs:receivemessages config-ref="Amazon_SQS_Configuration" doc:name="Receivemessages" doc:id="ID_VALUE"/>
+    <logger level="INFO" doc:name="Logger" doc:id="ID_VALUE message="#[payload]"/>
+  </flow>
+</mule>
+----
+
+
 == See Also
 * https://forums.mulesoft.com[MuleSoft Forum]
