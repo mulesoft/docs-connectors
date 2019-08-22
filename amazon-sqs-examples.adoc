@@ -1,0 +1,159 @@
+= Amazon SQS Examples - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:imagesdir: ../../assets/images/
+
+The common use case Amazon SQS connector can be sending a message along with meta data to an Amazon SQS queue and then receive it from the queue. This can be split into the following two flows:
+
+* Send message along with metadata, and then get the count of the messages in the queue to validate that the message has been sent.
+
+* Receive the message, log the message body.
+
+
+== Use Case: Send and receive message
+
+Send a message along with meta data to an Amazon SQS queue and then receive it from the queue.
+For this example to work in Anypoint Studio, you must provide Amazon Web Services credentials. 
+
+image::amazon/amazon-sqs-02.png[Studio 7 Visual Studio Icon Flow]
+
+=== Create a flow to send message
+
+. Create a new Mule project in Studio.
+. Drag an *HTTP Listener into the canvas, and select it to open the properties editor.
+. Add a new HTTP Listener Config global element:
+.. In General Settings, click the *+* button:
+.. Configure the following HTTP parameters, retain the default values for the other fields, and click *OK*.
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Name |HTTP_Listener_Configuration
+|Host |127.0.0.1
+|Port |8081
+|===
++
+.. Reference the HTTP Listener Configuration global element. In the General tab, specify the `/` Path.
+. Add a Transform Message component to attach the metadata:
++
+image::amazon/amazon-sqs-03.png[Transform Message]
++
+[source,xml,linenums]
+%dw 2.0
+output application/java
+---
+{
+	delaySeconds: 0,
+	body: "Hello World",
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}
+. Drag an Amazon SQS connector Send message operation into the flow, and double-click the connector to open its Properties Editor.
+. In Basic Settings on the right side of the field Extension configuration click the plus icon and add values for Access Key, Secret Key, and Queue Name.
+. Configure the remaining parameters of the connector.
++
+image::amazon/amazon-sqs-04.png[Send message]
++
+
+. Add a Logger to print the response in the Mule Console.
++
+image::amazon/amazon-sqs-05.png[Logger]
++
+. Add another Amazon SQS connector > Get approximate number of messages to get the count of the messages in the queue.
++
+image::amazon/amazon-sqs-06.png[Get number of messages]
+
+. Add a Logger to print the number in the Mule Console.
++
+image::amazon/amazon-sqs-05.png[Logger]
+
+
+=== Create a flow to receive a message
+This completes the first part of the use case. Now create another flow to receive message and log them before deleting them from the queue.
+
+. Drag an Amazon SQS connector Receivemessages operation into the flow, and double-click the connector to open its Properties Editor.
++
+image::amazon/amazon-sqs-07.png[Receivemessage operation]
+. Add a Logger to print the message in the Mule Console:
++
+image::amazon/amazon-sqs-05.png[Logger]
+
+== Use Case: XML Code
+
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+  <configuration-properties file="mule-artifact.properties"/>
+  <sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration" doc:id="33399299-ae1d-4687-8536-cf9d826ff39d">
+    <sqs:basic-connection accessKey="${sqs.accessKey}" secretKey="${sqs.secretKey}" defaultQueueName="${sqs.queueName}"/>
+  </sqs:config>
+  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="88b1d47d-f9c4-41c2-be5b-6d284168ff65">
+    <http:listener-connection host="0.0.0.0" port="8081"/>
+  </http:listener-config>
+  <flow name="sqs-send-message-operation-demo-flow" doc:id="6b36d76e-ea7b-4c34-b027-cb8948cee797">
+    <http:listener config-ref="HTTP_Listener_config" path="/" doc:name="Listener" doc:id="dfc8757e-c236-4e7d-929b-7b27e4224629"/>
+    <ee:transform doc:name="Transform Message" doc:id="d49dafd6-e99b-486e-9849-456aa709ad78">
+      <ee:message>
+        <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	delaySeconds: 0,
+	body: "Hello World",
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <sqs:send-message config-ref="Amazon_SQS_Configuration" doc:name="Send message" doc:id="4edc6ddf-4fa9-486a-94f8-483958433f56" message="#[payload]"/>
+    <logger level="INFO" doc:name="Logger" doc:id="01d53789-a810-46e5-b261-4d6194b345b4" message="#[payload]"/>
+    <sqs:get-approximate-number-of-messages config-ref="Amazon_SQS_Configuration" doc:name="Get approximate number of messages" doc:id="8a805617-1120-4635-a7e6-f9d448cd4a87" queueUrl="queueURL"/>
+    <logger level="INFO" doc:name="Logger" doc:id="e39518eb-9144-4d90-a98b-b826486ca46f" message="#[payload]"/>
+  </flow>
+  <flow name="sqs-receive-delete-message-operations-demo-flow" doc:id="e0d849af-4ba8-4a6d-85ac-4e8d9fc1e921">
+    <sqs:receivemessages config-ref="Amazon_SQS_Configuration" doc:name="Receivemessages" doc:id="fd85f711-d798-4f71-b04a-4a6dc3800d7a" queueUrl="queueURL"/>
+    <logger level="INFO" doc:name="Logger" doc:id="ID_VALUE" message="#[payload]"/>
+  </flow>
+</mule>
+----
+
+== See Also
+
+* https://forums.mulesoft.com[MuleSoft Forum]
+* https://support.mulesoft.com/s/knowledge[Knowledge Base Articles]
+* http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#using-the-default-credential-provider-chain[Amazon Default Provider Credential Chain]
