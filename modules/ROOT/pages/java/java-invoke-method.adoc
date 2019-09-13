@@ -1,20 +1,21 @@
-= Example: Invoke Methods Using the Java Module
+= Invoke Methods Using the Java Module
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
+:imagesdir: ../../assets/images/
 
 Java methods (either instance or static) can be called through the `invoke` and
 `invoke static` operations in the Java module. Their return value is placed in the
-payload of the output Message or can be placed in a
-https://docs.mulesoft.com/mule-runtime/4.2/target-variables[target variable].
+payload of the output message or can be placed in a
+xref:4.2@mule-runtime::target-variables.adoc[target variable].
 
 == Invoke Instance Methods
 
-Given the following Java class `TaxCalculator` that belongs to the `com.foo` package:
+In the following Java class `TaxCalculator`, belongs to the `com.me` package:
 
 [source,java,linenums]
 ----
-package com.foo;
+package com.me;
 
 public class TaxCalculator {
 
@@ -33,29 +34,34 @@ public class TaxCalculator {
 }
 ----
 
-IMPORTANT: The classes used with the Java Module must be exported (unless they belong to the default package). If not, the
-execution will fail with a JAVA:CLASS_NOT_FOUND error. See xref:4.1@mule-runtime::how-to-export-resources.adoc[how to
+[IMPORTANT]
+====
+The classes used with the Java Module must be exported (unless they belong to the default package). If not, the
+execution fails with a JAVA:CLASS_NOT_FOUND error. See xref:4.2@mule-runtime::how-to-export-resources.adoc[how to
 export resources].
+====
 
-In order to invoke instance methods:
+To invoke instance methods:
 
-. First an instanced object is needed to then call one of its methods. The xref:java/java-create-instance.adoc[`new`
-operation] from the Java module can be used to create an object on which a method is later invoked.
+. Use the xref:java/java-create-instance.adoc[`new`
+operation] from the Java Module to create an object on which a method is later invoked. This provides an instanced object that can then call one of its methods. 
 . Set the `invoke` operation to call one of the object's methods. Just like the `new` operation,
 `invoke` takes a map for input parameters (if the method has them) and supports
-https://docs.mulesoft.com/mule-runtime/4.2/target-variables[target parameters].
+xref:4.2@mule-runtime::target-variables[target parameters].
 
-In the following example, an instance of the class _TaxCalculator_ will be created and placed
-into the target variable `taxCalculator`. Then the _calculateTax(Double, Integer)_ method is
-called, which takes _price_ and _percentAdditionalTax_ as arguments, and its return value is
+In the next example, an instance of the class `TaxCalculator` is created and placed
+into the target variable `taxCalculator`. Then the `calculateTax(Double, Integer)` method is
+called, which takes `price` and `percentAdditionalTax` as arguments, and its return value is
 placed in the `totalTax` variable.
 
 [source,xml,linenums]
 ----
-<java:new class="com.foo.TaxCalculator" constructor="TaxCalculator()" target="taxCalculator"/>
+<java:new class="com.me.TaxCalculator" 
+	constructor="TaxCalculator()" 
+	target="taxCalculator"/>
 
 <java:invoke instance="#[vars.taxCalculator]"
-  class="com.foo.TaxCalculator"
+  class="com.me.TaxCalculator"
   method="calculateTax(Double, Integer)"
   target="totalTax">
       <java:args>#[{
@@ -66,27 +72,31 @@ placed in the `totalTax` variable.
 ----
 
 For the method parameters, the full package name can be specified, for example
-`constructor="Person(java.lang.Double, java.lang.Integer)"`. Of course, this is not needed, but it can
+`constructor="Person(java.lang.Double, java.lang.Integer)"`. This is not needed, but it can
 be useful to add more clarity in the code or in the case there are clashing class names in the Java code.
 
 In Studio, the Java module supports DataSense for the `invoke` operation, providing metadata
 for both the input arguments and the output value. In the example, DataSense discovers that
 _calculateTax_ returns a Number, so the output metadata for the `invoke` operation will look like this:
 
-image::../../assets/images/java/invoke-output-metadata.png[]
+image::java/invoke-output-metadata.png[]
 
 For a complete example of using `invoke` in Studio, see the section below: <<studio_example>>.
 
 [IMPORTANT]
-===============================
+====
 When configuring the constructor arguments in the `args` parameter,
-the keys of the map will determine how the parameters will be passed to the constructor. *In
-order to reference the parameters by name* (`price`, `percentAdditionalTax`, etc.),
-the java class containing the Method or Constructor has to be compiled
-using https://docs.oracle.com/javase/tutorial/reflect/member/methodparameterreflection.html[the `-parameters` compiler flag].
-If the class was not compiled with this flag, then the same parameters
+the keys of the map determine how the parameters are passed to the constructor. 
+
+To reference the parameters by name (`price`, `percentAdditionalTax`, etc.),
+the Java class containing the method or constructor has to be compiled
+using the https://docs.oracle.com/javase/tutorial/reflect/member/methodparameterreflection.html[`-parameters`] compiler flag.
+If the class was not compiled with this flag, the same parameters
 must be referenced in the declared order and with the canonical names
-(`arg0`, `arg1`, etc.). In this case:
+(`arg0`, `arg1`, etc.). 
+
+In this case:
+
 [source,xml,linenums]
 ----
 <java:args>#[{
@@ -95,8 +105,8 @@ must be referenced in the declared order and with the canonical names
 }]</java:args>
 ----
 
-If the Java classes are defined in a Studio Project, the Maven Compiler plugin must be
-configured in the `pom.xml` in order to compile Java classes with the `-parameters` flag:
+If the Java classes are defined in a Studio project, the Maven compiler plugin must be
+configured in the `pom.xml` to compile Java classes with the `-parameters` flag:
 
 [source,xml,linenums]
 ----
@@ -111,23 +121,25 @@ configured in the `pom.xml` in order to compile Java classes with the `-paramete
     </configuration>
 </plugin>
 ----
-===============================
+====
 
 == Invoke Methods with DataWeave
 
 The Java Module also has a DataWeave function (`Java::invoke`) to provide the same functionality
 as the `invoke` operation but inside a DataWeave expression. This practice is especially helpful for
-methods that return `boolean` values. The function takes as arguments the full class name of the
-given object, the instance method to execute, the instanced object and the method arguments as a map.
+methods that return `boolean` values. The function takes as arguments the full class name 
+of an object, the instance method to execute, the instanced object, and the method arguments as a map.
 
-Given the Java class at the <<Invoke Instance Methods,top of this page>>, this examples creates
-a new instance of _TaxCalculator_ and, rather than use the Java module `invoke` operation to call
-the _isTaxFree(Double)_ method, it embeds the DataWeave function in a
-https://docs.mulesoft.com/mule-runtime/4.1/choice-router-concept[Choice] component:
+In the Java class in <<Invoke Instance Methods>>, this examples creates
+a new instance of `TaxCalculator` and, rather than use the Java module `invoke` operation to call
+the `isTaxFree(Double)` method, it embeds the DataWeave function in a
+xref:4.2@mule-runtime::choice-router-concept.adoc[Choice] component:
 
 [source,xml,linenums]
 ----
-<java:new class="com.foo.TaxCalculator" constructor="TaxCalculator()" target="taxCalculator"/>
+<java:new class="com.foo.TaxCalculator" 
+	constructor="TaxCalculator()" 
+	target="taxCalculator"/>
 
 <choice>
     <when
@@ -139,11 +151,13 @@ https://docs.mulesoft.com/mule-runtime/4.1/choice-router-concept[Choice] compone
 
 == Invoke Static Methods
 
-An example on how to invoke *static* Java methods:
+An example on how to invoke static Java methods:
 
 [source,xml,linenums]
 ----
-<java:invoke-static class="java.lang.Math" method="toRadians(double)">
+<java:invoke-static 
+	class="java.lang.Math" 
+	method="toRadians(double)">
     <java:args>#[{
         arg0: 180
     }]</java:args>
@@ -153,8 +167,8 @@ An example on how to invoke *static* Java methods:
 [[studio_example]]
 == New and Invoke Operations in Studio
 
-In Studio, you can write or load a Java package into a project, configure
-Java operations within one or more a flows, and then run the Mule app in
+In Anypoint Studio, you can write or load a Java package into a project, configure
+Java operations within one or more a flows, and run the Mule app in
 which the operations reside.
 
 image::java/java-module-ex.png[Java module example]
@@ -219,26 +233,21 @@ public class Add {
 
 To create a Mule app that invokes `hello()` and `add()`:
 
-. Create a new Mule project in Studio with a name such as `javaexamples`:
-+
-In Studio, you select *File* > *New* > *Project*, provide a project
+. In Studio, select *File* > *New* > *Project*, provide a project
 name (`javaexamples`), and click *Finish*.
-+
-. Create a Java package for your classes:
-.. Right-click your Mule project's `src/main/java` directory from
-the *Package Explorer* tab (located on the left).
-.. Select *New* > *Package*.
-.. Provide the package name `com.examples` in the *Name* field.
-.. Click *Finish*.
+. Create a Java package for your classes by right clicking your Mule project's `src/main/java` directory in
+*Package Explorer*.
+. Select *New* > *Package*.
+. Provide the package name `com.examples` in the *Name* field.
+. Click *Finish*.
 +
 Make sure that the package `com.examples` appears under the `src/main/java`
 directory.
 +
 . Add the Java code for the `Hello` and `Add` classes to your new `com.examples`
-package:
-.. Right-click your new `com.examples` package in Studio, and select *New* > *Class*.
-.. Type the *Name* `Hello.java` for the `Hello` class, and click *Finish*.
-.. Copy and paste the `Hello` class content into the `Hello.java` file.
+package by right clicking your new `com.examples` package in Studio, and select *New* > *Class*.
+. Type the *Name* `Hello.java` for the `Hello` class, and click *Finish*.
+. Copy and paste the `Hello` class content into the `Hello.java` file.
 +
 The entire file looks like this, including `package com.examples` at the top:
 +
@@ -259,11 +268,11 @@ public class Hello {
 }
 ----
 +
-.. Right-click your new `com.examples` package in Studio, and select
+. Right-click your new `com.examples` package in Studio, and select
 *New* > *Class*.
-.. Type the *Name* `Add.java`.
-.. Click *Finish*.
-.. Copy and paste the class content into the `Add.java` file.
+. Type the *Name* `Add.java`.
+. Click *Finish*.
+. Copy and paste the class content into the `Add.java` file.
 +
 The entire file looks like this, including `package com.examples` at the top:
 +
@@ -298,9 +307,9 @@ component into the Studio canvas.
 Optional: You can also set the Scheduler frequency to something less frequent
 than the default, for example, *Frequency* to `10` and *Time unit* to `SECONDS`.
 +
-.. If the Java module is not already available in your Mule palette, click
-*Add Module*, and drag the Java module into the left column of the palette.
-.. Click the Java module, place its New operation to the right of the
+.. If the Java Module is not already available in your Mule palette, click
+*Add Module*, and drag the Java Module into the left column of the palette.
+.. Click the Java Module, place its New operation to the right of the
 Scheduler in the flow, and then double-click and configure the operation:
 +
 * *Class*: `com.examples.Hello`
@@ -317,15 +326,15 @@ and then double-click and configure the operation:
 +
 Do not click *fx* for the *Method* setting.
 +
-.. Find and drag a Logger component to the right of the Invoke operation in the
+.. Find and drag a *Logger* component to the right of the *Invoke* operation in the
 flow, and in its *Message* field, click *fx* and type `payload`.
-.. Find and drag a Flow Reference component to the right of the Logger component,
+.. Find and drag a *Flow Reference* component to the right of the *Logger* component,
 and then double-click the component and set the *Flow Name* field to
 `javaexamplesFlow1`, the name of a new flow that you create in the next step.
 . Set up a new flow by dragging a new Flow component below the existing flow,
 making sure that its name is `javaexamplesFlow1` (so that your Flow Reference
 setting in the other flow matches the name of this new flow).
-.. Click the Java module, then drag a New operation to the *Process*
+.. Click the Java module, then drag a *New* operation to the *Process*
 section of your new flow, `javaexamplesFlow1`, and provide the following
 configuration for the operation:
 +
@@ -335,7 +344,7 @@ configuration for the operation:
 +
 Do not click *fx* for the *Constructor* setting.
 +
-.. Place an Invoke operation to the right of the New operation in your new flow,
+.. Place an *Invoke* operation to the right of the *New* operation in your new flow,
 and provide the following configuration:
 +
 * Click *fx*, and set the *Instance* field: `payload`.
@@ -343,7 +352,7 @@ and provide the following configuration:
 * *Class*: `com.examples.Add`
 * *Method*: `add(int,int)`
 +
-Do not click *_fx_* for the *Method* setting.
+Do not click *fx* for the *Method* setting.
 +
 .. Continue with the New operation and click the *Advanced* configuration link, and
 set the *Output* to a target variable that stores the payload of the Invoke operation:
@@ -354,20 +363,20 @@ set the *Output* to a target variable that stores the payload of the Invoke oper
 This step shows how to pass the payload to a target variable if you
 ever need to do so.
 +
-.. Place a Logger component to the right of the Invoke operation in the
+.. Place a *Logger* component to the right of the *Invoke* operation in the
 new flow, click *fx*, and set the *Message* field to `vars.mySum`.
 +
-This Logger setting is for displaying the payload stored in the target
+This *Logger* setting is for displaying the payload stored in the target
 variable in the Studio console.
 +
 . To make any named parameters readable, add XML for the Mule compiler
 plugin to the `pom.xml` file for your Mule project:
 +
-.. In the *Package Explorer* on the left, simply double-click `pom.xml`,
+.. In the *Package Explorer*, double-click `pom.xml`,
 located at the bottom the *javaexamples* project.
 +
 .. Add the Mule compiler plugin XML between the
-`<build><plugins></plugins></build>` elements in the POM file,
+`<build><plugins></plugins></build>` elements in the `pom.xml` file,
 retaining any plugins that are already defined there.
 +
 [source,xml,linenums]
@@ -399,13 +408,14 @@ Paste this XML into your POM file:
 </build>
 ----
 +
-If you try to use named parameters in New without adding the Maven compiler
-plugin XML, the New operation fails with a message similar to this one:
+If you try to use named parameters in the *New* operation without adding the Maven compiler
+plugin XML, the *New* operation fails with a message similar to:
++
 `Failed to instantiate Class [com.examples.Add] with arguments [Integer numA, Integer numB]. 
 Expected arguments are [int arg0, int arg1]`
 +
 . Return to your Mule app by clicking the *javaexamples* tab in Studio.
-. Run the Mule app by selecting *Run* -> *Run* from the top set of menus.
+. Run the Mule app by selecting *Run* > *Run* from the top set of menus.
 . Once the project deploys successfully, check the *Console* for the
 expected output.
 +
@@ -420,10 +430,8 @@ INFO  2019-02-22 09:21:32 ... [event: 4c31f...] ... LoggerMessageProcessor: 7
 * `helloWorld` is the output value for *javaexamplesFlow*.
 * `7` is the output value for *javaexamplesFlow1*.
 
-== See also
+== See Also
 
-xref:java/java-throwable.adoc[Example: Working With Throwables]
-
-xref:java/java-argument-transformation.adoc[Java Module Argument transformation]
-
-xref:java/java-reference.adoc[Java Module Documentation Reference]
+* xref:java/java-throwable.adoc[Work With Throwables]
+* xref:java/java-argument-transformation.adoc[Java Module Argument Transformation]
+* xref:java/java-reference.adoc[Java Module Reference]
