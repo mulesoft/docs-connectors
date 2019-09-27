@@ -11,9 +11,9 @@ This example sends a message with metadata to an Amazon SQS queue and then recei
 . The first flow sends a message with metadata. Then it gets the count of the messages in the queue to validate that the message was sent.
 . The second flow receives the message and logs the message body.
 
-image::amazon/amazon-sqs-send-message-operation-demo-flow.png[Send Message Operation Flow]
+image::amazon/amazon-sqs-send-message-flow.png[Send Message Operation Flow]
 
-image::amazon/amazon-sqs-receive-delete-message-operations-demo-flow.png[Receive and Delete Message Operation Flow]
+image::amazon/amazon-sqs-receive-message-flow.png[Receive and Delete Message Operation Flow]
 
 Before you try the example, access Studio, and check to see if the Mule Palette displays entries for Amazon SNS and Amazon SQS. If not, follow the instructions in install the Connector in Studio Using Exchange to install both connectors.
 
@@ -98,10 +98,12 @@ image::amazon/amazon-sqs-send-global-config.png[send-global-config]
 [source,dataweave,linenums]
 ----
 <sqs:config name="Amazon_SQS_Configuration"
-   doc:name="Amazon SQS Configuration"  >
-	 <sqs:basic-connection accessKey="ZZZaccesskey"
-	   secretKey="GGGsecretkey"/>
-	 </sqs:config>
+  doc:name="Amazon SQS Configuration"
+	defaultQueueUrl="${sqs.queueUrl}">
+	<sqs:basic-connection accessKey="${sqs.accessKey}"
+	secretKey="${sqs.secretKey}"
+	region="us-east-1"/>
+</sqs:config>
 ----
 +
 . Configure the Following fields on the properties window:
@@ -112,7 +114,7 @@ image::amazon/amazon-sqs-send-global-config.png[send-global-config]
 |Display Name |Enter a name for the connector operation.
 |Connector Configuration |Select the global configuration you just created.
 |Message |`#[payload]`
-|Queue url |Enter the queue URL.
+|Queue url |Enter the queue URL, if you did not enter a default queue URL in the global element.
 |===
 +
 For example:
@@ -220,19 +222,32 @@ For this code to work in Anypoint Studio, you must provide Amazon Web Services c
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-  <configuration-properties file="mule-artifact.properties"/>
-  <sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration" doc:id="ID_VALUE">
-    <sqs:basic-connection accessKey="${sqs.accessKey}" secretKey="${sqs.secretKey}" defaultQueueName="${sqs.queueName}"/>
-  </sqs:config>
-  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="ID_VALUE">
-    <http:listener-connection host="0.0.0.0" port="8081"/>
-  </http:listener-config>
-  <flow name="sqs-send-message-operation-demo-flow" doc:id="ID_VALUE">
-    <http:listener config-ref="HTTP_Listener_config" path="/" doc:name="Listener" doc:id="ID_VALUE"/>
-    <ee:transform doc:name="Transform Message" doc:id="ID_VALUE">
-      <ee:message>
-        <ee:set-payload><![CDATA[%dw 2.0
+
+<mule xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+  http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd">
+	<http:listener-config name="HTTP_Listener_config"
+	doc:name="HTTP Listener config"  >
+	<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sqs:config name="Amazon_SQS_Configuration"
+	doc:name="Amazon SQS Configuration" defaultQueueUrl="${sqs.queueURL}">
+	<sqs:basic-connection accessKey="${sqs.accessKey}"
+	secretKey="${sqs.secretKey}" region="us-east-1"/>
+	</sqs:config>
+	<flow name="sqs-send-message-flow"  >
+	<http:listener doc:name="Listener"
+	config-ref="HTTP_Listener_config" path="/"/>
+	<ee:transform doc:name="Transform Message"  ">
+	<ee:message >
+	<ee:set-payload ><![CDATA[%dw 2.0
 output application/java
 ---
 {
@@ -256,19 +271,25 @@ output application/java
 	}
 } as Object {
 	class: "org.mule.extension.sqs.api.model.Message"
-}]]></ee:set-payload>
-      </ee:message>
-    </ee:transform>
-    <sqs:send-message config-ref="Amazon_SQS_Configuration" doc:name="Send message" doc:id="ID_VALUE" message="#[payload]"/>
-    <logger level="INFO" doc:name="Logger" doc:id="ID_VALUE" message="#[payload]"/>
-    <sqs:get-approximate-number-of-messages config-ref="Amazon_SQS_Configuration" doc:name="Get approximate number of messages" doc:id="ID_VALUE"/>
-    <logger level="INFO" doc:name="Logger" doc:id="ID_VALUE" message="#[payload]"/>
-  </flow>
-  <flow name="sqs-receive-delete-message-operations-demo-flow" doc:id="ID_VALUE">
-    <sqs:receivemessages config-ref="Amazon_SQS_Configuration" doc:name="Receivemessages" doc:id="ID_VALUE"/>
-    <logger level="INFO" doc:name="Logger" doc:id="ID_VALUE message="#[payload]"/>
-  </flow>
+}
+
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<sqs:send-message doc:name="Send message" config-ref="Amazon_SQS_Configuration">
+			<sqs:message ><![CDATA[#[#[payload]]]]></sqs:message>
+		</sqs:send-message>
+		<logger level="INFO" doc:name="Log Response" message="Sent Message: `#[payload]`"/>
+		<sqs:get-approximate-number-of-messages doc:name="Get approximate number of messages"
+		queueUrl="http://queue-url.com" config-ref="Amazon_SQS_Configuration"/>
+		<logger level="INFO" doc:name="Log Count"  message="Approx. messages in queue: `#[payload]`"/>
+	</flow>
+	<flow name="sqs-receive-message-flow" >
+		<sqs:receivemessages doc:name="Receivemessages" numberOfMessages="10" queueUrl="${sqs.queueName}"
+		config-ref="Amazon_SQS_Configuration"/>
+	</flow>
 </mule>
+
 ----
 
 
