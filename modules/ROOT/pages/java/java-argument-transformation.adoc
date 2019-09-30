@@ -1,27 +1,25 @@
-= Java Module Argument Transformation
+= Argument Transformation - Mule 4
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
-:keywords: Java, custom code, transformation, arguments
 
-*Available since version 1.1*
+Since Java Module version 1.1, this module transforms the arguments 
+given to a Java invocation even if they don't exactly
+match the type expected by the Java method. The Java module 
+infers how to transform a parameter to what a method expects.
 
-The Java Module transforms the arguments given to a Java invocation when they don't exactly
-match the type expected by the java method but there is a way to infer how to transform the
-given parameter to what the method expects.
+== When Are Arguments Transformed?
 
-== When Will The Arguments Be Transformed?
-
-For every parameter given, the module will check whether its type matches the type
+For each specified parameter, the Java module checks whether its type matches the type
 expected by the method for that parameter or not. If it is not what the method expects, the
-module will try to transform it to what is expected.
+Java Module transforms it to what is expected.
 
 == Simple Example of Argument Transformation
 
-This is a simple example where one of the arguments is transformed:
+This is a simple example where one of the arguments is transformed.
 
-The static method 'min' from the 'Math' class will be called, it expects
-to receive two `int` parameters, the call will be made with a Number and a String
+The static method `min` from the `Math` class is called, but the class expects
+to receive two `int` parameters. The call is made with a Number and a String:
 
 [source,xml,linenums]
 ----
@@ -36,19 +34,21 @@ to receive two `int` parameters, the call will be made with a Number and a Strin
 </flow>
 ----
 
-In this case 'arg1' would have been passed as a String, but it is transformed into an int
-before calling the java method.
+In this case `arg1` would have been passed as a string, but it is transformed into an integer
+before calling the Java method.
 
-== Custom POJO Passed to the Module as a Map
+== Pass a Custom POJO to a Module as a Map
 
-Previously, when working with custom POJOs, the user had to explicitly declare in the DataWeave
-expression to what type the data should be transformed. Now, the Java Module automatically
-recognizes what is the expected type for a given argument and tries to transform the given
-data to the expected type. Here is an example of when a Map parameter is transformed
-into a custom POJO by the module.
+In Mule 3 when working with custom POJOs, users explicitly declared in the DataWeave
+expression what type the data to transform. In Mule 4, the Java module automatically
+recognizes the expected type for an argument and tries to transform the 
+data to the expected type. (POJO stands for plain old Java object.)
 
-Here is the class of the POJO:
+In the examples that follow, a Map parameter is transformed
+into a custom POJO by the Java module. 
 
+. Define the `Car` class of the POJO:
++
 [source,java,linenums]
 ----
 public class Car {
@@ -69,20 +69,20 @@ public class Car {
   }
 }
 ----
-
-A Java class declares a static method that receives an instance of the POJO defined above:
-
++
+. Declare the `describeCar` static method in the class to receive an instance of the POJO:
++
 [source,java,linenums]
 ----
 public class CarUtils {
   public static String describeCar(Car car) {
-    return "This are the car has: " + car.getEngine() + "," + car.getWheels() + "," + car.getDoors();
+    return "This car has: " + car.getEngine() + ", " + car.getWheels() + ", " + car.getDoors();
   }
 }
 ----
-
-Mule flow where said static method is invoked:
-
++
+. Invoke the static method in the Mule flow:
++
 [source,xml,linenums]
 ----
 <flow name="describeCarFlow">
@@ -91,7 +91,7 @@ Mule flow where said static method is invoked:
             #[{
             'car': {
                 'doors' : "Four doors",
-                'engine' : "120 Horse power engine",
+                'engine' : "120 Horsepower engine",
                 'wheels' : "17 Inch chromed rims"
             }
             }]
@@ -99,29 +99,27 @@ Mule flow where said static method is invoked:
     </java:invoke-static>
 </flow>
 ----
++
+The Mule operation receives the `car` map whose key and values are mapped to a
+`Car` class instance. This map is transformed into an instance before the invocation of
+the Java method. Without this improvement, the invocation would fail, stating that the arguments
+passed to the Java method did not match its signature.
 
-The mule operation is receiving a Map named car whose key and values can be mapped to a
-Car instance. This Map will be transformed into such instance before the invocation of
-the java method. Without this improvement the invocation would fail stating that the arguments
-passed to the java method did not match its signature.
+== Collections and Maps
 
-== Collections And Map
+The Java module checks that every element of the collection and every entry of the map honors the Java Generic declared by the method signature. If any element fails this check, the Java module creates the whole collection or map repopulates it with the transformed elements.
 
-The Module will check that every element of the Collection and every entry of the map honors
-the Java Generic declared by the Method Signature. If any element fails this check, the whole
-Collection or Map will have to be created and repopulated with the transformed elements.
-[WARNING]
-The Java method will be called with another instance of the Collection or
-Map if a transformation is needed(not the same as the one passed in the Mule flow). This
-is particularly important if the method called is expected to add or remove elements in
-the Collection or Map and the ability to reference this Collection or Map after the invocation is needed.
+[IMPORTANT]
+====
+The Java method is called with another instance of the collection or map if a transformation is needed (not the same as the one passed in the Mule flow). This is particularly important if the method called is expected to add or remove elements in the collection or map, and the ability to reference this collection or map after the invocation is needed.
+====
 
-== Example Where a List is Transformed
+== Transform a List Example
 
-This is an example where the List given to the operation needs to be transformed and
-a new List with the transformed items will be passed to the java method.
+The `List` given to the operation is transformed and
+a new `List` with the transformed items is passed to the Java method.
 
-This is the java class that declares a static method:
+The `IntegerUtils` Java class declares the `sumNumbers` static method:
 
 [source,java,linenums]
 ----
@@ -132,7 +130,7 @@ public class IntegerUtils {
 }
 ----
 
-This is how it is invoked in a mule flow:
+This Mule flow invokes the Java class:
 
 [source,xml,linenums]
 ----
@@ -147,15 +145,14 @@ This is how it is invoked in a mule flow:
 </flow>
 ----
 
-Notice that the list given in the flow has some two String objects which will have
-to be transformed to Integer.
+The `numbers` list in the flow has two string objects (`"5"` and `"8"`), which the module transforms into integers.
 
-== Example Where a Map is Transformed
+== Transform a Map Example
 
-This is an example where the Map given to the operation needs to be transformed and
-a new Map with the transformed keys and values will be passed to the java method.
+A map for the operation is transformed and
+a new map with the transformed keys and values is passed to the Java method.
 
-This is the java class that declares a static method:
+This Java class declares the `sumMapValues` static method:
 
 [source,java,linenums]
 ----
@@ -166,7 +163,7 @@ public class MapUtils {
 }
 ----
 
-This is how it is invoked in a mule flow:
+This Mule flow invokes the `MapUtils` Java class:
 
 [source,xml,linenums]
 ----
@@ -185,6 +182,6 @@ This is how it is invoked in a mule flow:
 </flow>
 ----
 
-This Map contains values that does not comply with the generics imposed in the Java
-method. Because of this, a new instance with the transformed key and values are
+This map contains values that do not comply with the generics imposed in the Java
+method. Because of this, a new instance with the transformed key and values is
 used to call the method.
