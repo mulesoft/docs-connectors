@@ -255,15 +255,17 @@ The Mule runtime engine translates the LATEST dependency keyword to the current 
 To obtain the most up-to-date `pom.xml` file information, access 
 the connector in https://www.mulesoft.com/exchange/[Anypoint Exchange] and click *Dependency Snippets*.
 
-== Example: Get, Delete, Query, and Execute
+== Example: Create, Get, Query, Update and Execute
 
-This example demonstrates the use of SAP S/4 HANA connector to get and delete an entity, query for a value, and execute a function.
+This example demonstrates the use of SAP S/4 HANA connector to create and get an entity, query for a value, update entity and execute a function.
 
 To build and run this demo project, you need:
 
 * Anypoint Studio with at least the Mule 4.1.x Runtime.
 * SAP S/4 HANA Cloud Connector v1.0.0 or later.
 * Credentials for sending ODATA API requests.
+
+NOTE: Please take note that in case of update entity operation, the entity key *must* be specified as part of the payload.
 
 === Test the Flow
 
@@ -284,6 +286,7 @@ read timeout is used when waiting to read data from the server.
 image::sap/sap-hana-create.png[Operations Studio 7 Flow]
 image::sap/sap-hana-get.png[Operations Studio 7 Flow]
 image::sap/sap-hana-query.png[Operations Studio 7 Flow, scaledwidth="75%"]
+image::sap/sap-hana-update.png[Operations Studio 7 Flow]
 image::sap/sap-hana-execute.png[Operations Studio 7 Flow]
 
 [source,xml,linenums]
@@ -423,6 +426,46 @@ payload]]></ee:set-payload>
 		<ee:transform doc:name="Transform Message" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" message="#[payload]"/>
+	</flow>
+	<flow name="updateEntityFlow" >
+		<http:listener doc:name="Listener"
+		  config-ref="HTTP_Listener_config"
+		  path="/update"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"SalesOrder": "25",
+	"TransactionCurrency": "USD"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<s4hana:update-entity
+			doc:name="Update entity"
+			config-ref="SAP_S_4HANA_Config"
+			service="API_SALES_ORDER_SRV" 
+			entityType="A_SalesOrder">
+			<s4hana:entity><![CDATA[#[output application/java
+---
+payload]]]></s4hana:entity>
+			<s4hana:custom-headers>
+				<s4hana:custom-header key="If-Match" value="*" />
+			</s4hana:custom-headers>
+		</s4hana:update-entity>
+		<s4hana:get-entity doc:name="Get entity by key" config-ref="SAP_S_4HANA_Config" service="API_SALES_ORDER_SRV" entityType="A_SalesOrder">
+			<s4hana:key><![CDATA[#[SalesOrder: "25"]]]></s4hana:key>
+		</s4hana:get-entity>
+		<ee:transform doc:name="Transform Message">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
 output application/json
 ---
 payload]]></ee:set-payload>
