@@ -6,9 +6,9 @@ endif::[]
 
 When you configure Anypoint Connector for WebSockets (WebSocket Connector), you can do any of the following:
 
-* <<server-configuration,Configure a WebSocket server>>
-* <<client-configuration,Configure a WebSocket client>>
-* <<combined-configuration>,Configure a WebSocket server and client>>
+* <<server-configuration,Configure a WebSocket server>> that listens for incoming connection requests.
+* <<client-configuration,Configure a WebSocket client>> that requests external services
+* <<combined-configuration>,Configure a WebSocket server and client>> that listen for incoming connection requests and request external services.
 
 == WebSocket Server Configuration [[server-configuration]]
 
@@ -17,7 +17,7 @@ If your app exposes a WebSocket inbound endpoint, use the `<ws:server-settings>`
 * Reuse the available settings of an HTTP Listener, such as the settings for host, port, TLS, and so forth.
 * Expose both WebSockets and regular HTTP endpoints on the same port.
 
-When you configure the HTTP Listener, you can specify base connection settings such as settings for the host, port, and base path. Alternatively, you can configure a TLS-based connection (WSS), as described in <xxx>.
+When you configure HTTP Listener, you can specify base connection settings such as settings for the host, port, and base path. Alternatively, you can configure a TLS-based connection (WSS), as described in <xxx>.
 
 == Sample WebSocket Server Configuration
 
@@ -41,13 +41,13 @@ The following XML code shows a sample WebSocket server configuration.
 </flow>
 ----
 
-In this example, the app listens for incoming messages at +`ws://localhost:80/ws/chat`:
+In this example, the app listens for incoming messages at `ws://localhost:80/ws/chat`:
 
-* The `listenerConfig` attribute` points to the HTTP Listener configuration named `httpListenerConfig`, which listens for incoming messages on localhost (0.0.0.0) and port 80.
+* The `listenerConfig` attribute points to the HTTP Listener configuration named `httpListenerConfig`, which listens for incoming messages on localhost (0.0.0.0) and port 80.
 * The `listenerBasePath` attribute value `/ws` overrides the HTTP Listener `basePath` attribute value.
 * The `path` attribute value `/chat` specifies the path.
 
-Because the HTTP Listener does not reference a TLS Configuration component, the connection uses the WS protocol by default.
+Because the HTTP Listener does not reference a TLS Configuration component, the connection uses the Websocket (WS) protocol by default.
 
 ==== Server Timeouts
 
@@ -70,21 +70,62 @@ The following example shows how to use the `<websocket:server-settings>` element
 
 == WebSocket Client Configuration [[client-configuration]]
 
-If your app needs to connect to external WebSocket services, configure the `websocket:client-settings` element.
+If your app needs to connect to external WebSocket services, configure the `websocket:client-settings` element. You can either specify a URI or you can build a URI by specifying a host, port, and basePath. The second option is only supported when you specify `WS` as the protocol scheme.
 
+=== Sample Client Configuration that Builds a URI
 
-
-In this example:
-
-* The configuration for the outbound WebSocket references the WebSocket client configuration `wsClient` in the `config-ref` attribute. (In this example, you don't need to reference an HTTP Configuration.)
-
-we chose to specify a host, port and basePath to build our WS request URI. The host parameter is optional, if not set it will be set to "localhost". The port parameter is optional, if not specified the default value will be set according to the protocol scheme, if WS is used the default value will be set to 80, if WSS is used the default will be set to 443. The basePath parameter is optional, if URI is not set it will indicate the base path for all client requests relative to the indicated host and port, if not set the default value will be set to "/".
-
-/// Is there ever a need to reference an HTTP configuration for an Outbound WebSocket?
-///
+The following example shows a sample WebSocket client configuration called `wsClient` that builds a URI from the host, port, and basePath values. This example also initializes an outbound socket that references the WebSocket client configuration (`wsClient`) in the config-ref attribute:
 
 [source,xml,linenums]
 ----
+<websocket:config ​name​=​"wsClient"​> ​
+    <websocket:connection>
+    ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​
+
+          ​basePath​=​"/ws"​ />
+    </websocket:connection>
+</websocket:config>
+
+<flow="connectToWebSocketFlow">
+    <websocket:open-outbound-socket path="/chat"
+       socketId="myCustomWebSocketID-123" config-ref="wsClient" />
+    </websocket:open-outbound-socket>
+
+    <logger info="INFO" message="Opened connection to external service!"/>
+</flow>
+----
+
+Use the following parameters to build a URI:
+
+[%header,cols=“33s,33a,33a”]
+|===
+|Parameter | Description | Default Value
+|host | Host name for the external service| `localhost`
+|port | Port for the external service| Depends on the protocol scheme:
++
+* For the WS protocol, the default is `80`.
+* For WSS, the default is `443`.
++
+|basePath | Base path for all client requests relative to the specified host and port. Valid when the URI is not specified. |`/`
+----
+
+//// Can the value for host be an IP address?
+Where is the protocol specified in the example text coming from?
+Should we also show the <flow> and <logger> components for the second example? Are the examples in the correct order?
+////
+
+== Sample Client Configuration that Specifies a URI
+
+The following example shows a sample WebSocket client configuration called `WsClient` that specifies the URI `ws://www.mulesoft.com`. This example also initializes an outbound socket that references the WebSocket client configuration(`wsClient`) in the config-ref attribute::
+
+[source,xml,linenums]
+----
+<websocket:config ​name​=​"wsClient"​> ​
+    <websocket:connection>
+    ​   <websocket:client-settings ​uri="ws://www.mulesoft.com"​ />
+    </websocket:connection>
+</websocket:config>
+
 <websocket:config ​name​=​"wsClient"​> ​
     <websocket:connection>
     ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​ ​basePath​=​"/ws"​ />
@@ -99,26 +140,9 @@ we chose to specify a host, port and basePath to build our WS request URI. The h
 </flow>
 ----
 
-In this example we have initialized an Outbound Socket which references the WebSocket client configuration("wsClient") in the config-ref attribute. In this case, there is no need to reference an HTTP Configuration.
+=== Default Parameters and Headers
 
-In the configuration above, we chose to specify a host, port and basePath to build our WS request URI. The host parameter is optional, if not set it will be set to "localhost". The port parameter is optional, if not specified the default value will be set according to the protocol scheme, if WS is used the default value will be set to 80, if WSS is used the default will be set to 443. The basePath parameter is optional, if URI is not set it will indicate the base path for all client requests relative to the indicated host and port, if not set the default value will be set to "/".
-
-You can also specify a URL.
-
-[source,xml,linenums]
-----
-<websocket:config ​name​=​"wsClient"​> ​
-    <websocket:connection>
-    ​   <websocket:client-settings ​uri="ws://www.mulesoft.com"​ />
-    </websocket:connection>
-</websocket:config>
-----
-
-However, in this case we cannot indicate a path because the URL and Path parameters are mutually exclusive, this is because URL will indicate a full resource locator, while the Path will indicate a path relative to the host, port and basePath.
-
-==== Default Parameters and Headers
-
-You can specify default headers and query parameters in your client configuration, and they will be included in the connection request message.
+You can specify default headers and query parameters that are included in the connection request message. For example:
 
 [source,xml,linenums]
 ----
@@ -138,7 +162,7 @@ You can specify default headers and query parameters in your client configuratio
 </websocket:config>
 ----
 
-You can also choose to add headers or query parameters to your connect operation and they will be sent along with the default headers and parameters in the request to establish the connection.
+You can also add headers and query parameters to your connect operation to have them sent along with the default headers and parameters in the request to establish the connection. For example:
 
 [source,xml,linenums]
 ----
@@ -166,7 +190,7 @@ You can also choose to add headers or query parameters to your connect operation
 
 === Client Timeouts
 
-Just like with inbound connections, it's a good practice to set a timeout to automatically close idle outbound connections.
+By default, outbound sockets have no idle timeout although the remote service to which they connect probably has one. Either way, it's a good practice to set a timeout in the connector to automatically close idle outbound connections.
 
 The following example shows how to use the `<websocket:client-settings>` to configure a one hour idle sockets timeout:
 
@@ -178,8 +202,6 @@ The following example shows how to use the `<websocket:client-settings>` to conf
     </websocket:connection>
 </websocket:config>
 ----
-
-By default, outbound sockets have no idle timeout. However, the remote service to which they connect is likely to have one.
 
 == Combined Client/Server Configuration [[combined-configuration]]
 
@@ -216,7 +238,7 @@ Now we can reference this configuration from both Inbound and Outbound sockets.
 
 === TLS Configuration
 
-TLS (Transport Layer Security) enables client/server applications to communicate through a secure channele and prevent attackers from eavesdropping or tampering with the transmitted data.
+TLS (Transport Layer Security) enables client/server applications to communicate through a secure channel and prevents attackers from eavesdropping or tampering with the transmitted data.
 
 With the WebSocket server, TLS configuration is inherited from the referenced HTTP Listener configuration. To configure TLS on a WebSocket listener, point to a <http:listener-config> with TLS configured.
 
