@@ -7,21 +7,28 @@ endif::[]
 When you configure Anypoint Connector for WebSockets (WebSocket Connector), you can do any of the following:
 
 * <<server-configuration,Configure a WebSocket server>> that listens for incoming connection requests.
-* <<client-configuration,Configure a WebSocket client>> that requests external services
-* <<combined-configuration>,Configure a WebSocket server and client>> that listen for incoming connection requests and request external services.
+* <<client-configuration,Configure a WebSocket client>> that requests external services.
+* <<combined-configuration>,Configure a WebSocket server and client>> that both listen for incoming connection requests and request external services.
 
 == WebSocket Server Configuration [[server-configuration]]
 
 If your app exposes a WebSocket inbound endpoint, use the `<ws:server-settings>` element to configure that endpoint. Because an app uses an HTTP request to initiate WebSocket connections, exposing a WebSocket inbound endpoint requires pointing to an underlying HTTP Listener configuration. This configuration enables the app to:
 
-* Reuse the available settings of an HTTP Listener, such as the settings for host, port, TLS, and so forth.
+* Reuse the available settings of the referenced HTTP Listener, such as the settings for host, port, TLS, and so forth.
 * Expose both WebSockets and regular HTTP endpoints on the same port.
 
-When you configure HTTP Listener, you can specify base connection settings such as settings for the host, port, and base path. Alternatively, you can configure a TLS-based connection (WSS), as described in <<tls-configuration,TLS Configuration>>.
+When you configure HTTP Listener, you can specify base connection settings such as settings for the host, port, and base path. Alternatively, you can configure a TLS-based connection that uses the Web Socket Secure (WSS) protocol, as described in <<tls-configuration,TLS Configuration>>.
 
-== Sample WebSocket Server Configuration
+=== Server Configuration Example
 
-The following XML code shows a sample WebSocket server configuration.
+The following example shows a WebSocket server configuration. In this example, the app listens for incoming messages at `ws://localhost:80/ws/chat`:
+
+* In the `websocket:server-settings` element:
+** The `listenerConfig` attribute points to the HTTP Listener configuration named `httpListenerConfig`, which listens for incoming messages on localhost (0.0.0.0) and port 80.
+** The `listenerBasePath` attribute value `/ws` overrides the HTTP Listener `basePath` attribute value,
+* In the `<flow>` element, the `path` attribute value `/chat` specifies the path.
+
+Because the HTTP Listener in this example doesn't reference a TLS configuration component, the connection uses the Web Socket (WS) protocol by default.
 
 [source,xml,linenums]
 ----
@@ -41,14 +48,6 @@ The following XML code shows a sample WebSocket server configuration.
 </flow>
 ----
 
-In this example, the app listens for incoming messages at `ws://localhost:80/ws/chat`:
-
-* The `listenerConfig` attribute points to the HTTP Listener configuration named `httpListenerConfig`, which listens for incoming messages on localhost (0.0.0.0) and port 80.
-* The `listenerBasePath` attribute value `/ws` overrides the HTTP Listener `basePath` attribute value.
-* The `path` attribute value `/chat` specifies the path.
-
-Because the HTTP Listener does not reference a TLS Configuration component, the connection uses the Websocket (WS) protocol by default.
-
 === Server Timeouts
 
 Because WebSocket connections are persistent and stateful, it's a good practice to set a timeout to automatically close idle connections. By default, all inbound WebSockets have an idle timeout of 15 minutes.
@@ -63,25 +62,43 @@ The following example shows how to use the `<websocket:server-settings>` element
 
 <websocket:config ​name​=​"wsServer"​> ​
     <websocket:connection>
-    ​   <websocket:server-settings ​listenerConfig​=​"httpListenerConfig" listenerBasePath​=​"/ws"​/ idleSocketTimeout="1" idleSocketTimeoutUnit="HOUR">
+    ​   <websocket:server-settings ​listenerConfig​=​"httpListenerConfig" listenerBasePath​=​"/ws"​/
+    idleSocketTimeout="1" idleSocketTimeoutUnit="HOUR">
     </websocket:connection>
 </websocket:config>
 ----
 
 == WebSocket Client Configuration [[client-configuration]]
 
-If your app needs to connect to external WebSocket services, configure the `websocket:client-settings` element. You can either specify a URI or you can build a URI by specifying a host, port, and basePath. The second option is only supported when you specify `WS` as the protocol scheme.
+If your app needs to connect to external WebSocket services, use the `websocket:client-settings` element to configure the outbound endpoint. You can either specify a URI or you can build a URI by specifying a host, port, and basePath. The second option is only supported when you specify `WS` as the protocol scheme.
 
-=== Sample Client Configuration that Builds a URI
+To build a URI, use the following parameters:
 
-The following example shows a sample WebSocket client configuration called `wsClient` that builds a URI from the host, port, and basePath attribute values. This example also initializes an outbound socket that references the WebSocket client configuration (`wsClient`) in the config-ref attribute:
+[%header,cols=“33s,33a,33a”]
+|===
+|Parameter | Description | Default Value
+|host | Host name for the external service| `localhost`
+|port | Port for the external service a| Depends on the protocol scheme:
+
+* WS protocol: `80`
+* WSS protocol: `443`
+* What is the default port when not using TLS?
+
+|basePath | Base path for all client requests relative to the specified host and port. Valid when the URI is not specified. |`/`
+|===
+
+=== Client Configuration Example That Builds a URI
+
+The following example shows a sample WebSocket client configuration called `wsClient` that:
+
+* Builds a URI from the host, port, and basePath attribute values.
+* Initializes an outbound socket that references the WebSocket client configuration (`wsClient`) in the `config-ref` attribute of the `<websocket:open-outbound-socket` element:
 
 [source,xml,linenums]
 ----
 <websocket:config ​name​=​"wsClient"​> ​
     <websocket:connection>
     ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​
-
           ​basePath​=​"/ws"​ />
     </websocket:connection>
 </websocket:config>
@@ -95,29 +112,12 @@ The following example shows a sample WebSocket client configuration called `wsCl
 </flow>
 ----
 
-Use the following parameters to build a URI:
+=== Client Configuration Example That Specifies a URI
 
-[%header,cols=“33s,33a,33a”]
-|===
-|Parameter | Description | Default Value
-|host | Host name for the external service| `localhost`
-|port | Port for the external service| Depends on the protocol scheme:
+The following example shows a sample WebSocket client configuration called `WsClient` that:
 
-* WS protocol: `80`
-* WSS protocol: `443`
-
-|basePath | Base path for all client requests relative to the specified host and port. Valid when the URI is not specified. |`/`
-|===
-
-////
-Can the value for host be an IP address?
-Where is the protocol specified in the example text coming from?
-Should we also show the <flow> and <logger> components for the second example? Are the examples in the correct order?
-////
-
-== Sample Client Configuration that Specifies a URI
-
-The following example shows a sample WebSocket client configuration called `WsClient` that specifies the URI `ws://www.mulesoft.com`. This example also initializes an outbound socket that references the WebSocket client configuration(`wsClient`) in the config-ref attribute::
+* Specifies the URI `ws://www.mulesoft.com`.
+* Initializes an outbound socket that references the WebSocket client configuration(`wsClient`) in the `config-ref` attribute of the `<websocket:open-outbound-socket` element:
 
 [source,xml,linenums]
 ----
@@ -129,12 +129,15 @@ The following example shows a sample WebSocket client configuration called `WsCl
 
 <websocket:config ​name​=​"wsClient"​> ​
     <websocket:connection>
-    ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​ ​basePath​=​"/ws"​ />
+    ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​
+     ​    basePath​=​"/ws"​ />
     </websocket:connection>
 </websocket:config>
 
 <flow="connectToWebSocketFlow">
-    <websocket:open-outbound-socket path="/chat" socketId="myCustomWebSocketID-123" config-ref="wsClient" />
+    <websocket:open-outbound-socket path="/chat"
+       socketId="myCustomWebSocketID-123"
+       config-ref="wsClient" />
     </websocket:open-outbound-socket>
 
     <logger info="INFO" message="Opened connection to external service!"/>
@@ -145,7 +148,7 @@ The following example shows a sample WebSocket client configuration called `WsCl
 
 When you configure a WebSocket client, you can specify default headers and query parameters by including them in a connection request, adding them to a connection operation, or both.
 
-This example specifies default headers and query parameters in a connection request (`<websocket:connection>`):
+Use the `<websocket:client-settings>` element to specify default headers and query parameters in a connection request:
 
 [source,xml,linenums]
 ----
@@ -195,18 +198,20 @@ This example specifies default headers and query parameters in the `websocket:op
 
 By default, outbound WebSockets have no idle timeout, although the remote service to which they connect might have one. Either way, it's a good practice to set a timeout in the connector to automatically close idle outbound connections.
 
-The following example shows how to use the `<websocket:client-settings>` to configure a one hour idle sockets timeout:
+The following example shows how to use the `<websocket:client-settings>` element to configure a one hour idle sockets timeout:
 
 [source,xml,linenums]
 ----
 <websocket:config ​name​=​"wsServer"​> ​
     <websocket:connection>
-    ​   <websocket:client-settings ​host​=​"localhost" port​=​"${listenerPort}"​ ​basePath​=​"/ws"​ connectionIdleTimeout="1" connectionIdleTimeoutUnit="HOURS" />
+    ​   <websocket:client-settings ​host​=​"localhost"
+         port​=​"${listenerPort}"​ ​basePath​=​"/ws"​ connectionIdleTimeout="1"
+         connectionIdleTimeoutUnit="HOURS" />
     </websocket:connection>
 </websocket:config>
 ----
 
-== Combined Client/Server Configuration [[combined-configuration]]
+== Combined WebSocket Client/Server Configuration [[combined-configuration]]
 
 If you want the app to both listen for incoming connections and issue requests to external services, you can configure the WebSocket client and server together, as shown in the following example:
 
@@ -218,8 +223,11 @@ If you want the app to both listen for incoming connections and issue requests t
 
 <websocket:config ​name​=​"ws"​> ​
     <websocket:connection>
-    ​   <websocket:server-settings ​listenerConfig​=​"httpListenerConfig" listenerBasePath​=​"/ws"​ />
-    ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​ ​basePath​=​"/ws"​ />
+    ​   <websocket:server-settings
+       ​   listenerConfig​=​"httpListenerConfig"
+          listenerBasePath​=​"/ws"​ />
+    ​   <websocket:client-settings ​host​=​"localhost" port​=​"80"​
+          ​basePath​=​"/ws"​ />
     </websocket:connection>
 </websocket:config>
 ----
@@ -235,28 +243,35 @@ This configuration can be referenced from both inbound and outbound WebSockets:
 
 <flow="connectToWebSocketFlow">
     <websocket:open-outbound-socket path="/chat" config-ref="ws"/>
-    <logger info="INFO" message="I open a connection to an external service listening at path '/chat'!"/>
+    <logger info="INFO" message="Open a connection
+     to an external service listening at path '/chat'!"/>
 </flow>
 ----
 
-=== TLS Configuration [[tls-configuration]]
+== TLS Configuration [[tls-configuration]]
 
-TLS (Transport Layer Security) enables client/server applications to communicate through a secure channel and prevents attackers from eavesdropping or tampering with the transmitted data.
+TLS enables client/server applications to communicate through a secure channel and prevents attackers from eavesdropping or tampering with the transmitted data. TLS configuration for the WebSocket server is inherited from the referenced HTTP Listener configuration.
 
-TLS configuration for the WebSocket server is inherited from the referenced HTTP Listener configuration. To configure TLS on a WebSocket server:
-. Set up your Truststore.
+To configure TLS on a WebSocket server:
+
+. Set up a keystore.
 . Reference an HTTP Listener that has TLS configured.
 
-In the following example, the WebSocket server inherits the TLS configuration from the HTTP Listener named `listenerTlsConfig`. The HTTP Listener references a TLS context configuration named `listnerTlsContext`, which configures the keystore:
+In the following example:
+
+* The WebSocket server inherits the TLS configuration from the HTTP Listener named `listenerTlsConfig`.
+* The HTTP Listener references a TLS context configuration named `listnerTlsContext`, which configures the keystore.
 
 [source,xml,linenums]
 ----
 <tls:context name="listenerTlsContext" >
-    <tls:key-store path="tls/muleKeystore" keyPassword="mulepassword" password="mulepassword" alias="muleserver" />
+    <tls:key-store path="tls/muleKeystore" keyPassword="mulepassword"
+      password="mulepassword" alias="muleserver" />
 </tls:context>
 
 <http:listener-config name="listenerTlsConfig">
-    <http:listener-connection protocol="HTTPS" host="localhost" port="${listenerPort}" tlsContext="listenerTlsContext"/>
+    <http:listener-connection protocol="HTTPS" host="localhost"
+    port="${listenerPort}" tlsContext="listenerTlsContext"/>
 </http:listener-config>
 
 <websocket:config name="requestConfigWithCertificate">
@@ -270,10 +285,8 @@ To configure TLS on a WebSocket client:
 
 . Set up a truststore by referencing the <tls:context> element in the `tlsConfig` attribute.
 If you don't specify a truststore, default settings are used.
-///
-Where do the default settings come from?
-///
-. Optionally specify a value for the `protocol` attribute, which defaults to `WS` (insecure). Setting the values to `WSS`, enables SSL in the connection.
+/ Where do the default settings come from? /
+. Optionally specify a value for the `protocol` attribute, which defaults to `WS` (insecure). Setting the values to `WSS` enables SSL in the connection.
 
 In the following example, the WebSocket client references a TLS context configuration named `requestTlsContextWithCertificate`, which creates the truststore:
 
@@ -285,12 +298,14 @@ In the following example, the WebSocket client references a TLS context configur
 
 <websocket:config name="requestConfigWithCertificate">
     <websocket:connection>
-        <websocket:client-settings host="localhost" port="${listenerPort}" tlsContext="requestTlsContextWithCertificate" protocol="WSS"/>
+        <websocket:client-settings host="localhost"
+        port="${listenerPort}" tlsContext="requestTlsContextWithCertificate"
+        protocol="WSS"/>
     </websocket:connection>
 </websocket:config>
 ----
 
-For more information on configuring TLS for a Mule app, see xref:4.1@mule-runtime::tls-configuration.adoc[Configure TLS with Keystores and Truststores].
+For more information about configuring TLS for a Mule app, see xref:4.1@mule-runtime::tls-configuration.adoc[Configure TLS with Keystores and Truststores].
 
 == See Also
 
