@@ -1,0 +1,193 @@
+= WebSocket Server Triggers and Operations - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:imagesdir: ../../assets/images/
+
+WebSocket Connector supports the following triggers and operations:
+
+[%header,cols=“20,40,40”]
+|===
+|Category | Triggers | Operations
+|WebSocket Server  a|
+
+* <<inbound-listener-trigger,Inbound Listener>>
+* <<on-inbound-connection-trigger,On Inbound Connection>>
+a|
+* <<send-operation,Send>>
+* <<broadcast-operation,Broadcast>>
+* <<subscribe-groups-operation,Subscribe Groups>>
+* <<unsubscribe-groups-operation,Unsubscribe Groups>>
+|WebSocket Client |<<outbound-listener-trigger,Outbound Listener Trigger>> a|
+* <<open-outbound-socket-operation,Open Outbound Socket>>
+* <<send-operation,Send>>
+* <<broadcast-operation,Broadcast>>
+* <<subscribe-groups-operation,Subscribe Groups>>
+* <<unsubscribe-groups-operation,Unsubscribe Groups>>
+|===
+
+== Inbound Listener Trigger [[inbound-listener-trigger]]
+
+Use the `<websocket:inbound-listener>` element to represent a WebSocket endpoint to which clients can connect. By hitting this endpoint, external clients establish a WebSocket connection and trigger the associated flow each time they send a message.
+
+You can use the `defaultGroups parameter` to specify the default groups to which the inbound endpoint subscribes. The endpoint receives and processes broadcast operations that are performed on the subscribed groups.
+
+The group subscription only affects WebSockets that reside in the same app domain. Therefore, it is useful when one WebSocket in the app domain wants to send messages to the other WebSockets in the app domain.
+
+For more information about groups, see xref:websocket/websocket-connector-group-components.adoc[WebSockets Group Operations].
+
+The following example takes these actions:
+
+* In the flow named `on onIncomingMessageFlow`:
+. The Inbound Listener listens for messages on path `/chat/hello`.
+.
+* In the flow named `sendFriendlyMessageFlow`:
+. The outbound endpoint listens for a message on the path `/chat/hello`.
+. The flow associated with the outbound endpoint responds `Good morning to you` when it hears a message.
+
+[source,xml,linenums]
+----
+<flow name="onIncomingMessageFlow">
+    <websocket:inbound-listener ​path​=​"/chat"​ ​defaultGroups​=​"#[['AVENGERS', 'REVENGERS']]"​ ​config-ref​=​"ws"​ />
+    <logger level="INFO" message="#['Received message ' ++ payload ++ ' from socket: ' ++ attributes.socketId]" />
+    <websocket:send doc:name="SendResponse" socketId="#[attributes.socketId]" config-ref="ws" >
+        <websocket:content>#['I'm fine, thank you!']</websocket:content>
+    </websocket:send>
+</flow>
+<flow name="sendFriendlyMessageFlow">
+    <websocket:open-outbound-socket path="/chat" config-ref="ws" />
+    <websocket:send doc:name="SendMessage" socketId="#[attributes.socketId]" config-ref="ws" >
+        <websocket:content>#['Hi! How are you?']</websocket:content>
+    </websocket:send>
+</flow>
+----
+
+=== Sending Responses
+
+Because a WebSocket is full-duplex, the Inbound Listener doesn't automatically send a response. Depending on your use case, you might want to process the messages without sending a response, or only send responses in certain cases.
+
+To send a response, use the `<websocket:send>` operation.
+
+=== Output
+
+Each time a new message arrives, the Inbound Listener triggers the associated flow. The message MIME type is obtained from the Content-Type header of the HTTP request. If the Content-Type header isn't set, the MIME type defaults to one of these values, depending on the protocol’s DATA frame type:
+
+* For a binary DATA frame, the MIME type is application/octect-stream.
+* For a text DATA frame, the MIME type is text/plain.
+
+The attributes for the Inbound Listener contain a WebSocket Attributes object. The value of the `payload` attribute is the inbound message.
+
+== On Inbound Connection Trigger [[on-inbound-connection-trigger]]
+
+Use the `<websocket:on-inbound-connection>` element to trigger a flow each time an inbound WebSocket connection is established. You can use the associated flow to provide post-connect tasks such as logging or subscribing the WebSocket to a group.
+
+You can only have one On Inbound Connection trigger for a given path, and you must configure a matching Inbound Listener for the path.
+
+The flow associated with the On Inbound Connection trigger is triggered asynchronously. The flow is invoked after the socket is established and it can be broadcasting or receiving messages. The messages are queued and not delivered to the associated flow until the event triggered by this source completes. If the event fails, all queued messages are discarded and the connection is dropped.
+
+This message source has two main use cases:
+
+* To keep track of the generated WebSocket Ids so that they can be used later
+* Establish a validation point in which a WebSocket can be rejected before it the app can use it.
+
+For example, the following flow validates attributes from the originating request and closes the connection if the validation doesn't pass
+
+[source,xml,linenums]
+----
+<flow name="onNewInboundConnection">
+    <websocket:on-inbound-connection doc:name="On Inbound Connection" config-ref="WebSockets_Config" path="/chat"/>
+    <choice doc:name="Choice" >
+        <when expression="#[contains(attributes.headers.alias, 'admin')]">
+            <websocket:close socketId="#[attributes.socketId]" reason="Cannot impersonate the admin" config-ref="WebSockets_Config"/>
+        </when>
+        <otherwise >
+            <logger level="INFO" doc:name="Logger" message="Successfully connected to WebSocket #[attributes.socketId]" />
+        </otherwise>
+    </choice>
+</flow>
+<flow name="chat">
+    <websocket:inbound-listener doc:name="Inbound listener" path="/chat" config-ref="WebSockets_Config"/>
+    <logger level="INFO" doc:name="Logger" message="#['Received message' ++ payload]"/>
+</flow>
+----
+
+== Outbound Listener Trigger [[outbound-listener-trigger]]
+
+<<add text here>>
+
+== Broadcast Operation [[broadcast-operation]]
+
+Use `<websocket:broadcast>` to send a message to a group of other WebSockets. You can filter the target group according to the following criteria:
+
+* WebSockets subscribed to specific groups (`groups` attribute)
+* WebSockets connected to a specific path (`path` attribute)
+* Inbound or outbound WebSockets (`type` attribute)
+
+The `groups` and `type` parameters work in tandem. You can use them separately, but when used together, they provide two levels of filtering.
+
+The Broadcast operation returns an empty payload and no attributes.
+
+The following examples shows the different types of filtering you can use with the Broadcast operation:
+
+[source,xml,linenums]
+----
+<!-- send to all WebSockets connected to an endpoint at path /quotes -->
+<websocket:broadcast path=”/quotes” ​config-ref​=​"ws"​ />
+<!-- send to all inbound WebSockets connected to an endpoint at path /quotes -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​
+config-ref​="​ws"​ />
+<!-- send to all outbound WebSockets connected to the /quotes endpoint -->
+<websocket:broadcast path=”/quotes” ​type​=​"OUTBOUND"​ ​
+config-ref​=​"ws"​ />
+<!-- send to all inbound WebSockets connected to the /quotes endpoint,
+in the MARVEL and DC groups -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​
+groups​="​ #[['MARVEL', 'DC']]"​ ​config-ref​=​"ws"​ />
+----
+
+== Open Outbound Socket Operation [[open-outbound-socket-operation]]
+
+<add text here>
+
+== Send Operation [[send-operation]]
+
+Use `<websocket:send` to send a message through a WebSocket. You can use this operation to send a message from the WebSocket's inbound endpoint to its outbound endpoint, or from its outbound endpoint to its inbound endpoint.
+
+For example:
+
+* The flow named `Say Hello`:
+. Opens an outbound endpoint on a WebSocket called `socketId` on path `/chat/hello`.
+. Sends the message `Good morning!` through the WebSocket.
+* The flow named `Say Hello Back`:
+. Listens for a message on the path `/chat/hello`.
+. Responds `Good morning to you` when it hears a message.
+
+[source,xml,linenums]
+----
+    <flow name="sayHello">
+      <websocket:open-outbound-socket path="/chat/hello"
+        config-ref="ws" target="outboundSocketId"
+        targetValue="#[attributes.socketId]"/>
+      <websocket:send socketId="#[vars.socketId]"
+        config-ref="ws">
+        <websocket:content>'Good morning!'</websocket:content>
+      </websocket:send>
+    </flow>
+    <flow name="sayHelloBack">
+        <websocket:inbound-listener path="/chat/hello"
+          config-ref="ws" outputMimeType="text/plain" />
+        <websocket:send socketId="#[attributes.socketId]"
+          config-ref="ws">
+          <websocket:content>#['Good morning to you ' ++
+           attributes.socketId ++ '!']</websocket:content>
+        </websocket:send>
+    </flow>
+----
+
+== Subscribe Groups Operation [[subscribe-groups-operation]]
+
+<add text here>
+
+== Unsubscribe Groups Operation [[unsubscribe-groups-operation]]
+
+<add text here>
