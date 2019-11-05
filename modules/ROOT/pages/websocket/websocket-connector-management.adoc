@@ -1,0 +1,81 @@
+= Websocket Management - Mule 4 [[websocket-management]]
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: connectors, ws, wss, websocket
+
+
+
+== Open and Close WebSocket Connections
+
+To open a WebSocket connection, use
+
+To close a WebSocket connection, use .
+
+[source,xml,linenums]
+----
+<flow name="closeConnection">
+    <websocket:close-socket ​socketId​=​"#[attributes.socketId]"​ reason="Quota exceeded"/>
+</flow>
+----
+
+== Reconnect to a Dropped WebSocket Connection
+
+Because WebSockets are persistent, stateful connections, a connection can be abnormally closed due to idle timeouts, network conditions, and so forth.
+
+To reconnect inbound WebSockets, the remote system must resend the connection request.
+
+To reconnect outbound WebSockets, use a reconnection strategy to reestablish a dropped connection. A reconnection strategy specifies the number of reconnection attempts an app should make and the interval at which to execute them.
+
+The following example specifies a reconnection strategy on a `<websocket:send>` operation so that reconnection is attempted once every second up to five times if the connection is dropped:
+
+[source,xml,linenums]
+----
+<websocket:send socketId="#[vars.socketId]" config-ref="ws">
+    <reconnect count="5" frequency="1000"/>
+    <websocket:content>Hello World!</websocket:content>
+</websocket:send>
+----
+
+For more information about the reconnection strategy, see https://docs.mulesoft.com/mule-runtime/latest/reconnection-strategy-reference.adoc.
+
+== Manage WebSocket Groups
+
+WebSocket groups are string identifiers to which individual WebSockets can subscribe. Use groups to segregate messsages, in which an app can broadcast one message to a group of different WebSockets simultaneously.
+
+You can specify default groups as follows:
+
+* Use then Inbound Listener trigger (`<websocket:inbound-listener>`) with the Subscribe Groups operation (`<websocket:subscribe-groups>`) to set up a default group for all inbound WebSockets.
+* Use the Open Outbound Socket operation (`<websocket:open-outbound-socket>`) with the Subscribe Groups operation to set up a default group for all outbound WebSockets.
+
+Some use cases require an app to manually subscribe a WebSocket to a particular group or to unsubscribe a WebSocket from a group. For example, in a multi-tenant app with an inbound WebSocket, group subscription must be dynamic because the group to associate with a WebSocket is determined at runtime.
+
+The following example shows how to manually subscribe a WebSocket to a group at runtime. In this example:
+
+* The initiator HTTP request includes an authentication header named `clientId`.
+* The `fetch-client-details` flow validates `clientId` and sets a variable called `orgId`, which identifies the organization to which the client belongs.
+* The `<websocket:subscribe-groups>` operation subscribes the WebSocket with the ID `socketId` to the group represented by the `orgId` variable.
+
+[source,xml,linenums]
+----
+<flow name="onIncomingMessageFlow">
+    <websocket:inbound-listener ​path​=​"/feed"​ ​config-ref​=​"ws"​ />
+
+    <!-- Store relevant information in variables -->
+    <set-variable variableName="socketId" value="#[attributes.socketId]" />
+    <set-variable variableName="authHeader" value="#[attributes.headers.clientId]" />
+
+    <!-- validate the auth Header -->
+    <flow-ref name="fetch-client-details" />
+
+    <!-- perform group subscription -->
+    <websocket:subscribe-groups socketId="#[vars.socketId]" groups="#[[vars.orgId]]" config-ref="ws" />
+</flow>
+----
+
+The following example shows how to unsubscribe a WebSocket from a group by using the `<websocket:unsubscribe-groups>` operation:
+
+[source,xml,linenums]
+----
+<websocket:unsubscribe-groups socketId="#[vars.socketId]" groups="#[[vars.orgId]]" config-ref="ws" />
+----
