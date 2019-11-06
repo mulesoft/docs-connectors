@@ -26,15 +26,152 @@ WebSocket Connector supports the following operations for inbound (server end) a
 * <<unsubscribe-groups-operation,Unsubscribe Groups>>
 |===
 
-== Close WebSocket Connection Operation [[close-operation]]
+[[broadcast-operation]]
+== Broadcast Operation
 
-== Open Outbound Socket Operation [[open-outbound-socket-operation]]
+Use `<websocket:broadcast>` to send a message to a group of other WebSockets. You can filter the target group according to the following criteria:
 
-<add text here>
+* WebSockets subscribed to specific groups (`groups` attribute)
+* WebSockets connected to a specific path (`path` attribute)
+* Inbound or outbound WebSockets (`type` attribute)
 
-== Send Operation [[send-operation]]
+The `groups` and `type` parameters work in tandem. You can use them separately, but when used together, they provide two levels of filtering.
 
-Use `<websocket:send` to send a message through a WebSocket. You can use this operation to send a message from the WebSocket's inbound endpoint to its outbound endpoint, or from its outbound endpoint to its inbound endpoint.
+The Broadcast operation returns an empty payload and no attributes.
+
+The following examples shows the different types of filtering you can use with the Broadcast operation:
+
+[source,xml,linenums]
+----
+<!-- send to all WebSockets connected to an endpoint at path /quotes -->
+<websocket:broadcast path=”/quotes” ​config-ref​=​"ws"​ />
+<!-- send to all inbound WebSockets connected to an endpoint at path /quotes -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​
+config-ref​="​ws"​ />
+<!-- send to all outbound WebSockets connected to the /quotes endpoint -->
+<websocket:broadcast path=”/quotes” ​type​=​"OUTBOUND"​ ​
+config-ref​=​"ws"​ />
+<!-- send to all inbound WebSockets connected to the /quotes endpoint,
+in the MARVEL and DC groups -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​
+groups​="​ #[['MARVEL', 'DC']]"​ ​config-ref​=​"ws"​ />
+----
+
+[[close-operation]]
+== Close WebSocket Connection Operation
+
+Use `<websocket:close>` to close an established inbound or outbound WebSocket. The following example shows how to close a WebSocket with the socket ID represented by the variable `#[attributes.socketId]`.
+
+[source,xml,linenums]
+----
+<flow name="closeConnection">
+    <websocket:close-socket ​socketId​=​"#[attributes.socketId]"​ reason="Quota exceeded"/>
+</flow>
+----
+
+=== Output
+
+The output of the `<websocket:close>` operation is void.
+
+[[open-outbound-socket-operation]]
+== Open Outbound Socket Operations
+
+Use the `<websocket:open-outbound-socket` element to enable an outbound WebSocket to establish a connection to an external WebSocket endpoint.
+
+To establish a connection you must provide a configuration reference.
+
+*What is a configuration reference?*
+
+You can optionally specify a socket ID, path, and URI for outbound endpoint. The socket ID must be unique and cannot be null or blank. If you don't specify a socket ID. the connector generates one automatically.
+
+Once the outbound WebSocket is established, you will use the Socket Id to send messages through the WebSocket and close an established connection.
+
+=== Socket ID
+
+The Socket ID (`socketId`) attribute is especially important because you use it to reference the connection when you send messages through the connection and close the connection.
+
+You can access the socket ID for an established WebSocket by using this expression:
+
+ `#[attributes.socketId]`
+
+ The following example:
+
+* Creates an outbound endpoint on a WebSocket by reusing most of the settings defined in the `ws` configuration reference.
+* Overrides the referenced path with `/chat/hello`.
+* Sends the message `Hello World!` to the outbound endpoint.
+
+*"The following example opens a connection reusing most of the settings defined in the configuration reference, but others like the uri are overridden."
+
+*I don't see an overwritten URI.*
+
+[source,xml,linenums]
+----
+<flow ​name​=​"connectToMuleStocksAndSendMessage"​>
+    ​<websocket:open-outbound path=​"/quotes"​ ​config-ref​=​"ws"​ />
+
+    <websocket:send doc:name="Send" config-ref="ws" socketId="#[attributes.socketId]">
+        <websocket:content>#['Hello World!']</websocket:content>
+    </websocket:send>
+</flow>
+----
+
+=== Output
+
+This operation returns a `WebSocketAttributes` object in the attributes and an empty payload.
+
+
+=== Headers and Query Parameters
+
+You can add custom headers or query parameters to your connection operation. These are sent along with the default headers and parameters in the initial HTTP request to establish the WS connection. You can use DataWeave expressions to set the custom headers and query parameters as shown in the example below.
+
+[source,xml,linenums]
+----
+<flow ​name​=​"connect"​>
+    <websocket:open-outbound-socket path="/chatEcho" config-ref="ws" target="connectionAttributes" targetValue="#[attributes]">
+        <websocket:headers><![CDATA[
+                #[
+                    {
+                        chatAlias: 'Captain Marvel',
+                        personalities: 'Vers',
+                        personalities: 'Carol Danvers'
+                    }
+                ]
+            ]]>
+        </websocket:headers>
+        <websocket:query-params><![CDATA[
+                #[
+                    {
+                        theme: 'USA'
+                    }
+                ]
+            ]]>
+        </websocket:query-params>
+    </websocket:open-outbound-socket>
+</flow>
+----
+
+=== ERRORS
+
+* WEBSOCKET:INVALID_SOCKET_ID
++
+The app specified an invalid WebSocket ID when it attempted to establish a connection to a WebSocket .
++
+* WEBSOCKET:CONNECTIVITY
++
+The app specified a non-existing endpoint when it attempted to establish a connection to a WebSocket.
++
+* WEBSOCKET:SERVICE_UNAVAILABLE
++
+An app specified an an invalid path when it attempted to establish a connection to a WebSocket.
++
+* WEBSOCKET:SERVICE_UNAVAILABLE
++
+The app specified an existing WebSocket ID when attempted to create a new WebSocket.
+
+[[send-operation]]
+== Send Operation
+
+Use `<websocket:send` to send a message through an established WebSocket connection. You can use this operation to send a message from the WebSocket's inbound endpoint to its outbound endpoint, or from its outbound endpoint to its inbound endpoint.
 
 For example:
 
@@ -67,10 +204,12 @@ For example:
     </flow>
 ----
 
-== Subscribe Groups Operation [[subscribe-groups-operation]]
+[[subscribe-groups-operation]]
+== Subscribe Groups Operation
 
 <add text here>
 
-== Unsubscribe Groups Operation [[unsubscribe-groups-operation]]
+[[unsubscribe-groups-operation]]
+== Unsubscribe Groups Operation
 
 <add text here>
