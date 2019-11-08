@@ -1,0 +1,252 @@
+= WebSocket Operation Details - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:imagesdir: ../../assets/images/
+
+WebSocket Connector supports the following operations for inbound (server) and outbound (client) WebSockets:
+
+[%header,cols="20a,80a"]
+|===
+|WebSocket Type | Supported Operations
+|Inbound  a|
+
+* <<broadcast-operation,Broadcast>>
+* <<close-operation, Close Socket>>
+* <<send-operation,Send>>
+* <<subscribe-groups-operation,Subscribe Groups>>
+* <<unsubscribe-groups-operation,Unsubscribe Groups>>
+|Outbound a|
+
+* <<broadcast-operation,Broadcast>>
+* <<close-operation, Close Socket>>
+* <<open-outbound-socket-operation,Open Outbound Socket>>
+* <<send-operation,Send>>
+* <<subscribe-groups-operation,Subscribe Groups>>
+* <<unsubscribe-groups-operation,Unsubscribe Groups>>
+|===
+
+[[broadcast-operation]]
+== Broadcast Operation
+
+Use `<websocket:broadcast>` to send a message to a group of other WebSockets. You can filter the target group according to the following criteria:
+
+* WebSockets subscribed to specific groups (`groups` attribute)
+* WebSockets connected to a specific path (`path` attribute)
+* Inbound or outbound WebSockets (`type` attribute)
+
+The `groups` and `type` parameters work in tandem. You can use them separately, but when used together, they provide two levels of filtering.
+
+=== Output
+
+The Broadcast operation returns an empty payload and no attributes.
+
+=== Examples
+
+The following examples shows the different types of filtering you can use with the Broadcast operation:
+
+[source,xml,linenums]
+----
+<!-- send to all WebSockets connected to an endpoint at path /quotes -->
+<websocket:broadcast path=”/quotes” ​config-ref​=​"ws"​ />
+<!-- send to all inbound WebSockets connected to an endpoint at path /quotes -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​
+config-ref​="​ws"​ />
+<!-- send to all outbound WebSockets connected to the /quotes endpoint -->
+<websocket:broadcast path=”/quotes” ​type​=​"OUTBOUND"​ ​
+config-ref​=​"ws"​ />
+<!-- send to all inbound WebSockets connected to the /quotes endpoint,
+in the MARVEL and DC groups -->
+<websocket:broadcast path=”/quotes” ​type​=​"INBOUND"​ ​
+groups​="​ #[['MARVEL', 'DC']]"​ ​config-ref​=​"ws"​ />
+----
+
+[[close-operation]]
+== Close Socket Operation
+
+Use `<websocket:close>` to close an established inbound or outbound WebSocket. This operation is associated with the <<websocket/websocket-connector-triggers.adoc#on-websocket-close-trigger,On Socket Close Trigger>>.
+
+=== Output
+
+The output of the Close Socket operation is void.
+
+=== Example
+
+The following example shows how to close a WebSocket that has the socket ID represented by the `#[attributes.socketId]` expression.
+
+[source,xml,linenums]
+----
+<flow name="closeConnection">
+    <websocket:close-socket ​socketId​=​"#[attributes.socketId]"​ reason="Quota exceeded"/>
+</flow>
+----
+
+[[open-outbound-socket-operation]]
+== Open Outbound Socket Operation
+
+Use the `<websocket:open-outbound-socket` element to enable an outbound WebSocket to establish a connection to an external WebSocket endpoint.
+
+To establish a connection you must provide a configuration reference to an HTTP Listener, as described in <<websocket/websocket-connector-configuration.adoc#server-configuration,WebSocket Server Configuration>>.
+
+You can optionally specify a socket ID, path, and URI for the outbound endpoint. The socket ID must be unique and cannot be null or blank. If you don't specify a socket ID, the connector generates one automatically.
+
+Once the outbound WebSocket is established, you use the Socket Id to send messages through the WebSocket and close an established connection.
+
+You can access the socket ID for an established WebSocket by using this expression:
+
+ `#[attributes.socketId]`
+
+=== Output
+
+The Open Outbound Socket operation returns:
+
+* An empty payload.
+* An object of type `WebSocketAttributes` that contains the message attributes.
+
+=== Example
+
+The following example:
+
+* Creates an outbound endpoint on a WebSocket by reusing most of the settings defined in the `ws` configuration reference.
+* Overrides the referenced path with `/chat/hello`.
+* Sends the message `Hello World!` to the outbound endpoint.
+
+[source,xml,linenums]
+----
+<flow ​name​=​"connectToMuleStocksAndSendMessage"​>
+    ​<websocket:open-outbound path=​"/quotes"​ ​config-ref​=​"ws"​ />
+
+    <websocket:send doc:name="Send" config-ref="ws" socketId="#[attributes.socketId]">
+        <websocket:content>#['Hello World!']</websocket:content>
+    </websocket:send>
+</flow>
+----
+
+=== Headers and Query Parameters
+
+You can add custom headers or query parameters to your connection operation. These are sent along with the default headers and parameters in the initial HTTP request to establish the WebSocket connection. You can use DataWeave expressions to set the custom headers and query parameters as shown in this example:
+
+[source,xml,linenums]
+----
+<flow ​name​=​"connect"​>
+    <websocket:open-outbound-socket path="/chatEcho" config-ref="ws" target="connectionAttributes" targetValue="#[attributes]">
+        <websocket:headers><![CDATA[
+                #[
+                    {
+                        chatAlias: 'Captain Marvel',
+                        personalities: 'Vers',
+                        personalities: 'Carol Danvers'
+                    }
+                ]
+            ]]>
+        </websocket:headers>
+        <websocket:query-params><![CDATA[
+                #[
+                    {
+                        theme: 'USA'
+                    }
+                ]
+            ]]>
+        </websocket:query-params>
+    </websocket:open-outbound-socket>
+</flow>
+----
+
+=== Error Messages
+
+You might receive the following error messages when you use the Open Outbound Socket operation:
+
+* WEBSOCKET:INVALID_SOCKET_ID
++
+The app specified an invalid WebSocket ID when it attempted to establish a connection to a WebSocket.
++
+* WEBSOCKET:CONNECTIVITY
++
+The app specified a non-existing endpoint when it attempted to establish a connection to a WebSocket.
++
+* WEBSOCKET:SERVICE_UNAVAILABLE
++
+An app specified an an invalid path when it attempted to establish a connection to a WebSocket.
++
+* WEBSOCKET:SERVICE_UNAVAILABLE
++
+The app specified an existing WebSocket ID when it attempted to create a new WebSocket.
+
+[[send-operation]]
+== Send Operation
+
+Use `<websocket:send` to send a message through an established WebSocket connection. You can use this operation to send a message from the WebSocket's inbound endpoint to its outbound endpoint, or from its outbound endpoint to its inbound endpoint.
+
+In this example, the flow named `Say Hello`:
+
+. Opens an outbound endpoint on a WebSocket called `socketId` on path `/chat/hello`.
+. Sends the message `Good morning!` through the WebSocket.
+
+The flow named `Say Hello Back`:
+
+. Listens for a message on the path `/chat/hello`.
+. Responds `Good morning to you` when it hears a message.
+
+[source,xml,linenums]
+----
+    <flow name="sayHello">
+      <websocket:open-outbound-socket path="/chat/hello"
+        config-ref="ws" target="outboundSocketId"
+        targetValue="#[attributes.socketId]"/>
+      <websocket:send socketId="#[vars.socketId]"
+        config-ref="ws">
+        <websocket:content>'Good morning!'</websocket:content>
+      </websocket:send>
+    </flow>
+    <flow name="sayHelloBack">
+        <websocket:inbound-listener path="/chat/hello"
+          config-ref="ws" outputMimeType="text/plain" />
+        <websocket:send socketId="#[attributes.socketId]"
+          config-ref="ws">
+          <websocket:content>#['Good morning to you ' ++
+           attributes.socketId ++ '!']</websocket:content>
+        </websocket:send>
+    </flow>
+----
+
+[[subscribe-groups-operation]]
+== Subscribe Groups Operation
+
+Use the `<websocket:subscribe-groups>` operation to manually subscribe an inbound or outbound WebSocket to one or more groups. The app can invoke this operation on the same WebSocket multiple times. Each time the app specifies a new group, it is added to the list of target groups for the broadcast.
+
+To specify default groups for an inbound WebSocket, use the <<websocket/websocket-connector-triggers.adoc#inbound-listener-trigger,Inbound Listener>>.
+
+For more information about WebSocket groups, see <<websocket/websocket-connector-management.adoc#manage-groups,Manage WebSocket Groups>>.
+
+=== Output
+
+The output of the Subscribe Groups operation is void.
+
+=== Example
+
+The following example subscribes the WebSocket identified by the #[attributes.socketId] expression to the `Science` and `Humanities` groups:
+
+[source,xml,linenums]
+----
+<websocket:subscribe-groups socketId="#[attributes.socketId]" groups="#[[‘Science’,‘Humanities’]]" />
+----
+
+[[unsubscribe-groups-operation]]
+== Unsubscribe Groups Operation
+
+Use the `<websocket:unsubscribe-groups>` operation to unsubscribe a WebSocket from one or more groups.
+
+The app can invoke this operation on the same WebSocket multiple times. Each time an app invokes this operation for a subscribed group, the specified group is removed from the list of target groups for the broadcast.
+
+=== Output
+
+The output of the Unsubscribe Groups operation is void.
+
+=== Example
+
+The following example unsubscribes the WebSocket identified by the #[attributes.socketId] expression from the `Science` and `Humanities` groups.
+
+[source,xml,linenums]
+----
+<websocket:unsubscribe-group socketId="#[attributes.socketId]" groups=”#[['Science', 'Humanities']]" />
+----
