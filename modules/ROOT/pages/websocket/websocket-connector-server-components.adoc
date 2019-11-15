@@ -1,0 +1,88 @@
+= About WebSocket Server Components
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:keywords: connectors, ws, wss, websocket
+
+
+
+== Inbound Listener
+
+The Inbound Listener component represents a websocket endpoint that clients can connect to. By hitting this endpoint, external clients nestablish a WebSocket connection, and trigger the owning flow each time they send a message.
+
+You can also indicate the default groups that this endpoint will be automatically subscribed to in the defaultGroups parameter. If any broadcast operations are performed to said groups, this endpoint will receive and process them. This subscription is done inside the app domain, which means that adding the default groups parameter will not send any information about this subscription to the outbound WebSocket counterparts, because the groups feature is not part of WS protocol. What this means, is that if we subscribe our inbound WebSocket to a group, that will be useful if other WebSockets within our app domain want to send a message to all other WebSockets, also in our app domain, which have been subscribed to the specified groups. In short, the group subscription will only affect WebSockets residing in the same app domain, and WebSockets from external applications will not be subscribed by our mule application to any groups.
+
+[source,xml,linenums]
+----
+<flow name="onIncomingMessageFlow">
+    <websocket:inbound-listener ​path​=​"/chat"​ ​defaultGroups​=​"#[['AVENGERS', 'REVENGERS']]"​ ​config-ref​=​"ws"​ />
+    <logger level="INFO" message="#['Received message ' ++ payload ++ ' from socket: ' ++ attributes.socketId]" />
+
+    <websocket:send doc:name="SendResponse" socketId="#[attributes.socketId]" config-ref="ws" >
+        <websocket:content>#['I'm fine, thank you!']</websocket:content>
+    </websocket:send>
+</flow>
+
+<flow name="sendFriendlyMessageFlow">
+    <websocket:open-outbound-socket path="/chat" config-ref="ws" />
+
+    <websocket:send doc:name="SendMessage" socketId="#[attributes.socketId]" config-ref="ws" >
+        <websocket:content>#['Hi! How are you?']</websocket:content>
+    </websocket:send>
+</flow>
+----
+
+== Sending Responses
+
+An important consideration to keep in mind is that unlike the `<http:listener>` element which automatically sends a response when the flow ends, this component will never automatically send a response. This is because the WebSockets protocol is Full Duplex and therefore there's no guarantee that you actually want or need to send a response at all. Depending on your use case, you might want to simply process the messages without sending a response, or only send responses on certain cases only.
+
+For cases in which you actually want to send a response, you need to manually do so using the `<websocket:send>` operation.
+
+==== Output
+
+Each time a new message arrives, the flow will be triggered with a message which payload contains the message's content. The message mime-type will be obtained from the Content-Type header of the HTTP request. If it hasn’t been set, then it will default to one
+of the following depending on the protocol’s DataFrame type.
+
+    . if it’s binary then go to application/octect-stream.
+    . If it’s text, go to text/plain
+
+The attributes will contain a WebSocket Attributes Object.
+
+== On Inbound Connection
+
+This is a message source which will be triggered each time an INBOUND WebSocket connection is established. You can only have one of these sources for a given path and it requires that a matching Inbound Listener exist for said path. This is useful to perform post-connect tasks such as logging or assigning the socket with a group.
+
+This flow will be triggered synchronously. By the time this flow is invoked the socket has already been established and it could potentially be broadcasting or receiving messages. Those messages will be queued and not delivered to any flow until the event triggered by this source is completed. If it fails, all queued messages will discarded and the connection will be dropped.
+
+This message source has two main use cases:
+
+* To keep track of the generated socket Ids so that they can be used later
+* Have a validation point in which a WebSocket can be rejected before it becomes usable to the application
+
+For example, the following flow validates attributes from the originating request and decides to close the connection if the validation doesn't pass
+
+[source,xml,linenums]
+----
+<flow name="onNewInboundConnection">
+    <websocket:on-inbound-connection doc:name="On Inbound Connection" config-ref="WebSockets_Config" path="/chat"/>
+    <choice doc:name="Choice" >
+        <when expression="#[contains(attributes.headers.alias, 'admin')]">
+            <websocket:close socketId="#[attributes.socketId]" reason="Cannot impersonate the admin" config-ref="WebSockets_Config"/>
+        </when>
+        <otherwise >
+            <logger level="INFO" doc:name="Logger" message="Successfully connected to WebSocket #[attributes.socketId]" />
+        </otherwise>
+    </choice>
+</flow>
+
+<flow name="chat">
+    <websocket:inbound-listener doc:name="Inbound listener" path="/chat" config-ref="WebSockets_Config"/>
+    <logger level="INFO" doc:name="Logger" message="#['Received message' ++ payload]"/>
+</flow>
+----
+
+== See Also
+
+* xref:websocket/websockets.adoc[WebSocket Connector]
+* xref:websocket/websockets-connector-client-components.adoc[Websockets Client Components]
+* xref:websocket/websockets-connector-messaging-operations.adoc[WebSocket Messaging Operations]
