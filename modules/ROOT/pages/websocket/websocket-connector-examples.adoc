@@ -4,19 +4,24 @@ include::_attributes.adoc[]
 endif::[]
 :imagesdir: ../../assets/images/
 
-Let's see an example of how to use the WebSockets connector in a complex use case.
+You can use the WebSocket connector in a complex use case that builds an integration system that obtains and broadcasts stock quotes through WebSocket. 
 
-== The Use case
+This example consists of three apps:
 
-We're going to build an integration system to obtain and broadcast stock quotes through WebSockets. This system will be made of three apps:
+[%header,cols="50a,50a"]
+|===
+|App |Implementation
+|<<Quote Producer App>> |<<Quote Producer Implementation>>
+|<<Quote Aggregator App>> |<<Quote Aggregator Implementation>>
+|<<Quote Client App>> |<<Quote Client Implementation>>
+|===
 
-=== Quote Producer Application
+== Quote Producer App
 
-This application will generate continuos random stock quotes like the following example:
+This app generaates continuous random stock quotes like the following:
 
 [source,json,linenums]
 ----
-
 {
    "ticker": "CRM",
    "price": 157.6,
@@ -25,23 +30,22 @@ This application will generate continuos random stock quotes like the following 
 }
 ----
 
-We will call this type `Quote`.
+In this example, this is called by the `Quote` type.
 
-This application needs to generate around 50 of these, using at least 5 different tickers (CRM, MELI, GOOG, NFLX, AAPL) (the prices will be random, no need to go get the real ones for this example).
+This app generates approximately 50 quotes, using at least 5 different tickers (CRM, MELI, GOOG, NFLX, AAPL). The prices are random, so there's no need to get the real ones for this example.
 
-This application will also expose the endpoint `wss://localhost:8080/feed`. This TLS secure endpoint accepts one and only one connection. The first client to connect needs to do so successfully. Following clients need to be sent a wss message with the text "Sorry, spot taken" after which the connection is to be dropped.
+This app also exposes the `+wss://localhost:8080/feed+` endpoint. This TLS secure endpoint accepts one and only one connection. The first client to connect needs to do so successfully. Subsequent clients need to be sent a WSS message with the text "Sorry, spot taken" after which, the connection is dropped.
 
-Each produced Quote needs to be sent to the connected feed client.
+Each produced quote is sent to the connected feed client.
 
-=== Quote Aggregator Application
+== Quote Aggregator App
 
-This application connects to the feed endpoint in the prior application and receives all of the Quotes. It splits them by ticker and places them in time based aggregators which flush every 5 seconds.
+This app connects to the feed endpoint in the prior app and receives all of the quotes. It splits them by ticker and places them in time-based aggregators that flush every 5 seconds.
 
-When the aggregators flush, they will output an `Array<Quote>` that needs to be reduced to one single `QuoteSnapshot` type. `QuoteSnapshot` looks as follows:
+When the aggregators flush, they output an `Array<Quote>` that needs to be reduced to a single `QuoteSnapshot` type. `QuoteSnapshot` is as follows:
 
 [source,json,linenums]
 ----
-
 {
    "ticker": "CRM"
    "price": "157.54 USD"
@@ -50,31 +54,34 @@ When the aggregators flush, they will output an `Array<Quote>` that needs to be 
 
 Such reduction is done by picking the `Quote` with the greatest timestamp and transforming it per the example.
 
-The produced snapshots are to be broadcasted to a dynamic list of subscribers. Subscriptions are done through the `wss://localhost:8082/quotes` endpoint that this application exposes. Clients can connect to this endpoint, using a query param to indicate which stock quotes they want to follow. For example: `wss://localhost:8082/quotes?ticker=CRM&ticker=MELI`
+The produced snapshots broadcast to a dynamic list of subscribers. Subscriptions are done through the `+wss://localhost:8082/quotes+` endpoint that this application exposes. Clients can connect to this endpoint, using a query parameter to indicate what stock quotes to follow. For example: `+wss://localhost:8082/quotes?ticker=CRM&ticker=MELI+`
 
-The above request should establish a web socket which gets the snapshots for the `CRM` and `MELI` tickers. This should be done by subscribing the resulting sockets to the proper socket groups.
+The request should establish a web socket that gets the snapshots for the `CRM` and `MELI` tickers. This should be done by subscribing the resulting sockets to the proper socket groups.
 
-=== Quote Client Application
+== Quote Client App
 
-Finally, the client application should open at least three different web sockets to the quotes endpoint in the aggregator app. Each of those sockets should be listening for a different set of tickers.
+Finally, the client app should open at least three different web sockets to the quotes endpoint in the aggregator app. Each of those sockets should be listening for a different set of tickers.
 
-The received `QuoteSnapshots` should be transformed to CSV format and appended to a file
+The received `QuoteSnapshots` should be transformed to CSV format and appended to a file.
 
-== The implementation
-
-Following are the main flows that would make up for these three applications. 
-
-=== Quote Producer Implementation
+== Quote Producer Implementation
 
 [source,xml,linenums]
-----
-    
+----    
     <tls:context name="TLS_Context">
-        <tls:key-store path="producer-keystore.jks" alias="producerkey" keyPassword="mule123" password="mule123" />
+        <tls:key-store 
+		path="producer-keystore.jks" 
+		alias="producerkey" 
+		keyPassword="mule123" 
+		password="mule123" />
     </tls:context>
 
     <http:listener-config name="HTTP_TLS_Listener_config">
-        <http:listener-connection host="0.0.0.0" port="60000" tlsContext="TLS_Context" protocol="HTTPS"/>
+        <http:listener-connection 
+		host="0.0.0.0" 
+		port="60000" 
+		tlsContext="TLS_Context" 
+		protocol="HTTPS"/>
     </http:listener-config>
 
     <http:listener-config name="HTTP_Listener_config">
@@ -145,22 +152,42 @@ Following are the main flows that would make up for these three applications.
     </flow>
 
     <flow name="send-stock-quote-flow">
-        <os:contains objectStore="Object_store" key="webSocketConnectedId" target="webSocketConnected"/>
+        <os:contains 
+		objectStore="Object_store" 
+		key="webSocketConnectedId" 
+		target="webSocketConnected"/>
         <choice>
             <when expression="#[vars.webSocketConnected]">
-                <os:retrieve objectStore="Object_store" target="webSocketConnectedId" key="webSocketConnectedId" />
-                <websocket:send socketId="#[vars.webSocketConnectedId]" config-ref="WebSockets_Config"/>
+                <os:retrieve 
+			objectStore="Object_store" 
+			target="webSocketConnectedId" 
+			key="webSocketConnectedId" />
+                <websocket:send 
+			socketId="#[vars.webSocketConnectedId]" 
+			config-ref="WebSockets_Config"/>
             </when>
         </choice>
     </flow>
 
 	<flow name="on-new-inbound-connection-flow">
-		<websocket:on-inbound-connection doc:name="On New Inbound Connection" config-ref="WebSockets_Config" path="/feed" />
-		<os:contains key="webSocketConnectedId" target="webSocketConnected" objectStore="Object_store"/>
+		<websocket:on-inbound-connection 
+			doc:name="On New Inbound Connection" 
+			config-ref="WebSockets_Config" 
+			path="/feed" />
+		<os:contains 
+			key="webSocketConnectedId" 
+			target="webSocketConnected" 
+			objectStore="Object_store"/>
 		<choice>
 			<when expression="#[vars.webSocketConnected]">
-				<os:retrieve key="webSocketConnectedId" objectStore="Object_store" target="webSocketConnectedId" />
-				<websocket:close-socket socketId="#[attributes.socketId]" reason="Sorry, spot taken" config-ref="WebSockets_Config"/>
+				<os:retrieve 
+					key="webSocketConnectedId" 
+					objectStore="Object_store" 
+					target="webSocketConnectedId" />
+				<websocket:close-socket 
+					socketId="#[attributes.socketId]" 
+					reason="Sorry, spot taken" 
+					config-ref="WebSockets_Config"/>
 			</when>
 			<otherwise>
 				<os:store key="webSocketConnectedId" objectStore="Object_store">
@@ -172,7 +199,10 @@ Following are the main flows that would make up for these three applications.
 
 	<flow name="on-new-inbound-message-flow">
 		<websocket:inbound-listener config-ref="WebSockets_Config" path="/feed"/>
-		<logger level="INFO" doc:name="Logger" doc:id="7cbabe78-76ff-4151-a751-96c55889c084" message="#[output application/json
+		<logger 
+			level="INFO" 
+			doc:name="Logger" 
+			message="#[output application/json
 		---
 		{
 			info: 'New message received from [' ++ attributes.socketId ++ ']',
@@ -182,7 +212,10 @@ Following are the main flows that would make up for these three applications.
 
 	<flow name="on-socket-closed-flow">
 		<websocket:on-socket-closed config-ref="WebSockets_Config" path="/feed"/>
-		<os:retrieve key="webSocketConnectedId" objectStore="Object_store" target="webSocketConnectedId" />
+		<os:retrieve 
+			key="webSocketConnectedId" 
+			objectStore="Object_store" 
+			target="webSocketConnectedId" />
 		<choice>
 			<when expression="#[attributes.socketId == vars.webSocketConnectedId]">
 				<os:remove key="webSocketConnectedId" objectStore="Object_store"/>
@@ -191,21 +224,30 @@ Following are the main flows that would make up for these three applications.
 	</flow>
 
 	<flow name="close-websocket-flow">
-		<os:contains key="webSocketConnectedId" target="webSocketConnected" objectStore="Object_store"/>
+		<os:contains 
+			key="webSocketConnectedId" 
+			target="webSocketConnected" 
+			objectStore="Object_store"/>
 		<choice>
 			<when expression="#[vars.webSocketConnected]">
-				<os:retrieve doc:name="Retrieve" key="webSocketConnectedId" objectStore="Object_store" target="webSocketConnectedId" />
-				<websocket:close-socket config-ref="WebSockets_Config" socketId="#[vars.webSocketConnectedId]" reason="Producer app wanted to close the websocket"/>
+				<os:retrieve 
+					doc:name="Retrieve" 
+					key="webSocketConnectedId" 
+					objectStore="Object_store" 
+					target="webSocketConnectedId" />
+				<websocket:close-socket 
+					config-ref="WebSockets_Config" 
+					socketId="#[vars.webSocketConnectedId]" 
+					reason="Producer app wanted to close the websocket"/>
 			</when>
 		</choice>
 	</flow>
 ----
 
-=== Quote Aggregator Implementation
+== Quote Aggregator Implementation
 
 [source,xml,linenums]
-----
-    
+----    
 	<tls:context name="TLS_Context">
         <tls:trust-store path="aggregator-truststore.jks" password="mule123" />
     </tls:context>
@@ -216,7 +258,11 @@ Following are the main flows that would make up for these three applications.
 
     <websocket:config name="WebSockets_Client_Config">
         <websocket:connection >
-            <websocket:client-settings host="0.0.0.0" port="60000" protocol="WSS" tlsContext="TLS_Context"/>
+            <websocket:client-settings 
+	    	host="0.0.0.0" 
+		port="60000" 
+		protocol="WSS" 
+		tlsContext="TLS_Context"/>
         </websocket:connection>
     </websocket:config>
 
@@ -225,19 +271,28 @@ Following are the main flows that would make up for these three applications.
     <http:listener-config name="HTTP_WebSockets_Listener_Config">
         <http:listener-connection host="0.0.0.0" port="61001" protocol="HTTPS">
             <tls:context >
-                <tls:key-store path="broadcast-keystore.jks" alias="broadcast" keyPassword="mule123" password="mule123" />
+                <tls:key-store 
+			path="broadcast-keystore.jks" 
+			alias="broadcast" 
+			keyPassword="mule123" 
+			password="mule123" />
             </tls:context>
         </http:listener-connection>
     </http:listener-config>
 
     <websocket:config name="WebSockets_Server_Config">
         <websocket:connection >
-            <websocket:server-settings listenerConfig="HTTP_WebSockets_Listener_Config" idleSocketTimeout="30"/>
+            <websocket:server-settings 
+	    	listenerConfig="HTTP_WebSockets_Listener_Config" 
+		idleSocketTimeout="30"/>
         </websocket:connection>
     </websocket:config>
 
     <flow name="client-app-websocket-inbound-listener-flow">
-        <websocket:inbound-listener doc:name="On New Inbound Message" config-ref="WebSockets_Server_Config" path="/quotes"/>
+        <websocket:inbound-listener 
+		doc:name="On New Inbound Message" 
+		config-ref="WebSockets_Server_Config" 
+		path="/quotes"/>
         <logger level="INFO" doc:name="Logger" message="#[output application/json
             ---
             {
@@ -254,19 +309,29 @@ Following are the main flows that would make up for these three applications.
                 payload: payload
             }]"/>
         
-        <websocket:broadcast config-ref="WebSockets_Server_Config" path="/quotes" socketType="INBOUND" groups="#[[payload.ticker]]" />
+        <websocket:broadcast 
+		config-ref="WebSockets_Server_Config" 
+		path="/quotes" 
+		socketType="INBOUND" 
+		groups="#[[payload.ticker]]" />
     </flow>
 
 	<flow name="producer-app-websocket-open-flow">
         <websocket:open-outbound-socket config-ref="WebSockets_Client_Config" path="/feed"/>
-        <logger level="INFO" message="#['New connection established with [' ++ attributes.socketId ++ ']']" />
+        <logger 
+		level="INFO" 
+		message="#['New connection established with [' ++ attributes.socketId ++ ']']" />
         <os:contains key="socketId" objectStore="Object_store" target="webSocketConnected" />
         <choice>
             <when expression="#[vars.webSocketConnected]">
-                <logger level="INFO" message="#['The websocket [' ++ attributes.socketId ++ '] will not be saved since there is already one connected']"/>
+                <logger 
+			level="INFO" 
+			message="#['The websocket [' ++ attributes.socketId ++ '] is not saved as there is already one connected']"/>
             </when>
             <otherwise >
-                <logger level="INFO" message="#['Websocket with id [' ++ attributes.socketId ++ '] will be saved for later reference']"/>
+                <logger 
+			level="INFO" 
+			message="#['Websocket with ID [' ++ attributes.socketId ++ '] is saved for later reference']"/>
                 <os:store key="socketId" objectStore="Object_store">
                     <os:value><![CDATA[#[attributes.socketId]]]></os:value>
                 </os:store>
@@ -275,7 +340,10 @@ Following are the main flows that would make up for these three applications.
     </flow>
 
     <flow name="producer-app-websocket-outbound-listener-flow">
-        <websocket:outbound-listener config-ref="WebSockets_Client_Config" path="/feed" outputMimeType="application/json"/>
+        <websocket:outbound-listener 
+		config-ref="WebSockets_Client_Config" 
+		path="/feed" 
+		outputMimeType="application/json"/>
         <logger level="INFO" message="#[output application/json
             ---
             {
@@ -290,32 +358,43 @@ Following are the main flows that would make up for these three applications.
         <choice>
             <when expression="#[vars.webSocketConnected]">
                 <os:retrieve key="socketId" objectStore="Object_store" target="socketId"/>
-                <logger level="INFO" message="#['Trying to close websocket [' ++ vars.socketId as String ++ ']']"/>
-                <websocket:close-socket config-ref="WebSockets_Client_Config" socketId="#[vars.socketId]" reason="Client wanted to close the websocket"/>
+                <logger 
+			level="INFO" 
+			message="#['Trying to close websocket [' ++ vars.socketId as String ++ ']']"/>
+                <websocket:close-socket 
+			config-ref="WebSockets_Client_Config" 
+			socketId="#[vars.socketId]" 
+			reason="Client wants to close the websocket"/>
             </when>
             <otherwise >
-                <logger level="INFO" message="There is no websocket to close"/>
+                <logger level="INFO" message="There is no web socket to close"/>
             </otherwise>
         </choice>
     </flow>
 
     <flow name="producer-app-websocket-on-socket-closed-flow">
         <websocket:on-socket-closed config-ref="WebSockets_Client_Config" path="/feed"/>
-        <logger level="INFO" message="#['Websocket [' ++ attributes.socketId ++ '] was closed']"/>
+        <logger 
+		level="INFO" 
+		message="#['Websocket [' ++ attributes.socketId ++ '] was closed']"/>
         <os:retrieve key="socketId" objectStore="Object_store" target="socketId" />
         <choice>
             <when expression="#[attributes.socketId == vars.socketId]">
-                <logger level="INFO" message="#['Removing the websocket id stored for referencing it']" />
+                <logger 
+			level="INFO" 
+			message="#['Removing the websocket ID stored for referencing it']" />
                 <os:remove key="socketId" objectStore="Object_store" />
             </when>
             <otherwise >
-                <logger level="INFO" message="#['Disconnected websocket is not the main one [' ++ vars.socketId as String ++ ']']" />
+                <logger 
+			level="INFO" 
+			message="#['Disconnected websocket is not the main one [' ++ vars.socketId as String ++ ']']" />
             </otherwise>
         </choice>
     </flow>
 ----
 
-=== Quote Client Implementation
+== Quote Client Implementation
 
 [source,xml,linenums]
 ----
@@ -335,14 +414,22 @@ Following are the main flows that would make up for these three applications.
     </websocket:config>
 
     <flow name="aggregator-app-websocket-open-flow">
-        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="open-aggregator-ws"/>
+        <http:listener doc:name="Listener" 
+		config-ref="HTTP_Listener_config" 
+		path="open-aggregator-ws"/>
         <set-variable value="#[attributes.queryParams.*ticker]" variableName="groups"/>
-        <websocket:open-outbound-socket config-ref="WebSockets_Client_App_Config" path="/quotes" defaultGroups="#[vars.groups]" />
+        <websocket:open-outbound-socket 
+		config-ref="WebSockets_Client_App_Config" 
+		path="/quotes" 
+		defaultGroups="#[vars.groups]" />
     </flow>
 
     <flow name="stock-quotes-clientFlow">
-        <websocket:outbound-listener config-ref="WebSockets_Client_App_Config" path="/quotes" outputMimeType="application/json"/>
-        <logger level="INFO" doc:name="Logger" doc:id="3f7d04dc-ad7f-4a38-9d8b-f480bb384612" message="#[output application/json
+        <websocket:outbound-listener 
+		config-ref="WebSockets_Client_App_Config" 
+		path="/quotes" 
+		outputMimeType="application/json"/>
+        <logger level="INFO" doc:name="Logger" message="#[output application/json
             ---
             {
                 info: 'New message received on [' ++ attributes.socketId ++ ']',
@@ -353,10 +440,8 @@ Following are the main flows that would make up for these three applications.
 
 == See Also
 
-* https://forums.mulesoft.com[MuleSoft Forum]
-* https://support.mulesoft.com/s/knowledge[Knowledge Base Articles]
+* https://help.mulesoft.com[MuleSoft Help Center]
 * xref:websockets/websockets-connector-config-topics.adoc[WebSockets Configuration Topics]
 * xref:websockets/websockets-connector-client-components.adoc[WebSockets Client Components]
 * xref:websockets/websockets-connector-server-components.adoc[WebSockets Server Components]
 * xref:http/websockets-connector-messaging-operations.adoc[About WebSocket Messaging Operations]
-
