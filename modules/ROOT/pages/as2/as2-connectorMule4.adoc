@@ -35,6 +35,8 @@ Version 5 enables you to reuse the application HTTP listener configuration.
 
 Version 5 has support for additional modes of cipher. Hence the existing encryption types like `AES128`, `AES192`, `AES256` will map to `AES128_CBC`,`AES192_CBC `,`AES256_CBC` respectively.
 
+Version 5 has changed namespace from `as2` to `as2-mule4`.
+
 Version 5 also divides a single global configuration into operation/source specific global configurations like:
 
 * `send-config` - used by `send-with-sync-mdn` and `send-with-async-mdn` operations.
@@ -42,6 +44,25 @@ Version 5 also divides a single global configuration into operation/source speci
 * `mdn-listener-config` - used by `as2-mdn-listener` source.
 
 For example:
+
+==== Before (AS2 v4 namespace):
+```
+<mule  xmlns:as2="http://www.mulesoft.org/schema/mule/as2"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/as2 http://www.mulesoft.org/schema/mule/as2-mule4/current/mule-as2.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+```
+
+==== After (AS2 v5 namespace):
+```
+<mule xmlns:as2-mule4="http://www.mulesoft.org/schema/mule/as2-mule4"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xsi:schemaLocation="
+	http://www.mulesoft.org/schema/mule/as2-mule4 http://www.mulesoft.org/schema/mule/as2-mule4/current/mule-as2-mule4.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+```
+
 
 ==== Before (AS2 v4 global config):
 ```
@@ -54,7 +75,7 @@ For example:
     receiverHost="receiveHost" receiverPort="receive port" secureReceiverPort="https receive port" secureReceiverKeystorePath="https receive keystore path" secureReceiverKeystorePassword="https receive keystore pwd"
     mdnReceiverPort="MDN port" mdnSecureReceiverPort="https MDN port" mdnSecureReceiverKeystorePath="https mdn keystore path" mdnSecureReceiverKeystorePassword="https mdn keystore pwd"
     encrypt="AES256" sign="SHA256" contentTransferEncoding="BASE64" compressionType="true">
-        <as2:proxy proxyHost="proxyhost" proxyPort="proxyport" proxyUsername="proxyUser" proxyPassword="proxyPwd" />
+        <as2:proxy proxyHost="proxyhost" proxyPort="12345" proxyUsername="proxyUser" proxyPassword="proxyPwd" />
     </as2:connection>
 </as2:config>
 ```
@@ -63,15 +84,15 @@ For example:
 ```
 <!-- Send global config -->
 <as2-mule4:send-config name="AS2_Connector_Send_config" doc:name="AS2 Connector Send config" doc:id="f32f6a99-15ea-411d-ad00-ec4d9990b874" >
-    <as2-mule4:self-config as2Name="selfId" x509Alias="selfAlias" email="self@email.com" />
-    <as2-mule4:partner-config as2Name="partnerID" x509Alias="partnerAlias" email="partner@email.com" />
     <as2-mule4:connection partnerURL="partner-send-url" connectionTimeout="600000"
         usePersistentConnections="false" maxConnections="5" connectionIdleTimeout="40000" tlsContext="TLS_Context">
         <as2-mule4:proxy-config >
-            <as2-mule4:proxy host="proxyHost" port="proxyPort" username="proxyUser" password="proxyPwd" />
+            <as2-mule4:proxy host="proxyHost" port="12345" username="proxyUser" password="proxyPwd" />
         </as2-mule4:proxy-config>
     </as2-mule4:connection>
-	<as2-mule4:requester-config micAlg="SHA256" mdnMicAlg="SHA1" requestReceipt="SIGNED_REQUIRED" receiptDeliveryURL="selfMDNUrl" subject="Send Subject" encryptionAlg="AES256" contentTransferEncoding="BASE64" compressionType="ZLIB"/>
+    <as2-mule4:self-config as2Name="selfId" x509Alias="selfAlias" email="self@email.com" />
+    <as2-mule4:partner-config as2Name="partnerID" x509Alias="partnerAlias" email="partner@email.com" />
+	<as2-mule4:requester-config micAlg="SHA256" mdnMicAlg="SHA1" requestReceipt="SIGNED_REQUIRED" receiptDeliveryURL="selfMDNUrl" subject="Send Subject" encryptionAlg="AES256_CBC" contentTransferEncoding="BASE64" compressionType="ZLIB"/>
     <as2-mule4:keystore-config keystorePassword="keystorepwd" keystorePath="path/to/keystore"/>
 </as2-mule4:send-config>
 
@@ -79,12 +100,14 @@ For example:
 	<http:listener-config name="HTTP_Listener_config">
 		<http:listener-connection host="localhost" port="8081"/>
 	</http:listener-config>
+
+<!-- HTTPS global config (Only required if as2-listener or as2-mdn-listener has to support HTTPS)-->
 	<http:listener-config name="HTTPS_Listener_config">
 		<http:listener-connection host="localhost" port="8082" tlsContext="TLS_Context" protocol="HTTPS">
 		</http:listener-connection>
 	</http:listener-config>
 	<tls:context name="TLS_Context" doc:name="TLS Context" doc:id="41e55ae5-c31b-48e8-91c7-a3acb92d6d2b">
-		<tls:trust-store insecure="true"/>
+		<tls:trust-store path="mulecert.jks" password="pwd" algorithm="RSA"/>
 		<tls:key-store type="jks" path="mulecert.jks" alias="mulecert" keyPassword="mule123" password="mule123"/>
 	</tls:context>
 
@@ -131,13 +154,13 @@ The send operation is divided into 2 separate operations - `send-with-async-mdn`
 * After
 
 ```
-<as2-mule4:send-with-async-mdn  fileName="fileName" config-ref="AS2_Connector_Send_Async_config" mimeType="application/xml" requireProcessed="false">
+<as2-mule4:send-with-async-mdn  fileName="fileName" config-ref="AS2_Connector_Send_Sync_config" mimeType="application/xml" requireProcessed="false">
     <as2-mule4:content ><![CDATA[#['Hello world']]]></as2-mule4:content>
 </as2-mule4:send-with-async-mdn>
 
 <!-- OR -->
 
-<as2-mule4:send-with-sync-mdn  fileName="fileName" config-ref="AS2_Connector_Send_Async_config" mimeType="application/xml" requireProcessed="false">
+<as2-mule4:send-with-sync-mdn  fileName="fileName" config-ref="AS2_Connector_Send_Sync_config" mimeType="application/xml" requireProcessed="false">
     <as2-mule4:content ><![CDATA[#['Hello world']]]></as2-mule4:content>
 </as2-mule4:send-with-sync-mdn>
 
