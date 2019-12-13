@@ -104,19 +104,16 @@ As mentioned earlier, each time the application is deployed, the contents from t
 
 == File Locking
 
-You can use the `lock` parameter to set a file system lock on the file while it is being read.
-It is set to `false` by default, but when the parameter is set to `true`, the connector asks the operating system to lock the file, which prevents any other process from accessing that file while the
-lock is held. The lock is provided by the host file system, so its behavior might
+You can set the `lock` parameter to `true` to prevent other processes from accessing a file while it is being read. However, because it is provided by the host file system, the lock's behavior might
 change depending on the mounted drive and the operating system on which Mule is running. You must take
 that into consideration before relying on this lock. 
 
-The lock is automatically released when one of the following things occurs:
+If the file is already locked by someone else, the connector will not be able to lock it, and the operation throws a `FILE:FILE_LOCK` error.
+
+The lock is automatically released when one of the following occurs:
 
 * The Mule flow that locked the file ends.
-* The file's content has been fully read.
-
-If the file is already locked by someone else, the connector will not be able to lock
-it, and the operation will throw a `FILE:FILE_LOCK` error.
+* The file's content is fully read.
 
 The following is an example of locking:
 
@@ -129,9 +126,7 @@ The following is an example of locking:
 
 You can use the `outputEncoding` and `outputMimeType` parameters to change the MIME type or the
 encoding of the payload that the `Read` operation outputs. This does not transform the file's
-content, it just overrides the MIME type or encoding information. 
-
-For example:
+content, it just overrides the MIME type or encoding information, for example: 
 
 [source,xml,linenums]
 ----
@@ -140,32 +135,31 @@ For example:
     outputMimeType="application/csv; headers=false" />
 ----
 
-== Wait for a File
+== Time Between Size Checks Parameter
 
-The `TimeBetweenSizeChecks` parameter (which works alongside the `TimeBetweenSizeCheckUnit` parameter) can
-be used to safely read a file that is still in the process of being written to. 
+If you want to read the file contents returned by the `Read` operation, but you are not sure if the file
+is still being written to, you can use the `TimeBetweenSizeChecks` parameter, which works
+with the `TimeBetweenSizeCheckUnit` parameter. Combined, these two parameters perform two size checks:
 
-When these parameters are set, the connector performs two size checks: 
+* One when the flow reaches a point where the stream is about to be consumed. The time check is not done in the `Read` operation because `Read` returns a lazy stream pointing to the file's content, so it makes sense to do the size check only when the stream is about to be consumed. 
+* Another check is performed after the wait time set by the `TimeBetweenSizeChecks` and `TimeBetweenSizeCheckUnit` parameters 
 
-* One size check when the flow reaches a point where the stream is about to be consumed (not in the `Read` operation) 
-* Another size check after the wait time set by the `TimeBetweenSizeChecks` and `TimeBetweenSizeCheckUnit` parameters 
+If both size checks return the same file size, then the stream is consumed successfully. If the two size checks return different file sizes, then the file is still being written to, so the stream is not consumed and the operation fails with an error. 
 
-If the file's size is the same at both checks, then the stream is consumed successfully. Otherwise, it means that the file is still being written to, so the stream is not consumed and the operation fails with an error. The time check is not done in the `read` operation because `read` returns a lazy stream, so it makes sense to do the size check later on when the stream is about to be consumed.
-
-Let's see an example where the `Read` operation is used with size check parameters and then
-the output stream is consumed in a xref:mule-runtime::logger-component-reference.adoc[`logger` component].
+You can use the `Read` operation with size check parameters and then
+consume the output stream in a xref:mule-runtime::logger-component-reference.adoc[Logger component].
 
 [source,xml,linenums]
 ----
 <file:read config-ref="File_Config" 
-    path="relativePath"
-    timeBetweenSizeCheck="15" 
-    timeBetweenSizeCheckUnit="SECONDS">
-<logger level="INFO" message="#[payload]" />
+	path="filePath" 
+	timeBetweenSizeCheck="15" 
+	timeBetweenSizeCheckUnit="SECONDS">
+	<logger level="INFO" message="#[payload]"/>
 </file:read>
 ----
 
-Note that the size check at 15 seconds happens when the `logger` component executes, not at the `Read` operation.
+Note that the 15 seconds check happens when the `logger` component executes, not at the `Read` operation.
 
 //== STREAMING INCLUDE in File, FTP, and SFTP Connector docs
 include::partial$common-streaming.adoc[]
