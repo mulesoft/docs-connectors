@@ -4,16 +4,14 @@ include::_attributes.adoc[]
 endif::[]
 :imagesdir: ../../assets/images/
 
-The `List` operation lists the files and folders found in the path pointed to by the `directoryPath`
-parameter. The List operation returns an array of messages, where:
+Use the `List` operation to list the files and folders in the path pointed to by the `directoryPath`
+parameter. The `List` operation returns an array of messages in which:
 
-* Each message holds the file's content in its payload
-* Carries the file's metadata (such as name, creation time, and size, xref:file/file-documentation.adoc#LocalFileAttributes[among others] ) in the attributes section
-* The payload is empty if the element is a folder 
+* Each message holds the file's content in its payload.
+* The file's attributes section carries the file's metadata (such as name, creation time, and size).
+* The payload is empty if the element is a folder.
 
-The `directoryPath` parameter is required and represents the relative path of the directory to list,
-unless you specify the full path of the directory. The path is relative to the `working directory`
-defined in the configuration referenced by the `config-ref` parameter. If no configuration is referenced, the working directory defaults to the value of the `user.home` system property. If the system property is not set, the connector fails to initialize.
+The `List` operation requires the `directoryPath` parameter, which represents the relative path of the directory to list, unless you specify the full path of the directory. The path is relative to the working directory value defined in the configuration referenced by the `config-ref` parameter. If no configuration is referenced, the working directory defaults to the value of the `user.home` system property. If the system property is not set, the connector fails to initialize.
 
 For an example of setting a configuration, see
 xref:file/file-connector.adoc#connection_settings[File Connection Settings]. 
@@ -26,7 +24,7 @@ a relative path:
 <file:list config-ref="File_Config" directoryPath="relativePath" />
 ----
 
-As mentioned above, this will return an array of messages. In Studio, DataSense displays the
+As mentioned earlier, this returns an array of messages. In Anypoint Studio, DataSense displays the
 metadata for the operation's output:
 
 image::file/list-output.png[]
@@ -36,16 +34,12 @@ image::file/list-output.png[]
 The `List` operation lists both directories and files, but for files it also returns a lazy stream of
 the file's contents in the payload, which can then be directly consumed by other operations. This
 means that you do not need to perform a `Read` operation after a `List` operation to access the file's content. See
-<<Read Files Returned by List, below>> for an example.
+<<Read Files Returned by List, Read Files Returned by List>> for an example.
 ========
 
 == Read Files Returned by List
 
-This example lists all files and folders in the `directoryPath` and, in a xref:mule-runtime::for-each-scope-concept.adoc[For Each loop], 
-checks if each element is a file or a folder with a
-xref:mule-runtime::choice-router-concept.adoc[choice component]. If it is a file,
-then a xref:mule-runtime::logger-component-reference.adoc[logger] outputs its
-path and contents. If it is a directory, it is sent to another flow for processing.
+The following example lists all files and folders in `directoryPath` and, in a `foreach` loop: 
 
 [source,xml,linenums]
 ----
@@ -63,15 +57,17 @@ path and contents. If it is a directory, it is sent to another flow for processi
 </foreach>
 ----
 
-There is no `Read` operation inside the `For Each` loop because,
-as mentioned before, the `List` operation already returns the file's content in the payload, (but in
-a lazy manner) so there is no need to worry about performance or overhead when the stream is not
+The `foreach` loop determines whether each element is a file or folder with a `choice` component.  If the element is a file, then a xref:mule-runtime::logger-component-reference.adoc[Logger] outputs its
+path and contents. If the element is a directory, it is sent to another flow for processing.
+
+There is no `Read` operation inside the `foreach` loop because, as mentioned earlier, the `List` operation already returns the file's content in the payload, (but in
+a lazy manner), so there is no need to worry about performance or overhead when the stream is not
 consumed in the end.
 
-== Sub Folders
+== List Files and Folders Within Subfolders
 
-To list files or folders within any sub-folders of the `directoryPath`, such as a recursive list, you
-can set the `recursive` parameter to true.
+To list files or folders within any subfolders of the `directoryPath`, such as a recursive list, you
+can set the `recursive` parameter to `true`.
 
 [source,xml]
 ----
@@ -104,9 +100,12 @@ accepting or rejecting a file. Here is an example of file matching rules you can
 
 All of the attributes above are optional and are ignored if not provided. They all relate to each other under an `AND` operator.
 
-As the next examples show, a file matcher can be a reusable element (a named top-level element), or it can be used as an inner element that is proprietary to a particular component.
 
-=== Example: Top-level, Reusable Matcher
+=== Top-level, Reusable Matcher
+
+A file matcher can be a reusable element (a named top-level element) as shown in the following example: 
+
+For example:
 
 [source,xml,linenums]
 ----
@@ -118,7 +117,9 @@ As the next examples show, a file matcher can be a reusable element (a named top
 </flow>
 ----
 
-=== Example: Inner, Non-reusable Matcher
+=== Inner Element, Non-Reusable Matcher
+
+A matcher can be an inner element that is proprietary to a particular component (non-reusable) as shown in the following example:
 
 [source,xml,linenums]
 ----
@@ -130,25 +131,19 @@ As the next examples show, a file matcher can be a reusable element (a named top
 </flow>
 ----
 
-== Wait for a File
+== Use the Time Between Size Checks Parameter
 
-If you want to read a file's content returned by the `List` operation, but you are not sure if the file
-is still being written to or not, you can use the `TimeBetweenSizeChecks` parameter (which works
-with the `TimeBetweenSizeCheckUnit` parameter).  
+If you want to read the file contents returned by the `List` operation, but you are not sure if the file
+is still being written to, you can use the `TimeBetweenSizeChecks` parameter, which works
+with the `TimeBetweenSizeCheckUnit` parameter. Combined, these two parameters perform two size checks:
 
-When these parameters are set, two size checks are performed: 
+* One when the flow reaches a point where the stream is about to be consumed. The time check is not done in the `List` operation because `List` returns a lazy stream pointing to the file's content, so it makes sense to do the size check only when the stream is about to be consumed. 
+* Another check is performed after the wait time set by the `TimeBetweenSizeChecks` and `TimeBetweenSizeCheckUnit` parameters 
 
-* One size check when the flow reaches a point where the stream is about to be consumed (not in the `List` operation) 
-* Another size check after the wait time set by the `TimeBetweenSizeChecks` and `TimeBetweenSizeCheckUnit` parameters 
-
-If the file's size is the same at both
-checks, then the stream is consumed successfully. Otherwise, it means that the file is still being
-written to, so the stream is not consumed and the operation fails with an error. The time check is not done
-in the `List` operation because `List` returns a lazy stream pointing to the file's content, so it makes
-sense to do the size check only when the stream is about to be consumed.
+If both size checks return the same file size, then the stream is consumed successfully. If the two size checks return different file sizes, then the file is still being written to, so the stream is not consumed and the operation fails with an error. 
 
 For example, use the `Read` operation with size check parameters and then
-consume the output stream in a xref:mule-runtime::logger-component-reference.adoc[`logger` component].
+consume the output stream in a xref:mule-runtime::logger-component-reference.adoc[Logger component].
 
 [source,xml,linenums]
 ----
@@ -160,7 +155,7 @@ consume the output stream in a xref:mule-runtime::logger-component-reference.ado
 </file:read>
 ----
 
-Note that the 15 seconds check happens when the `logger` component executes, not at the Read operation.
+Note that the 15 seconds check happens when the `logger` component executes, not at the `Read` operation.
 
 //== STREAMING INCLUDE in File, FTP, and SFTP Connector docs
 include::partial$common-streaming.adoc[]
@@ -168,3 +163,5 @@ include::partial$common-streaming.adoc[]
 == See Also
 
 xref:file/file-documentation.adoc[File Connector Reference]
+xref:mule-runtime::for-each-scope-concept.adoc[foreach loop]
+xref:mule-runtime::choice-router-concept.adoc[Choice component]
