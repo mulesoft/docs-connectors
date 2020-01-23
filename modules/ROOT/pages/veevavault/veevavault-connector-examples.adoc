@@ -1,0 +1,312 @@
+= VeevaVault Connector Examples - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+
+
+The example project we provide can be a starting point for your MuleSoft project. 
+
+== Example : Create Documents on Vault with metadata fetched from database.
+
+This example create documents in bulk with document metadata received from external source (database). Before documents created on vault the document files are uploaded on Vault FTP server. The documents created status is inserted into – Database. However, you can trigger to external source etc.
+
+To create Mule flow, follow these instructions:
+
+* Drag and drop HTTP Listener from Mule palette to project canvas.
+* Configure HTTP Listener as per your environment.
+* Drag Database Select operation to fetch document metadata from table.
+* Configure Database connector configuration with credentials details.
+* Drag Flow Reference element to reference Sub Flow – upload-files-on-vault-ftp-server.
+* Drag Transform Message component to transform document metadata in CSV format.
+* Drag Create Documents operation from Veeva Vault Connector palette.
+* Configure Veeva Vault connection configuration with username, password, vault url, vault version, vault client Id.
+* Drag Database Bulk Insert operation to insert document created status data into table
+* Drag Logger element to log information in console or log file.
+* Create Sub-Flow with Logger to log information.
+* For-Each element containing Read file operation and FTPS Write operation to write file on vault FTP server.
+* Configure FTPS connector configuration with vault FTP server credentials details
+
+== Studio Flows
+
+image:../../assets/images/veevavault/veevavault-connector-create-documents-example.png[image,width=601,height=204]
+
+image:../../assets/images/veevavault/veevavault-connector-upload-documents-example.png[image,width=578,height=135]
+
+== XML Code
+
+*create-documents-operationsFlow*
+
+--------------------
+	<flow name="create-documents-operationFlow" doc:id="98fe428d-3961-41e9-afaf-1cbe2b38dee5" >
+		<http:listener doc:name="Listener" doc:id="a894ea19-6344-4553-aa50-b7827c8e8096" config-ref="HTTP_Listener_config" path="/create-documents"/>
+		<db:select doc:name="Select" doc:id="e5af2ee1-faf6-4397-aea8-7df1ca873abb" config-ref="Database_Config">
+			<db:sql >SELECT * FROM createdocuments</db:sql>
+		</db:select>
+		<!-- <flow-ref doc:name="upload-files-on-vault-ftp-server" doc:id="8be764bb-bf76-4c9f-870b-fe708077e28e" name="upload-files-on-vault-ftp-server"/> -->
+		<ee:transform doc:name="Transform Message" doc:id="ac21fdf2-9117-4201-a595-907e4dd1ea12">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+				output application/csv headerLineNumber = 0 , header = true
+				---
+				payload map ( payload01 , indexOfPayload01 ) -> {
+					lifecycle__v: payload01.lifecycle__v,
+					study__v: payload01.study__v,
+					subtype__v: payload01.subtype__v,
+					name__v: payload01.name__v ++ '--' ++ randomInt(10000) as String,
+					type__v: payload01.type__v,
+					classification__v: payload01.classification__v,
+					product__v: payload01.product__v,
+					file: payload01.file as String
+				}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<veevavault:create-documents metadataFormat="CSV" doc:name="Create Documents" doc:id="5b98678c-1559-4827-80a9-289aad4a8873" config-ref="Veeva_Vault_Config"/>
+		<db:bulk-insert doc:name=__"Bulk insert" doc:id="e8dd307e-40db-42bb-b82a-b72f6b235d00" config-ref="Database_Config">
+			<db:bulk-input-parameters ><![CDATA[#[output application/java
+			---
+			payload.data map () -> {
+			'id': $.id as String,
+			'external_id__v': $.external_id__v as String,
+			'responseStatus': $.responseStatus
+			}]]]></db:bulk-input-parameters>
+
+		<db:sql >INSERT into documents (id, external_id__v, responseStatus) VALUES (:id, :external_id__v, :responseStatus)</db:sql>
+		</db:bulk-insert>
+		<logger level="INFO" doc:name="Logger" doc:id="a447ff60-8deb-471c-a1be-cc6c01dfcc29" message="Document Created :: #[output application/json --- payload]"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="19d98427-1566-4f82-b694-f59cc6eb169a" type="ANY" >
+				<logger level="INFO" doc:name="Logger" doc:id="9c23d079-fbf2-42e7-afe2-b5186a7b9a3f" message="Flow Exception Handled --  #[payload]" />
+			</on-error-propagate>
+		</error-handler>	
+	</flow>
+--------------------
+
+*upload-files-on-vault-ftp-server (Subflow)*
+
+--------------------
+	<sub-flow name="upload-files-on-vault-ftp-server" doc:id="b92629e4-69ee-4d9d-a24c-753ff54eff41">
+		<logger level="INFO" doc:name="Logger" doc:id="74d38eea-f86a-4482-a209-06b8fc9dcd8f" message="Starting File Upload on Vault FTP server...." />
+		<foreach doc:name="For Each" doc:id="1d1578a5-ea4b-40d6-8b87-b34ec778f232">
+			<logger level="INFO" doc:name="Logger" doc:id="44acecd2-a655-4eee-94cc-934ab7d32b92" message="Uploading file [#[payload.file]] on Vault FTP server......." />
+			<file:read doc:name="Read" doc:id="4fad0c52-6d1c-452b-a51d-c5cfd3b2680b" config-ref="File_Config" path="#[payload.file]" />
+			<ftps:write doc:name="Write" doc:id="fa077475-e89e-4618-a394-c01c7ac2efbc" config-ref="FTPS_Config" path="#[attributes.fileName]" />
+			<set-variable value="#[vars.counter]" doc:name="Set Variable" doc:id="c8378c51-eb34-4739-a7a1-4b8e260faa65" variableName="numberOfFiles" />
+		</foreach>
+		<logger level="INFO" doc:name="Logger" doc:id="4d8382e4-61b3-4104-ba89-5a3209a2bb9e" message="Total Files [#[vars.numberOfFiles]]are uploaded successfully on Vault FTP server." />
+	</sub-flow>
+--------------------		
+
+== Example: Retrieve Documents details and store into database.
+
+This example retrieves document details based on type, subtype and classification and store into database.
+
+To create Mule flow, follow these instructions:
+
+* Drag and drop HTTP Listener from Mule palette to project canvas.
+* Configure HTTP Listener as per your environment.
+* Drag and drop Get Documents operation from Veeva Vault Connector palette.
+* Configure Veeva Vault connection configuration with username, password, vault Url, vault version, vault client Id.
+* Click respective refresh button to fetch document type, subtype, classification list.
+* Select Type, Subtype, Classification from drop down list each.
+* Add document properties in document properties list as per business requirement to incorporate properties name in VQL query build dynamically.
+* Drag For-Each element after Get Documents operation.
+* Drop Transform Message and Database – Insert operation from respective palette.
+* Configure transformation using Dataweave as per your business need.
+* Configure Insert query to insert data into table.
+* Drag Set Payload element after For-Each to set payload that can be returned to triggered source.
+* Drag Logger element to log information in console or log file.
+
+image:../../assets/images/veevavault/veevavault-connector-get-documents-example.png[image,width=598,height=245]
+
+== XML Code
+
+--------------------
+	<flow name=__"get-documents-operationFlow"__ doc:id=__"facc29d2-8025-4b58-a3ec-322ded221705"__ >
+	<http:listener doc:name=__"Listener"__ doc:id=__"93298153-7da4-4fcc-b028-00e692b0d19e"__ config-ref=__"HTTP_Listener_config"__ path=__"/get-documents"__/>
+	<veevavault:get-documents doc:name=__"Get Documents"__ doc:id=__"c9e9f482-91ce-40d2-a7f7-92b39fc7e8a3"__ config-ref=__"Veeva_Vault_Config"__>
+		<veevavault:documents type=__"site_management__c"__>
+		<veevavault:document-properties >
+		<veevavault:document-property value=__"name__v"__ />
+		<veevavault:document-property value=__"type__v"__ />
+		<veevavault:document-property value=__"subtype__v"__ />
+		<veevavault:document-property value=__"classification__v"__ />
+		<veevavault:document-property value=__"lifecycle__v"__ />
+		<veevavault:document-property value=__"status__v"__ />
+		<veevavault:document-property value=__"study__v"__ />
+		<veevavault:document-property value=__"product__v"__ />
+		</veevavault:document-properties>
+		</veevavault:documents>
+	</veevavault:get-documents>
+	<foreach doc:name=__"For Each"__ doc:id=__"a05bd532-48eb-42a8-af56-7c9830a4433d"__ >
+	<ee:transform doc:name=__"Transform Message"__ doc:id=__"d5bf0da9-e544-4728-a3e9-57dc05a02fa9"__ >
+		<ee:message >
+		<ee:set-payload ><![CDATA[%dw 2.0
+		output application/json
+		---
+		payload]]></ee:set-payload>
+		</ee:message>
+	</ee:transform>
+	<db:insert doc:name=__"Insert"__ doc:id=__"bf5a1288-8f37-456d-b26c-d18b8ea411db"__ config-ref=__"Database_Config"__>
+		<db:sql >INSERT INTO [.underline]#createdocuments# (name__v, type__v, subtype__v, classification__v, lifecycle__v,
+		product__v, status__v, study__v, file) VALUES (:name__v, :type__v, :subtype__v, :classification__v, :lifecycle__v, :product__v, :status__v, :study__v, :file)</db:sql>
+		<db:input-parameters ><![CDATA[#[%dw 2.0
+		output application/json
+		---
+		{
+			'name__v': payload.name__v as String,
+			'type__v': payload.type__v as String,
+			'subtype__v': payload.subtype__v as String,
+			'classification__v': payload.classification__v as String,
+			'lifecycle__v': payload.lifecycle__v as String,
+			'product__v': payload.product__v[0],
+			'status__v': payload.status__v as String,
+			'study__v': payload.study__v[0],
+			'file': "CDA.docx"
+		}]]]></db:input-parameters>
+	</db:insert>
+	</foreach>
+	<set-payload value=__"#[output application/json --- payload.payload]"__ doc:name=__"Set Payload"__ doc:id=__"abcb3160-55a5-49f8-9b31-d7e61dca3d2e"__ />
+	<logger level=__"INFO"__ doc:name=__"Logger"__ doc:id=__"ab49834e-389e-483e-84a4-2b61752bba72"__ message=__"Document Details :: #[payload]"__/>
+	<error-handler >
+	<on-error-propagate enableNotifications=__"true"__ logException=__"true"__ doc:name=__"Error Propagate"__ doc:id=__"a7ac2cf2-ec74-408b-8a02-ee1a0d24e8f4"__ type=__"ANY"__ >
+	<logger level=__"INFO"__ doc:name=__"Logger"__ doc:id=__"2b932042-57f3-45d8-9e6b-3cd9fcda6509"__ message=__"Flow Exception Handled -- #[payload]"__ />
+	</on-error-propagate>
+	</error-handler>
+	</flow>
+--------------------		
+
+== Example: Fetch Document or Object data from Vault using VQL query.
+
+To create Mule flow, follow these instructions:
+
+* Drag and drop HTTP Listener from Mule palette to project canvas.
+* Configure HTTP Listener as per your environment.
+* Drag Query operation from Veeva Vault Connector palette.
+* Configure Veeva Vault connection configuration with username, password, vault Url, vault version, vault client Id.
+* Define VQL query as per business requirement.
+* Add input placeholder if used in VQL query to incorporate dynamically with VQL at runtime.
+* Drag For-Each element after Query operation.
+* Drop Transform Message and File - Write operation from respective palette.
+* Configure transformation using Dataweave as per your business need for transforming payload.
+* Configure File connector configuration with working file path and Write operation to write payload data into specified file.
+* Drag Set Payload element after For-Each to set payload that can be returned to triggered source.
+* Drag Logger element to log information in console or log file.
+
+image:../../assets/images/veevavault/veevavault-connector-query-example.png[image,width=601,height=252]
+
+== XML Code
+
+--------------------
+	<flow name="query-operation-with-database-operationFlow" doc:id="451f0f78-1e2e-4cc4-b56d-4f427f01e30a" >
+		<http:listener doc:name="Listener" doc:id="454e6602-2c2f-4e98-8569-b3e928bf3da5" config-ref="HTTP_Listener_config" path="/query"/>
+		<veevavault:query doc:name="Query" doc:id="e4310f17-b0f5-49c0-8662-bc2d798fd9de" fetchSize="1000" config-ref="Veeva_Vault_Config">
+			<veevavault:vql >SELECT id, name__v, type__v, subtype__v, classification__v, lifecycle__v, status__v, study__v, product__v  from :table WHERE name__v= 'F22611234--6764'</veevavault:vql>
+			<veevavault:input-parameters ><![CDATA[#[{
+				'table': 'documents'
+			}]]]></veevavault:input-parameters>
+		</veevavault:query>
+		<foreach doc:name="For Each" doc:id="55a3f3e9-b0ad-4c6d-8ccf-96f2d11f7bc8" >
+		<ee:transform doc:name="Transform Message" doc:id="f4875262-fe32-42e6-8e21-a21e592a729d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+				output application/json
+				---
+				payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<file:write doc:name="Write" doc:id="cb88f995-b31f-4dcf-b508-ea8340ae84fb" path="query.json" config-ref="File_Config" mode="APPEND">
+			<file:content><![CDATA[#[output application/json
+			---
+			payload]]]></file:content>
+						</file:write>
+		
+		</foreach>
+		<set-payload value="#['Flow Completed']" doc:name="Set Payload" doc:id="66f96a83-dfc9-4855-a65c-c35327cfec2a" />
+		<logger level="INFO" doc:name="Logger" doc:id="016dc7a0-7014-44d9-bcbd-d2f540c2fc2e" message="Query Operation flow Completed - #[payload]"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="6a7998b6-4384-41fb-bb5a-625f5410003a" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="46ee422c-4430-4b63-b1c3-6c993ad732fa" message="Flow Exception Handled --  #[payload]"/>
+			</on-error-propagate>
+		</error-handler>		
+	</flow>
+--------------------		
+
+== Example: Validating Spark Message triggered from Vault.
+
+To create Mule flow, follow these instructions:
+
+* Drag and drop HTTP Listener from Mule palette to project canvas.
+* JKS Certificate for HTTPS connector – Require .jks file for HTTPS Listener to received Spark message over TLS connection with Vault. Following are the steps to follow to create .jks file, you can use Java Keytool located under <JDK_HOME>/bin directory. Below is an example:
+	a.	Run command from <JDK_HOME>/bin directory.
+
+		keytool -genkey -keyalg RSA -alias mule -keystore spark-listener.jks -storepass password -validity 360 -keysize 2048	
+	
+	b.  This will create spark-listener.jks file at current directory.
+	
+	c.  Copy/Import spark-listener.jks file under project directory (src/main/resources).
+* Configure HTTPS Listener as below.
+
+	a.	General Tab:
+
+		Protocol : HTTPS		
+		Host: 0.0.0.0		
+		Port: 8082
+	
+	b.	TLS Tab -> Key Store Configuration:
+
+		Type: JKS		
+		Path: spark-listener.jks		
+		Alias: mule		
+		Key Password: password		
+		Password: password
+
+* Drag Spark Validator operation from Veeva Vault Connector palette.
+* Configure Veeva Vault connection configuration with username, password, vault Url, vault version, vault client Id.
+* Configure Spark Validator parameters as below:
+
+	Include Spark Header: FALSE
+	Public Key Path: ${file.keyPath} 
+			Define file.keyPath property in configuration.yaml with path where public key file (00001.pem) will be store.
+	Spark Headers: #[attributes.headers]
+	Spark Message: #[payload]
+
+* Drag Set Payload and defined following in Value field
+
+	output application/json --- { 
+		"payload" : payload,
+		"attributes": attributes
+	}
+	
+* Drag Logger to log payload with below message.
+--------------------	
+	Spark Message :: #[payload]
+--------------------	
+
+
+image:../../assets/images/veevavault/veevavault-connector-spark-validator-example.png[image,width=425,height=242]
+
+== XML Code
+
+--------------------
+	<flow name="spark-message-validator-operationFlow" doc:id="de35a9a3-61f3-4cd1-9c58-f645c95187d3" >
+		<http:listener doc:name="Listener" doc:id="687a4226-b8df-4657-a329-1a79e4b8b2ea" config-ref="Spark_Listener" path="/"/>
+		<veevavault:spark-message-validator doc:name="Spark Validator" doc:id="384e963f-3f1c-4117-a6f3-1e8b09a585a9" config-ref="Veeva_Vault_Config" publicKeyPath="${file.keyPath}" includeSparkHeader="TRUE"/>
+		<set-payload value='#[output application/json --- { 
+			"payload" : payload,
+			"attributes": attributes
+		}]' doc:name="Set Payload" doc:id="69071232-9e9b-459f-8061-59f44e76ae98" />
+		<logger level="INFO" doc:name="Logger" doc:id="3ce348b9-bfbb-4c16-8663-48ecb401fbb2" message="Spark Message :: #[payload]"/>
+	</flow>
+--------------------		
+
+== Templates
+
+*Use Case* : Integrate https://anypoint.mulesoft.com/exchange/c5788341-a495-4d6f-a931-875757082c63/filesystem-to-veeva-vault-template/[FileSystem to VeevaVault]
+
+*Use Case* : Integrate https://anypoint.mulesoft.com/exchange/c5788341-a495-4d6f-a931-875757082c63/veevavault-connector-project-templates/[VeevaVault to FileSystem]
+
+*Use Case* : Auto approval of loan applications through Spark message https://anypoint.mulesoft.com/exchange/c5788341-a495-4d6f-a931-875757082c63/spark-message-solution-template/[Spark Message End Solution]
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
