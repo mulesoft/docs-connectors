@@ -29,7 +29,7 @@ You can use Amazon SNS to send notification messages to one or more HTTP or HTTP
 
 The following diagram shows an example flow for this use case:
 
-image::amazon/amazon-sns-use-case-flow.png[send-messages-to-SQS]
+image::amazon/amazon-sns-use-case-flow.png[send-messages-to-SQS,width=40%]
 
 Before you try the example,
 access Anypoint Studio, and verify that the Mule Palette displays entries for *Amazon SNS* and *Amazon SQS*.  If not, follow the instructions in <<amazon/amazon-sns-connector-studio.adoc#install-connector,Install the Connector in Studio Using Exchange>> to install both connectors.
@@ -51,7 +51,7 @@ image::amazon/amazon-sns-http-properties.png[http-properties]
 +
 . In the Mule Palette, search for *SNS* and select the *Publish* operation:
 +
-image::amazon/amazon-sns-publish-selection.png[publish-selection]
+image::amazon/amazon-sns-publish-selection.png[publish-selection,width=50%]
 +
 . Drag the *Publish* operation to the right of the *HTTP Listener* component.
 . In the *Publish* configuration, click *+* next to the *Connector configuration* field to add a global element.
@@ -61,14 +61,14 @@ image::amazon/amazon-sns-publish-selection.png[publish-selection]
 |===
 |Parameter |Description|Value
 |*Name* |Name used to reference the configuration |`Amazon_SNS_Configuration` or another name
-|*Access Key* |Alphanumeric text string that uniquely identifies the user who owns the account. |`AKIAIOSFODNN7EXAMPLE` or another access key
-|*Secret Key* |Key that plays the role of a password |`wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` or another secret key
+|*Access Key* |Alphanumeric text string that uniquely identifies the user who owns the account. |AWS Access Key
+|*Secret Key* |Key that plays the role of a password |AWS secret key
 |*Region Endpoint* |Queue reqion. | The queue region
 |===
 +
 The following image shows a sample global element for the Publish operation:
 +
-image::amazon/amazon-sns-global-config.png[sns-global-configuration]
+image::amazon/amazon-sns-global-config.png[sns-global-configuration,width=70%]
 +
 . Select the *Configuration XML* tab to view the corresponding XML:
 +
@@ -77,8 +77,8 @@ image::amazon/amazon-sns-global-config.png[sns-global-configuration]
 <sns:config name="Amazon_SNS_Configuration"
   doc:name="Amazon SNS configuration" >
   <sns:basic-connection
-    accessKey=AKIAIOSFODNN7EXAMPLE
-    secretKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY />
+    accessKey="EXAMPLEACCESSKEY"
+    secretKey="EXAMPLESECRETKEY" />
 </sns:config>
 ----
 +
@@ -112,12 +112,18 @@ image::amazon/amazon-sns-publish-message.png[sns-publish-message-props]
 [source,xml]
 ----
 <sns:publish doc:name="Publish"
-  topicArn="arn:aws:sns:us-east-3:123456789022:MyTopic"
+  topicArn="arn:aws:sns:us-east-1:123456789012:TopicName"
   messageStructure="JSON"
+  subject="Testing publish to queue"
   config-ref="Amazon_SNS_configuration">
-	<sns:message ><![CDATA[#[`Hello World`]]]></sns:message>
+	<sns:message><![CDATA[#['{
+	"default": "Hello World!"
+}']]]></sns:message>
 </sns:publish>
 ----
++
+Please note, the `default` JSON key has a special meaning for SQS and specifies that we want its value to be send as a message to every subscriber regardless of used protocol. User is required to specify at least this key and optionally other top-level keys that define the message we want to send to a specific transport protocol (e.g., "http", "sqs"). 
+For more information please see `MessageStructure` in https://docs.aws.amazon.com/sns/latest/api/API_Publish.html#API_Publish_RequestParameters.
 
 === Display the Data Processed by the Publish Operation
 
@@ -151,15 +157,15 @@ Using the same example, add a second flow that enables Amazon SQS to receive mes
 |===
 |Parameter |Description|Value
 |Name |A name by which to refer to the configuration |`Amazon_SQS_Configuration` or another name
-|Access Key |Alphanumeric text string that uniquely identifies the user who owns the account
-|`AKIAIOSFODNN7EXAMPLE` or another access key
-|Secret Key |Key that plays the role of a password. |`wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` or another secret key
-|Region Endpoint |Queue region. | The queue region
+|Access Key |Alphanumeric text string that uniquely identifies the user who owns the account |AWS access key
+|Secret Key |Key that plays the role of a password. |AWS secret key
+|Region Endpoint |Queue region. |The queue region
+|Test Queue ARN |Queue ARN which will be used in the next step to test the connection |Test queue ARN in the following format - `arn:aws:sqs:region:account-id:queue-name`
 |===
 +
 The following image shows a sample global element for the Receive messages operation:
 +
-image::amazon/amazon-sns-sqs-global-config.png[sns-sqs-config]
+image::amazon/amazon-sns-sqs-global-config.png[sns-sqs-config,width=70%]
 +
 . Select the *Configuration XML* tab to view the corresponding XML:
 +
@@ -169,12 +175,11 @@ image::amazon/amazon-sns-sqs-global-config.png[sns-sqs-config]
   doc:name="Amazon SQS Configuration" >
 	<sqs:basic-connection
   region="us_east_1"
-  accessKey="AKIAIOSFODNN7EXAMPLE"
-  secretKey="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"/>
+  accessKey="EXAMPLEACCESSKEY"
+  secretKey="EXAMPLESECRETKEY"
+  testQueueArn="arn:aws:sqs:us-east-1:123456789012:QueueName"/>
 </sqs:config>
 ----
-+
-Verify that the SQS queue in the configuration is subscribed to the SNS topic.
 +
 . Click *Test Connection* to confirm that Mule can connect with the SQS instance:
 ** If the connection is successful, click *OK* to save it.
@@ -187,9 +192,11 @@ Verify that the SQS queue in the configuration is subscribed to the SNS topic.
 2+|Basic Settings
 |Display Name |`Amazon SQS (Streaming)` or another name
 |Connector configuration*|`Amazon_SQS_Configuration` (the reference name to the global element you created)
-|Queue url | `\https://sqs.us-east-1.amazonaws.com/queue_url` or another URL
+|Queue url | Queue URL in the followin format - `https://sqs.region.amazonaws.com/account-id/queue-name`
 |Other fields in the *General* group | Default values
 |===
++
+Verify that the SQS queue in the configuration is **subscribed** to the SNS topic.
 +
 For example:
 +
@@ -201,7 +208,7 @@ image::amazon/amazon-sns-sqs-config.png[sns-sqs-config]
 ----
 <sqs:receivemessages
   doc:name="Amazon SQS (Streaming)"
-  queueUrl="https://sqs.us-east-1.amazonaws.com/queue_url"
+  queueUrl="https://sqs.us-east-1.amazonaws.com/123456789012/queue-url"
   config-ref="Amazon_SQS_Configuration"/>
 ----
 +
@@ -233,60 +240,46 @@ Paste this code into your XML editor to quickly load the flow for this example u
 ----
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs"
-  xmlns:sns="http://www.mulesoft.org/schema/mule/sns"
+<mule xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs" 
+	xmlns:sns="http://www.mulesoft.org/schema/mule/sns"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http"
-	xmlns="http://www.mulesoft.org/schema/mule/core"
-  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="
-  http://www.mulesoft.org/schema/mule/http
-  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-  http://www.mulesoft.org/schema/mule/core
-  http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-  http://www.mulesoft.org/schema/mule/http
-  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-  http://www.mulesoft.org/schema/mule/sns
-  http://www.mulesoft.org/schema/mule/sns/current/mule-sns.xsd
-  http://www.mulesoft.org/schema/mule/sqs
-  http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd">
-	<http:listener-config name="HTTP_Listener_config"
-  doc:name="HTTP Listener config" >
-	<http:listener-connection host="0.0.0.0" port="8081" />
+	xmlns="http://www.mulesoft.org/schema/mule/core" 
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sns http://www.mulesoft.org/schema/mule/sns/current/mule-sns.xsd
+http://www.mulesoft.org/schema/mule/sqs http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-	<sns:config name="Amazon_SNS_configuration"
-  doc:name="Amazon SNS configuration" >
-  <sns:basic-connection
-  accessKey="AKIAIOSFODNN7EXAMPLE"
-  secretKey="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-  region="us-east-1"/>
+	<sns:config name="Amazon_SNS_configuration" doc:name="Amazon SNS configuration">
+		<sns:basic-connection accessKey="EXAMPLEACCESSKEY" secretKey="EXAMPLESECRETKEY" />
 	</sns:config>
-  <sqs:config name="Amazon_SQS_Configuration"
-  doc:name="Amazon SQS Configuration" >
-	<sqs:basic-connection region="us_east_1"
-  accessKey="AKIAIOSFODNN7EXAMPLE"
-  secretKey="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"/>
-  </sqs:config>
-	<flow name="sns-connector-exampleFlow" >
-	<http:listener doc:name="HTTP"
-  config-ref="HTTP_Listener_config" path="/"/>
-	<sns:publish doc:name="Publish"
-  topicArn="arn:aws:sns:us-east-3:123456789022:MyTopic"
-  messageStructure="JSON" config-ref="Amazon_SNS_configuration">
-	<sns:message ><![CDATA[#[`Hello World`]]]></sns:message>
-	</sns:publish>
-	<logger level="INFO" doc:name="Logger"
-  message="Message: #[payload]"/>
+	<sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration">
+		<sqs:basic-connection accessKey="EXAMPLEACCESSKEY" secretKey="EXAMPLESECRETKEY" 
+		testQueueArn="arn:aws:sqs:us-east-1:123456789012:QueueName"/>
+	</sqs:config>
+	<flow name="sns-connector-exampleFlow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/"/>
+		<sns:publish doc:name="Publish" config-ref="Amazon_SNS_configuration" 
+		topicArn="arn:aws:sns:us-east-1:123456789012:TopicName" 
+		subject="Testing publish to queue" 
+		messageStructure="JSON">
+			<sns:message><![CDATA[#['{
+	"default": "Hello World!"
+}']]]></sns:message>
+		</sns:publish>
+		<logger level="INFO" doc:name="Logger" message="Message: #[payload]"/>
 	</flow>
-	<flow name="sns-connector-exampleFlow1" >
-	<sqs:receivemessages doc:name="Amazon SQS (Streaming)"
-  queueUrl="https://sqs.us-east-1.amazonaws.com/queue_url"
-  config-ref="Amazon_SQS_Configuration"/>
-	<logger level="INFO" doc:name="Display Message"
-  message="Received Message: #[payload]"/>
-  </flow>
+	<flow name="sns-connector-exampleFlow1">
+		<sqs:receivemessages doc:name="Amazon SQS (Streaming)" config-ref="Amazon_SQS_Configuration" 
+		queueUrl="https://sqs.us-east-1.amazonaws.com/123456789012/queue-url"/>
+		<logger level="INFO" doc:name="Logger" message="Received Message: #[payload]"/>
+	</flow>
 </mule>
 ----
 
 == See Also
-* https://forums.mulesoft.com[MuleSoft Forum]
+
+https://help.mulesoft.com[MuleSoft Help Center]
