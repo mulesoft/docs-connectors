@@ -1,11 +1,17 @@
-= HL7 EDI Connector
+= HL7 EDI Connector - Mule 4
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 
-Support Category: Premium
+Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[Premium]
 
-The Anypoint Connector for HL7 EDI (HL7 EDI Connector) lets you convert HL7 ER7 messages to and from DataWeave-compatible representations using lists and maps.
+HL7 EDI Connector Version 4.0.0
+
+Anypoint Connector for HL7 EDI (HL7 EDI Connector) lets you convert HL7 ER7 messages to and from DataWeave-compatible representations using lists and maps.
+
+https://docs.mulesoft.com/release-notes/connector/hl7-connector-release-notes-mule-4[Release Notes]
+
+https://www.mulesoft.com/exchange/mule-hl7-extension[Anypoint Exchange]
 
 == Prerequisites
 
@@ -16,6 +22,20 @@ See the Release Notes for compatibility information. A link to the
 release notes is listed in the See Also section of this document.
 
 You must purchase a license for the HL7 EDI Connector to use it in a production environment.
+
+== POM File Information
+
+[source,xml,linenums]
+----
+<dependency>
+  <groupId>com.mulesoft.connectors</groupId>
+  <artifactId>mule-hl7-extension</artifactId>
+  <version>4.0.3</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+Replace version 4.0.3 for the version you are using. To specify a version, view Anypoint Exchange and click *Dependency Snippets*.
 
 == What's New in this Connector
 
@@ -40,31 +60,28 @@ segment or position within the segment.
 
 The HL7 EDI Connector 4.0 is not supported for use in Design Center.
 
-== Install this Connector in Anypoint Studio 7
+== Add the Connector to a Studio Project
 
-. In Anypoint Studio, click the Exchange icon in the Studio task bar.
-. Click Login in Anypoint Exchange.
-. Search for the connector and click Install.
+Anypoint Studio provides two ways to add the connector to your Studio project:
+from the Exchange button in the Studio taskbar or from the Mule Palette view.
+
+=== Add the Connector Using Exchange
+
+. In Studio, create a Mule project.
+. Click the Exchange icon *(X)* in the upper-left of the Studio task bar.
+. In Exchange, click *Login* and supply your Anypoint Platform username and password.
+. In Exchange, search for "HL7".
+. Select the connector and click *Add to project*.
 . Follow the prompts to install the connector.
 
-When Studio has an update, a message displays in the lower right corner, which you can click to install the update.
+=== Add the Connector in Studio
 
-You must change the default Anypoint configuration to use the HL7 EDI Connector 4.0.0.
-
-Anypoint Studio 7.1.0 and later requires more than the standard memory
-configuration to use the HL7 EDI Connector 4.0.0. To change the memory
-setting for Studio, edit the Anypoint.ini file in the Anypoint Studio
-installation directory and change the two lines starting with `-Xms` and `-Xmx`:
-
-[source,text,linenums]
-----
--Xms4096m
--Xmx4096m
-----
-
-This sets the Anypoint Studio memory to 4GB, which is sufficient
-for most usage of this connector.
-
+. In Studio, create a Mule project.
+. In the Mule Palette view, click *(X) Search in Exchange*.
+. In *Add Modules to Project*, type "HL7" in the search field.
+. Click this connector's name in *Available modules*.
+. Click *Add*.
+. Click *Finish*.
 
 == Create Schemas
 
@@ -120,7 +137,7 @@ HL7 schema definitions are distributed inside the `hl7-schemas-4.0.0.jar`,
 which is embedded inside the HL7 EDI Connector update site and can also
 be found in the standard MuleSoft enterprise Maven repositories
 (under group ID `com.mulesoft.connectors`). You can copy a message structure schema
-from this JAR file and edit it to match your specific needs. 
+from this JAR file and edit it to match your specific needs.
 
 If you only need
 to make changes at the segment level, copy the message structure
@@ -664,7 +681,7 @@ The HL7 message contains the following keys:
 [%header%autowidth.spread]
 |===
 |Key name |Description
-|ACK (read only) |ACK message generated in response to the input data. The MSA-01 acknowledgment code value is based on the parser configuration settings. To send an acknowledgment, see the Sending Acknowledgments section below.
+|ACK (read only) |ACK message generated in response to the input data. The MSA-01 acknowledgment code value is based on the parser configuration settings. To send an acknowledgment, see the Sending Acknowledgments section.
 |Data (read or write) |Wrapper for message data, with a key matching the message structure ID value linking to the actual data. This allows different messages to be included in the metadata and handled in DataWeave mappings.
 |Delimiters (read or write) |The delimiters used for the message. The characters in the string are interpreted based on position, in the following order: (component separator), (repetition separator), (escape character), (subcomponent separator).
 |Errors (read only) |A list of errors which are associated with the input message. See the HL7Error structure description in the Reading and Validating HL7 Messages section below.
@@ -691,10 +708,75 @@ The maps containing extension segment data are added to the basic message map in
 
 If extension segments are used in nested groups, the list containing those segments are included in the map representing that group. Extension segments are ordered by position in the lists created by the parser, and must also be ordered by position when writing.
 
+=== Sending Acknowledgments
+
+An ACK (acknowledgement) message is an HL7 message that lets you acknowledge to a message sender that your application has received a message. ACK messages are the same as writing any other HL7 message, except you set the ACK message to what was generated during the read operation as the output message under a `Data` key.
+
+For example:
+
+[source,xml,linenums]
+----
+    <hl7-edi:read config-ref="HL7_EDI__Configuration1" doc:name="HL7 EDI"/>\
+    ...
+    <dw:transform-message doc:name="Create Outgoing Message">
+      <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+  Name: "ACK",
+  MSH: payload.ACK.MSH,
+  Id: "ACK",
+  Data: {
+    ACK: payload.ACK
+  }
+}]]></dw:set-payload>
+    </dw:transform-message>
+    <hl7-edi:write config-ref="HL7_EDI__Configuration" messageStructure="InMessage" doc:name="ACK"/>
+    ...
+    <file:outbound-endpoint responseTimeout="10000" doc:name="File" path="output" outputPattern="ack.edi"/>
+----
+
+The generated ACK messages have MSH data set up for sending back to the sender of the original message, so you don't need to change anything in the data to perform the send.
+
+If you include an ACK message schema in your configuration, that schema is used to both receive ACK messages and generate ACK messages. If you don't specify an ACK schema, the standard `hl7/v2_5_1/ACK.esl` schema is used by default.
+
+// image::ack-datasense.jpg[Default ACK message structure]
+
+=== Reading and Validating HL7 ER7 Messages
+
+To read an HL7 message:
+
+. Search the palette for *HL7 EDI* and drag the HL7 EDI building block into a flow.
+
+. From the properties view, select the connector configuration you created previously and select the `Read` operation.
++
+This operation reads any byte stream into the structure described by your HL7 schemas.
++
+
+
+HL7 EDI validates the message structure when read.
+Message validation includes checking the syntax and content of the MSH and all component segments of the message.
+Normally errors are logged, accumulated, and reported in the generated ACK message provided in the generated data structure.
+All messages, whether error free or with non-fatal errors, are passed on for processing as part of the output message Map.
+Errors reading the input data can throw exceptions.
+
+Error data entered in the receive data map uses the HL7Error class, a read-only JavaBean with the following properties:
+
+[%header,cols="30a,70a"]
+|===
+|Property |Description
+|`segment` |Zero-based index within the input of the segment causing the error
+|`fatal` |Flag for a fatal error, meaning the associated message was rejected as a result of the error
+|`errorType` |Enumeration for the different types of errors defined by the HL7 standards (ERR-3 values)
+|`errorCode` |Error code, as defined by the HL7 standard for the indicated type of error
+|`errorText` |Text description of the error
+|===
+
+The `Read` operation returns error data as an optional list with the `Errors` key.
+
 == See Also
 
-* xref:hl7/hl7-schemas.adoc[HL7 Supplied Schemas].
-* xref:release-notes::connector/hl7-connector-release-notes.adoc[HL7 EDI Connector Release Notes].
-* https://forums.mulesoft.com[MuleSoft Forum].
-* https://support.mulesoft.com[Contact MuleSoft Support].
-* xref:1.0@partner-manager::edi-schema-language-reference.adoc[EDI Schema Language].
+* xref:hl7/hl7-schemas.adoc[HL7 Supplied Schemas]
+* xref:release-notes::connector/hl7-connector-release-notes-mule-4.adoc[HL7 EDI Connector Release Notes]
+* https://help.mulesoft.com[MuleSoft Help Center]
+// * xref:partner-manager/1.0/edi-schema-language-reference.adoc[EDI Schema Language]
