@@ -39,7 +39,7 @@ Release Notes: xref:release-notes::connector/mongodb-connector-release-notes-mul
 ** SECONDARY_PREFERRED
 ** NEAREST |  Specifies the read preferences for this connection. |  PRIMARY |
 | Maximum Staleness Seconds a| Number |  Specifies, in seconds, how stale a secondary can be before the client stops using it for read operations. |  -1 |
-| Read Preference Tags a| Array of <<ReadPreferenceTagSet>> |  If a replica set member or members are associated with tags, you can specify a tag set (array of tag specification documents) in the read preference to target those members. |  |
+| Read Preference Tags a| <<ReadPreferenceTag>> |  If replica set members are associated with tags, you can specify a tag set (array of tag specification documents) in the read preference to target those members. |  |
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. This does not mean that the platform expires the instance at the exact moment that it becomes eligible. Mule purges the instances as appropriate. |  |
 | Write Concern Acknowledgment a| String |  Requests acknowledgment that the write operation has propagated to the specified number of Mongod instances. You can write a number of instances n>0 or use a value from the list. |  |
 | Write Concern Timeout a| Number |  This option specifies a time limit, in milliseconds, for the write concern. The option applies to Write Concern Acknowledgment values greater than 1. |  |
@@ -160,7 +160,7 @@ Release Notes: xref:release-notes::connector/mongodb-connector-release-notes-mul
 * <<collectionExists>>
 * <<countDocuments>>
 * <<createCollection>>
-* <<createFileFromPayload>>
+* <<createFile>>
 * <<createIndex>>
 * <<dropCollection>>
 * <<dropDatabase>>
@@ -173,7 +173,6 @@ Release Notes: xref:release-notes::connector/mongodb-connector-release-notes-mul
 * <<insertDocument>>
 * <<insertDocuments>>
 * <<listCollections>>
-* <<listFiles>>
 * <<listIndexes>>
 * <<mapReduce>>
 * <<removeDocuments>>
@@ -342,23 +341,24 @@ Creates a new collection. If the collection already exists, a MongoException is 
 * MONGO:CONNECTIVITY
 
 
-[[createFileFromPayload]]
-=== Create File From Payload
-`<mongo:create-file-from-payload>`
+[[createFile]]
+=== Create File
+`<mongo:create-file>`
 
-
-Creates a new MuleGridFSFile in the database, saving the given content, filename, contentType, and extraData, and answers it.
-
+Creates a new file in the database, saving the specified content, filename, contentType, and extraData.
 
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
-| Content a| Binary |  The mandatory content of the new gridfs file. It may be a java.io.File, a byte[] or an InputStream. |  #[payload] |
-| Filename a| String |  The mandatory name of new file. |  | x
-| Metadata a| Binary |  The optional String metadata of the new content type |  |
-| Target Variable a| String |  The name of a variable to store the operation's output. |  |
+| Content a| Binary |  The mandatory content of the new file. This content is an InputStream. |  #[payload] |
+| Filename a| String |  The name of new file |  | x
+| Metadata a| Binary |  A JSON object that holds information to store. |  |
+| Streaming Strategy a| <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* <<non-repeatable-stream>> |  Indicates whether repeatable streams should be used and if so, their behaviour |  |
+| Target Variable a| String |  The name of a variable to store the operation's output |  |
 | Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
@@ -367,7 +367,7 @@ Creates a new MuleGridFSFile in the database, saving the given content, filename
 ==== Output
 [%autowidth.spread]
 |===
-|Type |Object
+|Type |Binary
 |===
 
 === For Configurations
@@ -377,6 +377,7 @@ Creates a new MuleGridFSFile in the database, saving the given content, filename
 * MONGO:DUPLICATE_ERROR
 * MONGO:CONSISTENCY_ERROR
 * MONGO:RETRY_EXHAUSTED
+* MONGO:NOT_FOUND
 * MONGO:PERMISSIONS_DENIED
 * MONGO:TIMEOUT
 * MONGO:INVALID_INPUT
@@ -633,8 +634,8 @@ Finds all documents that match a given query. If no query is specified, all docu
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
-| Query a| Binary |  The optional query for finding documents. If unspecified, all documents are retrieved. The value can be {"field1": "value1"}, or it can contain operators: { "field1": { $gte: 1, $lt:  10 } } |  |
-| Sort By a| Binary |  Indicates the document used to sort the results |  |
+| Query a| Binary |  The query object that lists all files. The value can be {"field1": "value1"}, or it can contain these operators: { "field1": { $gte: 1, $lt:  10 } } |  |
+| Sort By a| Binary |  Enables you to sort the result list. A file can only be sorted by file_id or uploadDate. |  |
 | Page Size a| Number |  Size of documents of each page to return |  100 |
 | Limit a| Number |  Limit of documents to return. |  |
 | Streaming Strategy a| * <<repeatable-in-memory-iterable>>
@@ -690,48 +691,6 @@ Lists all the files that match the given query
 ==== Output
 [%autowidth.spread]
 |===
-|Type |Array of Object
-|===
-
-=== For Configurations
-* <<config>>
-
-==== Throws
-* MONGO:DUPLICATE_ERROR
-* MONGO:CONSISTENCY_ERROR
-* MONGO:RETRY_EXHAUSTED
-* MONGO:PERMISSIONS_DENIED
-* MONGO:TIMEOUT
-* MONGO:INVALID_INPUT
-* MONGO:CONNECTIVITY
-
-
-[[getFileContent]]
-=== Get File Content
-`<mongo:get-file-content>`
-
-
-Answers an inputstream to the contents of the first file that matches the given query. If no object matches it, a MongoException is thrown.
-
-
-==== Parameters
-[%header,cols="20s,20a,35a,20a,5a"]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | The name of the configuration to use. | | x
-| File Id a| Binary |  The MuleBsonObjectId of the file to be deleted |  #[payload] |
-| Streaming Strategy a| * <<repeatable-in-memory-stream>>
-* <<repeatable-file-store-stream>>
-* non-repeatable-stream |  Configure to use repeatable streams. |  |
-| Target Variable a| String |  The name of a variable to store the operation's output. |  |
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] |
-| Reconnection Strategy a| * <<reconnect>>
-* <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
-|===
-
-==== Output
-[%autowidth.spread]
-|===
 |Type |Binary
 |===
 
@@ -742,6 +701,46 @@ Answers an inputstream to the contents of the first file that matches the given 
 * MONGO:DUPLICATE_ERROR
 * MONGO:CONSISTENCY_ERROR
 * MONGO:RETRY_EXHAUSTED
+* MONGO:NOT-FOUND
+* MONGO:PERMISSIONS_DENIED
+* MONGO:TIMEOUT
+* MONGO:INVALID_INPUT
+* MONGO:CONNECTIVITY
+
+
+[[getFileContent]]
+=== Get File Content
+`<mongo:get-file-content>`
+
+Gets an InputStream to the content of the file specified by File ID.
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | The name of the configuration to use. | | x
+| File Id a| Binary |  The mandatory file ID. |  #[payload] |
+| Target Variable a| String |  The name of a variable to store the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type a| Any
+|Attributes Type a| Binary
+|===
+
+=== For Configurations
+* <<config>>
+
+==== Throws
+* MONGO:DUPLICATE_ERROR
+* MONGO:CONSISTENCY_ERROR
+* MONGO:RETRY_EXHAUSTED
+* MONGO:NOT_FOUND
 * MONGO:PERMISSIONS_DENIED
 * MONGO:TIMEOUT
 * MONGO:INVALID_INPUT
@@ -871,53 +870,9 @@ Lists names of collections available at this database
 * MONGO:INVALID_INPUT
 * MONGO:CONNECTIVITY
 
-
-[[listFiles]]
-=== List Files
-`<mongo:list-files>`
-
-
-Lists all the files that match the given query, sorting them by filename. If no query is specified, all files are listed.
-
-
-==== Parameters
-[%header,cols="20s,20a,35a,20a,5a"]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | The name of the configuration to use. | | x
-| Query a| Binary |  The optional string query |  #[payload] |
-| Streaming Strategy a| * <<repeatable-in-memory-stream>>
-* <<repeatable-file-store-stream>>
-* non-repeatable-stream |  Configure to use repeatable streams. |  |
-| Target Variable a| String |  The name of a variable to store the operation's output. |  |
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] |
-| Reconnection Strategy a| * <<reconnect>>
-* <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
-|===
-
-==== Output
-[%autowidth.spread]
-|===
-|Type |Binary
-|===
-
-=== For Configurations
-* <<config>>
-
-==== Throws
-* MONGO:DUPLICATE_ERROR
-* MONGO:CONSISTENCY_ERROR
-* MONGO:RETRY_EXHAUSTED
-* MONGO:PERMISSIONS_DENIED
-* MONGO:TIMEOUT
-* MONGO:INVALID_INPUT
-* MONGO:CONNECTIVITY
-
-
 [[listIndexes]]
 === List Indexes
 `<mongo:list-indexes>`
-
 
 List existent indexes in a collection
 
@@ -1163,9 +1118,12 @@ Updates documents that match the specified query. If a query is not specified, a
 | Configuration | String | The name of the configuration to use. | | x
 | Collection Name a| String |  The name of the collection to update |  | x
 | Query a| Binary |  The query object used to detect the element to update. The value can be: {"field1": "value1"}, or it can contain operators { "field1": { $gte: 1, $lt:  10 } }. |  |
-| Content To Update a| Binary |  The object that will replace the one which matches the query. |  | x
+| Content To Update a| Binary |  The object to replace the one that matches the query |  | #payload
 | Multiple Update a| Boolean |  If all or just the first document matching the query will be updated |  false |
 | Upsert a| Boolean |  If set to true, creates a new document when no document matches the query criteria. The default value is false, which does not insert a new document when no match is found. |  false |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* <<non-repeatable-stream>> |  Configure if repeatable streams should be used and their behaviour |  |
 | Target Variable a| String |  The name of a variable to store the operation's output. |  |
 | Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
@@ -1175,7 +1133,7 @@ Updates documents that match the specified query. If a query is not specified, a
 ==== Output
 [%autowidth.spread]
 |===
-|Type |<<UpdateDocumentResult>>
+|Type |Any
 |===
 
 === For Configurations
@@ -1195,7 +1153,7 @@ Updates documents that match the specified query. If a query is not specified, a
 == Sources
 
 [[object-listener]]
-=== Object Listener
+=== On Object Listener
 `<mongo:object-listener>`
 
 
@@ -1340,23 +1298,13 @@ Updates documents that match the specified query. If a query is not specified, a
 | Frequency a| Number | How often in milliseconds to reconnect |  |
 |===
 
-[[ReadPreferenceTagSet]]
-=== Read Preference Tag Set
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Read Preference Tags a| Array of <<ReadPreferenceTag>> |  |  |
-|===
-
 [[ReadPreferenceTag]]
 === Read Preference Tag
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Name a| String |  |  |
-| Value a| String |  |  |
+| Name Value a| String |  |  |
 |===
 
 [[ExpirationPolicy]]
@@ -1486,18 +1434,6 @@ Updates documents that match the specified query. If a query is not specified, a
 ** ASC
 ** DESC |  |  |
 |===
-
-[[UpdateDocumentResult]]
-=== Update Document Result
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Matched a| Number |  |  |
-| Modified a| Number |  |  |
-| Upserted Id a| String |  |  |
-|===
-
 
 == See Also
 
