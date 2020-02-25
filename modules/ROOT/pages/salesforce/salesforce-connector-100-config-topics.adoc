@@ -2,67 +2,52 @@
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
-:imagesdir: ../../assets/images/
 
-Configuration and usage information.
-
+Read this topic to obtain additional configuration and usage information for Anypoint Connector for Salesforce (Salesforce Connector).
 
 [[customevents]]
 == Custom Event Notifications
 
-The Salesforce connector provides two operations that are useful for getting custom event notifications. These notifications pertain to general events that are not tied to Salesforce data changes.
+Salesforce Connector enables you to obtain custom event notifications. These notifications apply to general events that are not tied to Salesforce data changes.
 
-. Create a streaming channel with the Publish Streaming Channel operation.
+To obtain custom event notifications:
+
+. Create a streaming channel by using the Publish streaming channel operation.
 +
-A StreamingChannel is a special Salesforce object that represents a channel used for notifying listeners of generic Streaming API events.
+StreamingChannel is a special Salesforce object that represents a channel used to notify listeners of generic Streaming API events.
 +
-Note that you can also create a streaming channel through the Salesforce or through Workbench.
+You can also create a streaming channel through Salesforce or https://workbench.developerforce.com/about.php[
+Workbench].
 +
-. Subscribe to the channel through the `Subscribe Channel Listener` operation.
+. Subscribe to the channel by using the Subscribe channel listener operation.
 +
-The Salesforce connector converts the custom events in your streaming channel to Mule events and dispatches them to your flows.
+Salesforce Connector converts the custom events in your streaming channel to Mule events.
+
+For more information about working with streaming channels, see <<streamingchannel,Create a Streaming Channel to Receive Data from Salesforce>> and <<receivedata,Receive Data from Salesforce>>.
 
 [[eventsandtopics]]
 == Events and Topics
 
-Your application can receive events by subscribing to a Salesforce topic.
+Your app can receive events by subscribing to an existing Salesforce topic or by creating a new topic and then subscribing to it.
 
-Each event that travels through your flows contains information about the Salesforce data that has changed, how it changes, and when. The connector parses this information and sends you information that a flow can work with.
+Each event that travels through your flow contains information about the Salesforce data that changed, including how the data changed and when the change occurred.
 
-Inbound properties of events:
+Salesforce stores events for 24 hours. A subscriber to a topic or channel can retrieve events related to that topic or channel during the 24-hour retention window. After the retention window ends, the subscriber can retrieve newer events that have not yet expired.
 
-* `payload`
-* `createdDate`
-* `replayId`
+Salesforce assigns each broadcast event a numeric ID. IDs are incremented, but not necessarily by 1 for each consecutive event. For example, the event following the event with ID 999 can have an ID of 1025. A broadcast event ID is unique for the organization and channel. Salesforce does not reuse the IDs of deleted events.
 
-Salesforce stores events for 24 hours, so you can retrieve stored events during that retention window. A subscriber (to a topic or channel) can retrieve events at any time and is not restricted to listening to events at the time they are sent.
-
-Each broadcast event is assigned a numeric ID. IDs are incremented and not guaranteed to be contiguous for consecutive events. Each ID is guaranteed to be higher than the ID of the previous event. For example, the event following the event with ID 999 can have an ID of 1025. The ID is unique for the organization and the channel. The IDs of deleted events are not reused.
-
-See also <<Receive Data From Salesforce>> for event processing
-when streaming data to an application from Salesforce.
-
-Sections:
-
-* <<Receive Events for a Topic>>
-* <<Subscribe to a Topic>>
-* <<Replay a Topic>>
+For information about processing events when streaming data to an app from Salesforce, see <<Receive Data from Salesforce>>.
 
 [[eventsreceive]]
-== Receive Events for a Topic
+=== Receive Events for a Topic
 
-Before you can receive events for Salesforce changes that are associated with a topic, you must first create a topic (a PushTopic). A PushTopic is a special object in Salesforce that binds a name (the topic's name) and Salesforce Object Query Language (SOQL) query together. Once a PushTopic is created, you can subscribe to it by using its name.
+Before you can receive events for Salesforce changes associated with a topic, you must create the topic, if it does not exist. When you create a topic, the connector creates a PushTopic, which is a special object in Salesforce that binds a name (in this case, the topic's name) and a Salesforce Object Query Language (SOQL) query together. After you create a topic, you can subscribe to it by name.
 
-You can either use the Create (`create`) or Publish Topic (`publish-topic`) operations to create a topic. Example of the required fields for these operations:
-
-* *Topic Name*: `AccountUpdates`
-* *Query*: `SELECT Id, Name FROM Account`
-
-Example in XML for `publish-topic`:
+You can use either the Create (`create`) or Publish topic (`publish-topic`) operation to create a topic. The following example uses the `publish-topic` operation to create a topic:
 
 `<sfdc:publish-topic name="AccountUpdates" query="SELECT Id, Name FROM Account"/>`
 
-Alternatively, in Salesforce you can create a topic by executing code like this from an *Enter Apex Code* window, accessible through your system logs:
+Alternatively, you can create a topic in Salesforce by executing code such as this code from an *Enter Apex Code* window, which is accessible through the system logs:
 
 [source,text,linenums]
 ----
@@ -76,11 +61,11 @@ System.debug('Created new PushTopic: '+ pushTopic.Id);
 ----
 
 [[topicsub]]
-== Subscribe to a Topic
+=== Subscribe to a Topic
 
-After you create a Salesforce topic, you can start receiving events by subscribing to the topic. To do so, add the Subscribe Topic Listener (`subscribe-topic-listener`) or Replay Topic Listener (`replay-topic-listener`) as an input source trigger to your flow. The trigger acts as an inbound endpoint. Every time the subscription receives an event, the trigger executes the rest of the flow in your Mule app. In the case of the XML example below, it prints a message to the log at INFO level.
+To subscribe to a topic, add the Subscribe topic listener (`subscribe-topic-listener`) or Replay topic listener (`replay-topic-listener`) as an input source for your flow. The input source acts as an inbound endpoint. Every time the subscription receives an event, the input source executes the rest of the flow in your Mule app.
 
-In XML, you use `subscribe-topic-listener` or `replay-topic-listener` as the trigger:
+In the following XML example, Mule prints a message to the log at the INFO level when the `AccountUpdates` topic receives an event:
 
 [source,xml,linenums]
 ----
@@ -92,28 +77,30 @@ In XML, you use `subscribe-topic-listener` or `replay-topic-listener` as the tri
 </flow>
 ----
 
-NOTE: When subscribing to a topic that was not previously published in Salesforce, the subscription is successful. When the topic is later published, the user who is already subscribed to it does not receive notifications regarding that topic. The user has to resubscribe after the topic creates.
+You can subscribe to a topic that was not previously published in Salesforce. However, when the topic is published, you do not receive notifications regarding that topic unless you resubscribe to it.
 
 [[topicrep]]
-== Replay a Topic
+=== Replay a Topic
 
-A subscriber can specify which events to receive, such as all events within the retention window or those that start after a particular event. The default is to receive only new events sent after subscribing. Events outside the 24-hour retention period are discarded.
+A subscriber can specify which events to receive. By default, a subscriber receives only the events that occur after subscribing. Events outside the 24-hour retention period are discarded.
 
 The Replay Topic Listener operation provides these options:
 
-[%header%autowidth.spread]
-|===
-| XML Value |Description
-| `ALL` | Subscriber receives all events, including past events that are within the 24-hour retention period and new events sent after subscription.
-| `ONLY_NEW` | Subscriber receives new events that are broadcast after the client subscribes.
-| `FROM_REPLAY_ID` | Subscriber receives all events after the specified event `replayId`.
-|===
+* `ALL`
++
+Subscriber receives all events, including past events that are within the 24-hour retention period and new events sent after the client subscribes.
+* `ONLY_NEW`
++
+Subscriber receives new events that are broadcast after the client subscribes.
+* `FROM_REPLAY_ID`
++
+Subscriber receives all events after the specified event `replayId`.
 
-If the `ALL` or `ONLY_NEW` replay option is selected, then the `replayId` value is ignored.
+If you specify either the `ALL` replay option or `ONLY_NEW` replay option, the `replayId` value is ignored.
 
-In Studio, the *Resume from the Last Replay Id* check box lets you specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. This functionality can be useful in cases when the connector stopped listening for some reason, such as a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, your replay option determines what events to replay.
+In Studio, the *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
 
-In this XML example, the Replay Topic Listener acts like an inbound endpoint for the Logger message:
+In the following XML example, the Replay topic listener acts like an inbound endpoint for the Logger component message:
 
 [source,xml,linenums]
 ----
@@ -128,34 +115,42 @@ In this XML example, the Replay Topic Listener acts like an inbound endpoint for
 [[pushdata]]
 == Push Data to Salesforce
 
-Use as an outbound connector in your flow to push data to Salesforce. To use the connector in this capacity, simply place the Salesforce connector in your flow at any point after an inbound endpoint.
+You can use Salesforce Connector as an outbound connector in your flow to push data to Salesforce. To use the connector in this capacity, place Salesforce Connector to the right of an inbound endpoint in your flow.
 
 [[receivedata]]
-== Receive Data From Salesforce
+== Receive Data from Salesforce
 
-You can use the Salesforce connector as an inbound connector without wrapping the connector in a poll scope to stream data from Salesforce into your application. To use the connector in this capacity, place a Salesforce connector at the start of your flow.
+You can use Salesforce Connector as an inbound connector to stream data from Salesforce into your application. To use the connector in this capacity, use one of these input sources:
 
-NOTE: Studio automatically converts the connector to Salesforce (Streaming) mode. Technically, this is still the same connector, but it accesses the Salesforce Streaming API. This means that the only operation the converted connector can perform is *Subscribe Topic Listener* (that is, subscribe to PushTopic).
+* Subscribe topic listener
+* Subscribe channel listener
+* Replay topic listener
+* Replay channel listener
+
+Studio automatically converts the connector to Salesforce Streaming mode, which listens to notifications from the Salesforce Streaming API.
+
+In this example, Salesforce Connector listens to notifications on a topic and feeds the data into the flow:
 
 image::salesforce/salesforce-studio-subscribe-streaming-channel.png[subscribe streaming channel]
 
-Salesforce connector: Listens to notifications on a topic and feeds the data into the flow.
+Streaming channels provide subscribers with notifications that are not limited to record-based events. You can use Salesforce Connector to work with Salesforce streaming channels.
 
-See also: https://developer.salesforce.com/docs/atlas.en-us.api_streaming.meta/api_streaming/intro_stream.htm[Salesforce Streaming API]
-
-Streaming channels provide notifications to subscribers that are not limited to record-based events. You can use the Salesforce connector to work with Salesforce streaming channels.
+For more information about streaming channels, see the https://developer.salesforce.com/docs/atlas.en-us.api_streaming.meta/api_streaming/intro_stream.htm[Salesforce Streaming API].
 
 [[streamingchannel]]
-== Create a Streaming Channel to Receive Data From Salesforce
+== Create a Streaming Channel to Receive Data from Salesforce
 
-You must have the proper Salesforce Streaming API permissions enabled in your organization.
+To create a streaming channel, you must have the proper Salesforce Streaming API permissions enabled in your organization.
 
-. Log into your Salesforce Developer Edition organization.
+Follow these steps to create a streaming channel:
+
+. Log in to your Salesforce Developer Edition organization.
 . Under *All Tabs (+)*, select *Streaming Channels*.
 . On the *Streaming Channels* tab, select *New* to create a new streaming channel.
-. Enter `/u/notifications/ExampleUserChannel` in the *Streaming Channel Name* field, and an optional description.
+. Enter `/u/notifications/ExampleUserChannel` in the *Streaming Channel Name* field.
+. Enter an optional description.
 
-You can either use the *Create* operation or the exclusive `publish-streaming-channel` operation as follows:
+You can also create a streaming channel by using either the connector Create operation or the connector Publish streaming channel (`publish-streaming-channel`) operation. The following example uses the `publish-streaming-channel` operation:
 
 [source,xml,linenums]
 ----
@@ -167,8 +162,7 @@ You can either use the *Create* operation or the exclusive `publish-streaming-ch
 [[streamsub]]
 == Subscribe to a Streaming Channel
 
-After you create a streaming channel, you can start receiving events by subscribing to the channel. The `subscribe-channel-listener` acts like an inbound endpoint and is used as follows:
-
+After you create a streaming channel, you can start receiving events by subscribing to the channel. The `subscribe-channel-listener` input source acts like an inbound endpoint. In this example, every time a subscription to `/u/TestStreaming` receives an event, it executes the rest of the flow and logs a message at the INFO level:
 [source,xml,linenums]
 ----
 <flow name="notificationsChannelSubscription">
@@ -179,28 +173,25 @@ After you create a streaming channel, you can start receiving events by subscrib
 </flow>
 ----
 
-A Mule flow is divided in two. The first portion is usually an inbound endpoint (or an HTTP connector) and a message source. The Mule flow is an entity that receives and generates events that later are processed by the rest of the flow. The other portion is a collection of message processors that processes the messages (also known as events) that are received and generated by the inbound endpoint.
+The Streaming channel field of the Subscribe channel listener operation does not display change events that are available in the Salesforce environment, because this information is not provided in the Salesforce API. However, your connector can subscribe to a streaming channel to obtain this information. For example, to subscribe to the `All Change Events` channel, use `/data/ChangeEvents` as the channel name to which you subscribe.
 
-Every time a subscription to `/u/TestStreaming` receives an event, it executes the rest of the flow. In the case of this example, it logs a message at INFO level.
-
-NOTE: The *Streaming Channel* field of the Subscribe Channel Listener operation does not display change events that are available in the Salesforce environment because this information is not provided in the Salesforce API. However, your connector can subscribe to a streaming channel. For example, to subscribe to the `All Change Events` channel, use `/data/ChangeEvents` as the channel name to which you subscribe. See https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_subscribe_channels.htm[Subscription Channels] in the Salesforce Change Data Capture Developer Guide.
-
+For more information, see https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_subscribe_channels.htm[Subscription Channels] in the Salesforce Change Data Capture Developer Guide.
 
 === Streaming Channel Inbound Properties
 
 This information gets passed along as inbound properties:
 
-* `channel` - Maps to the Channel JSON property.
-* `type` - Maps to the Type JSON property in data.
-* `createdDate` - Maps to the createdDate JSON property in data.
+* `channel` maps to the Channel JSON property.
+* `type` maps to the Type JSON property in data.
+* `createdDate` maps to the createdDate JSON property in data.
 
 Except for `channel`, each property inside an event is available as an inbound property.
 
+// Kim, I have a question in to the developer about the above text, since I find it confusing.
+
 === Replay Events from a Streaming Channel
 
-A streaming channel can replay notifications, much like topic replay.
-
-The `replay-channel-listener` input source acts like an inbound endpoint and can be used like this:
+A streaming channel can replay notifications. The `replay-channel-listener` input source acts as an inbound endpoint. You can use it as shown in the following example:
 
 [source,xml,linenums]
 ----
@@ -212,13 +203,13 @@ The `replay-channel-listener` input source acts like an inbound endpoint and can
 </flow>
 ----
 
-If the `ALL` or `ONLY_NEW` replay options are selected, then the `replayId` value is ignored.
+If you specify either the `ALL` replay option or the `ONLY_NEW` replay option, the `replayId` value is ignored.
 
 === Push Events to a Streaming Channel
 
-Salesforce lets you push custom events to a specific streaming channel through the REST API. You can use the Salesforce https://workbench.developerforce.com/about.php[Workbench] or this connector.
+Salesforce enables you to push custom events to a specific streaming channel through the REST API. To do this, use https://workbench.developerforce.com/about.php[Workbench] or this connector.
 
-To use `push-generic-event` operation:
+The following example uses the connector `push-generic-event` operation to push custom events to the channel with the ID `0M6j0000000KyjBCAS`:
 
 [source,xml,linenums]
 ----
@@ -233,24 +224,23 @@ To use `push-generic-event` operation:
 </flow>
 ----
 
-The channel ID can be retrieved from the response map of the `publish-streaming-channel` operation.
+You can retrieve the channel ID from the response map of the `publish-streaming-channel` operation. Alternatively, you can retrieve the channel ID from the Salesforce page:
 
-Another way of retrieving the ID of the channel is from the Salesforce page, as follows:
-
-. Log into your Developer Edition organization.
+. Log in to your Developer Edition organization.
 . Under *All Tabs (+)*, select *Streaming Channels*.
 
-If the channel ID field is not visible on the channel list, then:
+If the channel ID field is not visible on the channel list, follow these steps:
 
 . Click *Create New View*.
 . Type a name for the view in the *Name* input field.
-. In the *Available Fields* list, select *Streaming Channel ID*, and click *Add*.
-. Add any other fields you want.
+. In the *Available Fields* list, select *Streaming Channel ID* and click *Add*.
++
+You should see the channel ID for each streaming channel in the list.
++
+. Add any other fields.
 . Click *Save*.
 
-You should see the channel ID for each streaming channel in the list.
-
-The JSON received as a response from the push event operation looks something like:
+The JSON received as a response from the push event operation looks something like this:
 
 [source,json,linenums]
 ----
@@ -266,33 +256,21 @@ The JSON received as a response from the push event operation looks something li
 [[batchdata]]
 == Load Data in Batches
 
-The Salesforce Bulk API loads batches of your organization's data into Salesforce.
+The Salesforce Bulk API loads batches of your organization's data into Salesforce. Salesforce Connector provides the Create and Create Bulk operations for working with the Bulk API.
 
-The Salesforce connector provides the Create and Create Bulk operations for working
-with the Bulk API.
+For all bulk operations, Salesforce handles the creation process in the background. The connector replies with a BatchInfo object, which contains the ID of the batch and the ID of the job it creates to upload the batched objects.
 
-For all bulk operations, Salesforce handles the creation process in the background, so the connector does not reply with a collection of SaveResults because it does not have them yet. Instead, the connector replies with a BatchInfo object, which contains the ID of the batch and the ID of the job it creates to upload those objects.
-
-[[trackbulk]]
-=== Track Bulk Data Status
-
-You can monitor a Bulk API batch in Salesforce through the Job ID for the Bulk Data Load Jobs.
-
-The job detail page in Salesforce includes a related list of all the batches for the job. The related list provides View Request and View Response links for each batch. If a batch is a CSV file, the links return the request or response in CSV format. If a batch is an XML file, the links return the request or response in XML format.
-
-In Salesforce, you can track the status of bulk data load jobs and their associated batches:
+In Salesforce, you can track the status of bulk data load jobs and their associated batches by using the job ID for Bulk Data Load Jobs:
 
 . Click YOUR_NAME > *Setup* > *Monitoring* > *Bulk Data Load Jobs*.
 . Click the job ID to view the job detail page.
 
-The job detail page includes a related list of all the batches for the job. The related list provides *View Request* and *View Response* links for each batch. If the batch is a CSV file, the links return the request or response in CSV format. If the batch is an XML file, the links return the request or response in XML format.
+The job detail page includes a list of all the batches related to the job. The list provides `View Request` and `View Response` links for each batch. If the batch is a CSV file, the links return the request or response in CSV format. If the batch is an XML file, the links return the request or response in XML format.
 
 [[leadconvert]]
 == Specify a Lead Convert Request ID
 
-To specify a lead ID in a `LeadConvertRequest`, use a DataWeave transform message. When you use a transform message before the operation, just add the `leadId` field. The metadata for the operation doesn't specify the `leadId` field.
-
-For example:
+To specify a lead ID for a `LeadConvertRequest` operation, use a DataWeave transform message. When you use a transform message before the operation, you must add the `leadId` field, because the metadata for the operation doesn't specify it:
 
 [source,example,linenums]
 ----
@@ -316,31 +294,23 @@ output application/java
 [[usagenotes]]
 == Usage Notes
 
-=== Fields To Null
-
-The configurations have a checkbox called Can Clear Fields by Updating Field Value to Null. If checked, all the fields in a request that have a Null value are added to the `fieldsToNull` field and sent to Salesforce.
-
-You can decide which fields to set to Null without being forced to use the `fieldsToNull` field.
-
 === Upsert
 
-Unless you configure the External ID Field Name for the sObject to which you are trying to upsert, every use of the upsert fails.
+Unless you configure the External ID Field Name for the sObject to which you are trying to upsert, the Upsert operation fails.
 
-The upsert operation does not work with the sObject `priceBookentry2`.
+The Upsert operation does not work with the sObject `priceBookentry2`.
 
-While you can't change the `contentType` for bulk upsert, you can use the `Create Job` operation to set the contentType to either CSV or zipped CSV (if you're near the character limit). Follow up with the `Create Batch` operation.
+Although you can't change the `contentType` value for a bulk upsert, you can use the Create job operation to set the content type to either CSV (or zipped CSV if you're near the character limit). Follow up with the Create batch operation.
 
 === Query
 
-Even though you can see the fields of an sObject and their corresponding types via DataSense, the `Query` operation returns all fields as `String`.
+Although you can see the fields of an sObject and their corresponding types via DataSense, the Query operation returns all fields as `String`.
 
-If you want to use the actual type of the field, you must convert that field to the desired type using a Transform (or Transform Message) component.
+To use the actual type of a field, use a Transform or Transform Message component to convert the field to the desired type.
 
-Although `CreatedDate` field appears as `dateTime`, the query returns a `String` representing the date.
+Although the `CreatedDate` field appears as `dateTime`, the query returns a `String` value that represents the date. To use the field as a `dateTime` field, configure it using a Transform Message component.
 
-To actually use the field as a `dateTime`, you can configure it using Transform Message.
-
-To store `Date` and `dateTime` fields, you can use DataWeave expressions to create `Date` and `Calendar` Java objects.
+To store `Date` and `dateTime` fields, use DataWeave expressions to create `Date` and `Calendar` Java objects.
 
 === Invoke APEX Rest Method
 
@@ -378,19 +348,24 @@ The Invoke APEX Rest operation enables users to invoke a method from an Apex cla
 		</ee:transform>
 ----
 
-The `body` element contains `URLParameters`, which is a map containing the parameters that replace the wildcards in the path of the REST resource described in the Apex class. For example if the REST resource is set to `@RestResource(urlMapping='/myResource/\*/mySubResource/*')`, then the value of `Parameter1` replaces the first `\*` and the value of `Parameter2` replaces the second `*`. The key names must start with `Parameter` followed by a number showing the position of the `*` to be replaced. After the `URLParameters` block, provide the content of the `body` to be sent to the REST resource, as shown in the example `account` block.
+In this example:
 
-The `headers` and `cookies` fields describe the headers and cookies to pass along with the HTTP request to the desired service.
+* The `body` element contains `URLParameters`, which is a map containing the parameters that replace the wildcards in the path of the REST resource described in the Apex class.
++
+For example, if the REST resource is set to `@RestResource(urlMapping='/myResource/\*/mySubResource/*')`, the value of `Parameter1` replaces the first `\*`, and the value of `Parameter2` replaces the second `*`.
+* Key names must start with `Parameter`, followed by a number that shows the position of the `*` to be replaced.
++
+* After the `URLParameters` block, provide the content of the `body` value to send to the REST resource, as shown in the example `account` block.
+* The `headers` and `cookies` fields describe the headers and cookies to pass along with the HTTP request to the desired service.
+* The `queryParameters` field describes the query parameters to use, and the keys and values in this map that the specified Apex Class must accept.
 
-The `queryParameters` field describes the query parameters to use, and the keys and values in this map that have to be accepted by the specified Apex Class.
+=== Insert Values in a Salesforce Connector List
 
-=== Insert Values in a Salesforce Drop-Down Menu
+Inserting dependent values into an existing list in Salesforce Connector does not always work. Test to confirm this functionality.
 
-Inserting dependent values into an existing drop-down menu in Salesforce does not always work. Test to confirm functionality.
+=== Evaluate Values in a Salesforce List
 
-=== Evaluate Values in a Salesforce Drop-Down Menu
-
-If you are evaluating against a value in an existing drop-down list field in Salesforce, be sure to use the exact value in the drop-down list. For example, if you use the value `US` to evaluate against the contents of a drop-down list that contains the value `USA`, the evaluation works, but the result is two values in the drop-down list: one for `US` and one for `USA`.
+If you are evaluating against a value in an existing list field in Salesforce, use the exact value in the list. For example, if you use the value `US` to evaluate against the contents of a list that contains the value `USA`, the evaluation works, but the result is two values in the  list: one for `US` and one for `USA`.
 
 === Currency
 
@@ -400,11 +375,11 @@ When working with multiple currencies, be aware of which currency your sObject u
 
 === Limits on API Calls
 
-You need to know the rate limiting policy that applies to your account so that you do not exceed the number of allotted API calls per day.
+You must know the scope of the rate limiting policy that applies to your account so that you do not exceed the number of allotted API calls per day.
 
 === Opportunity Object
 
-When extracting data from an `Opportunity`, be aware that a "quarter" is not relative to a calendar year. A "quarter" in this context is relative to the financial year of the organization.
+When extracting data from a Salesforce Opportunity object, be aware that a "quarter" in this context is relative to the financial year of the organization and not necessarily to the calendar year.
 
 == See Also
 
