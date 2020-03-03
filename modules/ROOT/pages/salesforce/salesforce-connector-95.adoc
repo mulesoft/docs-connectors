@@ -806,6 +806,42 @@ In Salesforce, you can track the status of bulk data load jobs and their associa
 
 The job detail page includes a related list of all the batches for the job. The related list provides View Request and View Response links for each batch. If the batch is a CSV file, the links return the request or response in CSV format. If the batch is an XML file, the links return the request or response in XML format. These links are available for batches created in Salesforce API version 19.0 and later.
 
+== Object Store Usage
+
+Mule's Object Store is used internally by the connector or the runtime to provide certain features such as automatic message replay or message redelivery on sources and triggers.
+
+If the Mule application is running On Premise then it will use Object Store v1, which has no limitations in terms of transaction limits. However, in a Cloud deployment, such as Cloudhub, Object Store v2 will be used to persist data and this version has a limit of 10 transactions per second for the free version. For more details check https://docs.mulesoft.com/object-store/#object-store-notes[Object Store Notes].
+
+Below, you can find details on how the connector is using the Object Store and how many transactions it requires on each case.
+
+=== Replay Sources
+
+The Replay Topic and Replay Streaming Channel sources have the option to continue from the last replay id they received before restarting the application.
+
+In order to provide this feature, when a Mule application is started for the first time, the connector creates an Object Store that will be used to save the replay id.
+
+Each time the application is restarted the connector will try to cleanup the expired replay ids form the Object Store(a replay id is expired if it was saved more than 24 hours before the cleanup execution). This cleanup task will perform 3 transactions on the Object Store for each topic/channel that was used in that specific application.
+
+For each message that comes through a topic/streaming channel that the connector is subscribed to, there will be a series of operations executed to update the latest processed replay id in the object store, with the required details attached. These operations will sum up to 6 transactions.
+
+=== Get Updated Objects operation
+
+This operation retrieves the list of records that have been updated between the last time this method was called and the current server timestamp.
+
+In order to provide this, on the first use of this operation, the connector will create an Object Store and save the current server timestamp to be used on further calls. On subsequent usages, the connector will read the timestamp from the Object Store and after it receives the api response it will update this value. Each usage of this operation will execute 2 transactions to interact with the Object Store.
+
+=== OAuth 2.0 authentication type
+
+OAuth 2.0 is one of the authentication types that can be used with the Salesforce Connector.
+
+When configuring this type of connection, the users can specify an Object Store which represents a reference to the Object Store that should be used to store each resource owner ID’s data. If not specified, the runtime automatically provisions the default object store.
+
+The application will interact with the Object Store only when a new resource owner is authenticated, when the token is refreshed or when invalidated.
+
+=== Message redelivery on sources and triggers
+
+The redelivery policy can be configured for sources and triggers so that when processing a message fails, it will be redelivered and the processing will be tried again for a specified number of times. This feature is provided by the runtime not the connector itself and the users can use a specific object store for this functionality. If the Object Store is not specified by the user a non persistent Object Store will be automatically created and used by the runtime. Based on the number of retries configured for the redelivery policy, the number of transactions used to interact with the Object Store will vary. Check https://docs.mulesoft.com/mule-runtime/4.2/redelivery-policy[Redelivery policy] for details.
+
 == Usage Notes
 
 === Fields To Null
