@@ -1,0 +1,420 @@
+= NetSuite Connector Examples - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:imagesdir: ../../assets/images/
+
+NetSuite Connector Version 9.2
+
+== Search Operation - Account Basic search filtering by an Integer field
+
+In this example the Search Operation is used to obtain the Account Basic items whose Internal Id is less than the value sent by query parameter.
+
+Prerequisites: In the NetSuite instance there must be at least one Basic Account that meets the search condition.
+
+. In Studio, click *HTTP* and drag the *Listener* operation to the canvas. Create the HTTP Configuration setting the *host* field to `localhost` and the *port* field to `8081`. Set the *path* value to `/account`.
+. From the palette, select *NetSuite* and drag the Search operation into your flow by placing it to the right of *HTTP Listener*. Create or set an existing Connector Configuration.
+. In the connector box: put `ACCOUNT_BASIC` in the *Key* field and set a integer value between `10 and 1000` for the *Page Size* field.
+. From the palette, drag the *Transform Message* component to the left of *NetSuite Connector*.
+. Click *Transform Message*: in the *Output* column, the metadata of the *AccountSearchBasic* object will be displayed.
+.. Within this is the object *internalIdNumber*: double click in the *operator* field inside and set its value in `"LESS_THAN"`.
+-  Note: an Integer operator also accepts the following values: `EQUAL_TO`, `LESS_THAN`, `GREATER_THAN`, `LESS_THAN_OR_EQUAL_TO`, `GREATER_THAN_OR_EQUAL_TO`, `NOT_EQUAL_TO`, `NOT_LESS_THAN`, `NOT_GREATER_THAN`, `NOT_LESS_THAN_OR_EQUAL_TO`, `NOT_GREATER_THAN_OR_EQUAL_TO`, `BETWEEN`, `NOT_BETWEEN`, `EMPTY`, `NOT_EMPTY`.
+.. Then double click on the *searchValue* field (also inside *internalIdNumber*) and set its value to `attributes.queryParams["internalId"]`. With this we manage to take the value from the "internalId" query parameter.
+.. The DataWeave code must have look like this:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	internalIdNumber: {
+		operator: "LESS_THAN",
+		searchValue: attributes.queryParams["internalId"]
+	}
+} as Object {
+	class : "org.mule.module.netsuite.extension.api.AccountSearchBasic"
+}
+----
++
+. From the Mule Palette view, drag other *Transform Message* components to the right of NetSuite Connector.
+. Click *Transform Message* and set the output to `application/json`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
++
+. Execute the mule app and make a call to: `http://localhost:8081/account?internalId=5`
+- With this call we will obtain the Account Basic items whose internal id is less than 5.
+
+=== Account Basic search flow in Studio
+
+image::netsuite/netsuite-examples-search-account.png[Account Basic search flow in Studio]
+
+
+=== XML for Account Basic search flow
+
+[source]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:netsuite="http://www.mulesoft.org/schema/mule/netsuite"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/netsuite http://www.mulesoft.org/schema/mule/netsuite/current/mule-netsuite.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+        <http:listener-connection host="0.0.0.0" port="8081"/>
+    </http:listener-config>
+
+    <netsuite:config name="NetSuite_Config" doc:name="NetSuite Config">
+        <netsuite:login-authentication-connection
+    		email="${email}" password="${password}" account="${account}"
+    		roleId="${roleId}" applicationId="${applicationId}" />
+    </netsuite:config>
+
+    <flow name="netsuite-search-account">
+	    <http:listener doc:name="/account" config-ref="HTTP_Listener_config" path="/account"/>
+	    <ee:transform doc:name="Search Criteria">
+		    <ee:message >
+			    <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	internalIdNumber: {
+		operator: "LESS_THAN",
+		searchValue: attributes.queryParams["internalId"]
+	}
+} as Object {
+	class : "org.mule.module.netsuite.extension.api.AccountSearchBasic"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<netsuite:search key="ACCOUNT_BASIC" doc:name="Search Account" config-ref="NetSuite_Config" pageSize="10"/>
+		<ee:transform doc:name="Response to Json">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+== Search Operation - Employee Basic search filtering by Boolean and String fields
+
+In this example the Search Operation is used to obtain the Employee Basic items that are in active state and that their last name begins with "A".
+
+Prerequisites: In the NetSuite instance there must be at least one Employee that meets the search conditions.
+
+. In Studio, click *HTTP* and drag the *Listener* operation to the canvas. Create the HTTP Configuration setting the *host* field to `localhost` and the *port* field to `8081`. Set the *path* value to `/employee`.
+. From the palette, select *NetSuite* and drag the Search operation into your flow by placing it to the right of *HTTP Listener*. Create or set an existing Connector Configuration.
+. In the connector box: put `EMPLOYEE_BASIC` in the *Key* field and set a integer value between `10 and 1000` for the *Page Size* field.
+. From the palette, drag the *Transform Message* component to the left of *NetSuite Connector*.
+. Click *Transform Message*: in the *Output* column, the metadata of the *EmployeeSearchBasic* object will be displayed.
+.. Within this is the object *isInactive*: double click on the *searchValue* field inside and set its value in `attributes.queryParams["isInactive"]`. With this we manage to take the value from the "isInactive" query parameter.
+.. Also within *EmployeeSearchBasic* is the object *lastName*:  double click in the *operator* field inside and set its value in `"STARTS_WITH"`.
+-  Note: a String operator also accepts the following values: `IS`, `IS_NOT`, `STARTS_WITH`, `DOES_NOT_STARTS_WITH`, `CONTAINS`, `DOES_NOT_CONTAIN`.
+.. Then double click on the *searchValue* field (also inside *lastName*) and set its value to `attributes.queryParams["lastName"]`. With this we manage to take the value from the "lastName" query parameter.
+.. The DataWeave code must have look like this:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	isInactive: {
+		searchValue: attributes.queryParams["isInactive"]
+	},
+	lastName: {
+		operator: "STARTS_WITH",
+		searchValue: attributes.queryParams["lastName"]
+	}
+} as Object {
+	class : "org.mule.module.netsuite.extension.api.EmployeeSearchBasic"
+}
+----
++
+. From the Mule Palette view, drag other *Transform Message* components to the right of NetSuite Connector.
+. Click *Transform Message* and set the output to `application/json`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
++
+. Execute the mule app and make a call to: `http://localhost:8081/employee?isInactive=false&lastName=A`
+- With this call we will obtain the Employee items whose are in active state and last name starts with "A".
+
+=== Employee Basic search flow in Studio
+
+image::netsuite/netsuite-examples-search-employee.png[Employee search flow in Studio]
+
+
+=== XML for Employee Basic search flow
+
+[source]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:netsuite="http://www.mulesoft.org/schema/mule/netsuite"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/netsuite http://www.mulesoft.org/schema/mule/netsuite/current/mule-netsuite.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+        <http:listener-connection host="0.0.0.0" port="8081"/>
+    </http:listener-config>
+
+    <netsuite:config name="NetSuite_Config" doc:name="NetSuite Config">
+        <netsuite:login-authentication-connection
+    		email="${email}" password="${password}" account="${account}"
+    		roleId="${roleId}" applicationId="${applicationId}" />
+    </netsuite:config>
+
+    <flow name="netsuite-search-employee">
+    		<http:listener doc:name="/employee" config-ref="HTTP_Listener_config"
+    			path="/employee" />
+    		<ee:transform doc:name="Search Criteria">
+    			<ee:message >
+    				<ee:set-payload ><![CDATA[%dw 2.0
+    output application/java
+    ---
+    {
+    	isInactive: {
+    		searchValue: attributes.queryParams["isInactive"]
+    	},
+    	lastName: {
+    		operator: "STARTS_WITH",
+    		searchValue: attributes.queryParams["lastName"]
+    	}
+    } as Object {
+    	class : "org.mule.module.netsuite.extension.api.EmployeeSearchBasic"
+    }]]></ee:set-payload>
+    			</ee:message>
+    		</ee:transform>
+    		<netsuite:search doc:name="Search Employee"config-ref="NetSuite_Config" key="EMPLOYEE_BASIC" pageSize="10" />
+    		<ee:transform doc:name="Response to Json">
+    			<ee:message >
+    				<ee:set-payload ><![CDATA[%dw 2.0
+    output application/json
+    ---
+    payload]]></ee:set-payload>
+    			</ee:message>
+    		</ee:transform>
+    	</flow>
+</mule>
+----
+
+
+== Search Operation - Customer Advanced search filtering by Date and Array fields
+
+In this example the Search Operation is used to obtain the Customer items that were created after 2015 year and that their stage are "LEAD". In addition, each item will be iterated to log in and a formatting of the final result will be done to filter unnecessary fields.
+
+Prerequisites: In the NetSuite instance there must be at least one Customer that meets the search conditions.
+
+. In Studio, click *HTTP* and drag the *Listener* operation to the canvas. Create the HTTP Configuration setting the *host* field to `localhost` and the *port* field to `8081`. Set the *path* value to `/customer`.
+. From the palette, select *NetSuite* and drag the Search operation into your flow by placing it to the right of *HTTP Listener*. Create or set an existing Connector Configuration.
+. In the connector box: put `CUSTOMER_ADVANCED` in the *Key* field and set a integer value between `10 and 1000` for the *Page Size* field.
+. From the palette, drag the *Transform Message* component to the left of *NetSuite Connector*.
+. Click *Transform Message*: in the *Output* column, the metadata of the *CustomerSearchAdvanced* object will be displayed.
+.. Within this, expand: *columns* -> *basic* -> *dateCreated* ->  double click on the *customLabel* field inside and set its value in `Created`.
+.. Within *CustomerSearchAdvanced*, expand: *columns* -> *basic* -> *entityId* ->  double click on the *customLabel* field inside and set its value in `EntityId`.
+.. Within *CustomerSearchAdvanced*, expand: *columns* -> *basic* -> *stage* ->  double click on the *customLabel* field inside and set its value in `Stage`.
+- Note: the fields added in the previous steps are the ones that will be shown in the search result.
+.. Within *CustomerSearchAdvanced*, expand: *criteria* -> *basic* -> *dateCreated* ->  double click on the *operator* field inside and set its value in `AFTER`.
+-  Note: a Date operator also accepts the following values: `ON`, `BEFORE`, `AFTER`, `ON_OR_BEFORE`, `ON_OR_AFTER`, `WITHIN`, `EMPTY`, `NOT_ON`, `NOT_BEFORE`, `NOT_AFTER`, `NOT_ON_OR_BEFORE`, `NOT_ON_OR_AFTER`, `NOT_WITHIN`, `NOT_EMPTY`.
+.. Then double click on the *searchValue* field (also inside *dateCreated*) and set its value to `attributes.queryParams["dateCreated"] as LocalDateTime {format: "yyyy-MM-dd HH:mm:ss.SSS"}`. With this we manage to take the value from the "dateCreated" query parameter and convert it to LocalDateTime.
+.. Within *CustomerSearchAdvanced*, expand: *criteria* -> *basic* -> *stage* ->  double click on the *operator* field inside and set its value in `ANY_OF`.
+-  Note: an Array operator also accepts the following values: `ANY_OF`, `NONE_OF`.
+.. Then double click on the *searchValue* field (also inside *stage*) and set its value to `[attributes.queryParams["stage"]]`. With this we manage to take the value from the "stage" query parameter and convert it to an array item.
+.. The DataWeave code must have look like this:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	columns: {
+		basic: {
+			dateCreated: [{
+				customLabel: "Created"
+			}],
+			entityId: [{
+				customLabel: "Entity Id"
+			}],
+			stage: [{
+				customLabel: "Stage"
+			}]
+		}
+	},
+	criteria: {
+		basic: {
+			dateCreated: {
+				operator: "AFTER",
+				searchValue: attributes.queryParams["dateCreated"] as LocalDateTime {format: "yyyy-MM-dd HH:mm:ss.SSS"}
+			},
+			stage: {
+				operator: "ANY_OF",
+				searchValue: [attributes.queryParams["stage"]]
+			}
+		}
+	}
+} as Object {
+	class : "org.mule.module.netsuite.extension.api.CustomerSearchAdvanced"
+}
+----
++
+. From the Mule Palette view, drag a *For-each* component to the right of NetSuite Connector.
+. Drag a *Transform Message* component inside For-each box, and set this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	entityId: payload.entityId,
+	dateCreated: payload.dateCreated,
+	stage: payload.stage
+}
+----
+. Drag a Logger component from the Mule Palette to the right of *Transform*, inside the *For-each* box. Set the *Message* field to `#[payload]`.
+- Note: the objective of the previous three steps is to process each item on the list returned by the Search Operation individually, so that they are displayed by the console.
+. From the Mule Palette view, drag other *Transform Message* components at the end of the flow, outside the For-each box.
+. Click *Transform Message* and set the output to `application/json`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
++
+. Execute the mule app and make a call to: `http://localhost:8081/customer?dateCreated=2015-02-02%2000:00:00.000&stage=LEAD`
+- With this call we will obtain the Customer items whose are created after 2015-02-02 and their stage are "LEAD".
+
+=== Customer Advanced search flow in Studio
+
+image::netsuite/netsuite-examples-search-customer.png[Customer search flow in Studio]
+
+
+=== XML for Customer Advanced search flow
+
+[source]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:netsuite="http://www.mulesoft.org/schema/mule/netsuite"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/netsuite http://www.mulesoft.org/schema/mule/netsuite/current/mule-netsuite.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+        <http:listener-connection host="0.0.0.0" port="8081"/>
+    </http:listener-config>
+
+    <netsuite:config name="NetSuite_Config" doc:name="NetSuite Config">
+        <netsuite:login-authentication-connection
+    		email="${email}" password="${password}" account="${account}"
+    		roleId="${roleId}" applicationId="${applicationId}" />
+    </netsuite:config>
+
+    <flow name="netsuite-search-customer-advanced">
+    		<http:listener doc:name="/customer" config-ref="HTTP_Listener_config" path="/customer"/>
+    		<ee:transform doc:name="Search Criteria">
+    			<ee:message>
+    				<ee:set-payload><![CDATA[%dw 2.0
+    output application/java
+    ---
+    {
+    	columns: {
+    		basic: {
+    			dateCreated: [{
+    				customLabel: "Created"
+    			}],
+    			entityId: [{
+    				customLabel: "Entity Id"
+    			}],
+    			stage: [{
+    				customLabel: "Stage"
+    			}]
+    		}
+    	},
+    	criteria: {
+    		basic: {
+    			dateCreated: {
+    				operator: "AFTER",
+    				searchValue: attributes.queryParams["dateCreated"] as LocalDateTime {format: "yyyy-MM-dd HH:mm:ss.SSS"}
+    			},
+    			stage: {
+    				operator: "ANY_OF",
+    				searchValue: [attributes.queryParams["stage"]]
+    			}
+    		}
+    	}
+    } as Object {
+    	class : "org.mule.module.netsuite.extension.api.CustomerSearchAdvanced"
+    }]]></ee:set-payload>
+    			</ee:message>
+    		</ee:transform>
+    		<netsuite:search key="CUSTOMER_ADVANCED" doc:name="Search Customer Advanced" config-ref="NetSuite_Config" pageSize="10"/>
+    		<foreach doc:name="For Each">
+    			<ee:transform doc:name="Transform Customer">
+    				<ee:message >
+    					<ee:set-payload ><![CDATA[%dw 2.0
+    output application/json
+    ---
+    {
+    	entityId: payload.entityId,
+    	dateCreated: payload.dateCreated,
+    	stage: payload.stage
+    }]]></ee:set-payload>
+    				</ee:message>
+    			</ee:transform>
+    			<logger level="INFO" doc:name="Logger Customer" message="#[payload]"/>
+    		</foreach>
+    		<ee:transform doc:name="Response to Json">
+    			<ee:message >
+    				<ee:set-payload ><![CDATA[%dw 2.0
+    output application/json
+    ---
+    payload]]></ee:set-payload>
+    			</ee:message>
+    		</ee:transform>
+    	</flow>
+</mule>
+----
+
+
+== See Also
+
+*  xref:introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
