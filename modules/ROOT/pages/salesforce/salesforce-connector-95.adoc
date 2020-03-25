@@ -806,51 +806,57 @@ In Salesforce, you can track the status of bulk data load jobs and their associa
 
 The job detail page includes a related list of all the batches for the job. The related list provides View Request and View Response links for each batch. If the batch is a CSV file, the links return the request or response in CSV format. If the batch is an XML file, the links return the request or response in XML format. These links are available for batches created in Salesforce API version 19.0 and later.
 
-<<<<<<< Updated upstream
-=======
 == Object Store Usage
 
-Connectors and Mule runtime use Mule's Object Store is used internally by the connector or runtime to provide features such as automatic message replay and message redelivery on input sources.
+Both Salesforce Connector and Mule use an object store to persist data for features such as automatic message replay and message redelivery:
 
-Mule apps use different versions of object store, depending on how they are deployed:
-* If a Mule app runs on-premises, it uses Object Store v1, which has no transaction limits.
-* If a mule app is deployed with CloudHub, it uses Object Store v2 to persist data. The free version of Object Store v2 has a limit of 10 transactions per second. For more information, see https://docs.mulesoft.com/object-store/#object-store-notes[Object Store Notes].
+* A Mule app that runs on-premises uses Mule Object Store, which has no transaction limits.
 
-=== Replay Topic and Replay Streaming Channel Input Sources
+* A Mule app with a CloudHub deployment uses Object Store v2.
++
+The free version of Object Store v2 has a limit of 10 transactions per second.
 
-The Replay Topic and Replay Streaming Channel input sources have the option to continue from the last replay ID they received before restarting the application.
+For more information about object store versions, see https://docs.mulesoft.com/object-store/#object-store-notes[Object Store Notes].
 
-To provide this feature, Salesforce Connector uses an object store:
+=== Replay Topic and Replay Channel Listener Operations
+
+The Replay topic and Replay channel listener operations have the option to continue from the last replay ID they received before restarting the application.
+
+Salesforce Connector uses an object store for these operations:
 
 * When a Mule app starts for the first time, the connector creates an object store that saves the replay ID.
-* For each message that comes through a topic or streaming channel to which the connector is subscribed, the connector updates the latest processed replay ID in the object store, with the required details attached.
-// what are the required details? Do users need to know //this?
-* Each time the app restarts, the connector cleans up the expired replay IDs from the object store. A replay ID is expired if it was saved more than 24 hours before the cleanup execution.
+* For each message that comes through a topic or streaming channel to which the connector is subscribed, the connector updates the latest processed replay ID in the object store.
++
+This update process uses up to six transactions.
++
+* Each time the application restarts, the connector deletes the expired replay IDs in the object store. A replay ID is expired if it was saved more than 24 hours before the cleanup execution.
++
+This cleanup task uses three transactions on the object store for each topic and channel used in the application.
 
-// This cleanup task performs three transactions on the // object store for each topic or channel that was used // in that specific app.
+=== Get Updated Objects Operation
 
-// These operations will sum up to 6 transactions.
+The Get updated objects operation retrieves the list of records that were updated between the last time this operation was called and the current server timestamp:
 
-=== Get Updated Objects operation
+* On the first use of this operation, the connector creates an object store and saves the current server timestamp.
+* On subsequent uses of this operation, the connector reads the timestamp from the object store. It updates the value of the object store after it receives the API response to the operation.
 
-This operation retrieves the list of records that were updated between the last time the operation was called and the current server timestamp.
+Each use of the Get updated object operation performs two transactions to interact with the object store.
 
-On the first use of this operation, the connector creates an object store and saves the current server timestamp for later use. On subsequent usages, the connector:
-* Reads the timestamp from the object store
-* Updates the value after it receives the API response
-// Each usage of this operation executes 2 transactions // to interact with the Object Store.
+=== OAuth 2.0 Connection Type
 
-=== OAuth 2.0 Authentication Type
+When configuring an OAuth 2.0 connection, you can specify an object store that stores each resource owner's ID data. If you don't specify an object store, Mule automatically provisions the default object store.
 
-When you configure a connection that uses OAuth2.0 for authentication, you can specify an object store to store then ID for each resource owner. If you don't specify an object store, Mule automatically provisions the default object store.
+The app interacts with the object store automatically when a new resource owner is authenticated, the access token is refreshed, or the access token is invalidated.
 
-The app interacts with the object store when a new resource owner is authenticated, a token is refreshed, or a token is invalidated.
+=== Message Redelivery for Input Sources
 
-=== Message Redelivery on Input Sources
+You can configure a redelivery policy for input sources by setting the number of redelivery attempts to try after an initial failure. You can specify an object store for this policy. If you don't specify an object store, Mule creates a non-persistent object store.
 
-You can configure a redelivery policy for input sources so that when processing a message fails, it is redelivered and the processing will be tried again for a specified number of times. This feature is provided by the runtime not the connector itself and the users can use a specific object store for this functionality. If the object store is not specified by the user a non persistent Object Store will be automatically created and used by the runtime. Based on the number of retries configured for the redelivery policy, the number of transactions used to interact with the Object Store will vary. Check https://docs.mulesoft.com/mule-runtime/4.2/redelivery-policy[Redelivery policy] for details.
+Based on the number of retries configured for the
+redelivery policy, The number of transactions used to interact with the object store varies based on the number of retries configured for the redelivery policy.
 
->>>>>>> Stashed changes
+For more information about configuring a redelivery policy, see xref:mule-runtime::redelivery-policy.adoc[Redelivery policy].
+
 == Usage Notes
 
 === Fields To Null
