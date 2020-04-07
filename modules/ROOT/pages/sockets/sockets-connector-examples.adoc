@@ -34,10 +34,9 @@ Suppose that we have set up our Socket Listener and we want to build an applicat
 			<db:sql>#["SELECT first_name, last_name from SYSTEM.MUSICIANS where id = :id"]</db:sql>
 			<db:input-parameters><![CDATA[#[{ 'id': payload.id }]]]></db:input-parameters>
 		</db:select>
-		<set-payload value="#[output application/json --- 'name': payload[0].FIRST_NAME as String ++ ' ' ++ payload[0].LAST_NAME as String]" doc:name="Set Payload" />
 		<logger level="INFO" doc:name="Logger" message="#[payload]" />
 		<sockets:send doc:name="Send" config-ref="Sockets_Request_config">
-			<sockets:content ><![CDATA[#[output application/json --- payload]]]></sockets:content>
+			<sockets:content ><![CDATA[#[output application/json --- 'name': payload[0].FIRST_NAME as String ++ ' ' ++ payload[0].LAST_NAME as String]]]></sockets:content>
 		</sockets:send>
 	</flow>
 ----
@@ -110,24 +109,28 @@ We will slightly modify with our previous example. Now we will add a new flow `s
 	<file:config name="File_Config" doc:name="File Config" >
 		<file:connection />
 	</file:config>
+
 	<flow name="socket-testFlow">
-		<sockets:listener doc:name="Listener"  config-ref="Sockets_Listener_config" outputMimeType="application/json" />
-		<db:select doc:name="Select"  config-ref="Database_Config">
-			<db:sql >#[&quot;SELECT first_name, last_name from SYSTEM.MUSICIANS where id = :id&quot;]</db:sql>
+		<sockets:listener doc:name="Listener" config-ref="Sockets_Listener_config" outputMimeType="application/json" />
+		<db:select doc:name="Select" config-ref="Database_Config">
+			<db:sql >#["SELECT first_name, last_name from SYSTEM.MUSICIANS where id = :id"]</db:sql>
 			<db:input-parameters><![CDATA[#[{ 'id': payload.id }]]]></db:input-parameters>
 		</db:select>
-		<set-payload value="#[output application/json --- 'name': payload[0].FIRST_NAME as String ++ ' ' ++ payload[0].LAST_NAME as String]" doc:name="Set Payload"  />
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload><![CDATA[%dw 2.0
+					output application/json --- 'name': payload[0].FIRST_NAME as String ++ ' ' ++ payload[0].LAST_NAME as String]]>
+				</ee:set-payload>
+			</ee:message>
+		</ee:transform>
 	</flow>
 
-	<flow name="socketSendAndReceive">
+	<flow name="socketSendAndReceive" >
 		<sockets:listener doc:name="Listener" config-ref="Sockets_Listener_config1" outputMimeType="application/json"/>
-		<sockets:send-and-receive doc:name="Send and receive"  config-ref="Sockets_Request_config" outputMimeType="application/json">
+		<sockets:send-and-receive doc:name="Send and receive" config-ref="Sockets_Request_config" outputMimeType="application/json">
 		</sockets:send-and-receive>
 		<logger level="INFO" doc:name="Logger" message='#[payload]'/>
-		<file:write path="musicians.txt" config-ref="File_Config" mode="CREATE_NEW">
-		  <file:content><![CDATA[#[payload]
-		  ]]></file:content>
-		</file:write>
+		<file:write path="musicians.json" config-ref="File_Config" mode="CREATE_NEW" />
 	</flow>
 ----
 
