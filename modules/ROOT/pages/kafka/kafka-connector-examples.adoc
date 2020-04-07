@@ -1,55 +1,75 @@
-= Kafka Examples - Mule 4
+= Apache Kafka Examples - Mule 4
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
-:imagesdir: ../../assets/images/
 
-== Consume a Topic
+== Publish and then Consume a Topic
 
-You can use the Kafka connector to consume messages from a topic and then feed the flow with those messages, or to produce a message into a topic. This example uses the two Kafka source operations, *Message Consumer* and *Publish Message* to push a message to Kafka and then retrieve it.
+This example shows how to use two Anypoint Connector for Apache Kafka (Kafka Connector) operations, *Publish* and *Consume*, to publish a message to Kafka and then retrieve it.
 
-Construct a flow as follows:
+=== Create the Producer flow
 
-. Drag the Kafka *Message Consumer* operation to the Studio canvas.
-. Click the green plus icon to the right of *Connector Configuration*.
-. Set these fields for the Consumer:
-+
-[%header,cols="20s,40a,40a"]
-|===
-|Field |Value |Description
-|Consumer partitions |`${consumer.topic.partitions}` |The number of partitions to use for the consumer.
-|Group id |`${consumer.groupId}` |A unique string that identifies the consumer group this consumer belongs to.
-|Bootstrap servers |`${config.basic.bootstrapServers}` |Comma-separated host-port pairs used to establish the initial connection to the Kafka cluster.
-|===
-+
-. Declare and complete the variables previously described in the corresponding YAML file (for example: src/main/resoures/properties/project_name_dev.yaml), and load that properties file as a global element. 
-. Drag *Logger* to the canvas and set the message to:
-+
-[source,xml]
-----
-#['New message arrived: ' ++ payload ++ &quot;, key:&quot; ++ attributes.key ++ &quot;, partition:&quot; ++ attributes.partition ++ &quot;, offset:&quot; ++ attributes.offset ]
-----
-+
-The Consumer flow appears in Studio as:
-+
-image::kafka/kafka-consumer-studio-flow.png[]
-+
-. In the next flow, drag *HTTP Listener* to the canvas, set the *Path* to `/pushMessage`, and use the defaults for the configuration.
-. Drag *Logger* to the canvas and set the message to:
+The Producer flow publishes a message to Kafka. The following screenshot shows the Producer flow in Anypoint Studio:
+
+.Create a flow like this one to publish a message to Kafka.
+image::kafka/kafka-producer-studio-flow.png[Kafka Connector Producer flow in Studio]
+
+To create the Producer flow:
+
+. Drag *HTTP Listener* to the canvas.
+. Change the flow name to `Producer-Flow`.
+. Set the *Display Name* of *Listener* to `Push message endpoint` and the *Path* to `/pushMessage`.
+. Drag a *Logger* component to the right of *Push message endpoint* on the Studio canvas and set the message to:
 +
 [source,xml]
 ----
 #[&quot;Message: '&quot; ++ payload.message ++ &quot;' is going to be published to topic: '&quot; ++ payload.topic ++ &quot;'.&quot;]
 ----
 +
-. Drag the Kafka *Publish Message* operation to the Studio canvas, set *Topic* to the `&#35;&#91;payload.topic&#93;` value, and set *Key* to the `&#35;&#91;now()&#93;` value.
-. Drag *Set Payload* to the canvas and set the *Value* to `Message successfully sent to Kafka topic.`
+. Drag the Apache Kafka *Publish* operation to the right of *Logger* on the Studio canvas.
+. Set the *Display Name* field to `Producer`, the *Topic* field to `\#[payload.topic]`, and the *Key* field to `#[now()]`.
+. Click the green plus icon to the right of the *Connector configuration* field to access the global element configuration fields.
+.. In the *Bootstrap server URLs* field, select *Edit inline* and then click the green plus sign.
+.. Enter the value `${config.basic.bootstrapServers}` and click *Finish*.
+. Declare and complete the variables previously described in the corresponding YAML file (for example: `src/main/resources/properties/kafka-producer.yaml`), and load that properties file as a global element.
 +
-The Producer flow appears in Studio as:
+For more information about using a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders]
 +
-image::kafka/kafka-producer-studio-flow.png[]
+. Drag the *Set Payload* component to the right of *Producer* on the Studio canvas.
+. Change the *Display Name* field to `Push response builder`.
+. Set the *Value* to `Message successfully sent to Kafka topic.`
 
-=== XML for Consuming a Topic
+=== Create the Consumer Flow
+
+The Consumer flow consumes a message from Kafka.The following screenshot shows the Consumer flow in Studio:
+
+.Create a flow like this one to retrieve a message from Kafka.
+image::kafka/kafka-consumer-studio-flow.png[Kafka Connector Consumer flow in Studio]
+
+To create the Consumer flow:
+
+. Drag the Apache Kafka *Consume Message* input source to the Anypoint Studio canvas.
+. Change the flow name to `Consumer-Flow`.
+. Set the *Display Name* field of *Message Listener* to `Consume message endpoint`.
+. Click the green plus icon to the right of the *Connector configuration* field to access the global element configuration fields.
+. Complete these fields:
+.. In the *Bootstrap server URLs* field, select *Edit inline* and then click the green plus sign.
+.. Enter the value `${config.basic.bootstrapServers}` and click *Finish.*
+.. In the *Group ID* field, enter `${consumer.groupId}`.
+.. In the *Topic Subscription Patterns* field, select *Edit inline* and then click the green plus sign.
+.. Enter the value `${config.topics}` and click *Finish*.
+. Declare and complete the variables previously described in the corresponding YAML file (for example: `src/main/resources/properties/kafka-consumer.yaml`), and load that properties file as a global element.
++
+For more information about using a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders]
++
+. Drag a *Logger* component to the right of *Consume message endpoint* on the Studio canvas, and set the message to:
++
+[source,xml]
+----
+'New message arrived: ' ++ payload ++ &quot;, key:&quot; ++ attributes.key ++ &quot;, partition:&quot; ++ attributes.partition ++ &quot;, offset:&quot; ++ attributes.offset
+----
+
+=== XML for Consuming and Publishing a Topic
 
 [source,xml,linenums]
 ----
@@ -62,7 +82,11 @@ xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka"
 	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	xmlns:spring="http://www.springframework.org/schema/beans"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="http://www.springframework.org/schema/beans
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.springframework.org/schema/beans
 	http://www.springframework.org/schema/beans/spring-beans-current.xsd
 	http://www.mulesoft.org/schema/mule/core
 	http://www.mulesoft.org/schema/mule/core/current/mule.xsd
@@ -72,46 +96,59 @@ xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka"
 	http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
 	http://www.mulesoft.org/schema/mule/kafka
 	http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd">
-    <configuration-properties file="mule-app.properties"></configuration-properties>
-    <http:listener-config name="HTTP_Listener_config" 
-      doc:name="HTTP Listener config"  >
-        <http:listener-connection host="0.0.0.0" port="8081" />
-    </http:listener-config>
+  <configuration-properties file="mule-app.properties">
+	</configuration-properties>
+  <http:listener-config name="HTTP_Listener_config"
+    doc:name="HTTP Listener config"  >
+  <http:listener-connection host="0.0.0.0" port="8081" />
+  </http:listener-config>
 
-    <kafka:kafka-consumer-config name="consumer-basic" doc:name="Consumer Basic" >
-    <kafka:basic-kafka-consumer-connection 
-    consumerPartitions="${consumer.topic.partitions}"
-    groupId="${consumer.groupId}" 
-    bootstrapServers="${config.basic.bootstrapServers}" />
-  </kafka:kafka-consumer-config>
-  <kafka:kafka-producer-config name="producer-basic" doc:name="Producer Basic" >
-    <kafka:basic-kafka-producer-connection 
-    bootstrapServers="${config.basic.bootstrapServers}" />
-  </kafka:kafka-producer-config>
-
-    <flow name="consumer-flow" >
-        <kafka:consumer config-ref="consumer-krb-plain" 
-        topic="${consumer.topic.name}"
-        doc:name="Consumer" />
-        <logger level="INFO" doc:name="Logger"
-        message="#['New message arrived: ' ++ payload ++ &quot;, key:&quot; ++ attributes.key ++ &quot;, partition:&quot; ++ attributes.partition ++ &quot;, offset:&quot; ++ attributes.offset ]"/>
-    </flow>
-  <flow name="producer-flow" >
-        <http:listener config-ref="HTTP_Listener_config" 
-        path="/pushMessage" doc:name="Push message endpoint" doc:id="DOC_ID" />
-        <logger level="INFO" doc:name="Logger" doc:id="DOC_ID"
-        message="#[&quot;Message: '&quot; ++ payload.message ++ &quot;' published to topic: '&quot; ++ payload.topic ++ &quot;'.&quot;]" />
-        <kafka:producer config-ref="producer-krb-plain" topic="#[payload.topic]"
-                        key="#[now()]"
-                        doc:name="Producer" >
-            <kafka:message ><![CDATA[#[payload.message]]]></kafka:message>
-        </kafka:producer>
-        <set-payload value="Message successfully sent to Kafka topic." 
-        doc:name="Push response builder" />
-    </flow>
+  <kafka:consumer-config name="Apache_Kafka_Consumer_configuration"
+ 	  doc:name="Apache Kafka Consumer configuration" >
+	  <kafka:consumer-plaintext-connection groupId="${consumer.groupId}" >
+	  <kafka:bootstrap-servers >
+	    <kafka:bootstrap-server value="${config.basic.bootstrapServers}" />
+	  </kafka:bootstrap-servers>
+	  <kafka:topic-patterns >
+	    <kafka:topic-pattern value='${topic1}
+	    &lt;kafka:topic-pattern value="topic-1" /&gt;
+	    &lt;kafka:topic-pattern value="topic-2" /&gt;
+	    &lt;/kafka:topic-patterns&gt;]' />
+	  </kafka:topic-patterns>
+	  </kafka:consumer-plaintext-connection>
+	</kafka:consumer-config>
+	<kafka:producer-config name="Apache_Kafka_Producer_configuration"
+	  doc:name="Apache Kafka Producer configuration" >
+	  <kafka:producer-plaintext-connection >
+	  <kafka:bootstrap-servers >
+	    <kafka:bootstrap-server value="${config.basic.bootstrapServers}" />
+	  </kafka:bootstrap-servers>
+	  </kafka:producer-plaintext-connection>
+	  </kafka:producer-config>
+	<kafka:consumer-config name="Apache_Kafka_Consumer_configuration1" doc:name="Apache Kafka Consumer configuration" >
+		<kafka:consumer-plaintext-connection groupId="${consumer.groupId}" >
+			<kafka:bootstrap-servers >
+				<kafka:bootstrap-server value="${config.basic.bootstrapServers}" />
+			</kafka:bootstrap-servers>
+			<kafka:topic-patterns >
+				<kafka:topic-pattern value="${config.topics}" />
+			</kafka:topic-patterns>
+		</kafka:consumer-plaintext-connection>
+	</kafka:consumer-config>
+	<flow name="Producer-Flow" >
+		<http:listener doc:name="Push message endpoint" config-ref="HTTP_Listener_config" path="/pushMessage" />
+		<logger level="INFO" doc:name="Logger" message="&amp;quot;Message: '&amp;quot; ++ payload.message ++ &amp;quot;' is going to be published to topic: '&amp;quot; ++ payload.topic ++ &amp;quot;'.&amp;quot;" />
+		<kafka:publish doc:name="Producer" topic="#[payload.topic]" key="#[now()]" config-ref="Apache_Kafka_Producer_configuration" />
+		<set-payload value="Message successfully sent to Kafka topic." doc:name="Push response builder" />
+	</flow>
+	<flow name="Consumer-Flow" >
+		<kafka:message-listener doc:name="Consume message endpoint" config-ref="Apache_Kafka_Consumer_configuration"/>
+		<logger level="INFO" doc:name="Logger" message="'New message arrived: ' ++ payload ++ &amp;quot;, key:&amp;quot; ++ attributes.key ++ &amp;quot;, partition:&amp;quot; ++ attributes.partition ++ &amp;quot;, offset:&amp;quot; ++ attributes.offset"/>
+	</flow>
 </mule>
 ----
 
 == See Also
 
-https://help.mulesoft.com[MuleSoft Help Center]
+* xref:introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
