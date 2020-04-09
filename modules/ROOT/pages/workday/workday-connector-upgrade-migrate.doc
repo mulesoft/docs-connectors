@@ -19,51 +19,53 @@ Upgrade Anypoint Connector for Workday (Workday Connector) to version 12.0.0.
 This release contains the following changes:
 
 * Upgraded the Workday API to 34.0
-* Added the `Student Core` operation, which enables you to invoke the Workday Student Core web service
+* Added the `Student Core` operation, which enables you to invoke the Workday Student Core Web Service
 * Replaced the `On New Object` input source with the `On Modified Object` input source, which polls data more efficiently. For more information, see <<on-modified-object,On Modified Object>>.
-* Removed the `blocking` field from the `Reconnect` and `Reconnect Forever` objects
 * Changed all operations so that they return headers as attributes
+* Added the ability to create response timeouts for the input source (`On Modified Objects`) and all connector operations by using the new `Response Timeout` and `Response Timeout Unit` fields.
+* Split the connection timeout fields into value and time unit fields. For more information, see <<changes-in-connection-types,Changes in Connection Types>>.
+* Removed the `blocking` field from the `Reconnect` and `Reconnect Forever` objects
 * Removed the `WORKDAY:UNKNOWN` error type
 
+[[changes-in-connection-types]]
 == Changes in Connection Types
 
-* Split the timeout fields into value and time unit fields
-* Added the `Response Timeout` and 'Response Timeout Unit` fields to the connector configuration. You can use these fields to create response timeouts for the input source (`On Modified Objects`) and all connector operations.
+The following fields are split into value and time unit fields:
 
-== Changed Operations, Parameters, and Return Types
-
-There are no changes related to operations, parameters, and return types.
-
-== Changes in Operations Metadata
-
-There are no changes related to keys, input metadata, or output metadata.
+// [cols="50,50"]
+[%header%autowidth.spread]
+|===
+|Field in v11.x | Replaced By
+|Connection Idle Timeout
+|Connection Idle Timeout and Connection Idle Timeout Unit
+|Connction Timeout |Connection Timeout and Connection Timeout Unit
 
 [[new-object-listener]]
 == On Modified Objects Input Source
 
-The `On New Objects` input source Workday Connector version 11x polled data in a Workday resource from the beginning of the specified time interval to the present. It did this for each worker in the Workday instance, which caused large time inefficiencies when the instance contained thousands of workers.
+The `On New Objects` input source in Workday Connector version 11x polled data in a Workday resource from the beginning of the specified time interval to the present. It did this for each worker in the Workday instance, which caused large time inefficiencies when the instance contained thousands of workers.
 
 The new `On Modified Objects` input source, instead, always polls the latest data in the specified time interval. After one poll iteration, the input source sets the earliest moment as the previous latest moment and the latest moment as the current date and time. These changes to polling make the `On Modified Objects` input source much more efficient than the `On New Objects` input source.
 
 You can use the `On Modified Objects` input source with the following operations:
 
-* Human Resources
+* `Human Resources Web Service`
 ** `Get Workers`
 ** `Get Job Profiles`
-* `Payroll interface`
+* `Payroll Interface` Web Service
 ** `Get Payees`
 ** `Payee Reference Id`
 ** `Pay Group Reference ID`
 ** `Universal ID`
-* `Recruiting`
+* `Recruiting` Web Service
 ** `Get Evergreen Requisitions`
 ** `Get Job Requisitions`
 ** `Get Positions`
-* `Staffing`
+* `Staffing` Web Service
 ** `Get Workers`
 ** `Get Positions`
 
-The following example shows how to use the `On Modified Objects` input source with the `Get Workers` operation: to 
+The following example shows how to use the `On Modified Objects` input source. This example creates a new position and hires an employee when a new Worker instance is added to Workday. The `On Modified Objects Listener` input source listens for modified Worker instances. Whey it finds a modified Worker instance, the input source logs the new Worker instance to the Studio console.
 
 output application/xml
 ----
@@ -75,15 +77,15 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
 http://www.mulesoft.org/schema/mule/workday http://www.mulesoft.org/schema/mule/workday/current/mule-workday.xsd">
     <configuration-properties file="mule-app.properties"/>
-    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="0c4d4772-93c3-4e2b-bd77-da7e902ee907" >
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
         <http:listener-connection host="0.0.0.0" port="8081" />
     </http:listener-config>
     <workday:config-version-34-config
-            name="config" doc:name="Workday Config version 34" doc:id="649d9b10-cfcc-46dd-bbe5-b7a8f7ed8136" timeZone="UTC+01:00">
+            name="Workday-Config" doc:name="Workday Config version 34"  timeZone="UTC+01:00">
         <workday:basic-authentication-api-v34-connection userName="username" password="password" tenantName="tname"/>
     </workday:config-version-34-config>
-    <flow name="create-worker-flow" doc:id="8ba9e540-ab89-46c2-b04e-c706d74bc71e" >
-        <http:listener doc:name="/put-worker" doc:id="f3124c01-c7d3-40ef-8e08-cd959853955d" config-ref="HTTP_Listener_config" path="/put-worker" />
+    <flow name="create-worker-flow" >
+        <http:listener doc:name="/put-worker" config-ref="HTTP_Listener_config" path="/put-worker" />
         <ee:transform doc:name="testData">
             <ee:message>
             </ee:message>
@@ -133,7 +135,7 @@ ns ns0 urn:com.workday/bsvc
 }]]></ee:set-payload>
             </ee:message>
         </ee:transform>
-        <workday:staffing operation="Create_Position" doc:name="Create Position" config-ref="config"/>
+        <workday:staffing operation="Create_Position" doc:name="Create Position" config-ref="Workday-Config"/>
         <ee:transform doc:name="Prepare Hire Employee Request">
             <ee:message >
                 <ee:set-payload ><![CDATA[%dw 2.0
@@ -198,15 +200,15 @@ ns ns0 urn:com.workday/bsvc
 }]]></ee:set-payload>
             </ee:message>
         </ee:transform>
-        <workday:staffing operation="Hire_Employee" doc:name="Hire Employee" config-ref="config" />
+        <workday:staffing operation="Hire_Employee" doc:name="Hire Employee" config-ref="Workday-Config" />
     </flow>
-    <flow name="listener-flow" doc:id="280c0403-6732-40e4-ba42-ce818e2caf3e" >
-        <workday:modified-objects-listener objectType="WORKERS" doc:name="On Modified Objects Listener" doc:id="2f2cd599-cb87-43cb-a48e-940df076f890" config-ref="config">
+    <flow name="listener-flow" >
+        <workday:modified-objects-listener objectType="WORKERS" doc:name="On Modified Objects Listener" config-ref="Workday-Config">
             <scheduling-strategy >
                 <fixed-frequency />
             </scheduling-strategy>
         </workday:modified-objects-listener>
-        <logger level="INFO" doc:name="Logger - On Modified Objects" doc:id="41082f91-1fc0-4331-90b4-30aca8a516c1" message='#[payload]'/>
+        <logger level="INFO" doc:name="Logger - On Modified Objects" message='#[payload]'/>
     </flow>
     </mule>
 ----
