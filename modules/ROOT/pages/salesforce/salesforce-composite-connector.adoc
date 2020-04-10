@@ -103,7 +103,7 @@ When Studio has an update, a message displays in the lower right corner, which y
 +
 image::salesforce/salesforce-composite-studio-basic-auth.png[Studio basic auth]
 
-== Use Case: Studio
+== Studio Example
 
 * Listener(HTTP) - Accepts data from HTTP requests.
 * Transform message - Transforms the HTTP input accordingly.
@@ -112,7 +112,7 @@ image::salesforce/salesforce-composite-studio-basic-auth.png[Studio basic auth]
 +
 image::salesforce/salesforce-composite-studio-use-case.png[Studio use case]
 
-== Use Case: XML
+=== XML for the Studio Example
 
 Paste this XML code into Anypoint Studio to experiment with the flow described in the previous section.
 
@@ -210,9 +210,9 @@ payload]]></ee:set-payload>
 </mule>
 ----
 
-=== Use Case: HTTP Input
+=== HTTP Input For the Studio Example
 
-An example of HTTP input for this flow is:
+An example of HTTP input for the Studio example is:
 
 [source,json,linenums]
 ----
@@ -291,7 +291,172 @@ An example of HTTP input for this flow is:
 }
 ----
 
-== Prequery Use Case
+== Pre-query Example
+
+The following example provides metadata for an object to be queried, generates two sub-requests that contain this metadata, and then executes the sub-requests.  In this example:
+
+* `HTTP Listener` initiates the flow when it detects an event in the `executeFlow` path.
+* The first `Transform Message` component sets a value for the `Name` field and then passes this value to the `Pre create` operation.
+* The `Pre create` operation provides metatdata for creating an object called `NewAcount`. It generates a sub-request for the `executeCompositeBatch` operation.
+* The second `Transform Message` component sets values for the `ID` and `Type` fields, and then passes these values to the `Pre query` operation.
+* The `Pre query` operation provides metadata for an object to be queried. It generates a sub-request for the `Execute composite batch` operation.
+* The third `Transform Message` operation passes the output of the `Pre query` operation to the `Execute composite batch operation`.
+* `The executeCompositeBatch` operation executes the sub-requests that the `Pre create` and `Pre query` operations created.
+* The fourth `Transform Message` operation converts the output to JSON format.
+
+=== Flow for the Pre-Query Example
+
+The following screenshot shows the flow for the Pre-Query example:
+
+image::salesforce/salesforce-composite-prequery-flow.png[Pre-Query Flow]
+
+=== Create the Pre-Query Flow
+
+Follow these steps to create the Pre-Query flow in Studio:
+
+. In the Mule Palette view, search for *HTTP* and select the *Listener* operation.
+. Drag the *Listener* operation onto the canvas.
+. In the Listener properties window, set the *Path* field to `/executeFlow`.
+. In the Mule Palette view, search for *Transform Message*.
+. Drag the *Transform Message* component onto the canvas, to the right of *Listener*.
+. Enter the name `MyNewAccount`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/json
+---
+{
+   Name: "MyNewAccount"
+}
+----
++
+. In the Mule Palette view, search for *Salesforce* and select the *Salesforce Composite Pre create* operation.
+. Drag the *Pre create* operation to the right of *Transform Message*.
+. Click the green plus icon to the right of the *Connector configuration* field to access the Salesforce Composite global element configuration fields.
+. Complete the fields using variables, as follows:
++
+image::salesforce/salesforce-composite-global-config.png[Salesforce Composite global element configuration]
++
+. In the Pre create properties window, enter `Account` in the *Type* field.
+. In a YAML file src/main/resoures/properties/project_name_dev.yaml, declare and enter values for the variables from step 10.
+. Load the YAML file as a global element.
+. Drag a second *Transform Message* component to the right of *Pre create*.
+. Enter the following name-value pairs:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/json
+---
+{
+"Id": payload.Id,
+"Fields" : ["Id", "Name"],
+"Type": "Account"
+}
+----
++
+. Drag a Salesforce Composite *Pre query* operation to the right of the second *Transform Message*.
+. In the *Query* field, enter the following query:
++
+`Select Name from Account WHERE Name LIKE '%:name %'`
++
+. Drag a third *Transform Message* component to the right of *Pre query*.
+. Set the output to `payload`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/java
+---
+[
+payload
+]
+----
+. Drag a Salesforce Composite *Execute composite batch* operation to the right of the third *Transform Message*.
+. Drag a fourth *Transform Message* component to the right of *Execute composite batch*.
+. Set the output to `application/json`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/json
+---
+payload
+----
+
+=== XML for the Pre-Query Example
+
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:salesforce-composite="http://www.mulesoft.org/schema/mule/salesforce-composite" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+   xmlns:http="http://www.mulesoft.org/schema/mule/http"
+   xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce-composite http://www.mulesoft.org/schema/mule/salesforce-composite/current/mule-salesforce-composite.xsd">
+   <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+      <http:listener-connection host="0.0.0.0" port="8081" />
+   </http:listener-config>
+   <salesforce-composite:composite-config name="Salesforce_Composite_Config" doc:name="Salesforce Composite Config" >
+      <salesforce-composite:oauth-user-pass-connection consumerKey="${consumerKey}" consumerSecret="${consumerSecret}" username="${username}" password="${password}" securityToken="${securityToken}" />
+   </salesforce-composite:composite-config>
+   <flow name="composite-prequery-exampleFlow" >
+      <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/executeFlow"/>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+   Name: "MyNewAccount"
+}]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+      <salesforce-composite:pre-create type="Account" doc:name="Pre create" config-ref="Salesforce_Composite_Config">
+      </salesforce-composite:pre-create>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[output application/java
+---
+{
+   "Id": payload.Id,
+   "Fields" : ["Id", "Name"],
+   "Type": "Account"
+}]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+      <salesforce-composite:pre-query doc:name="Pre query" config-ref="Salesforce_Composite_Config">
+         <salesforce-composite:query >Select Name from Account WHERE Name LIKE '%:name %'
+                    </salesforce-composite:query>
+         <salesforce-composite:parameters ><![CDATA[#[output applicaton/java
+---
+{
+   "name" : "MyNewAccount"
+}]]]></salesforce-composite:parameters>
+      </salesforce-composite:pre-query>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[
+   payload
+]]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+      <salesforce-composite:execute-composite-batch doc:name="Execute composite batch" config-ref="Salesforce_Composite_Config"/>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+   </flow>
+</mule>
+----
 
 == See Also
 
