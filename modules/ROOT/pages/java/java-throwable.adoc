@@ -1,68 +1,102 @@
-= Example: Working With Throwables
+= Work With Throwables - Mule 4
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
-:keywords: Java, Throwable, error
+:imagesdir: ../../assets/images/
 
+The Java module exposes useful DataWeave functions for throwable instances.
+(In Java, a throwable is a `throw` statement.)
 
+These functions have been available since DataWeave version 1.2.0.
 
+== Check for a Cause
 
+You can check if a throwable was caused by a certain type of exception 
+using the `isCausedBy` function. This is especially useful when adding logic to
+xref:mule-runtime::intro-error-handlers/adoc[error handlers].
 
-The Java module exposes useful functions to deal with Throwable instances.
+[source,java,linenums]
+----
+package com.me;
 
-IMPORTANT: These functions have been available since version 1.2.0.
+public class TaxCalculator {
 
-== Checking for a Cause
+	public Double calculateTax(Double price) {
+		if (price == null) {
+			throw new NullPointerException("Must provide a value for price");
+		}
+		if (price < 0) {
+			throw new IllegalArgumentException("Price must be a non-negative value, but was: " + price);
+		}
+		return price * 0.21;
+	}
+}
+----
 
-You can check whether a Throwable was caused by a certain type of Exception using the `isCausedBy` function.
+The `calculateTax(Double price)` method declares the `IllegalArgumentException` 
+and `NullPointerException` exceptions.
 
-For example, if invoking the tax calculation method example fails, it is possible to check whether it was given an invalid argument (such as a negative value) or whether it was given a `null` one, assuming those are failures the method declares.
+The next code example lists part of a
+flow that throws an error during the execution of the
+xref:java/java-invoke-method.adoc[`invoke` operation].
+
+To check which of the Java exceptions occurred during the failed invocation of
+the `calculateTax(Double price)` method, use the `isCausedBy` function in the error
+handler to add different logic for each of the cases.
 
 [source,xml,linenums]
 ----
-<java:new class="com.foo.TaxCalculator"
-  constructor="TaxCalculator()"
-  target="taxCalculator"/>
-<java:invoke instance="#[vars.taxCalculator]"
-  class="com.foo.TaxCalculator"
-  method="calculate(Long)">
+<java:new class="com.me.TaxCalculator" 
+	constructor="TaxCalculator()" 
+	target="taxCalculator"/>
+<java:invoke instance="#[vars.taxCalculator]" 
+	class="com.me.TaxCalculator" 
+	method="calculateTax(Double)">
     <java:args>#[{price: payload.price}]</java:args>
 </java:invoke>
 <error-handler>
-    <on-error-continue when="#[Java::isCausedBy(error.cause, 'java.lang.IllegalArgumentException')]">
-        <set-payload value="You can't have negative prices."/>
+    <on-error-continue 
+    	when="#[Java::isCausedBy(error.cause, 'java.lang.IllegalArgumentException')]">
+        <set-payload value="Negative prices are not allowed."/>
     </on-error-continue>
-    <on-error-continue type="#[Java::isCausedBy(error.cause, 'java.lang.NullPointerException')]">
+    <on-error-continue 
+    	type="#[Java::isCausedBy(error.cause, 'java.lang.NullPointerException')]">
         <set-payload value="There is no price."/>
     </on-error-continue>
 </error-handler>
 ----
 
-== Obtaining a Root Cause
+== Obtain a Root Cause
 
-You can also obtain the root cause of a Throwable, disregarding any exception wrapping, with the `getRootCause` function.
+The `getRootCause` function obtains the root cause of a throwable, disregarding any
+exception wrapping.
 
-In the following example, all tax calculation errors are handled by another class, which takes the root cause of the Throwable.
+In the next example, all tax calculation errors are handled by 
+the `FailureHandler` class, which has the `handle(Throwable)` method that takes the root cause of
+the throwable. To make that possible, the `getRootCause` function can be used to pass the
+root cause as an argument to the `handle(Throwable)` method.
 
 [source,xml,linenums]
 ----
-<java:new class="com.foo.TaxCalculator"
+<java:new class="com.me.TaxCalculator"
   constructor="TaxCalculator()"
   target="taxCalculator"/>
 <java:invoke instance="#[vars.taxCalculator]"
-  class="com.foo.TaxCalculator"
-  method="calculate(Long)">
+  class="com.me.TaxCalculator"
+  method="calculateTax(Double)">
     <java:args>#[{price: payload.price}]</java:args>
 </java:invoke>
 <error-handler>
     <on-error-continue>
-      <java:invoke-static class="com.foo.FailureHandler" method="handle(Throwable)">
+      <java:invoke-static 
+      	class="com.me.FailureHandler" 
+	method="handle(Throwable)">
           <java:args>#[{cause: Java::getRootCause(error.cause)}]</java:args>
       </java:invoke-static>
     </on-error-continue>
 </error-handler>
 ----
 
-== See also
+== See Also
 
-xref:4.1@mule-runtime::mule-error-concept.adoc[About the Mule Error]
+* xref:mule-runtime::mule-error-concept.adoc[About the Mule Error]

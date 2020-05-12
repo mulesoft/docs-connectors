@@ -1,8 +1,8 @@
-= Aggregator Examples
+= Aggregators Examples - Mule 4
 ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
-:keywords: aggregators, connector
+
 
 [[aggregators-examples]]
 
@@ -23,7 +23,7 @@ So, you could use this:
 </aggregators:size-based-aggregator>
 ----
 
-Now, suppose that you want to execute some action every time your list of names is filled by a 10%. You do not want to do this for every new element because that would cause too many executions. You can assume that the logic to be executed is in another flow named `partialAction`. We can you the `incremental-aggregation` route for this.
+If you do not want to execute an action for every new element because that would cause too many executions, you can use `incremental-aggregation`. For example, you could execute an action every time your list of names increases by an increment of 10% as shown here: 
 
 [source,xml,linenums]
 ----
@@ -42,7 +42,9 @@ Now, suppose that you want to execute some action every time your list of names 
 </aggregators:size-based-aggregator>
 ----
 
-But what if you do not want to wait forever to fill every batch. In that case, you might want to process all the events that you have even if the `maxSize` is not reached. For this, you can configure a timeout for your aggregator. This example sets the waiting limit to 10 seconds.
+You can assume that the logic to be executed is in another flow named `partialAction`. 
+
+If you do not want to wait forever to fill every batch, you can process all the events that you have even if the `maxSize` value is not reached, by setting a timeout for your aggregator. The following example sets the timeout to 10 seconds.
 
 
 [source,xml,linenums]
@@ -65,7 +67,7 @@ But what if you do not want to wait forever to fill every batch. In that case, y
 </aggregators:size-based-aggregator>
 ----
 
-To make sure that the `aggregation-complete` route will execute once a timeout occurs, you also need to include a listener, for example:
+To make sure that the logic that processes all aggregated elements executes once a timeout occurs, you also need to include a listener, for example:
 
 [source,xml,linenums]
 ----
@@ -73,7 +75,45 @@ To make sure that the `aggregation-complete` route will execute once a timeout o
 <flow-ref name="whatToDoWithAllTheseNames"/>
 ----
 
-Keep in mind that for this case, the data types that come from the `aggregation-complete` route and `aggregator-listener` are the same. So, for the execution of the flow `whatToDoWithAllTheseNames`, it does not matter where the data comes from.
+For this case, the data types that come from the `aggregation-complete` route and `aggregator-listener` are the same. So, for the execution of the flow `whatToDoWithAllTheseNames`, it does not matter where the data comes from.
+However, with this configuration, when the aggregation is complete, the flow `whatToDoWithAllTheseNames` triggers twice: once from the `aggregation-complete` route `flow-ref`, and again from the `flow-ref` in the flow with the `aggregator-listener`.
+
+To avoid multiple executions of the same logic, wrap the `flow-ref` value `aggregator-listener` in a `choice` component that uses the `isAggregationComplete` attribute to check for an incomplete aggregation: 
+
+[source,xml,linenums]
+----
+<flow name="test-flow">
+    ...
+    <aggregators:size-based-aggregator name="personsNameAggregator"
+                                       maxSize="100"
+                                       timeout="10"
+                                       timeoutUnit="SECONDS">
+        <aggregators:content>#[vars.personName]</aggregators:content>
+        <aggregators:incremental-aggregation>
+            <choice>
+                <when expression="#[(sizeOf(payload) mod 10) == 0]">
+                    <flow-ref name="partialAction"/>
+                </when>
+            </choice>
+        </aggregators:incremental-aggregation>
+        <aggregators:aggregation-complete>
+            <flow-ref name="whatToDoWithAllTheseNames"/>
+        </aggregators:aggregation-complete>
+    </aggregators:size-based-aggregator>
+    ...
+</flow>
+
+<flow name="aggregator-listener-flow">
+    <aggregators:aggregator-listener aggregatorName="personsNameAggregator" includeTimedOutGroups="true"/>
+    <choice>
+        <when expression="#[not attributes.isAggregationComplete]">
+            <flow-ref name="whatToDoWithAllTheseNames"/>
+        </when>
+    <choice>
+</flow>
+----
+
+In this example, the `flow-ref` is called only when a timeout triggers that flow.
 
 Lastly, you realize that you need to process each person according to nationality. This information comes in a variable. However, in this case, assume that you want to process every person from the same country together in the same batch.
 
@@ -109,7 +149,7 @@ The flow also needs a listener for timeouts:
 <flow-ref name="whatToDoWithAllTheseNamesFromSomeCountry"/>
 ----
 
-Notice that the example does not configure an eviction time in the aggregator. That is because the default value is `0` (Evict right after the group is released), which is the desired behavior. So if a group completed or timed out, a subsequent value can be added to the group without being rejected.
+Notice that the example does not configure an eviction time in the aggregator. That is because the default value is `0`, which means the eviction occurs directly after the group is released, which is the desired behavior. Therefore, if a group finishes or is timed out, a subsequent value can be added to the group without being rejected.
 
 
 [[see_also]]
