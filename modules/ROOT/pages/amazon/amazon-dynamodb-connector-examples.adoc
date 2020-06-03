@@ -49,8 +49,7 @@ image::amazon/amazon-dynamodb-http-global-element.png[HTTP Listener Global Eleme
 . Click *OK*.
 . In the *Path* field on the HTTP Listener properties window, enter `/createtable`:
 +
-+
-image::amazon/amazon-dynamodb-http-props.png[HTTP propert==ies]
+image::amazon/amazon-dynamodb-http-prop.png[HTTP properties]
 
 === Configure the Create Table Operation
 
@@ -71,9 +70,9 @@ Configure the `Create Table` operation to create a table named `Issues`.
 |===
 +
 For example:
-+
-image::amazon/amazon-dynamodb-gobal-element.png[Global Element for the Create Table Operation]
-+
+
+image::amazon/amazon-dynamodb-global-element.png[Amazon DynamoDB global element]
+
 The corresponding XML configuration should be as follows:
 +
 [source,xml,linenums]
@@ -120,7 +119,50 @@ The XML flow for the Create Table example should look like this after you config
 
 [source,xml,linenums]
 ----
+<?xml version="1.0" encoding="UTF-8"?>
 
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns:dynamodb="http://www.mulesoft.org/schema/mule/dynamodb"
+xmlns="http://www.mulesoft.org/schema/mule/core"
+xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/dynamodb
+http://www.mulesoft.org/schema/mule/dynamodb/current/mule-dynamodb.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<dynamodb:config
+		name="Amazon_DynamoDB_Configuration"
+		doc:name="Amazon DynamoDB Configuration">
+		<dynamodb:basic-connection
+			accessKey="${config.accesskey}"
+			secretKey="${config.secretkey}" />
+	</dynamodb:config>
+	<http:listener-config
+		name="HTTP_Listener_config"
+		doc:name="HTTP Listener config">
+		<http:listener-connection host="localhost"
+		port="8081" />
+	</http:listener-config>
+	<flow name="create-table-flow" >
+	<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/createtable"/>
+		<dynamodb:create-table doc:name="Create table" config-ref="Amazon_DynamoDB_Configuration" tableName="Issues" readCapacityUnits="5" writeCapacityUnits="5">
+		<dynamodb:attribute-definitions>
+			<dynamodb:attribute-definition attributeName="IssueId" attributeType="STRING" />
+			<dynamodb:attribute-definition attributeName="Title" attributeType="STRING" />
+			<dynamodb:attribute-definition attributeName="CreateDate" attributeType="STRING" />
+			<dynamodb:attribute-definition attributeName="DueDate" attributeType="STRING" />
+		</dynamodb:attribute-definitions>
+		<dynamodb:key-schemas>
+			<dynamodb:key-schema-element attributeName="IssueId" keyType="HASH" />
+			<dynamodb:key-schema-element attributeName="Title" keyType="RANGE" />
+		</dynamodb:key-schemas>
+	</dynamodb:create-table>
+</flow>
+</mule>
 ----
 
 [[secondary-index]]
@@ -206,7 +248,7 @@ The primary key attributes and index key attributes are automatically copied, no
             } as Object {
             	class: "org.mule.extension.dynamodb.api.model.GlobalSecondaryIndex"
             }
-        ]]' doc:name="Secondary" doc:id="cfcce18a-85c2-40ee-89fd-f8d5b5e64198" variableName="secondary"/>
+        ]]' doc:name="Secondary" variableName="secondary"/>
 ----
 
 [[configure-logger]]
@@ -221,13 +263,122 @@ image::amazon/amazon-dynamodb-logger-props.png[Logger Properties]
 
 === XML Flow for the Complete Create Table Example
 
-The XML flow for the Complete Create Table example should look like this:
+The XML flow for the complete Create Table example should look like this:
 
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
 
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns:dynamodb="http://www.mulesoft.org/schema/mule/dynamodb"
+xmlns="http://www.mulesoft.org/schema/mule/core"
+xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/dynamodb
+http://www.mulesoft.org/schema/mule/dynamodb/current/mule-dynamodb.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<dynamodb:config
+		name="Amazon_DynamoDB_Configuration"
+		doc:name="Amazon DynamoDB Configuration">
+		<dynamodb:basic-connection
+			accessKey="${config.accesskey}"
+			secretKey="${config.secretkey}" />
+	</dynamodb:config>
+	<http:listener-config
+		name="HTTP_Listener_config"
+		doc:name="HTTP Listener config">
+		<http:listener-connection host="localhost"
+		port="8081" />
+	</http:listener-config>
+	<flow name="create-table-flow" >
+	<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/createtable"/>
 
+		<set-variable value='#[[
+            {
+                "IndexName": "CreateDateIndex",
+                "Projection": {
+                    "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                    "WriteCapacityUnits": 5,
+                    "ReadCapacityUnits": 5
+                },
+                "KeySchema": [
+                    {
+                        "KeyType": "HASH",
+                        "AttributeName": "CreateDate"
+                    },
+                    {
+                    	"KeyType": "RANGE",
+                    	"AttributeName": "IssueId"
+                    }
+                ]
+            } as Object {
+            	class: "org.mule.extension.dynamodb.api.model.GlobalSecondaryIndex"
+            },
+            {
+                "IndexName": "TitleIndex",
+                "Projection": {
+                    "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                    "WriteCapacityUnits": 5,
+                    "ReadCapacityUnits": 5
+                },
+                "KeySchema": [
+                    {
+                        "KeyType": "HASH",
+                        "AttributeName": "Title"
+                    },
+                    {
+                    	"KeyType": "RANGE",
+                    	"AttributeName": "IssueId"
+                    }
+                ]
+            } as Object {
+            	class: "org.mule.extension.dynamodb.api.model.GlobalSecondaryIndex"
+            },
+            {
+                "IndexName": "DueDateIndex",
+                "Projection": {
+                    "ProjectionType": "ALL"
+                },
+                "ProvisionedThroughput": {
+                    "WriteCapacityUnits": 5,
+                    "ReadCapacityUnits": 5
+                },
+                "KeySchema": [
+                    {
+                        "KeyType": "HASH",
+                        "AttributeName": "DueDate"
+                    }
+                ]
+            } as Object {
+            	class: "org.mule.extension.dynamodb.api.model.GlobalSecondaryIndex"
+            }
+        ]]' doc:name="Secondary" variableName="secondary"/>
+
+		<dynamodb:create-table doc:name="Create table" config-ref="Amazon_DynamoDB_Configuration" tableName="Issues" readCapacityUnits="5" writeCapacityUnits="5">
+		<dynamodb:attribute-definitions>
+			<dynamodb:attribute-definition attributeName="IssueId" attributeType="STRING" />
+			<dynamodb:attribute-definition attributeName="Title" attributeType="STRING" />
+			<dynamodb:attribute-definition attributeName="CreateDate" attributeType="STRING" />
+			<dynamodb:attribute-definition attributeName="DueDate" attributeType="STRING" />
+		</dynamodb:attribute-definitions>
+		<dynamodb:key-schemas>
+			<dynamodb:key-schema-element attributeName="IssueId" keyType="HASH" />
+			<dynamodb:key-schema-element attributeName="Title" keyType="RANGE" />
+		</dynamodb:key-schemas>
+	</dynamodb:create-table>
+		<logger level="INFO" doc:name="Logger"
+    message="#[payload]"/>
+</flow>
+</mule>
 ----
 
 === Run the Project
@@ -274,8 +425,6 @@ Configure `HTTP Listener` to listen for HTTP requests on the `/deletetable` path
 . In the Listener properties window, click the plus sign (+) next to the Connector configuration field to create a global element for `HTTP Listener`.
 . In the *Host* field, enter `localhost` and click *OK*.
 . In the *Path* field, enter `/deletetable`.
-+
-image::amazon/amazon-dynamodb-http-props.png[DynamoDB HTTP configuration properties]
 
 === Configure the Delete Table Operation
 
@@ -312,8 +461,6 @@ The corresponding XML configuration should be as follows:
 * If the connection is unsuccessful, review or correct any incorrect parameters, and then test again.
 . Click *OK*.
 . In the properties editor, set the value of `Table name` to `Issues`:
-+
-image::amazon/amazon-dynamodb-delete-table-info.png[Delete table info properties]
 
 [[configure-logger]]
 === Configure a Logger
@@ -322,8 +469,6 @@ Configure a `Logger` component to print the response generated by the `Delete ta
 
 . Drag a *Logger* component to the right of *Delete Table* on the Studio canvas.
 . In the *Logger* component, enter `#[payload]`in the *Message* field.
-+
-image::amazon/amazon-dynamodb-delete-table-logger-props.png[dynamodb delete table logger]
 
 === XML Flow
 
@@ -345,6 +490,8 @@ The following screenshot shows the Studio flow for scanning a table:
 
 image::amazon/amazon-dynamodb-scan-operation.png[Creating a table in Amazon DynamoDB]
 
+
+
 === Steps for Performing a Scan
 
 Follow these steps to perform a scan:
@@ -364,7 +511,6 @@ to print the response generated by the `Scan` operation to the Mule console.
 === XML for the Scan Table Example
 
 The XML for the Scan Table example should look like this:
-
 
 
 === Response to the Scan Table Example
