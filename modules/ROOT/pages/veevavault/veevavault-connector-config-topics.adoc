@@ -44,6 +44,10 @@ Veeva Vault Connector supports the following operations and configurations:
 
 * <<spark_validator,Spark Validator>>
 
+*Invoke Rest API*
+
+* <<invoke_rest_api,Invoke Rest API>>
+
 == Connector Configuration
 
 image::veevavault/veevavault-connector-basic-configuration.png[image,width=601,height=54]
@@ -541,9 +545,9 @@ The Spark Validator operation validates and verifies Spark messages triggered fr
 
 The output of the Spark Validator operation includes Spark attributes (optional) with the Spark message as it is received from Vault.
 
-*Note*: Before triggering a Spark message from the vault make sure to raise a support ticket with Veeva Support to increase the time interval (for example, 10 seconds) for the Spark message to resend or retry. By default, it is configured as 3 seconds, which is less than the time required for Spark Validator to complete message validation and verification.
+*Note*: Before triggering a Spark message from the Vault make sure to raise a support ticket with Veeva Vault Support to increase the time interval (for example, 10 seconds) for the Spark message to resend or retry. By default, it is configured as 3 seconds, which is less than the time required for Spark Validator to complete message validation and verification.
 
-*Note*: As per Veeva Systems the public key (00001.pem) expires every two years. You receive notification in advance advising you of the expiration date. If you are using this operation in a Mule application flow, after the public key expiration date you need to remove the public key file from the path configured in the *Public Key Path* field. A new public key will be created during execution of the key removal. If you don't do this, Spark message verification fails as *INVALID_SPARK_MESSAGE*. The Mule application deployed on Cloudhub with the default path must be restarted for successful Spark Message verification.
+*Note*: As per Veeva Systems the public key (00001.pem) expires every two years. You receive notification in advance advising you of the expiration date. If you are using this operation in a Mule application flow, after the public key expiration date you need to remove the public key file from the path configured in the *Public Key Path* field. A new public key will be created during execution of the key removal. If you don't do this, Spark message verification fails as *INVALID_SPARK_MESSAGE*. The Mule application deployed on CloudHub with the default path must be restarted for successful Spark Message verification.
 
 
 === Spark Validator Configuration
@@ -567,10 +571,141 @@ image::veevavault/veevavault-connector-spark-validator-output.png[image,width=28
 
 |===
 
+[[invoke_rest_api]]
+=== Invoke Rest API
+
+The Invoke Rest API operation enables you to invoke Veeva Vault Rest APIs. The response returned is either in JSON (default) or XML format, depending on the header *Accept* value provided.
+
+==== Invoke Rest API Configuration
+
+image:veevavault/veevavault-connector-invoke-rest-api.png[image,width=852,height=600]
+
+[cols=",",options="header",]
+|===
+|*Field* |*Description*
+|*Method*|Method to invoke the Veeva Vault Rest API. The default is *GET*.
+|*Path*|URI path to invoke the Veeva Vault Rest API. For example: `/objects/documents/{doc_id}`
+|*Body*|Body to send with a request to invoke Veeva Rest API. Default is *#[payload]*.
+|*Headers*|Headers in key-value format to send along with the request. If there are no required headers in the request, leave empty. The default is *Empty list*.
+|*URI Parameters*|URI Parameters in key-value format to resolve the value in the path. If there are no URI parameters in the path, leave empty. The default is an *Empty List*.
+|*Query Parameters*|Query parameters in key-value format to send along with the request. If there are no query parameters required in the request, leave empty. The default is *Empty list*.
+|*Request Streaming Mode*|Whether to use streaming mode for the request. By default, if the type of the payload is a stream, streaming is used to send the request. Select the streaming option from the drop-down list. 
+|*Input*|N/A
+|*Output*|Response either in JSON (default) or XML format, depending on the specified header *Accept* value provided in *Headers* section. 
+|===
+
+A typical use of the Invoke Rest API operation is to invoke the Veeva Vault Rest API using the default GET method. By default, GET methods do not send the payload in the request; the body of the HTTP request is empty. The other methods send the message payload as the body of your request.
+
+After sending a request, the connector receives the response either in JSON (default) or XML format, depending on the header *Accept* value provided. The payload is then passed to the next element in your application’s flow.
+
+==== Add Parameters
+
+By default, the Invoke Rest API operation sends the Mule message payload as the request body, but you can customize it using a DataWeave script or expression. In addition to the body of the request, you can configure:
+
+- Headers
+- Query parameters
+- URI parameters
+
+==== Headers
+
+In *General > Request > Query Parameters*, click the plus icon (+) to add headers to the request. For example, add header names `HeaderName1` and `HeaderName2`, and header values `HeaderValue1` and `HeaderValue2`. 
+
+You can use DataWeave expressions, for example:
+
+----
+#[{'HeaderName1' : 'HeaderValue1', 'HeaderName2' : 'HeaderValue2'}].
+----
+
+==== URI Parameters
+You configure a URI parameter when you want to use a placeholder, such as `/objects/documents/{doc_id}`, in the path of your request. To configure a URI parameter, type the placeholder enclosed in curly brackets in the *Path* field. Select *URI Parameters*, and click the plus sign (+), to enter a name and value.
+
+==== Query Parameters
+
+In *General > Request > Query Parameters*, click the plus icon (+) to add a parameter to a request. Type a name and value for the parameter or use a DataWeave expression to define the name and value.
+
+==== Sending Form Parameters in a POST Request
+
+To send parameters in a POST request:
+
+. In *General > Request*, select the *POST* method. 
+. In *Body*, construct the payload of the Mule message. 
++
+Following are some examples:
+
+.. Enter the names and the values of the parameters to send for *application/x-www-form-urlencoded*: 
++
+----
+#[output application/x-www-form-urlencoded --- {'key1':'value1', 'key2':'value2'}]
+----
++
+.. In *multipart/form-data*, ensure the header *Content-Type* value contains a boundary attribute with the same value as the Dataweave output as shown, for example: `multipart/form-data; boundary=abcdefg`.
++
+----
+%dw 2.0
+output multipart/form-data boundary='abcdefg'
+---
+{
+	parts: {
+		file: {
+			headers: {
+				"Content-Disposition": {
+					"name": "file",
+					"filename": attributes.fileName
+				},
+				"Content-Type": payload.^mimeType
+			},
+			content : payload
+		},
+		name__v: {
+			headers: {
+				
+			},
+			content: 'Test Document'
+		},
+		type__v: {
+			headers: {
+			
+			},
+			content: 'Trial Management'
+		},
+		subtype__v: {
+			headers: {
+
+			},
+			content: 'Meetings'
+		},
+		classification__v: {
+			headers: {
+
+			},
+			content: 'Kick-off Meeting Material'
+		},
+		lifecycle__v: {
+			headers: {
+				
+			},
+			content: 'Base Doc Lifecycle'
+		},
+		study__v: {
+			headers: {
+				
+			},
+			content: '0ST000000000301'
+		},	
+		comments__c: {
+			headers: {
+				
+			},
+			content: 'Test Document'
+		}						
+	}
+}
+----
+
 [[connector_operations_success_and_failure_response]]
 == Connector Operations SUCCESS and FAILURE Response
 
-The Veeva Vault Connector operation responses are based on the Veeva API success or failure response with an error.
+The Veeva Vault Connector operation responses are based on the Veeva Vault API success or failure response with an error.
 
 The connector returns a `SUCCESS` response at `HIGH LEVEL` and `SUCCESS` or `FAILURE` at `LOW LEVEL`. This means the connector operation is successful but some document or object records failed to create or update due to some irrelevant metadata being passed in the request.
 
@@ -632,7 +767,7 @@ The connector returns a `SUCCESS` response at `HIGH LEVEL` and `SUCCESS` or `FAI
 }
 --------------------
 
-The Veeva Vault operations throw an exception when Veeva APIs return a `FAILURE` response, for example:
+The Veeva Vault operations throw an exception when Veeva Vault APIs return a `FAILURE` response, for example:
 
 *FAILURE with an ERROR response*
 --------------------
@@ -646,7 +781,7 @@ The Veeva Vault operations throw an exception when Veeva APIs return a `FAILURE`
 	]
 }
 --------------------
-Upon receiving the `FAILURE` response from Veeva APIs, the connector operations throw an exception, which is caught in the *Error Handling* component within the Mule flow; for example:
+Upon receiving the `FAILURE` response from Veeva Vault APIs, the connector operations throw an exception, which is caught in the *Error Handling* component within the Mule flow:
 
 --------------------
 **********************************************************************************
