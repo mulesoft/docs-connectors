@@ -1,0 +1,621 @@
+= Microsoft SharePoint 2013 Connector - Mule 3
+:page-aliases: 3.9@mule-runtime::microsoft-sharepoint-2013-connector.adoc
+
+Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[Select]
+
+Microsoft SharePoint 2013 Connector v2.3
+
+Anypoint Connector for Microsoft SharePoint 2013 (SharePoint 2013 Connector) is a web app platform for content and document management, intranet portals, collaboration, extranets, websites, and enterprise search.
+
+The connector enables integration with SharePoint 2013 through its REST API.
+
+Release Notes: xref:release-notes::connector/microsoft-sharepoint-2013-connector-release-notes.adoc[Microsoft SharePoint 2013 Connector Release Notes] +
+Samples: link:{attachmentsdir}/sharepoint-connector-samples.zip[sharepoint-connector-samples.zip] +
+FAQ: <<Frequently Asked Questions>>
+
+== Supported Operations
+
+* *Lists and List Items API*:
++
+Create, delete, retrieve, and update lists and list items
++
+* *Files and Folders API*:
+** Files:
++
+Add, retrieve content, retrieve metadata, delete, check out, undo checkout, check in, publish, unpublish, approve, deny, recycle, and copy files
++
+** Folders:
++
+Create, delete, and retrieve folders
+
+== Supported Microsoft SharePoint Versions
+
+* Microsoft SharePoint 2013
+* Microsoft SharePoint Online
+** *FileQuery* and *FolderQuery* operations are not supported when interacting with SharePoint Online.
+
+== POM File Information
+
+If you Mavenize your Studio project, you can use this information in your project's pom.xml file:
+
+[source,xml,linenums]
+----
+<dependency>
+  <groupId>org.mule.modules</groupId>
+  <artifactId>mule-module-sharepoint-2010</artifactId>
+  <version>RELEASE</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+Mule converts RELEASE to the latest version. To specify a version, view
+https://www.mulesoft.com/exchange/org.mule.modules/mule-module-sharepoint/[Microsoft SharePoint 2013 Connector] in
+Anypoint Exchange and click *Dependency Snippets*.
+
+== Authentication
+
+SharePoint 2013 Connector supports different authentication schemes based on which
+Microsoft SharePoint that you access:
+
+Supported Microsoft SharePoint authentication on-premise:
+
+* NTLM
+* Claims-based authentication against Microsoft ADFS
+* Security token obtained from Microsoft ADFS
+* Unsupported authentication: Kerberos
+
+Supported Microsoft SharePoint Online authentication:
+
+* Microsoft Online (Office 365) managed users
+* Microsoft Online (Office 365) federated users against Microsoft ADFS
+* Security token obtained from Microsoft Online
+* Standard SharePoint Online user credentials
+
+=== Claims-Based Authentication
+
+Configuring the connector to use claims-based authentication requires the following information from the Security Token Service (STS) to use for authenticating:
+
+* *Sts Url*
++
+The STS endpoint that accepts username and password for authenticating users and understands the WS-Trust 1.3 protocol. When the STS is Microsoft’s ADFS (Active Directory Federation Services), this URL usually is:
++
+`+https://youradfs.com/adfs/services/trust/13/usernamemixed+`.
++
+* *Sts App Identifier*
++
+A string that identifies the SharePoint site in the STS. It is also known as Relying Party Identifier, Client Identifier, Scope, or Realm. When the STS is Microsoft’s ADFS, this value can be discovered in the AD FS Management console under AD FS at *Trust Relationships* > *Relying Party Trusts* > (SharePoint Site’s relying part properties) > *Identifiers* tab.
++
+You can obtain the STS App Identifier by logging into the SharePoint Site that you want to be accessed by opening the Site URL in a web browser. If there is more than one authentication provider configured for a site, a drop-down menu lists the options. Select the desired STS to be redirected to the STS’s login page. At this point, the address bar of the web browser contains a URL that includes the following query parameters: +
++
+`wa=wsignin1.0&wtrealm=uri%3amule%3asp80`
++
+The parameter *wa* tells the STS when a sign in is initiated. The *wtrealm* contains the URI-encoded value for the Sts App Identifier. In the example, `uri%3amule%3asp80` is `uri:mule:sp80`. The unencoded value is the parameter for the connector’s configuration.
+
+=== Security Token Authentication
+
+You can use a SAML security token to log in to SharePoint. You can provide an XML body via a POST request to get the security token that you put in the Studio Security Token field.
+
+To obtain a security token, make a POST request to `+https://login.microsoftonline.com/extSTS.srf+` with this XML body:
+
+[source,text,linenums]
+----
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+      xmlns:a="http://www.w3.org/2005/08/addressing"
+      xmlns:u="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+  <s:Header>
+    <a:Action s:mustUnderstand="1">http://schemas.xmlsoap.org/ws/2005/02/trust/RST/Issue</a:Action>
+    <a:ReplyTo>
+      <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
+    </a:ReplyTo>
+    <a:To s:mustUnderstand="1">https://login.microsoftonline.com/extSTS.srf</a:To>
+    <o:Security s:mustUnderstand="1"
+       xmlns:o="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+      <o:UsernameToken>
+        <o:Username>[username]</o:Username>
+        <o:Password>[password]</o:Password>
+      </o:UsernameToken>
+    </o:Security>
+  </s:Header>
+  <s:Body>
+    <t:RequestSecurityToken xmlns:t="http://schemas.xmlsoap.org/ws/2005/02/trust">
+      <wsp:AppliesTo xmlns:wsp="http://schemas.xmlsoap.org/ws/2004/09/policy">
+        <a:EndpointReference>
+          <a:Address>[endpoint]</a:Address>
+        </a:EndpointReference>
+      </wsp:AppliesTo>
+      <t:KeyType>http://schemas.xmlsoap.org/ws/2005/05/identity/NoProofKey</t:KeyType>
+      <t:RequestType>http://schemas.xmlsoap.org/ws/2005/02/trust/Issue</t:RequestType>
+      <t:TokenType>urn:oasis:names:tc:SAML:1.0:assertion</t:TokenType>
+    </t:RequestSecurityToken>
+  </s:Body>
+</s:Envelope>
+----
+
+The response to this request contains the security token between the <wsse:BinarySecurityToken> tags.
+
+After you have a security token, specify the token value in Studio:
+
+image::sharepoint-security-token-config.png[]
+
+* Security token: Enter the corresponding security token.
+* Site URL: Enter the corresponding site URL.
+
+== Install the Connector
+
+. In Anypoint Studio, click the Exchange icon in the Studio taskbar.
+. Click Login in Anypoint Exchange.
+. Search for the connector and click *Install*.
+. Follow the prompts to install the connector.
+
+When Studio has an update, a message displays in the lower right corner, which you can click to install the update.
+
+== Configure Your First Flow
+
+To configure:
+
+. In Anypoint Studio, click *File* > *New* > *Mule Project*.
+. Specify a *Project Name* and click *Finish*.
+. Click the *Global Elements* tab.
+. Click *Create*.
+. In the *Search* text box, type *sharepont*.
+. Click *Microsoft SharePoint* and click *OK*.
+. Choose the Global Type to configure:
++
+image::windowsglobaltypes.png[WindowsGlobalTypes]
++
+. Legacy Connection:
+.. Fill in the *Username*, *Password*, and *Site URL*.
+.. For authentication:
+* If using a self-signed SSL certificate, and click the *Disable SSL certificate validation* checkbox.
+* To connect with Claims Authentication, fill in STS URL (Security Token Service) and scope (Relying Party Identifier).  The STS URL has to point to the endpoint of the STS that accepts username and password as authentication credentials and understands WS-Trust 1.3 standard. In ADFS, the endpoint is usually `+https://myadfs.com/adfs/services/trust/13/usernamemixed+`. Also, the endpoint has to be enabled in ADFS (it is enabled by default).
+* To connect with NTLM Authentication, fill in *Domain*.
+* To connect to SharePoint Online, leave  NTLM and Claims inputs empty. Just specify a *Username*, *Password*, and *Site URL*.
++
+.. Click *Test Connection* to ensure the connection works correctly:
++
+image::spglobalelementprops.png[SPGlobalElementProps]
+
+The other connection types require similar information.
+
+*Note*: The Pooling Profile, Reconnection, and Notes tabs can be ignored. These are provided by Studio and contain default information.
+
+=== Create an Anypoint Studio Flow
+
+To create an Anypoint Studio flow:
+
+. From Anypoint Studio, click *File* > *New* > *Mule Project*.
+. Specify a *Project Name* and click *Finish*.
+. In the Search box, type *http* and drag an *HTTP Connector* to the canvas.
+. In the Search box, type *sharepoint* and drag a Microsoft SharePoint connector instance next to the HTTP connector.
+. In the Search box, type *json* and drag an *Object to JSON* transformer next to the Microsoft SharePoint connector.
++
+image::spmuleflow.png[SPMuleFlow]
++
+. Double-click the HTTP connector. Make sure *Host* is set to *localhost* and *Port* is set to *8081*. Set the *Path* to *query*. Click *OK*.
+. Double-click the Microsoft SharePoint connector and click the green plus symbol.
+. Update the following configuration values: +
+.. From the Connector Configuration list, click the *Microsoft SharePoint* configuration that was previously created.
+.. From the Operation list, click *List query*.
++
+*Note*: The *List query* option only appears in the Operation list after you have successfully connected to a SharePoint instance.
++
+.. From the Language list, click *DataSense Query Language*.
+. Click Query Builder: +
+.. From the list of Types, click *Documents*.
+.. From the list of Fields, click *ID*, and *Title*.
+.. From Order By, click *Title*.
+.. From Direction, click  *DESCENDING*.
++
+image::msspquerybuilder.png[MSSPQueryBuilder]
+
+== Run the Flow
+
+. In Package Explorer, right click on sharepoint2013-demo and select *Run As > Mule Application*.
+. Check the console to see when the application starts. You should see the following  message if no errors occurred:
++
+[source,text,linenums]
+----
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++ Started app 'sharepoint2013-demo'                        +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+----
++
+. Open an Internet browser and visit http://localhost:8081/query.
+. The list of documents are ordered by descending title and returns in JSON format  (results vary according to your SharePoint 2013 instance).
++
+[source,text,linenums]
+----
+[{"__metadata":{"id":"Web/Lists(guid'2af685ae-5aec-4f60-b175-
+54b21b6bd668')/Items(4)","uri":"https://ec2-54-200-49-206.us-west-
+2.compute.amazonaws.com/_api/Web/Lists(guid'2af685ae-5aec-4f60-b175-
+54b21b6bd668')/Items(4)","etag":"\"1\"","type":"SP.Data.Shared_x0020_Document
+sItem"},"Id":4,"ID":4,"Title":"folder"}]
+----
+
+== Operations: Lists and List Items API
+
+Use the Lists and List Items API to create, retrieve, update, and delete SharePoint lists and list items.
+
+=== Create, Update, and Delete List Items
+
+When creating or updating an item, specify the list ID. After you specify an ID, DataSense fetches the list's metadata and the object builder shows each field that can be completed:
+
+[source,xml,linenums]
+----
+<sharepoint-2013:list-create config-ref="SharePoint_2013" doc:name="SharePoint 2013" baseTemplate="GENERIC_LIST" title="Title">
+  <sharepoint-2013:list ref="#[payload]"/>
+</sharepoint-2013:list-create>
+----
+
+Or define the attributes in the connector itself:
+
+[source,xml,linenums]
+----
+<sharepoint-2013:list-create config-ref="SharePoint_2013" doc:name="SharePoint 2013" baseTemplate="GENERIC_LIST" title="Title">
+  <sharepoint-2013:list contentTypesEnabled="true" description="Description"/>
+</sharepoint-2013:list-create>
+----
+
+For retrieving and deleting lists, only the list ID is necessary:
+
+[source,xml]
+----
+<sharepoint-2013:list-delete config-ref="SharePoint_2013" doc:name="SharePoint 2013" listId="8e306633-c600-40ab-80db-80f57968c0a1" />
+----
+
+image::msspobjectbuilder.png[MSSPObjectBuilder]
+
+=== Query List Items
+
+Using the query builder:
+
+On the left panel, every not hidden list appears. On the right panel, the fields of the selected list appear. If the field is a *Lookup Field*, the field type is either `SharepointListReference` or `SharepointListMultiValueReference`.
+
+image::spquerybuilder.png[SPQueryBuilder]
+
+If any of these fields are selected to be returned by the query, two types of return objects are available, depending on the value of the *Retrieve full objects for reference fields* checkbox:
+
+* Not checked:
++
+A summary object containing the reference object's ID and the reference object list's ID:
++
+[source,json,linenums]
+----
+{
+    "Title": "A title",
+    "LookupFieldId": {
+        "id": "1",
+        "lookupListId": "aaaa-1111-bbbb-2222"
+    },
+    "MultiValueLookupFieldId": {
+        "ids": [
+            1,
+            2,
+            3
+        ],
+        "lookupListId": "cccc-3333-dddd-4444"
+    }
+}
+----
++
+This object can later be used in another connector to retrieve the referenced object
+together with a for-each component:
++
+image::mssplistitemquery.png[MSSPListItemQuery]
++
+* Checked:
++
+Retrieves the full object graph. In case there is a cycle, the summary reference object displays:
++
+[source,json,linenums]
+----
+{
+    "Title": "A title",
+    "LookupFieldId": {
+        "Title": "Another title",
+        "Id": "1",
+        "Property1": "A value"
+    },
+    "MultiValueLookupFieldId": [
+        {
+            "Title": "Another title",
+            "Id": "1",
+            "Property1": "A value"
+        },
+        {
+            "Title": "Another title",
+            "Id": "2",
+            "Property1": "A value"
+        }
+    ]
+}
+----
++
+Example *Query Text*:
++
+image::spexampleqtext.png[SPExampleQText]
++
+*Note:* Checking this option may cause large item lists with many reference fields to take a long time to retrieve.
+
+Since version 2.1.10 of this connector you can use the internal or title field names in DSQL queries (as well as in other list's operations as follows).
+
+For example for the previous query:
+
+----
+SELECT AuthorId, Created, List3MultiId FROM 8e306633-c600-40ab-80db-80f57968c0a1
+----
+
+If their titles are the following Author, Date Created and Details, you can write the query using field names:
+
+----
+SELECT Author, 'Date created', Details FROM Inventory
+----
+
+You can also mix internal and title field names:
+
+----
+SELECT AuthorId, 'Date created', List3MultiId FROM Inventory
+----
+
+Using internal and title field names is supported within the following list operations only when:
+
+* Adding a new item to the list
+* Updating an existent item in the list
+* Querying items in the list
+
+*Note:* To filter by a datetime field type, write the value using ISO-8601 format when specified in a DSQL clause (for example, Created > 2000-01-01T00:00:00-03:00).
+
+== Operations: File and Folder API
+
+Using the File and Folder API allows you to create, retrieve, update, and delete files and folders, and also check in, check out, publish, approve, deny, copy, and recycle files from Documents Lists.
+
+When using the folders operations, the server's relative URL refers to where the folder is or will be. The URL can be in the format /site/docList/innerFolder or in docList/innerFolder format. In the second case, the site specified in the connector's configuration site URL parameter is used.
+
+When using the files operations, the file server relative URL refers to a folder server relative URL plus the filename: /site/docList/innerFolder/filename or docList/innerFolder/filename.
+
+=== Create and Delete a Folder
+
+You can create or delete a folder by specifying the server relative URL where the folder is or where you plan to create the folder.
+
+The resulting flow is:
+
+[source,xml,linenums]
+----
+<sharepoint-2013:folder-create config-ref="SharePoint_2013"
+url="/path/to/folder" doc:name="SharePoint 2013"/>
+
+<sharepoint-2013:folder-delete config-ref="SharePoint_2013"
+url="/path/to/folder" doc:name="SharePoint 2013"/>
+----
+
+=== Add a File
+
+A file can be uploaded by selecting a physical file or passing an input stream to the connector, and it's uploaded to the specified server relative URL. For example, you can use this together with a File Connector to upload files to a list.
+
+Using an input stream:
+
+[source,xml,linenums]
+----
+<sharepoint-2013:file-add config-ref="SharePoint_2013"
+fileServerRelativeUrl="/path/to/folder/filename"
+fileContentStream-ref="#[payload]" overwrite="true"
+doc:name="SharePoint 2013"/>
+----
+
+To upload large files, you must configure your SharePoint and IIS servers:
+
+* Set *Maximum Upload Size* to 2047 MB (max) at SP management console for site.
+* Set *Connection Timeout* for an IIS site to the high value.
+* Set *Maximum Allowed Content Length* to 2147483647 for IIS app (at request filtering).
+
+The SharePoint REST API (which the connector uses) supports uploading files of up to 2 GB. When working with large files it's best practice to provide the system local path to the file (localFilePath parameter's value) because it's the most efficient way to upload the file through the connector.
+
+=== Get File Contents
+
+The file content is returned as a byte array. For example, you can use this as an input of a File Connector to download files from a list:
+
+[source,xml,linenums]
+----
+<sharepoint-2013:file-get-content config-ref="SharePoint_2013"
+doc:name="SharePoint 2013"
+fileServerRelativeUrl="/path/to/folder/filename"/>
+----
+
+=== Query Files and Folders
+
+This operation returns all the files and folders that match the specified criteria, starting from the specified folder.
+
+Using the query builder:
+
+* On the left panel, a document list from the SharePoint instance appears. The selected instance is used as part of the starting path to query the files and folders.
+* On the right panel, for every document list, the same fields appear.
+* Additionally, you can specify an inner folder or folders in the folder path input, to use as the starting path.
+* When selecting the recursive checkbox, files and folders are searched recursively in every folder of the starting path.
+
+To set query builder options:
+
+image::sharepointfolderpath.png[SharePointFolderPath]
+
+Example:
+
+[source,text,linenums]
+----
+sharepoint-2013:file-query config-ref="SharePoint_2013" query="dsql:SELECT Author,ModifiedBy,Name,ServerRelativeUrl FROM #[header:inbound:documentListName]" recursive="true" doc:name="SharePoint 2013"/>
+
+<sharepoint-2013:folder-query config-ref="SharePoint_2013" recursive="true" query="dsql:SELECT ItemCount,Name,ServerRelativeUrl FROM #[header:inbound:documentListName] WHERE ItemCount &gt; 0" doc:name="SharePoint 2013"/>
+----
+
+=== Other File Operations
+
+Approve, Check In, Check Out, Deny, Publish, Undo Checkout, and Unpublish, are all very similar to use. Specify the file URL, and in some, pass an additional comment as a parameter.
+
+[source,xml,linenums]
+----
+<sharepoint-2013:file-publish config-ref="SharePoint_2013"
+doc:name="SharePoint 2013" fileServerRelativeUrl="" comment=""/>
+----
+
+=== Set File Metadata
+
+You can get and set metadata on files that are uploaded to Document Libraries by using the *Update List Item* operation.
+
+To set the properties of the file in the list, you must know the *List Item Id*. This can be retrieved using the deferred *ListItemAllFields* property.
+
+The following flow illustrates how a *File Add* may chain directly to an *Update List Item* operation to upload a file to a list and set the metadata immediately after:
+
+[source,xml,linenums]
+----
+<flow name="sharepoint_demo_fileAddWithMetadata"
+   doc:name="sharepoint_demo_fileAddWithMetadata">
+   <http:inbound-endpoint exchange-pattern="request-response" host="localhost"
+     port="8081" path="upload" doc:name="HTTP"/>
+   <sharepoint:file-add config-ref="SharePoint"
+     fileServerRelativeUrl="/Shared Documents/myfile.txt"
+     overwrite="true"
+     doc:name="Add file"/>
+   <sharepoint:resolve-object config-ref="SharePoint"
+     doc:name="Get ListItemId of File"
+     url="#[payload.listItemAllFields.__deferred.uri]"/>
+   <sharepoint:list-item-update config-ref="SharePoint" itemId="#[payload.Id]"
+     listId="ccbfaf65-b53e-48ac-be19-adf45192ecc3" doc:name="Set file properties">
+       <sharepoint:updated-properties>
+           <sharepoint:updated-property key="Title">Test title</sharepoint:updated-property>
+       </sharepoint:updated-properties>
+   </sharepoint:list-item-update>
+   <set-payload value="OK" doc:name="Set Payload"/>
+</flow>
+----
+
+== Resolve Deferred Properties
+
+For performance reasons, many SharePoint operations return a basic set of data for an entity along with one or more deferred property references you can use to retrieve additional detail or related objects.
+
+You can use the generic *Resolve object* or *Resolve collection* operations to resolve the deferred property set to a single `Map<string,object>` or a `List<Map<string,object>>` and access this information in the flow.
+
+For example, this technique gets the full set of fields of a SharePoint File object:
+
+[source,xml,linenums]
+----
+<sharepoint:resolve-object config-ref="SharePoint"
+  url="#[payload.listItemAllFields.__deferred.url]"
+  doc:name="Microsoft SharePoint" >
+</sharepoint:resolve-object>
+----
+
+Using the Mule Debugger or Logger component to log the payload, you can identify properties with a `_deferred` URL property.
+
+== Attach a File to a List Item
+
+To attach a file to a list item, use the ResolveObject operation as shown in this example:
+
+[source,xml,linenums]
+----
+<flow name="sp-testFlow2">
+    <http:listener config-ref="HTTP_Listener_Configuration" path="/at" doc:name="HTTP"/>
+    <set-variable variableName="FileNameToAttach" value="CHANGELOG.md" doc:name="Set FileNameToAttach"/>
+    <sharepoint:list-item-query config-ref="Microsoft_SharePoint__NTLM_Connection" query="dsql:SELECT ID,Title FROM 82b2a455-3faf-4162-8276-63a1093fcc7e WHERE Title = 'test-list-item-1'" doc:name="Read List Item"/>
+    <set-variable variableName="ListItemUrl" value="#[payload.next() .__metadata.uri]" doc:name="SetListItemUri from list item query result"/>
+    <set-payload value="#[groovy:new FileInputStream('C:\\temp\\' + flowVars.FileNameToAttach)]" doc:name="Set file to attach as inputstream in payload"/>
+    <sharepoint:resolve-object config-ref="Microsoft_SharePoint__NTLM_Connection" url="#[flowVars.ListItemUrl]/AttachmentFiles/add(FileName='#[flowVars.FileNameToAttach]')" resolveRequestType="Create" doc:name="create attachment"/>
+    <json:object-to-json-transformer doc:name="Object to JSON"/>
+</flow>
+----
+
+The flow shows how to:
+
+. Get the list item URI by reading it from SharePoint. If you already have the list item because it’s being created in the same flow, you can use that one.
+. Read a file into an input stream. Here it's from c:\temp (find the path in the flow to replace it).
+. Create the list item attachment with the file.
+
+== Execute Direct Calls Against the REST API
+
+SharePoint REST API allows a large number of commands that can be reached though *Resolve object* and *Resolve collection* actions. These operations provide an authenticated call to a specified URL, and resolves into a Map and a `List<Map>` respectively.
+
+The *Resolve object* operation accepts all the HTTP verbs (GET, POST, PUT/MERGE, DELETE) and allows sending a body in the request to the API. The body’s default value is the payload of the Mule message.
+
+The body can be for API endpoints that accept a JSON:
+
+* `Map<String, Object>` that is converted to a JSON string.
+* `String` containing the JSON. This string is sent as-is.
+
+For API endpoints that accept a file:
+
+* `InputStream` with the file. The stream closes after using it.
+* `byte[]` with the file. This byte arrays is sent as-is.
+
+== Work with Choice Column Type with Multiple Values
+
+You can configure a Choice column type to allow multiple values. The metadata in Studio for columns accepting multiple values appears as follows:
+
+image::sharepointchoicemultiselect.png[SharePointChoiceMultiSelect]
+
+Assuming that the target List in SharePoint has a Title property and a multi-select column called ChoiceMultiSelect that accepts values `"one"`, `"two"`, or `"three"`, the following Groovy script constructs a payload that sets the selection to `"one", "three"`:
+
+----
+[Title: "foo", ChoiceMultiSelect: [results: ["one", "three"]]]
+----
+
+Any language that can construct a `List<string>` for the multi-select column results property may be used to similar effect.
+
+This block of pseudo code demonstrates how to set Choice #1 and Choice #2 as the values for the ChoiceMultiSelect column:
+
+[source,text,linenums]
+----
+values = new List<String>
+values.add("Choice #1")
+values.add("Choice #2")
+multiValuesMap = new Map<String, Object>
+multiValuesMap["results"] = values
+List-item["ChoiceMultiSelect"] = multiValuesMap
+----
+
+== Exception Handling
+
+=== Exception When Connecting
+
+If the connector fails to connect with the SharePoint instance for any reason, an exception of type ConnectionException is thrown.
+
+The exception message helps debug the cause of the exception.
+
+=== Exception in Operations
+
+If when executing an operation, an error occurs, a SharepointException is thrown with a message about the error.
+
+== Frequently Asked Questions
+
+=== Which versions of SharePoint are supported by this connector?
+
+The SharePoint connector supports SharePoint 2013 on-premises, and SharePoint online versions.
+
+=== What authentication schemes are supported by the connector?
+
+Options for authentication against on-premises SharePoint instances include Claims Authentication (ADFS) and NTLM. For SharePoint Online, authentication using standard SharePoint online user credentials is supported.
+
+=== What parts of the SharePoint object model are accessible by the connector?
+
+Specific support for Files and Folders, Lists, ListItems and Attachments is offered. Additionally, all other entities of the SharePoint API are accessible in JSON form via the ResolveObject and ResolveCollection operations.
+
+=== Is DataSense supported by this connector?
+
+Yes, all supported entities and entity attributes are exposed to Studio by the connector for use with DataSense.
+
+=== What operations can I perform with the connector?
+
+For the Lists and ListItems API, supported operations include Create, Retrieve, Update, and Delete. For Files and Folders, operations include Add, retrieve content, retrieve metadata, delete, check out, undo check out, check in, publish, unpublish, approve, deny, recycle, and copy.
+
+=== Are there any examples that show how to use the connector?
+
+Yes, an example project for Anypoint Studio is freely available in the link:{attachmentsdir}/sharepoint-connector-samples.zip[sharepoint-connector-samples.zip].
+
+=== What Mule editions can I use this connector on?
+
+This connector is supported on any Enterprise Edition Anypoint platform running on any operating system and bitness, including the CloudHub integration PaaS.
+
+== See Also
+
+* xref:3.9@mule-runtime::mule-expression-language-mel.adoc[Mule Expression Language (MEL)]
+* xref:3.9@mule-runtime::endpoint-configuration-reference.adoc[Configuring Endpoints]
+* xref:3.9@mule-runtime::transformers.adoc[Studio Transformers]
+* xref:3.9@mule-runtime::flow-reference-component-reference.adoc[Flow References]
+* https://www.mulesoft.com/exchange/org.mule.modules/mule-module-sharepoint/[Microsoft SharePoint 2013 Connector on Exchange]
+* https://help.mulesoft.com[MuleSoft Help Center]

@@ -1,0 +1,231 @@
+= Configuring an ActiveMQ Connection
+:keywords: jms, connector, jms_1.0.2b, jms_1.1, jms_2.0, activemq
+:page-aliases: connectors::jms/jms-activemq-configuration.adoc
+
+
+Anypoint Connector for JMS (JMS Connector) includes an ActiveMQ connection configuration, which provides out-of-the-box support for ActiveMQ 5.  With this connection, you can use JMS 1.1 (default), JMS 1.0.2b, or JMS 2.0 specifications, and you can configure not only all of the general connection parameters for JMS but also the custom parameters that are present only in ActiveMQ.
+
+== Connecting to ActiveMQ
+
+After you declare `active-mq-connection`, all you need to do is set up the
+connection factory with your custom configuration. Every parameter in the connection
+comes with a default value, meaning that you are required to configure only the
+parameters relevant for your use case. The ActiveMQ connection also exposes
+parameters that are exclusive to ActiveMQ implementation, like `initialRedeliveryDelay`.
+
+The following example shows a simple configuration of an ActiveMQ connection:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+ <jms:active-mq-connection >
+  <jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+ </jms:active-mq-connection>
+</jms:config>
+----
+
+[[in-memory-broker]]
+== In-Memory Broker
+
+By default, Anypoint Connector for ActiveMQ (ActiveMQ Connector) uses an in-memory broker, which makes it
+easy to start building an application without configuring a connection
+against an external broker.
+
+Default URL: `vm://localhost?broker.persistent=false&broker.useJmx=false`
+
+The in-memory broker is required to configure both the <<activemq-client-lib,ActiveMQ Client>>
+and <<activemq-broker-lib,ActiveMQ Broker>> libraries.
+
+== SSL Connections
+
+This information applies to JMS Connector version 1.3.0 and later.
+
+You can configure ActiveMQ connections with SSL configurations to enable the connector to establish secure and encrypted connections against the ActiveMQ broker:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+   <tls:context>
+    <tls:trust-store
+      path="client.ts"
+      password="password" />
+    <tls:key-store
+      path="client.ks"
+      password="password"
+      keyPassword="password"
+      alias="client" />
+   </tls:context>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+image::jms-ssl.png[JMS ActiveMQ SSL Configuration]
+
+The connector can also reference global TLS context configurations, so you can
+reuse and share the same TLS context between connectors as shown in the following example with Anypoint Connector for HTTP (HTTP Connector):
+
+[source,xml,linenums]
+----
+<!--  HTTP Requester Configuration -->
+<http:request-config name="HTTP_Request_configuration">
+  <http:request-connection tlsContext="TLS_Context" />
+</http:request-config>
+
+<!--  JMS Configuration -->
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection tlsContext="TLS_Context"/>
+</jms:config>
+
+<!--  Reusable TLS Context -->
+<tls:context name="TLS_Context">
+ <tls:trust-store
+  path="client.ts"
+  password="password" />
+<tls:key-store
+  path="client.ks"
+  password="password"
+  keyPassword="password"
+  alias="client" />
+</tls:context>
+----
+
+== Delivery Handling
+
+[[poison-messages]]
+=== Avoiding Poison Messages
+
+When a message cannot be processed correctly, it's not acknowledged. The message
+is then redelivered and probably again not processed correctly, which can cause the cycle to execute indefinitely.
+
+To prevent a message that can't be properly handled from endlessly redelivering ("poison messages"), you can configure the `maxRedelivery` parameter to set a maximum number of times that a message can be delivered to the application.
+
+.In this example a message is redelivered a maximum of 10 times:
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration maxRedelivery="10"/>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+By default, JMS Connector uses a `maxRedelivery` of `0`, which means that messages
+won't be redelivered, and it doesn't matter if the message is recovered or rolled back
+from a transaction.
+
+If the message has persistent delivery set, ActiveMQ sends the message to `DLQ.QUEUE` (dead letter queue).
+
+=== Advanced Redelivery
+
+ActiveMQ enables users to have a client-side redelivery configuration. You can also configure the <<poison-messages,maximum times that a message is redelivered>> and how fast the connector is required to redeliver the message.
+
+`initialRedeliveryDelay`: In milliseconds, how much time to wait for the message to be redelivered the first time.
+`redeliveryDelay`: In milliseconds, how much time to wait until the message is subsequently redelivered after the first redelivery.
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration
+      redeliveryDelay="100"
+      initialRedeliveryDelay="1000"/>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+== Object Serialization
+
+ActiveMQ 5.12.2, 5.13.0, and later restricts the classes that can be serialized and deserialized to prevent the execution of a malicious payload that can exploit the host system.
+
+=== Trusted Packages
+
+For ActiveMQ, JMS Connector allows only the JDK and JRE provided classes by default, so if you
+need to exchange object messages, you must add the packages your applications are using:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration >
+      <jms:trusted-packages >
+        <jms:trusted-package value="com.mulesoft.someapp" />
+        <jms:trusted-package value="com.mulesoft.someapp.model" />
+      </jms:trusted-packages>
+    </jms:factory-configuration>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+image::jms-trusted-packages.png[JMS ActiveMQ Trusted Packages]
+
+In the previous example, JMS Connector allows only users who are compliant with the `com.mulesoft.someapp` and `com.mulesoft.someapp.model` packages to consume and produce ObjectMessages.
+
+=== Trust All Packages
+
+Even though you can enable the *Trust All Packages* parameter to allow the serialization of more classes by allowing any object to be serialized and deserialized, this is not as secure as leaving it disabled in most cases. Keep this parameter disabled (`false`) to improve security and help prevent malicious attacks.
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration trustAllPackages="true"/>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+== Configuring Required Libraries
+
+image::jms-libs.gif[Configuring Required JMS Libraries]
+
+[[activemq-client-lib]]
+=== ActiveMQ Client
+
+The ActiveMQ client library is the only library that is required to use ActiveMQ connections. The ActiveMQ client library is also needed to connect to a broker.
+
+[source,xml,linenums]
+----
+<dependency>
+ <groupId>org.apache.activemq</groupId>
+ <artifactId>activemq-client</artifactId>
+ <version>5.15.4</version>
+</dependency>
+----
+
+[[activemq-broker-lib]]
+=== ActiveMQ Broker
+
+The ActiveMQ broker can create an <<in-memory-broker,In Memory Broker>>:
+
+[source,xml,linenums]
+----
+<dependency>
+ <groupId>org.apache.activemq</groupId>
+ <artifactId>activemq-broker</artifactId>
+ <version>5.15.4</version>
+</dependency>
+----
+
+=== ActiveMQ KahaDB
+
+The ActiveMQ KahaDB is required when using an <<in-memory-broker,In Memory Broker>> and is also required for persistent message delivery.
+
+[source,xml,linenums]
+----
+<dependency>
+ <groupId>org.apache.activemq</groupId>
+ <artifactId>activemq-kahadb-store</artifactId>
+ <version>5.15.4</version>
+</dependency>
+----
+
+== See Also
+
+* xref:jms-consume.adoc[How to Consume Messages]
+* xref:jms-publish.adoc[How to Publish Messages]
+* xref:jms-listener.adoc[How to Listen For New Messages]
+* xref:jms-publish-consume.adoc[How to Listen For A Reply]
+* xref:jms-ack.adoc[Handling Message Acknowledgement]
+* xref:jms-transactions.adoc[Handling Transactions in JMS]
+* xref:jms-performance.adoc[JMS Tuning For Performance]
+* xref:1.6@jms-xml-ref.adoc[JMS Connector Technical Reference]

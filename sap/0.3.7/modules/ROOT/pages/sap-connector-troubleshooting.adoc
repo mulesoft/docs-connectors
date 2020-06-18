@@ -1,0 +1,357 @@
+= SAP Connector Troubleshooting
+:keywords: sap, connector, troubleshooting
+:page-aliases: 3.7@mule-runtime::sap-connector-troubleshooting.adoc
+
+This page contains some common troubleshooting suggestions for the xref:3.7@mule-runtime::mulesoft-enterprise-java-connector-for-sap-reference.adoc[SAP Connector].
+
+[[checking-log-files]]
+== Checking Log Files
+
+Mule stores log files (on a per application basis) in the `$MULE_HOME\logs` directory:
+
+* `mule.log` - Default Mule log file.
+* `mule-app-YOUR_APP_NAME.log` - Per application log file.
+
+[[enabling-jco-trace]]
+== Enabling JCo Trace
+
+JCo Trace can be enabled from outside Mule and accepts the following Java startup environment properties:
+
+* `-Djco.trace_level=N` (where 0 \<= N \<= 10, with 10 = most detailed trace)
+* `-Djco.trace_path=<PATH>` (optional)
+
+To enable traces at the connector level, perform the following steps:
+
+. Set the attribute `jcoTrace` to `true` or provide the extended JCo property `jco.client.trace` or `jco.server.trace` with value `1`.
+. Provide a value for `-Djco.trace_level=N` at Mule startup. *JCo offers trace levels from 0 to 10*. The amount of traced data increases with the chosen trace level. Each trace level also contains all the trace data from the lower trace levels. For details about the traced data please see the table below. If you are using a high JCo trace level with lots of JCo calls and transferred content, please make sure that enough disk space is available. *Default value is 0*.
++
+[%header%autowidth,cols="^,^,<"]
+|===
+|Trace Level |AS Java Severity Level |JCo 3 Trace Content
+|`0` |`NONE` |No trace.
+|`1` |`ERROR` |JCo version and runtime environment info. +
+JCo internal errors and exceptions without application errors.
+|`2` |`WARNING` |JCo warning messages (e.g. non-ABAP system exceptions).
+|`3` |`INFO` |JCo information messages (e.g. ABAP exceptions).
+|`4` |`PATH` |RFC calls and important public API calls.
+|`5` |`DEBUG` |Important internal middleware calls. +
+Codepage information.
+|`6` |`DEBUG` |Connection attributes. +
+ASCII content data (first 1000 chars of structures / first 5 rows of tables).
+|`7` |`DEBUG` |RFC metadata (name, type, offset, length, import/export options) and
+additional Hex values for content data.
+|`8` |`DEBUG` |Full content data dump (no character or row limits). +
+Caller stack trace information (e.g. for getClient() - identifies application).
+|`9` |`DEBUG` |No additional information (reserved for future use).
+|`10` |`DEBUG` |No additional information (reserved for future use).
+|===
++
+. Optionally, you can provide a value for `-Djco.trace_path=<PATH>`. This is supposed to be the complete path to an existing directory where trace files will be stored, but there are other special values can be applied:
+* `stdout` - JCo trace information is sent to standard *output* stream.
+* `stderr` - JCo trace information is sent to standard *error* stream.
+
+If `-Djco.trace_path` is not set, then trace files will be stored in the working directory. For Mule ESB standalone, this is usually the `$MULE_HOME/bin` folder.
+
+[[common-errors]]
+== Common Errors
+
+[[error-jco-missing-libs]]
+=== JCo Missing Libraries
+
+==== Problem
+
+This exception typically occurs when testing the connection or trying to deploy the Mule application without loading one or more of the required SAP JCo dependencies:
+
+* Missing JCo native library
++
+[source,text,linenums]
+----
+java.lang.ExceptionInInitializerError: JCo initialization failed with java.lang.UnsatisfiedLinkError: no sapjco3 in java.library.path
+----
++
+[.center.text-center]
+image::sap-error-jco-libs1.png[SAP Error JCo Native Library]
+
+* Missing JCo JAR
++
+----
+java.lang.NoClassDefFoundError: com/sap/conn/jco/JCoTraceListener
+----
++
+[.center.text-center]
+image::sap-error-jco-libs2.png[SAP Error JCo JAR]
+
+* Missing IDoc JAR
++
+----
+java.lang.NoClassDefFoundError: com/sap/conn/idoc/IDocMetaDataUnavailableException
+----
++
+[.center.text-center]
+image::sap-error-jco-libs3.png[SAP Error IDoc JAR]
+
+==== Solution
+
+To add these libraries to your project, click the *Add File* button next to each of the listed libraries with the red exclamation mark, then browse to and select the appropriate file. The SAP libraries will be  automatically added to the project classpath.
+
+[.center.text-center]
+image::sap-error-jco-classpath.png[SAP Error JCo Classpath]
+
+[[error-jco-classloader-conflicts]]
+=== JCo Classloader Conflicts
+
+[source,text,linenums]
+----
+java.lang.ExceptionInInitializerError: JCo initialization failed with java.lang.UnsatisfiedLinkError: Native Library /home/mule/sap-errors/lib/jco/libsapjco3.so already loaded in another classloader
+----
+
+==== Problem
+
+When you load the native library from the Global Configuration, a copy of the file is placed inside `$YOUR_APP/src/main/app/lib`, but the "original" one is not removed. Hence, you will get this exception if it shares the same directory as the JCo jar files when testing the connection or deploying your app.
+
+[.center.text-center]
+image::sap-error-jco-classloader-folder.png[SAP Error JCo Classloader Folder]
+
+==== Solution
+
+* *Straightforward approach:* just remove the _duplicate_ native library file from the directory where your JCo jars live.
+
+[.center.text-center]
+image::sap-error-jco-classloader-fix.png[SAP Error JCo Classloader Fix]
+
+* *Best-practice approach:* configure the environment variable `LD_LIBRARY_PATH` to hold the dynamic link library and share it across multiple applications deployed within the same Mule ESB server.
+
+[NOTE]
+For further information, take a look at xref:index.adoc#share-jco-dependencies-between-several-applications[Share JCo Dependencies Among Multiple Applications].
+
+[[error-jco-version-conflicts]]
+=== JCo Version Conflicts
+
+[source,text,linenums]
+----
+java.lang.ExceptionInInitializerError: Native library sapjco3 is too old. Found library System-defined path to libsapjco3.so has version "720.612", but required is at least version "720.713".
+----
+
+==== Problem
+
+The most frequent cause is employing different versions of the native library and the JCo jars.
+
+==== Solution
+
+Verify the following:
+
+* JCo is compatible with the underlying JVM. The 64-bit JCo is required on a JVM that runs in 64-bit mode, and the 32-bit JCo on a JVM running in 32-bit mode.
+* On Microsoft® Windows®, JCo requires the Microsoft Visual Studio 2005 C/C++ runtime libraries.
+* The `sapjco.jar`, and `sapjco3.dll` or `sapjco3.so` or `sapjco3.jnilib` files must be from the *same JCo package*.
++
+[NOTE]
+====
+To check the versions of the JCo libraries that you are using, do one of the following:
+
+* From the UI (Windows):
+	. Navigate to the directory where the sapjco3.jar file is located.
+	. Right-click the `sapjco3.jar` file.
+	. Select *Open With* from the context menu.
+	. Click Java 2 Platform Standard Edition binary.
+	. A SAP Java Connector (JCo) dialog will pop-up displaying the information about the JCo and Java versions used.
+
+* From a console:
+	. Open a terminal console.
+	. Navigate to the directory where the `sapjco3.jar` file is located.
+	. Execute the command `java -jar sapjco3.jar -version`.
+	. A SAP Java Connector (JCo) dialog will pop up displaying the information about the JCo and Java versions used.
+
+[.center.text-center]
+image::sap-jco-version.png["scaledwidth="60%", Check JCo Version]
+====
+
+[[error-jco-renaming-conflicts]]
+=== JCo Renaming Conflicts
+
+----
+java.lang.ExceptionInInitializerError: Illegal JCo archive "sapjco3-3.0.11.jar". It is not allowed to rename or repackage the original archive "sapjco3.jar"
+----
+
+==== Problem
+
+Since the release of *JCo 3.0.11*, you cannot change the names of any of the SAP JCo library files from their original names, as they won’t be recognized by JCo.
+
+==== Solution
+
+If you are using *Maven*, the suggested workaround is to configure the *maven-dependency-plugin* with the attribute `<stripVersion>true</stripVersion>`. This way, all version numbers of the dependent libs will be stripped when copying the JCo artifacts.
+
+Further information is available externally at the http://maven.apache.org/plugins/maven-dependency-plugin/usage.html[Apache Maven Dependency Plugin].
+
+[[error-transformer-needs-a-valid-endpoint]]
+=== Transformer Needs a Valid Endpoint
+
+----
+java.lang.IllegalStateException: This transformer needs a valid endpoint
+----
+
+==== Problem
+
+The `outputXml` attribute of the SAP endpoint has been set to `false`, thus disabling the implicit use of the `sap:object-to-xml` transformer.
+
+[.center.text-center]
+image::sap-error-transformer.png[Transformer Error]
+
+==== Solution
+
+* Option A: change the value of `outputXml` to `true`.
+
+* Option B: add a `sap:object-to-xml` transformer to the flow.
+
+[.center.text-center]
+image::sap-error-transformer-fix.png[Transformer Fix]
+
+[[error-message-not-a-sap-object]]
+=== Message Not a SAP Object
+
+[source,text,linenums]
+----
+org.mule.api.transport.DispatchException: Message is not a SAP object, it is of type "byte[]". Check the transformer for this Connector "SapConnector". Failed to route event via endpoint: SapOutboundEndpoint{endpointUri=sap://function, connector=SapConnector
+{
+ name=SapConnector
+ lifecycle=start
+ this=4571cebe
+ numberOfConcurrentTransactedReceivers=4
+ createMultipleTransactedReceivers=true
+ connected=true
+ supportedProtocols=[sap]
+ serviceOverrides=<none>
+}
+,  name='endpoint.sap.function', mep=ONE_WAY, properties={evaluateFunctionResponse=false, bapiTransaction=false, functionName=BAPI_MATERIAL_AVAILABILITY, rfcType=srfc, outputXml=true}, transactionConfig=Transaction{factory=null, action=INDIFFERENT, timeout=0}, deleteUnacceptedMessages=false, initialState=started, responseTimeout=10000, endpointEncoding=UTF-8, disableTransportTransformer=false}. Message payload is of type: byte[]
+----
+
+==== Problem
+
+As clearly stated in the exception message, the endpoint is expecting a SAP Object with the input parameters to execute a BAPI or IDoc but none has been provided or the object is malformed.
+
+==== Solution
+
+Create a SAP object that represents the call to the BAPI or IDoc. There are two options here:
+
+. Create a XML that represents a SAP Object with the BAPI call.
+. Provide a XML definition and use the input inside that definition to create the actual SAP call.
+
+[[error-icoc-metadata-unavailable]]
+=== IDoc Metadata Unavailable
+
+[source,text,linenums]
+----
+RfcException: [mc-vmware|a_rfc] message: (3) IDOC_ERROR_METADATA_UNAVAILABLE: The meta data for the IDoc type "??????????????????????????å å" with extension "  ORDSAPB6L B60CL          ???" is unavailable.
+    Return code: RFC_FAILURE(1)
+    error group: 104
+    key: RFC_ERROR_SYSTEM_FAILURE
+----
+
+==== Problem
+
+The RFC destination should support *Unicode*.
+
+==== Solution
+
+Configure Unicode support in your SAP instance using transaction *SM59*.
+
+[[error-cannot-join-a-transaction]]
+=== Cannot Join a Transaction
+
+----
+SAP Connector Cannot Join Transaction of Type [org.mule.TransactionClass]
+----
+
+The action of type `[srfc|trfc|qrfc]` will be stateless, because SAP Transport doesn't support Multi Transactions for the moment.
+
+[[error-missing-tid-handler]]
+=== Missing TID Handler
+
+[source,text,linenums]
+----
+[10-11 08:02:26] ERROR SapJcoServerDefaultListener [JCoServerThread-1]: Exception occurred on idoc_send connection 3-10.30.9.26|sapgw00|idoc_send: check TID fault: No transaction handler is installed. Unable to process tRFC/qRFC requests.
+RfcException: [mule.local|MULESOFT_IDOC_SEND_TEST]
+    message: check TID fault: No transaction handler is installed. Unable to process tRFC/qRFC requests.
+    Return code: RFC_FAILURE(1)
+    error group: 104
+    key: RFC_ERROR_SYSTEM_FAILURE
+Exception raised by myhost.com.ar|MULESOFT_IDOC_SEND_TEST
+    at com.sap.conn.jco.rt.MiddlewareJavaRfc$JavaRfcServer.playbackTRfc(MiddlewareJavaRfc.java:2625)
+    at com.sap.conn.jco.rt.MiddlewareJavaRfc$JavaRfcServer.handletRfcRequest(MiddlewareJavaRfc.java:2546)
+    at com.sap.conn.jco.rt.MiddlewareJavaRfc$JavaRfcServer.listen(MiddlewareJavaRfc.java:2367)
+    at com.sap.conn.jco.rt.DefaultServerWorker.dispatch(DefaultServerWorker.java:284)
+    at com.sap.conn.jco.rt.DefaultServerWorker.loop(DefaultServerWorker.java:369)
+    at com.sap.conn.jco.rt.DefaultServerWorker.run(DefaultServerWorker.java:245)
+    at java.lang.Thread.run(Thread.java:680)
+----
+
+==== Problem
+
+No TID handler has been defined.
+
+==== Solution
+
+Set the `rfcType` to `trfc` or `qrfc` in the `<sap:inbound-endpoint />`.
+
+[[error-parameter-not-supported]]
+=== Parameter Not Supported
+
+[source,text,linenums]
+----
+Root Exception stack trace:
+RfcException: [null]
+message: Parameter 'type' not supported: 'f'
+Return code: RFC_INVALID_PARAMETER(19)
+error group: 101
+key: RFC_ERROR_PROGRAM
+
+at com.sap.conn.rfc.api.RfcOptions.checkParameters(RfcOptions.java:182)
+at com.sap.conn.jco.rt.MiddlewareJavaRfc$JavaRfcClient.connect(MiddlewareJavaRfc.java:1328)
+at com.sap.conn.jco.rt.ClientConnection.connect(ClientConnection.java:731)
++ 3 more (set debug level logging or '-Dmule.verbose.exceptions=true' for everything)
+----
+
+==== Problem
+
+SAP extended properties (configured in a Map bean or as endpoint address parameters) should have valid names. If you provide an invalid property name you will get an error message similar to the above.
+
+In this example, JCo libraries are reporting that the parameter with name _type_ is not valid.
+
+==== Solution
+
+Provide a valid property name. The complete list of extended properties can be found xref:sap-connector-advanced-features.adoc#jco-extended-properties[here].
+
+[[error-multiple-jco-servers]]
+==== Multiple JCo Servers Running
+
+[source,text,linenums]
+----
+ERROR 2012-07-05 10:11:30,525 [WrapperListener_start_runner] com.mulesoft.mule.transport.sap.SapMessageReceiver: Error connecting to server
+com.sap.conn.jco.JCoException: (101) JCO_ERROR_CONFIGURATION: Server configuration for sapavalara-1.0-SNAPSHOT-gettax is already used for a running server
+at com.sap.conn.jco.rt.StandaloneServerFactory.update(StandaloneServerFactory.java:358)
+at com.sap.conn.jco.rt.StandaloneServerFactory.getServerInstance(StandaloneServerFactory.java:176)
+at com.sap.conn.jco.server.JCoServerFactory.getServer(JCoServerFactory.java:74)
+at com.mulesoft.mule.transport.sap.jco3.SapJcoRfcServer.initialise(SapJcoRfcServer.java:46)
+at com.mulesoft.mule.transport.sap.jco3.SapJcoServerFactory.create(SapJcoServerFactory.java:60)
+at com.mulesoft.mule.transport.sap.SapMessageReceiver.doConnect(SapMessageReceiver.java:56)
+at org.mule.transport.AbstractTransportMessageHandler.connect(AbstractTransportMessageHandler.java:218)
+at org.mule.transport.AbstractConnector.registerListener(AbstractConnector.java:1254)
+----
+
+==== Problem
+
+There cannot be two or more JCo servers with the same set of configuration parameters, even if they have different configuration names.
+
+==== Solution
+
+The server group key (that determines the uniqueness of a JCo server connection) is given by the following attributes:
+
+* `jco.server.gwhost`
+* `jco.server.gwserv`
+* `jco.server.progid`
+
+So, you can start two servers in the same Mule instance (JCo keeps this information in a Singleton class) as long as they have different values for `gwhost`, `gwserv` and `progid`.
+
+[[see-also]]
+== See Also
+* xref:index.adoc[SAP Connector documentation].
+* xref:sap-connector-advanced-features.adoc[SAP Connector Advanced Features].
