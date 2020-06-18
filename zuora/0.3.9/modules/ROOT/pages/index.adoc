@@ -1,0 +1,762 @@
+= Zuora Connector
+:keywords: zuora connector, dataweave, datasense, subscription
+:page-aliases: 3.9@mule-runtime::zuora-connector.adoc
+
+xref:3.9@mule-runtime::anypoint-connectors.adoc#connector-categories[_Select_]
+
+Release Notes: xref:release-notes::connector/zuora-connector-release-notes.adoc[Zuora Connector Release Notes] +
+Anypoint Exchange: https://www.anypoint.mulesoft.com/exchange/org.mule.modules/mule-module-zuora/[Zuora Connector] +
+Attachments:
+
+* link:{attachmentsdir}/zuora-aqua-api-operations-demo.zip[zuora-aqua-api-operations-demo.zip]
+* link:{attachmentsdir}/zuora-subscribe-operations-demo.zip[zuora-subscribe-operations-demo.zip]
+
+The Anypoint Connector for Zuora lets you connect to the Zuora platform. The connector exposes convenient methods for taking advantage of the capabilities of Zuora, allowing you to access the entire Zuora
+functional suite.
+
+The connector executes API calls targeting Zuora’s SOAP API and REST API. All required request headers and error handling are abstracted from you and built into the connector.
+
+== Prerequisites
+
+This document assumes that you are familiar with Zuora, Mule, Anypoint Connectors, and Anypoint Studio Essentials. This page requires some basic knowledge of Mule concepts, elements in a Mule flow, and Global Elements.
+
+[[requirements]]
+=== Hardware and Software Requirements
+
+For hardware and software requirements, see the xref:3.9@mule-runtime::hardware-and-software-requirements.adoc[Hardware and Software Requirements] page.
+
+To use the Zuora connector, you need:
+
+* Anypoint Studio - If you do not use Anypoint Studio for development, follow the instructions in <<Configuring Maven Dependencies,Configuring Maven Dependencies>> for your project.
+* A Zuora account - Contact the Zuora team to learn more about Zuora and how you can obtain an account: http://info.zuora.com/talk-to-our-sales-team.html[Zuora Sales].
+* Zuora WSDL - To use the SOAP API, a Zuora WSDL must be provided to the connector. Sign into https://www.zuora.com/apps/newlogin.do[Zuora Production] or https://apisandbox.zuora.com/apps/newlogin.do[Zuora Sandbox], navigate to Settings, then click Z-Billing Settings > Download the Zuora WSDL.
+
+
+=== Compatibility
+
+[%header%autowidth.spread]
+|===
+|Application/Service|Version
+|Mule Runtime|Mule Enterprise Edition 3.5.2 and newer
+|Zuora|v75
+|===
+
+*Notes:*
+
+* Starting with v3.0.0, the Zuora connector is licensed commercially as a https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[_Select_] connector.  Prior versions are freely available to the community.
+
+* Support for TLS1.0 is discontinued in Zuora. If by default the application tries to use TLS1.0, when running it, add the `-Dhttp.protocols=TLSv1.1,TLSv1.2` VM argument to enensure that TLS1.1 or TLS1.2 is used for the communication with Zuora.
+
+* WSDL Versions - The Zuora connector can use WSDL versions older than version 75, but only version 75 has been tested in detail.
+
+* Zuora's SOAP API is not supported in Zuora's EU datacenter. See https://knowledgecenter.zuora.com/DC_Developers/G_SOAP_API/E_SOAP_API_Calls[Zuora Knowledge Center].
+
+
+== To Install this Connector
+
+. In Anypoint Studio, click the Exchange icon in the Studio taskbar.
+. Click Login in Anypoint Exchange.
+. Search for this connector and click Install.
+. Follow the prompts to install the connector.
+
+=== To Update from an Older Version
+
+When an updated version of a connector is released, Anypoint Studio displays the Updates Available popup in the bottom right corner of Studio. Click the popup and install the new version.
+
+== To Create a New Project
+
+. In Anypoint Studio, click File > New > Mule Project.
+. Enter a name for your new project and leave the remaining options with their default values.
+. If you plan to use Git, select Create a default .gitignore file for the project with default ignores for Studio Projects, and then click Next.
+. Click Finish to create the project.
+
+== Configure the Zuora Global Element
+
+You can configure a global Zuora element to use with the Zuora connector.
+
+The global parameters are:
+
+image::zuora-global-element-props.png[zuora-config]
+
+[%header%autowidth.spread]
+|===
+|Field |Description
+|Username |Enter the username to log into Zuora.
+|Password |Enter the corresponding password.
+|Endpoint |Enter the address of the endpoint responsible for handling the SOAP requests. Default value:
+`+https://apisandbox.zuora.com/apps/services/a/75.0+`
+|Rest Endpoint |Enter the base of the endpoint responsible for handling the REST requests. Default value:
+`+https://apisandbox.zuora.com/apps/api/+`.
+|WsSDL Location |Enter the path to the Zuora WSDL. You can give the absolute path to the file, or
+you can give the relative path to the file, where the parent directory is src/main/resources.
+|===
+
+
+Zuora Connector uses a session ID to authenticate to Zuora when executing flows. The life of a session ID
+varies depending on how the Zuora environment is configured. When executing flows, if no reconnection strategy
+is set for the connector, when the session ID is invalidated, the API call fails.
+To ensure the call is successful, a reconnection strategy must be created to refresh the session ID.
+
+[[using-the-connector]]
+== Using the Connector
+
+The Zuora connector has three message processors. The *Invoke SOAP Service* processor is capable of calling operations specified in the Zuora WSDL and can determine what type of objects the operation expects.
+
+=== Invoke SOAP Service
+
+Invoke SOAP Service - Use this processor for calling a Zuora SOAP operation.
+
+The processor uses multi-level DataSense to provide the lists of operations in the input Zuora WSDL, and a list of object types that can be used for the chosen operation. The *Service* dropdown contains the services available in the WSDL file.
+
+image::zuora-invoke-soap1.png[invoke-soap-first-step]
+
+The second level presents the user with all the available operations from the WSDL
+
+image::zuora-invoke-soap2.png[invoke-soap-first-step]
+
+The third level presents all the available object types for the chosen operation. If the operation does not use an object with a specific type,
+or it uses no input, the Entity field has an undefined value.
+image:zuora-invoke-soap3.png[invoke-soap-first-step].
+
+== SOAP Operations
+
+For Zuora API version 75, the available SOAP operations are:
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/amend_call[Amend]: Changes a subscription.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/create_call[Create]: Creates one or more objects of a specific type.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/delete_call[Delete]: Deletes one or more objects of the same type.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/execute_call[Execute]: Splts an invoice into multiple invoices.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/generate_call[Generate]: Generates an on demand invoice for a specific customer.
+
+* Get User Info: Retrieves information about the user.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/login_call[Login]: Takes a user name and a password and logs that person into the Zuora server.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/query_call[Query]: Sends a query expression by specifying the object to query, the fields to retrieve from that object, and any filters to determine whether a given object should be queried.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/queryMore_call[Query More]: Allows to request additional results from a previous query() call.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/subscribe_call[Subscribe]: Performs many actions.  Use the subscribe() call to bundle information required to create at least one new subscription.
+
+* https://knowledgecenter.zuora.com/DC_Developers/SOAP_API/E_SOAP_API_Calls/update_call[Update]: Updates the information in one or more objects of the same type.
+
+*Note:* Observe the syntax for calling an operation from the Zuora SOAP API using the connector. The *Operation* and *Entity* are passed in the `soapMetadataKey` attribute separated by two vertical bars "||".
+
+[source,xml,linenums]
+----
+<zuora:invoke-soap-service config-ref="Zuora__Basic_Authentication"
+ soapMetadataKey="ZuoraService-Soap-http://api.zuora.com/||create||Account-zObject"
+ doc:name="Create Account"/>
+----
+
+* Query - This processor allows the user to query for records using a *DataSense Query Language* to construct the query and provide DataSense for the query Output.
+
+image::zuora-query-builder.png[query-builder]
+
+Using Query Builder, you can easily construct queries and add filters to them. If the DataSense Query Language does not have the
+capability to construct the desired query, the user can opt to use Native Query Language, but this mode does not support DataSense. This processor
+uses a Paginated Query to return all the records from the database that match the given query.
+
+
+== REST Processors
+
+The REST processors have two fields Entity ID and Entity Name that allows you to use the Zuora Multi-entity API see https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity[Multi-entity API].
+
+* https://knowledgecenter.zuora.com/DC_Developers/REST_API/B_REST_API_reference/Usage/1_POST_usage[Post Usage] - This operation imports usage data for one or more accounts taken from a csv file given as input. If the import is submitted successfully, the operation returns a POJO containing an URL used to check
+the status of the import. The URL can be given as input to the *Check Import Status* processor
+to retrieve the status of the import. For more information see See [Zuora Post Usage].
+
+* Check Import Status - This operation receives an import URL and returns the current status of the import. If the import failed, the response may contain some information with the reason
+of the failure.
+
+* Get Export File Content - This operation returns the content of a an export file that contains queried data from Zuora.
+
+* Get Export File Stream - This operation returns a stream that represents an export file that contains queried data from Zuora.
+
+* Zuora Aqua Processors -This is a collection of processors and sources that enables the user to interact with the Zuora AQUA Api. See https://knowledgecenter.zuora.com/DC_Developers/Aggregate_Query_API[Zuora Aqua Api Documentation].
+
+The following processors/sources are available:
+
+** Aqua Post Query - This processor submits an aggregated list of ZOQL and Export ZOQL queries in a stateful or stateless mode. See https://knowledgecenter.zuora.com/DC_Developers/Aggregate_Query_API/B_Submit_Query[Zuora's documentation for Post Query].
++
+The project and partner are required to be completed in order for this request to be stateful. Stateful requests have more features than the stateless requests. For more information see https://knowledgecenter.zuora.com/DC_Developers/Aggregate_Query_API/BA_Stateless_and_Stateful_Modes[Zuora Stateless vs Stateful Mode].
++
+If the Aqua Post Query request is successful, the processor returns a job that  has a batch for each query in the request. Using other processors, the user can check the status of the job and retrieve the results of its batches. If the request fails, the job is not created and the result  contains some information about the cause of the failure.
++
+The Save Job To Object Store flag, if set to true,  causes all the IDs of the jobs created by the PostQuery operation to be saved in a Persistent Object Store whose name is given by the Object Store Name field, to be used by the Aqua Get Batch Result source.
+If the flag is set to true and no object store is given, a default object store `zuoraPostQueryObjectStore` is used.
++
+** Aqua Get Job Results - Receives a String representing a jobId and returns an object representing the status of that job.
++
+** Aqua Delete Job - Deletes the current job, only if the job is not complete and returns the information about the cancelled job.
+** Aqua Get Last Completed Job - Returns the details of the last completed job of a stateful request represented by the *partnerId* and *projectId* .
+** Aqua Operations For Pooling Results - The last 2 processors/sources work together with aquaPostQuery to continuously check the status of a given job. When the job is finished, the job is returned and the content of it's batches can be extracted.
++
+The Source *Aqua get batch results* periodically checks an object store for jobs to check. When it determines a job is completed, it returns the job in form of a POJO.
++
+Because a source does not have DataSense by default, the Aqua Get Job Metadata processor can be used to transform the POJO returned by the source to a job so the user can use DataSense on it. The object store used by the source is populated with jobs by the Aqua Post Query
+processor if the Save Job To Object Store flag is set to true.
++
+*** Aqua Get Batch Results - This source optionally can receive a name for a persistent object store to periodically check the status of the jobs stored in that object store. If no name is provided, a default object store zuoraPostQueryObjectStore is used. The polling period can
+be modified by changing the Polling Period field. When a job completes, the source returns it as a POJO.
++
+image::zuora-aqua-source.png[aqua-source]
++
+*** Aqua Get Job Metadata - Receives a POJO  that represents a result returned by the Aqua Get Batch Results source and converts it to a Job object. This way, a user can retrieve the metadata of the Job object and map the job structure to other elements further down the flow.
++
+An example of how this operations could work together is:
++
+image::zuora-aqua-source-example.png[aqua-source-example]
++
+In the first flow, Post Query creates a new job and stores the job in an object Store.
++
+The source from the second flow periodically checks the jobs present in the object store. When it concludes a job is completed,
+it returns the job result as a pojo. The next processor (Aqua Get Job Metadata), converts the POJO to a Job object to provide dataSense to the user.
+The user then can download the query results by going through each Batch from the Job and using the Get Export File Stream processor to download the file.
+
+Generally speaking, the Zuora connector can be used as an outbound connector. A description of this scenario follows.
+
+== Outbound Scenario
+
+Use as an outbound connector in your flow to push data into Zuora. To use the connector in this capacity, simply place the connector in your flow at any point after an inbound endpoint (see image below).
+
+=== Basic Example
+
+image::zuora-connector-outbound.png[zuora_outbound]
+
+. File connector - Accepts data from a file, such as a CSV, into a flow.
+. Transform Message - Transforms data structure and format to produce the output Zuora connector expects.
+. Zuora connector (outbound) - Connects with Zuora, and performs an operation to push data into Zuora.
+
+== Connector Namespace and Schema
+
+When designing your application in Studio, the act of dragging the connector from the palette onto the Anypoint Studio canvas should automatically populate the XML code with the connector *namespace* and *schema location*.
+
+*Namespace:* `+http://www.mulesoft.org/schema/mule/zuora+`
+
+*Schema Location:* `+http://www.mulesoft.org/schema/mule/connector/current/mule-zuora.xsd+`
+
+If you are manually coding the Mule application in Studio's XML editor or other text editor, define the namespace and schema location in the header of your Configuration XML, inside the `mule` tag.
+
+[source,xml,linenums]
+----
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:connector="http://www.mulesoft.org/schema/mule/zuora"
+      xsi:schemaLocation="
+               http://www.mulesoft.org/schema/mule/core
+               http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+               http://www.mulesoft.org/schema/mule/zuora
+               http://www.mulesoft.org/schema/mule/connector/current/mule-zuora.xsd">
+
+      <!-- put your global configuration elements and flows here -->
+
+</mule>
+----
+
+
+== Using the Connector in a Mavenized Mule App
+
+After you download and install the connector, use the following steps to make the Zuora connector available to inside a Mule application for use and to package the application with the connector.
+If you use Anypoint Studio, it does this automatically for you.
+
+. Add the repository information to your project's pom.xml file:
++
+[source,xml,linenums]
+----
+<repositories>
+   <repository>
+        <id>mule-ee-releases</id>
+        <name>MuleEE Releases Repository</name>
+        <url>https://repository-master.mulesoft.org/nexus/content/repositories/releases-ee/</url>
+    <repository>
+        <id>mule-ee-snapshots</id>
+        <name>MuleEE Snapshots Repository</name>
+        <url>https://repository-master.mulesoft.org/nexus/content/repositories/ci-snapshots/</url>
+    </repository>
+</repositories>
+----
++
+. Add the module as a dependency to your project for the latest release version:
++
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.mule.modules</groupId>
+    <artifactId>mule-module-zuora</artifactId>
+    <version>RELEASE</version>
+</dependency>
+----
++
+Or for the latest version:
++
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.mule.modules</groupId>
+    <artifactId>mule-module-zuora</artifactId>
+    <version>SNAPSHOT</version>
+</dependency>
+----
++
+. If you plan to use this module inside a Mule application, you need to include it in the packaging process. That way the final zip file that contains your flows and Java code also contains this module and its dependencies. Add a special inclusion to the configuration of the Mule Maven plugin for this module as follows:
++
+[source,xml,linenums]
+----
+<plugin>
+    <groupId>org.mule.tools</groupId>
+    <artifactId>maven-mule-plugin</artifactId>
+    <extensions>true</extensions>
+    <configuration>
+        <excludeMuleDependencies>false</excludeMuleDependencies>
+        <inclusions>
+            <inclusion>
+                <groupId>org.mule.modules</groupId>
+                <artifactId>mule-module-zuora</artifactId>
+            </inclusion>
+        </inclusions>
+    </configuration>
+</plugin>
+----
+
+
+== Demo: Aggregate Query API
+
+This demo shows the use of Aggregate Query API with Zuora Connector.
+
+link:{attachmentsdir}/zuora-aqua-api-operations-demo.zip[Download the demo zip file].
+
+To build and run this demo project you need:
+
+* Anypoint Studio with at least Mule 3.5 Runtime.
+* Mule Zuora Connector v3.1.0 or higher.
+
+=== Test the Flows
+
+. Import the demo project into your workspace via "Anypoint Exchange" or "Import..." from "File" menu.
+. Specify your Zuora credentials in /src/main/app/mule-app.properties
++
+** config.username - User name within Zuora system
+** config.password - Password within Zuora system
+** config.endpoint - Endpoint called by the Zuora Soap operations
+** config.restEndpoint - Endpoint called by the Zuora Rest operations
+** config.wsdlLocation - Location of the Zuora WSDL
++
+. Run the project in Studio.
+. Type `+localhost:8081+` in your browser to access the selection menu of the demo.
+. Optionally you can configure the Read Timeout and Connection Timeout.
+The connection timeout is the timeout in making the initial connection with the server.
+The read timeout is the timeout on waiting to read data from the server.
+
+
+=== To Run This Demo
+
+. `aqua-api-post-query-demo`: Choose Post Multiple Query in the selection menu.
++
+This flow executes an Export ZOQL and ZOQL at the same time. You must specify a Job Name, Project ID, and Partner ID fields being optional and if specified.
++
+Aqua executes in Stateful mode, establishing a continuous session across a series of requests. If not provided, Aqua executes in Stateless mode.
++
+See https://knowledgecenter.zuora.com/DC_Developers/Aggregate_Query_API/BA_Stateless_and_Stateful_Modes[Stateless/Stateful Modes].
++
+For this operation, you can also configure Entity ID and Entity Name for multi-entity support. Read more about https://knowledgecenter.zuora.com/BB_Introducing_Z_Business/Multi-entity[multi-entity].
++
+. `aqua-api-get-job-results-demo`: Choose Get Job Results Demo in the selection menu.
++
+This flow returns the representation of a job, having the status for the job and a list of batches. Each Batch contains information about a single query that was
+submitted.
++
+If a query has the field status as completed, it also contains an additional field called fileId. With the Get Export File Stream operation, the connector can retrieve the query results from a specified fileId.
+This operation also has multi-entity support.
++
+. `aqua-api-get-last-completed-job-demo`: Choose Get Last Completed Job.
++
+This flow returns the representation of the last completed job. This operation works only for jobs in stateful mode, so the GetLastJobRequest needs the partnerId and the projectId to give back a response. This operation also has multi-entity support.
++
+. `aqua-post-query-results-to-object-store`: Choose Post Query Results to Object Store.
++
+This flow uses the Aqua Post Query operation and it requires a PostQueryResponse for input. For this operation we checked Save Job To Object Store and we named it PostQueryResultsStore in the Object Store Reference configuration input. If no name is specified, the default object store is used.
++
+. `aqua-polling-demo`: This flow works behind the scene.
++
+This processes the jobs saved with the Aqua Post Query operation in the PostQueryResultsStore object store.
++
+.. The Aqua Get Batch Results operation goes to each job found in the Object Store. The Object Store can be named by the user in the operation configuration. If no name is specified, the default object store is processed. The operation periodically checks if the job is completed. The polling period can be configured by the user using the field Polling Period.
+.. When a completed job is found the source returns it as an Object.
+.. Aqua Get Job Metadata operation receives the Object as the input and  outputs the representation of a Job so Datasense can be used.
+.. The For Each component goes to each batch from the job and the fileId of the batch is exported to be used by the Get Export File Stream operation.
+.. The Get Export File Stream operation accesses the results for the given fileId and return them as a stream.
+.. The Copy to File component takes each stream and save it in a file named fileId in `src/test/resources`.
+
+=== Example Use Case
+
+The following example shows how to create an account, a contact, then update that account to an active state and use the created contact for billing:
+
+. In Anypoint Studio, click File > New > Mule Project, name the project, and click OK.
+. In the search field, type "http" and drag the HTTP connector to the canvas. Use three HTTP connectors to create three separate flows. Click the HTTP connector,
+click the green plus sign to the right of Connector Configuration, and in the next screen, click OK to accept the default settings. Name the endpoints `/create-account`, `/create-contact`, and `/update-account`.
+. In the Search bar type "zuora" and drag the Zuora connector onto the canvas. Configure as before.
+. Click the Invoke SOAP Service operation. Choose Create operation and Account object. DataSense brings ibn the structure of the Account as well as the output structure of the Create operation.
+. For the second flow click the Invoke SOAP Service operation. Choose Create operation and Contact object. DataSense brings in the structure of the Contact as well as the output structure of the create operation.
+. For the third flow click the Invoke SOAP Service operation. Choose Update operation and Account object.
+DataSense brings the structure of the Account and brings in the output structure of the update operation.
+Add Transform Message components, one in front of and one after the connector.
++
+*Note:*  If "Payload - Unknown" is shown in DataWeave then the method either has no input or it returns nothing. If DataWeave detects any input for the method, it appears as: "Payload - Unknown".
++
+. The mapping for the three transforms should look like this:
++
+** Transform for creating account image:zuora-transform1.png[zuora-transformer-create-account]
++
+** Transform for creating contact image:zuora-transform2.png[zuora-transformer-create-contact]
++
+** Transformer for updating account image:zuora-transform3.png[zuora-transformer-update-account]
++
+. The flows appear as:
++
+image::zuora-create-account-flow.png[zuora-create-account]
++
+image::zuora-create-contact-flow.png[zuora-create-contact]
++
+image::zuora-update-account-flow.png[zuora-update-account]
++
+. After you create the flows, right-click the project name in the  image:zuora-package-explorer.png[] and click Run As > Mule Application.
+. Create and post a JSON file that has the structure presented in the transforms at the endpoints that belong to each flow.
+As an example, below are a few valid JSON files.
++
+Create Account Input.
++
+image::zuora-account-json.png[]
++
+Create Contact Input - For AccountId, the ID from the account created by the previous flow can be used.
++
+image::zuora-contact-json.png[]
++
+Update Account Input (for ID, the ID from the account created by the first flow can be used. For the other
+two fields, the ID from the contact created by the second flow can be used.
++
+image::zuora-update-account-json.png[]
+
+
+=== Example Use Case - XML
+
+Paste this into Anypoint Studio to interact with the example use case application discussed in this guide.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+xmlns:zuora="http://www.mulesoft.org/schema/mule/zuora"
+xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking"
+xmlns="http://www.mulesoft.org/schema/mule/core"
+xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+xmlns:spring="http://www.springframework.org/schema/beans"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://www.springframework.org/schema/beans
+http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking
+http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd
+http://www.mulesoft.org/schema/mule/zuora
+http://www.mulesoft.org/schema/mule/zuora/current/mule-zuora.xsd
+http://www.mulesoft.org/schema/mule/ee/dw
+http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0"
+    port="8081" doc:name="HTTP Listener Configuration"/>
+    <zuora:config name="Zuora__Basic_Authentication" username="${config.username}"
+    password="${config.password}" doc:name="Zuora: Basic Authentication"
+    wsdlLocation="${config.wsdlLocation}" endpoint="${config.endpoint}"
+    restEndpoint="${config.restEndpoint}">
+        <reconnect-forever/>
+    </zuora:config>
+    <flow name="zuora-subscribe-operations-createAccount-demoFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/create-account" doc:name="HTTP"/>
+        <logger message="'Input:'#[payload]" level="INFO" doc:name="Logger"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:input-payload doc:sample="json.json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+%namespace ns0 http://api.zuora.com/
+%namespace ns1 http://object.api.zuora.com/
+---
+{
+	ns0#create: {
+		ns0#zObjects: {
+			ns1#AllowInvoiceEdit: false,
+			ns1#AutoPay: false,
+			ns1#Batch: "Batch1",
+			ns1#BillCycleDay: "1",
+			ns1#Currency: "USD",
+			ns1#Name: payload.Name,
+			ns1#PaymentTerm: "Due Upon Receipt",
+			ns1#Status: "Draft"
+		}
+	}
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <zuora:invoke-soap-service config-ref="Zuora__Basic_Authentication" soapMetadataKey="ZuoraService-Soap-http://api.zuora.com/||create||Account-zObject" doc:name="Create Account"/>
+
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="'Output:'#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="zuora-subscribe-operations-createContact-demoFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/create-contact" doc:name="HTTP"/>
+        <logger message="'Input:'#[payload]" level="INFO" doc:name="Logger"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:input-payload doc:sample="json_1.json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+%namespace ns0 http://api.zuora.com/
+%namespace ns1 http://object.api.zuora.com/
+---
+{
+	ns0#create: {
+		ns0#zObjects: {
+			ns1#AccountId: payload.AccountId,
+			ns1#Address1: payload.Address1,
+			ns1#City: payload.City,
+			ns1#Country: "Romania",
+			ns1#FirstName: payload.FirstName,
+			ns1#LastName: payload.LastName,
+			ns1#State: payload.State
+		}
+	}
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <zuora:invoke-soap-service config-ref="Zuora__Basic_Authentication" soapMetadataKey="ZuoraService-Soap-http://api.zuora.com/||create||Contact-zObject" doc:name="Create Contact"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="'Output:'#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="zuora-subscribe-operations-updateAccount-demoFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/update-account" doc:name="HTTP"/>
+        <logger message="'Input:'#[payload]" level="INFO" doc:name="Logger"/>
+        <dw:transform-message doc:name="Transform Message">
+            <dw:input-payload doc:sample="json_7.json"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/xml
+%namespace ns0 http://api.zuora.com/
+%namespace ns1 http://object.api.zuora.com/
+---
+{
+	ns0#update: {
+		ns0#zObjects: {
+			ns1#Id: payload.Id,
+			ns1#BillToId: payload.contactId,
+			ns1#SoldToId: payload.contactId,
+			ns1#Status: "Active"
+		}
+	}
+}]]></dw:set-payload>
+        </dw:transform-message>
+        <zuora:invoke-soap-service config-ref="Zuora__Basic_Authentication" soapMetadataKey="ZuoraService-Soap-http://api.zuora.com/||update||Account-zObject" doc:name="UpdateAccount"/>
+
+        <dw:transform-message doc:name="Transform Message">
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+payload]]></dw:set-payload>
+        </dw:transform-message>
+        <logger message="'Output:'#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+  </mule>
+----
+
+== Demo: Subscribe Operation
+
+Anypoint Studio demo for Zuora subscribe operation.
+
+link:{attachmentsdir}/zuora-subscribe-operations-demo.zip[Download the demo zip file].
+
+=== How to Run Demo
+
+. Import the project folder in Studio.
+. Specify your Zuora credentials in /src/main/app/mule-app.properties.
+. Run the project in Studio.
+. Type localhost:8081 in your browser to access the selection menu of the demo.
+
+=== About the Demo
+
+The config file named mule-app.properties contains configurable properties:
+
+* config.username - User name within Zuora system
+* config.password - Password within Zuora system
+* config.endpoint - Endpoint called by the Zuora Soap operations
+* config.restEndpoint - Endpoint called by the Zuora Rest operations
+* config.wsdlLocation - Location of the Zuora WSDL
+
+The project contains 18 simple flows that show how to successfully create a subscription and modify different components of that subscription. It must be noted that the
+Subscribe operation can combine all the operations from this demo into a single unit, but to make the process more clear, the necessary operations to create a subscription
+are split.
+
+This demo is split into these sections:
+
+* <<Create Subscription>>
+* <<Renew and Cancel Subscription>>
+* <<Modify Terms and Conditions>>
+* <<Modify Subscription Products>>
+
+=== Create Subscription
+
+. zuora-subscribe-operations-createAccount-demoFlow: Choose Create Account in the selection menu.
++
+This flow creates an account. For input, only the name must be provided. The demo uses some hard coded values for some fields like the batch in which
+the account is created, or the currency that the account uses. The account is created in Draft state.
++
+. zuora-subscribe-operations-createContact-demoFlow: Choose Create Contact in the selection menu.
++
+This flow creates a contact. For input, personal information like the first and last name or country need to be added. The Contact needs an existing Account ID.
+The demo auto-completes this field with the ID resulted from the creation of the Account in flow 1.
++
+. zuora-subscribe-operations-createPayment-demoFlow: Choose Create Payment in the selection menu.
++
+This flow creates a payment method for the subscription. For input, credit card information is required. The demo uses a Visa as a credit card type.
+The demo auto-completes the Account ID with the ID resulted from the creation of the Account in flow 1.
++
+. zuora-subscribe-operations-createProduct-demoFlow: Choose Create Product in the selection menu.
++
+This flow creates a product that has a name, start and end date. The date must have the format YYYY-MM-DD.
++
+. zuora-subscribe-operations-createProductRate-demoFlow: Choose Create Product Rate in the selection menu.
++
+This flow creates a product rate, that is an option which belongs to a product. Like a product, it has a name, start and end date.
+The date must have the format YYYY-MM-DD. The demo auto-completes the Product ID with the ID resulted from the creation of the Product in flow 4.
++
+. zuora-subscribe-operations-createProductRateCharge-demoFlow: Choose Create Product Rate Charge in the selection menu.
++
+This flow creates a payment strategy for a product rate.
+The demo auto-completes the Product Rate Plan ID with the ID resulted from the creation of the Product Rate Plan in flow 5. As it can be seen when analyzing the
+flow in Studio, the used currency is USD with a price of 12 units.
++
+. zuora-subscribe-operations-updateAccount-demoFlow: Choose Update Account in the selection menu.
++
+This flow updates an account to an active state. In order for an account to be in Active State, it needs to have contact information assigned to it
+for billing. The demo auto-completes the Account ID with the ID resulted from the creation of the Account in flow 1. It also auto-completes
+BillTo and SoldTo fields with the ID resulted from the creation of the Contact in flow 2.
++
+. zuora-subscribe-operations-subscribe-demoFlow: Choose Subscribe in the selection menu.
++
+This flow creates a new subscription. The subscription needs an Account id, Payment ID, Contact ID and a Product Rate Plan ID. These are auto-completed
+using the results from the previous flows. The subscription also needs a ContractAcceptanceDate and ContractEffectiveDate with the YYYY-MM-DD format. The
+ContractAcceptanceDate represents the date when the customer accepts the contract and the ContractEffectiveDate represents the date when the contract takes
+effect.
+
+=== Renew and Cancel Subscription
+
+. zuora-renew-subscription-demoFlow: Choose Renew Subscription in the selection menu.
++
+This flow renews an existing subscription. If a subscription was created using the Create Subscription section in the same session, then the Subscription ID field auto-completes by the ID of that subscription. The ServiceActivationDate represents the date that the subscription starts, and the ContractEffectiveDate
+represents the date when the contract that governs the subscription takes effect.
++
+. zuora-cancel-subscription-demoFlow: Choose Cancel Subscription in the selection menu.
++
+This flow cancels an existing subscription. If a subscription was created using the Create Subscription section in the same session, then the Subscription ID field
+auto-completes by the ID of that subscription. The ContractEffectiveDate represents the date the contract expires and the EffectiveDate date field
+represents the date the subscription expires. After expiration, the value of the EffectiveDate is overwritten by the value of ContractEffectiveDate.
+
+=== Modify Terms and Conditions
+
+This section lets you extend or shorten the initial term or renewal term of the subscription:
+
+zuora-change-term-of-service-demoFlow: Choose Change Terms and Conditions in the selection menu.
+
+This flow modifies the term related details of the subscription. If a subscription was created using the Create Subscription section in the same session, then the Subscription ID field
+auto-completes by the ID of that subscription. The Term Start Date field dictates when the term should start affecting the subscription.
+The RenewalTermPeriodType can have values as Day or Week for example. The RenewalTerm field dictates how many days, weeks, etc(depends on the
+value of RenewalTermPeriodType) the term takes action. The ContractEffectiveDate dictates when the new contract's changes takes effect.
+
+=== Modify Subscription Products
+
+This section contains flows to add, update, or delete products from a subscription:
+
+. zuora-amend-createNewProduct-demoFlow: Choose Create New Product in the selection menu.
++
+This flow creates a product that has a name, start, and end date. The date must have the format YYYY-MM-DD. This product is added to an existing subscription.
++
+. zuora-amend-createNewProductRate-demoFlow: Choose Create New Product Rate in the selection menu.
++
+This flow creates a product rate, that is an option which belongs to a product. Like a product, it has a name, start and end date.
+The date must have the format YYYY-MM-DD. The demo auto-completes the Product ID with the ID resulted from the creation of the Product in flow 1.
++
+. zuora-amend-createNewProductRateCharge-demoFlow: Choose Create New Product Rate Charge in the selection menu.
++
+This flow creates a payment strategy for a product rate.
+The demo auto-completes the Product Rate Plan ID with the ID resulted from the creation of the Product Rate Plan in flow 2. As it can be seen when analyzing the
+flow in studio, the used currency is USD with a price of 12 units.
++
+. zuora-amend-addProducts-demoFlow: Choose Add Product For Subscription in the selection menu.
++
+This flow adds a new product to an existing subscription. The demo auto-completes the Product Rate Plan ID with the ID that results
+from the creation of the Product Rate Plan in flow 2.
+If a subscription was created using the Create Subscription
+section in the same session, then the Subscription ID field
+auto-completes by the ID of that subscription. The Service Activation Date represents the date the new product is added to the subscription.
+The Customer Acceptance Date field represents the date when the customer accepts the contract. The Contract Effective Date field represents the date
+the contract starts.
++
+. zuora-amend-queryRateId-productsFlow Choose Query Rate ID in the selection menu.
++
+This flow queries the the Rate ID of a Product Rate  that was added to a subscription. When a product with a product rate is added to a subscription, a
+corresponding Rate object is created. To alter the product instance linked to the subscription, the ID of the corresponding rate is required.
+If the Product Rate was created in this session using flow 2, the query is auto filled. If not, the query must have the form: "Select ID from RatePlan where ProductRatePlanId= ''",
+and include the ProductRatePlanId that was used for the subscription.
++
+. zuora-amend-updateProducts-demoFlow: Choose Amend Update Product for Subscription.
++
+This flow updates the charge quantity details of a subscription product to 7. If a subscription was created using the Create Subscription section in the same session, then the Subscription ID field
+is auto-completed by the ID of that subscription. For ProductRatePlanId, it needs the ID field of a Rate object. The ID can be retrieved using flow 5.
+It also needs the ID of the charge plan for the given product. All these fields are auto-completed if all the previous section flows are successfully run.
+The Service Activation Date represents the date the new product is added to the subscription.
+The Customer Acceptance Date field represents the date when the customer accepts the contract. The Contract Effective Date field represents the date the contract starts.
++
+. zuora-amend-deleteProducts-demoFlow: Choose Amend Delete Product for Subscription.
++
+This flow deletes a product from a subscription. If a subscription was created using the Create Subscription section in the same session, then the Subscription ID field
+is auto-completed by the ID of that subscription. For ProductRatePlanId, it needs the ID field of a Rate object. The ID can be retrieved using flow 5.
+All these fields are auto-completed if all the previous section flows are successfully run.
+The Service Activation Date represents the date the new product is added to the subscription.
+The Customer Acceptance Date field represents the date when the customer accepts the contract. The Contract Effective Date field represents the date the contract starts.
+
+
+== Connector Performance
+
+To define the pooling profile for the connector manually, access the Pooling Profile tab in the applicable global element for the connector.
+
+For background information on pooling, see xref:3.9@mule-runtime::tuning-performance.adoc[Tuning Performance].
+
+=== Best Practices
+
+. It is advisable to set the Reconnection Strategy to *Reconnect Forever* to make sure that the Session ID can be successfully refreshed.
+. To take full advantage of DataSense functionality with the Zuora connector, design-time best practice dictates that you should build an application in this particular order:
+
+.. Configure the connector.
+.. Test the connection.
+.. Initiate DataSense metadata extraction.
+.. Build the rest of your flow.
+.. Add and configure DataWeave.
++
+The objective of this design-time strategy is to set the pieces of the integration puzzle in place, then glue them together with DataWeave. Rather than designing a flow sequentially, from the inbound endpoint, this type of align, then glue together strategy ensures that you are utilizing DataSense, wherever possible, to prepopulate the information about the structure and format of the input or output data in a Transform Message component. The diagram in the section below prescribes a process that follows this best practice in the context of a flow that uses a Zuora connector.
+
+For more information, see xref:6@studio::datasense.adoc[DataSense Best Practices].
+
+== See Also
+
+* Access the xref:release-notes::connector/zuora-connector-release-notes.adoc[Zuora Connector Release Notes].

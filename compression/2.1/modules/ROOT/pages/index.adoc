@@ -1,0 +1,360 @@
+= Compression Module - Mule 4
+:page-aliases: connectors::compression/compression-module.adoc
+
+Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[Select]
+
+Compression Module v2.0
+
+Compression Module supports and provides access to the most-used
+file archiver and compression formats through a Mule app.
+
+A file archiver is a computer program that combines a number of files together
+into one archive file for easier transportation or storage, and most archivers
+employ data compression in their archive formats to reduce the size of the
+final archive. However, not all compression algorithms can archive multiple
+files. Some are limited to single-file data compression.
+
+This module compresses and decompresses files for each of the available
+formats without losing any of the features that the format associated algorithm
+provides.
+
+To achieve this capability, the module provides two pairs of operations, one for
+compressing and decompressing a single file, another for archiving and
+extracting a bundle of files. Each of these operations can be configured
+with the compression or archiving strategies of your choice.
+
+Release Notes: xref:release-notes::mule-runtime/module-compression.adoc[Compression Module Release Notes] +
+Exchange: https://www.mulesoft.com/exchange/org.mule.modules/mule-compression-module/[Compression Module]
+
+== POM File Information
+
+If you create an app outside of Studio, set your POM file information as follows:
+
+[source,xml,linenums]
+----
+<dependency>
+  <groupId>org.mule.modules</groupId>
+  <artifactId>mule-compression-module</artifactId>
+  <version>RELEASE</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+Mule converts RELEASE to the latest version of the connector.
+
+== Compress and Decompress a Single File
+
+=== Content Compression
+
+Given an input stream, the module compresses the stream and returns a new
+compressed stream of bits so it can be stored in a file system or transferred
+to another system.
+
+==== Compressor Strategies
+
+A Compressor strategy can compress a file or a single-entry archive.
+
+===== GZip Compressor Strategy
+
+When used in an operation, this strategy declares that the content should be
+compressed with the `gzip` format.
+
+[source, xml]
+----
+<compression:gzip-compressor/>
+----
+
+===== Zip Compressor Strategy
+
+When used in an operation, this strategy declares that the content should be
+compressed with the `zip` format.
+
+[source, xml]
+----
+<compression:zip-compressor/>
+----
+
+==== Compress Operation
+
+[source, xml]
+----
+<compression:compress>
+   <compression:content>#[payload.data]</compression:content> // <1>
+   <compression:compressor>
+       <compression:zip-compressor/> // <2>
+   </compression:compressor>
+</compression:compress>
+----
+
+<1> The `InputStream` to be compressed. Defaults to `#[payload]`.
+<2> Compressor strategy to be used.
+
+==== Compression Errors
+
+If an error occurs while compressing the content, a
+`COMPRESSION:COULD_NOT_COMPRESS` error is thrown.
+
+== Content Decompression
+
+Decompresses single-entry compressed content, which is assumed to be an archive
+in the specified compression format.
+
+=== Decompressor Strategies
+
+A Decompressor strategy knows how to decompress a file or a single-entry archive.
+
+==== GZip Decompressor Strategy
+
+When used in an operation, this strategy declares that the content should be
+decompressed with the `gzip` format.
+
+[source, xml]
+----
+<compression:gzip-decompressor/>
+----
+
+==== Zip Decompressor Strategy
+
+When used in an operation, this strategy declares that the content should be
+decompressed with the `zip` format.
+
+[source, xml]
+----
+<compression:zip-decompressor/>
+----
+
+=== Decompress Operation
+
+[source, xml, linenums]
+----
+<compression:decompress>
+   <compression:content>#[payload]</compression:content> // <1>
+   <compression:decompressor>
+       <compression:gzip-decompressor/> // <2>
+   </compression:decompressor>
+</compression:decompress>
+----
+
+<1> The `InputStream` to be decompressed. Defaults to `#[payload]`.
+<2> Decompressor strategy to be used.
+
+==== Decompression Errors
+
+If the given content does not match the format of the configured strategy, a
+`COMPRESSION:INVALID_ARCHIVE` error will be thrown.
+
+If the archive to be decompressed has more than one entry, this operation will
+fail with a `COMPRESSION:TOO_MANY_ENTRIES` error, because it will not be able
+to choose only one entry to return. For these cases, you should use the
+Extract operation.
+
+== Archive and Extract Multiple Entries
+
+=== Archive
+
+Given a Map of `<entryName,InputStream>`, the archiving process compresses all
+the given entries into a new archive in the configured format.
+
+==== Archiver Strategies
+
+An Archiver strategy is for compressing multiple entries into an archive.
+
+===== Zip Archiver Strategy
+
+When used in an operation, the Zip Archiver strategy declares that the content
+should be compressed with the `zip` format.
+
+[source, xml]
+----
+<compression:zip-archiver/>
+----
+
+=== Archive Operation
+
+This operation receives a Map that identifies the entries to be compressed and
+their values. Each entry passed to this operation is placed inside the
+compressed archive bearing the name you provide.
+
+[source, xml, linenums]
+----
+<compression:archive>
+   <compression:entries> // <1>
+    #[
+       {
+         summary.pdf: vars.summary,
+         'details/result_001.pdf': vars.file1
+         'details/result_002.pdf': vars.file2
+       }
+     ]
+   </compression:entries>
+   <compression:archiver>
+       <compression:zip-archiver/> // <2>
+   </compression:archiver>
+</compression:archive>
+----
+
+<1> A DataWeave script defining each name of the entry to be compressed as a
+key and the content of that entry as its value.
+<2> The archiver strategy to be used.
+
+The resulting archive contains _three entries_, one named `summary.pdf` at root
+level, the others called `result_001.pdf` and `result_002.pdf`, inside a
+directory called `details`:
+
+[source]
+----
++- content.zip
+|  \- summary.pdf
+|  \+ details
+   |  \- result_001.pdf
+   |  \- result_002.pdf
+
+----
+
+Note that the slash (`/`) in the name of an entry (for example,
+`details/result_001.pdf`) indicates directory separation, so all names will be
+introspected to create directories inside the archive.
+
+NOTE: If you create the input to the Archive operation using a DataWeave expression, the DataWeave expression must output an Object, which is used to build the Java Map object. For the entire object to be added to the archive, every key must be unique.
+
+==== Archive Errors
+
+If a problem occur while compressing the content, a
+`COMPRESSION:COULD_NOT_COMPRESS` error will be thrown.
+
+== Extract
+
+Decompresses content that represents an archive in some compression format.
+
+=== Extractor Strategies
+
+An Extractor strategy can decompress an archive with multiple entries that are
+compressed in a particular format.
+
+==== Zip Strategy
+
+When used in an operations, this strategy declares that the content should be
+extracted with the `zip` format.
+
+[source, xml]
+----
+<compression:zip-archiver/>
+----
+
+=== Extract Operation
+
+[source, xml, linenums]
+----
+<compression:extract>
+    <compression:compressed>#[vars.archive]</compression:compressed> // <1>
+    <compression:extractor>
+        <compression:zip-extractor/> // <2>
+    </compression:extractor>
+</compression:extract>
+----
+
+<1> The compressed content to be extracted. Defaults to `#[payload]`.
+<2> The entries of this archive are returned as objects, each accessible by its
+name. For example, assume that an archive with three entries with the following
+structure is decompressed:
+
+[source]
+----
++- Archive
+|  \- summary.pdf
+|  \+ details
+   |  \- result_001.pdf
+   |  \- result_002.pdf
+----
+
+In this case, you can access the extracted contents of the entries like this:
+`payload['summary.pdf']` or `payload.details['result_001.pdf']`
+
+==== Archive and Extractor Example
+
+This example reads in all the files from a folder named input, then creates a compressed archive by creating an object with the key set to the file name, and the value to the value of the read file. Next the archive is extracted, then the For-Each scope iterates over each extracted key/value and writes the file to a new output folder with the key as the new file name, and the value the corresponding extracted file content.
+
+[source, xml, linenums]
+----
+  <flow name="archive-extract-test" >
+	<scheduler doc:name="Scheduler">
+		<scheduling-strategy >
+			<fixed-frequency frequency="15" timeUnit="SECONDS"/>
+		</scheduling-strategy>
+	</scheduler>
+	<file:list doc:name="List" config-ref="File_Config" directoryPath="input"/>
+	<set-payload value='#[output application/java
+---
+(0 to sizeOf(payload) - 1) as Array
+reduce (index, acc={}) -&gt;
+acc ++ { (payload[index].attributes.fileName): payload[index].payload}]' doc:name="Set Payload" />
+
+	<compression:archive doc:name="Archive" >
+		<compression:archiver>
+			<compression:zip-archiver />
+		</compression:archiver>
+	</compression:archive>
+
+	<compression:extract doc:name="Extract"  >
+		<compression:extractor >
+			<compression:zip-extractor />
+		</compression:extractor>
+	</compression:extract>
+
+	<foreach doc:name="For Each"  collection="payload">
+	  <file:write doc:name="Write"  config-ref="File_Config" path='#[output application/json
+---
+"output/" ++ (payload pluck $$)[0]]' >
+	    <file:content ><![CDATA[#[output application/java --- ( payload pluck $ )[0]]]]></file:content>
+	  </file:write>
+	</foreach>
+
+	<logger level="INFO" doc:name="Logger" message="#[output application/json --- payload]"/>
+  </flow>
+</mule>
+----
+
+==== Extractor Errors
+
+If the content is not in the configured format, a `COMPRESSION:INVALID_ARCHIVE`
+error will be thrown. For other errors that occur during the compression process,
+the operation throws a `COMPRESSION:COULD_NOT_DECOMPRESS` error.
+
+== Common Use cases
+
+=== Compress a File
+
+This example reads a file, compresses it, and saves it.
+
+[source, xml, linenums]
+----
+<file:read path="file.txt"/>
+<compression:compress>
+   <compression:compressor>
+       <compression:gzip-compressor/>
+   </compression:compressor>
+</compression:compress>
+<file:write path="file-txt.gz"/>
+----
+
+=== Decompress a Payload from a Remote Service
+
+This example calls a server that returns and decompresses a Zip file.
+
+[source, xml, linenums]
+----
+<wsc:consume config="ZipServiceConfig" operation="returnsZip"/>
+<compression:decompress>
+   <compression:content>
+      #[payload.body.zipContent]
+   </compression:content>
+   <compression:decompressor>
+       <compression:zip-decompressor/>
+   </compression:decompressor>
+</compression:decompress>
+----
+
+== See Also
+
+* xref:compression-documentation.adoc[Compression Module Reference]
+* https://help.mulesoft.com[MuleSoft Help Center]

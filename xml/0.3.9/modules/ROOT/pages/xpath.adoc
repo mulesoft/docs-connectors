@@ -1,0 +1,147 @@
+= XPath
+:keywords: anypoint studio, esb, xpath
+:page-aliases: 3.9@mule-runtime::xpath.adoc
+
+*_Mule 3.6.0 and above_*
+
+== Supported XPath Versions
+
+Mule 3.6.0 and newer provide basic support for version 3.0 of the spec. This means that any feature of the spec is supported as long as it doesn't rely on schema awareness, high order functions, or streaming.
+
+Mule 3.6.0 and newer also provide improved support for XPath 2.0, XSLT 2.0 and XQuery 1.0.
+
+Mule 3.6.0 and newer include the `xpath3() function which provides full support for XPath 3.0 and 2.0. However, versions 3.0 and 2.0 are not fully compatible with version 1.0; for this reason, the old `xpath()` function is only supported until Mule 4.0.
+
+In Mule 3.6.0, the following XPath components were deprecated:
+
+*  `xpath` expression evaluator
+*  `xpath2` expression evaluator
+*  `bean` expression evaluator
+*  `jxpath` filter
+*  `jxpath` extractor transformer
+*  `jaxen` filter
+
+Since XPath 3.0 is completely backwards-compatible with XPath 2.0, the new function works for 2.0 expressions as well. XPath 1.0 expressions, however, are not guaranteed to work. Compatibility mode is limited, and disabled by default.
+
+For a description of the new xpath3() function, see the next section.
+
+== The xpath3() Function
+
+The `xpath3()` function supports <<Function Parameters>> and <<Query Parameters>>.
+
+The function takes the following form:
+
+----
+xpath3(xpath_expression, input_data, return_type)
+----
+
+=== Function Parameters
+
+==== XPath Expression (String, Required)
+
+The XPath expression to evaluate. Cannot be null or blank.
+
+==== Input Data (Object, Optional)
+
+If not provided, this defaults to the message payload. It supports the following input types:
+
+* org.w3c.dom.Document
+* org.w3c.dom.Node
+* org.xml.sax.InputSource
+* OutputHandler
+* byte[]
+* InputStream
+* String
+* XMLStreamReader
+* DelayedResult
+
+If input is not of any of the above types, the function attempts to use a registered transformer to transform the input into a DOM document or node. If no such transformer is found, then an `IllegalArgumentException` is thrown.
+
+Additionally, this function verifies if the input is of a consumable type, such as streams or readers. Evaluating the expression over a consumable input causes the input source to be exhausted, so in cases in which the input value was the actual message payload (whether left blank by the user or provided by default), the function updates the output message payload with the result obtained from consuming the input.
+
+==== Return Type (String, Optional)
+
+If not provided, defaults to String.
+
+This parameter was introduced to allow for the different intents you may have when invoking the `xpath3()` function, such as retrieving the actual data or just verifying if a specific node exists. This feature conforms to the JAXP API https://www.jcp.org/en/jsr/detail/summary?id=206[JSR-206], which defines the standard way for a Java application to handle XML, and therefore to execute XPath expressions. This parameter allows you to leverage this feature of the JAXP API without delving into the API's complexities.
+
+You can select from the following list of possible output types:
+
+* `BOOLEAN`: Returns the effective boolean value of the expression as a `java.lang.String`. Equivalent to wrapping the expression in a call of the XPath `boolean() ` function.
+* `STRING`: Returns the result of the expression converted to a string, as a `java.lang.String`. Equivalent to wrapping the expression in a call to the XPath `string()` function.
+* `NUMBER`: Returns the result of the expression converted to a double as a `java.lang.Double`. Equivalent to wrapping the expression in a call of the XPath `number()` function.
+* `NODE`: Returns the result as a node object.
+* `NODESET`: Returns a DOM NodeList object.
+
+==== Query Parameters
+
+The `xpath3()` function supports passing parameters into the XPath query. The example below shows a query which returns all the LINE elements which contain a given word:
+
+----
+//LINE[contains(., $word)]
+----
+
+The $ sign marks the parameter. The function automatically resolves that variable against the current flow variables. The example below returns all occurrences of the word "handkerchief:"
+
+[source,xml,linenums]
+----
+<set‐variable variableName="word" value="handkerchief"/>
+<expression‐transformer>
+   xpath3('//LINE[contains(.,$word)]',payload,'NODESET')
+</expression‐transformer>
+----
+
+=== Namespace Manager
+
+The `xpath3()` function is `namespace-manager`-aware, which means that all namespaces configured through a `namespace-manager` component is available on XPath evaluation.
+
+The example below shows how to perform an XPath evaluation on a document with multiple namespaces.
+
+[source,xml,linenums]
+----
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body foo="bar">
+    <ns1:echo xmlns:ns1="http://simple.component.mule.org/">
+      <ns1:echo>Hello!</ns1:echo>
+    </ns1:echo>
+  </soap:Body>
+</soap:Envelope>
+----
+
+The above sample document has several namespaces, which the Xpath engine needs to be aware of in order to navigate the DOM tree. The relevant `xpath3()` function is shown below.
+
+[source,xml,linenums]
+----
+<mulexml:namespace-manager includeConfigNamespaces="true">
+  <mulexml:namespace prefix="soap" uri="http://schemas.xmlsoap.org/soap/envelope/"/>
+  <mulexml:namespace prefix="mule" uri="http://simple.component.mule.org/"/>
+</mulexml:namespace-manager>
+
+
+<flowname="xpathWithNamespace">
+  <expression‐transformer expression="xpath3('/soap:Envelope/soap:Body/mule:echo/mule:echo')"/>
+</flow>
+----
+
+[NOTE]
+====
+To ensure consistency, namespace support has also been added to the `xquery-transformer` element. For this reason, some applications may have issues if they use expressions with custom namespaces without correctly specifying the namespace manager. You can avoid this issue by declaring the namespace manager or using a wildcard, for example using `*` instead of the namespace, as shown below.
+
+----
+xpath3('/*:/contacts/')
+----
+
+====
+
+=== XQuery
+
+The xquery-transformer element retains the same syntax as in previous versions. You can select the XQuery version using xquery version in the XQuery script, as shown below:
+
+[source,xml,linenums]
+----
+<mxml:xquery‐text>
+<![CDATA[
+  xquery version "3.0";
+----
+
+XQuery 3.0 introduces support for several new features in the XQuery transformer, such as using an XQuery script to operate on multiple documents at once. For more information, see xref:xquery-transformer.adoc[XQuery Transformer].

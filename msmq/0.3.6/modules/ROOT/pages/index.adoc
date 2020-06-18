@@ -1,0 +1,142 @@
+= MSMQ Connector
+:keywords: anypoint studio, esb, connector, endpoint, msmq, microsoft, message queuing
+:page-aliases: 3.6@mule-runtime::msmq-connector.adoc
+
+_*Standard*_
+
+The MSMQ Connector allows you to send and receive data from MSMQ queues via the Anypoint Gateway for Windows.
+
+After reading this page you can:
+
+* Download and install the MSMQ Connector
+* Build a simple example project
+* Upload, deploy, and run your project
+
+*Release Notes*: xref:release-notes::connector/msmq-connector-release-notes.adoc[MSMQ Connector Release Notes]
+
+== Prerequisites
+
+*  Install the xref:windows-gateway-services-guide.adoc[Windows Gateway Service] first before installing and configuring MSMQ.
+* .NET 4.0
+* MSMQ Service
+
+== Installation and Configuration
+
+=== Installing the MSMQ Connector in Anypoint Studio
+
+*Important*: Install the xref:windows-gateway-services-guide.adoc[Windows Gateway Service] first before installing and configuring MSMQ.
+
+To install a connector, see xref:3.6@mule-runtime::installing-connectors.adoc[To Install a Connector from Anypoint Exchange].
+
+== Example
+
+This example requires some basic familiarity with MSMQ and with Mule. The following documentation describes the Mule ESB features in this example:
+
+* xref:3.6@mule-runtime::mule-expression-language-mel.adoc[Mule Expression Language]
+* xref:3.6@mule-runtime::endpoint-configuration-reference.adoc[Configuring Endpoints]
+* xref:3.6@mule-runtime::transformers.adoc[Transformers]
+* xref:3.6@mule-runtime::flow-reference-component-reference.adoc[Flow Reference Component Reference]
+* xref:msmq-connector-user-guide.adoc[MSMQ User Guide]
+
+=== Set Up Demo Queue in MSMQ
+
+==== Step 1: Create Queue
+
+image::mmc-privatequeues.png[MMC_PrivateQueues]
+
+. Open the Computer Management console on the server where MSMQ is running.
+. Expand *Services and Applications*.
+. Expand *Message Queuing*.
+. Right-click *Private Queues*, click *New*, and *Private Queue*.
+. Name the new queue **msmq-demo**, and click *OK*.
+
+==== Step 2: Grant Permissions
+
+Set the appropriate permissions for the identity that the MSMQ Connector uses to interact with the queue.
+
+. Right click the msmq-demo queue and click Properties.
+. Click the Security Tab. For this demo, make sure that everyone has permissions to the following:
+
+* Receive Message
+* Peek Message
+* Get Properties
+* Get Permissions
+* Send Message
+
+image::msmq-demo-properties.png[msmq_demo_properties]
+
+=== Setting Up a Mule Project
+
+==== Step 1: Create a New Mule Project
+
+After Anypoint Studio launches, create a new project:
+
+. Go to *File* > *New* > *Mule Project*.
+. In the *New Mule Project* configuration menu, provide a name for this project: ` msmq-demo ` .
+. Click *Finish*.
+
+==== Step 2: Create a MSMQ Global Element
+
+. Click the *Global Elements* tab.
+. Click *Create* to display the Global Type dialog box.
+. Search for *msmq*.
+. Select *MSMQ* from *Cloud Connectors* section and click *OK*.
+. Fill in *Gateway Service Address* using the format _machinename/ip address:port_. (For example, **localhost:9333**). Don't use URLs as they are not supported.
+. Fill in *Gateway Access Token*. You can find the configured token in the Windows Service configuration file (`c:\Program Files(x86)\Anypoint Gateway for Windows\Mule.SelfHost.exe.config`) under the *mule-auth-token* appSetting key.
+. Fill in the *Queue name* using the supported syntax by MSMQ. For example, `.\private$\msmq-demo` for the private queue created above. Because the required permissions have been granted to *Everyone*, you do not need to specify a UserName and Password for this demo.
+. If you are using a self-signed SSL certificate such as the one included out of the box, make sure *Ignore SSL Warnings* is checked.
+. Click *Test Connection* to make sure everything was set up correctly.
+. Click *OK*.
+
+image::globalelementproperties.png[GlobalElementProperties]
+
+=== Building Flows
+
+The sample flows send and receive messages from an existing queue. Transformers put the necessary information on the Mule Message for subsequent operations to consume. The end result looks like this:  +
+
+image::buildingflows.png[BuildingFlows]
+
+ Step 1: Building the Send Flow
+
+. Search for *http*, and drag and drop an HTTP connector to the canvas. This creates a new flow `msmq-demoFlow`.
+.  Search for  *payload*, and drag a *Set Payload Transformer* next to the HTTP connector.
+.  Search for *logger*, and drag a *Logger* component next to the Set Payload.
+. Search for *msmq*, and drag a *MSMQ* connector next to the Logger.
+. Double-click *HTTP* . After its properties dialog displays, select one-way from the *Exchange Patterns* group. Make sure *Host* is set to *localhost* and the Port is set to *9333*. S ave the changes.
+. Double-click *Set Payload Transformer* . After its properties dialog displays, set *Value* to `#[header:INBOUND:http.relative.path]` , and save the changes.
+. Double-click *Logger Component* . After its properties dialog displays, set *Message* to `Sending message: #[payload]` , and save the changes.
+. Double-click *MSMQ Connector* . After its properties dialog displays, select the *Config Reference* named MSMQ . Leave the rest of the fields with the default values, and save the changes.
+
+==== Step 2: Building the Receive Flow
+
+. Search for *msmq* and drag a MSMQ Connector to the canvas, outside of the existing flow msmq-demoFlow. This creates a new flow `msmq-demoFlow1`.
+.  Search for *byte* and drag a *Byte Array To String* *Transformer* next to the *MSMQ Connector*.
+.  Search for *logger* and place a *Logger Component* next to the *Byte Array To String Transformer*.
+. Double-click *MSMQ Connector* . After its properties dialog displays, select the *Config Reference* named MSMQ , and leave the rest of the properties with the default values. Save the changes.
+. Double-click the *Logger Component*. After its properties dialog displays, set *Message* to `Received from queue: #[payload]`, and save the changes.
+
+==== Step 3: Running the Flows
+
+. Right-click `msmq-demo.mflow` and click *Run As* > *Mule Application*.
+. Check the console to see when the application starts. You should see a message `Started app 'msmq-demo'`  message if no errors occurred.
++
+----
+++++++++++++++++++++++ Started app 'msmq-demo'
+----
+
+. Access the endpoint at `+http://localhost:9333/Hello-World+` and check the operation payload.
+. The following messages should display in the console.
++
+[source,text,linenums]
+----
+INFO  XXXX-XX-XX XX:XX:XX,XXX [[msmq-demo].msmq-demoFlow.stage1.02] org.mule.api.processor.LoggerMessageProcessor: Sending message: Hello-World
+INFO  XXXX-XX-XX XX:XX:XX,XXX [[msmq-demo].msmq-demoFlow1.stage1.02] org.mule.api.processor.LoggerMessageProcessor: Received from queue: Hello-World
+INFO  XXXX-XX-XX XX:XX:XX,XXX [[msmq-demo].msmq-demoFlow.stage1.02] org.mule.api.processor.LoggerMessageProcessor: Sending message: Hello-World
+INFO  XXXX-XX-XX XX:XX:XX,XXX [[msmq-demo].msmq-demoFlow1.stage1.02] org.mule.api.processor.LoggerMessageProcessor: Received from queue: Hello-World
+----
+
+== See Also
+
+* Refer to the xref:msmq-connector-user-guide.adoc[user guide] for more information about this connector.
+* Read the xref:msmq-connector-faqs.adoc[FAQs] about the MSMQ Connector.
+* https://www.mulesoft.com/exchange/org.mule.modules/mule-module-msmq/[MSMQ Connector on Exchange]

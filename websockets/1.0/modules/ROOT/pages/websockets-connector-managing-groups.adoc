@@ -1,0 +1,51 @@
+= WebSockets Managing Groups - Mule 4
+:page-aliases: connectors::websockets/websockets-connector-managing-groups.adoc
+
+The WebSockets Connector uses socket groups, which are String identifiers that WebSockets clients can optionally subscribe to. This is useful for what we call message segregation, which enables your app to broadcast a single message to a group of different WebSockets clients.
+
+Examples of how to leverage groups can be found in the documentation of the broadcast operation.
+
+Both the `<websocket:inbound-listener>` trigger and the `<websocket:open-outbound-socket>` operation allow to specify default groups. That is groups that every new inbound and outbound sockets will be automatically subscribed to.
+
+There are also use cases that require manually subscribing or unsuscribing a socket from a group. For example, imagine the use case of a multi-tenant application in which an inbound WebSocket is established. The initiator HTTP request includes an authentication header called `clientId`. We call a flow called `fetch-client-details` which validates a client ID and sets a variable called `orgId` that identifies the organization the client belongs to. The socket is added to a group that identifies its organization.
+
+Group subscription is dynamic because the group to be subscribed to (the organization ID) can only be determined at runtime.
+
+An example of a flow:
+
+[source,xml,linenums]
+----
+<flow name="onIncomingMessageFlow">
+    <websocket:inbound-listener path="/feed" config-ref="ws" />
+
+    <!-- Store relevant information in variables -->
+    <set-variable variableName="socketId" value="#[attributes.socketId]" />
+    <set-variable variableName="authHeader" value="#[attributes.headers.clientId]" />
+
+    <!-- Validate the auth Header -->
+    <flow-ref name="fetch-client-details" />
+
+    <!-- Perform group subscription -->
+    <websocket:subscribe-groups
+      socketId="#[vars.socketId]"
+      groups="#[[vars.orgId]]"
+      config-ref="ws" />
+</flow>
+----
+
+The flip side of this use case is that you also need to dynamically unsubscribe from a group, which can be achieved with the `<websocket:unsubscribe-groups>` operation:
+
+[source,xml,linenums]
+----
+<websocket:unsubscribe-groups
+  socketId="#[vars.socketId]"
+  groups="#[[vars.orgId]]"
+  config-ref="ws" />
+----
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
+* xref:index.adoc[WebSockets Connector]
+* xref:websockets-connector-config-topics.adoc[Connector Configuration]
+* xref:websockets-connector-messaging-operations.adoc[Messaging Operations]

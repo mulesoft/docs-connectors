@@ -1,0 +1,198 @@
+= HTTP Connector
+:keywords: anypoint studio, esb, connectors, http, https, http headers, query parameters, rest, raml
+:page-aliases: 3.6@mule-runtime::http-connector.adoc
+
+The Anypoint Connector for HTTP (HTTP Connector) sends and receives HTTP or HTTPS requests using a host, port, and address.
+
+Depending on which type of HTTP connector you use, you can either:
+
+* xref:http-listener-connector.adoc[Listen for HTTP requests] that arrive at a certain address and provide an HTTP response to these
+* xref:http-request-connector.adoc[Send HTTP requests] to a certain address and receive the returned response
+
+Through additional configuration, the connector allows you to:
+
+* Use xref:tls-configuration.adoc[TLS] encryption to send or receive *HTTPS* requests
+* Send xref:authentication-in-http-requests.adoc[Authenticated Requests], through *Basic Authentication, Digest and OAuth*
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+In Studio, the HTTP Connector can work in one of two ways, depending on where it's placed on a flow:
+
+* As an xref:http-listener-connector.adoc[HTTP Listener Connector]
+* As an xref:http-request-connector.adoc[HTTP Request Connector]
+
+To instance the connector as an HTTP Listener Connector, you must place it into the *Source* section of a flow (ie: as the first element in the flow):
+
+image::add-listener.png[add+listener]
+
+To instance the connector as an HTTP Request Connector, you must place it into the *Process* section of a flow (ie: anywhere except the beginning of it):
+
+image::add-request-connector.png[add+request+connector]
+
+[discrete.view]
+=== XML Editor
+
+When writing Mule projects in XML, the HTTP Connector can work in one of two ways, depending on how you create it:
+
+* As an xref:http-listener-connector.adoc[HTTP Listener Connector]
+* As an xref:http-request-connector.adoc[HTTP Request Connector]
+
+To instance the connector as an HTTP Listener Connector, add the following XML tag at the start of a flow:
+
+`<``http:listener` `config-ref``=``"HTTP_Listener_Configuration"` `path``=``"/"``/>`
+
+This element must reference a global configuration element of the following type:
+
+`<http:listener-config` `name``=``"HTTP_Listener_Configuration"` `host``=``"localhost"` `port``=``"8081"``/>`
+
+To instance the connector as an HTTP Listener Connector, add the following XML tag in any part of a flow:
+
+ `<``http:request` `config-ref``=``"HTTP_Request_Configuration"` `path``=``"/"` `method``=``"GET"``/>`
+
+This element must reference a global configuration element of the following type:
+
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_Configuration" host="example.com" port="8081"/>
+----
+
+=====
+
+For information about migrating a project that uses instances of the old HTTP endpoint-based Connector to the new HTTP operation-based Connector, see xref:migrating-to-the-new-http-connector.adoc[Migrating to the New HTTP Connector]. The old HTTP endpoint-based Connector still does work with Mule 3.6 Runtime, but it's deprecated and will be eventually removed.
+
+*Tip*: You can edit the log4j2 configuration file to make the logging of the HTTP connector's activity verbose. See xref:3.6@mule-runtime::logging-in-mule.adoc[Logging in Mule] for instructions.
+
+== Debugging
+
+Gaining greater visibility into HTTP inbound and outbound behavior can be achieved by enabling underlying library loggers with log4j2. This section assumes you're comfortable adjusting log levels with log4j2. If you have not adjusted logging levels in the past, read xref:3.7@mule-runtime::logging-in-mule.adoc#configuring-custom-logging-settings[configuring custom logging settings] before continuing.
+
+=== Logging Listener and Request Activity
+
+By enabling the `DEBUG` level on `org.mule.module.http.internal.HttpMessageLogger`, activity coming from all HTTP Listener and Request components will be logged. This includes the HTTP Listener Connector's inbound request, HTTP Request Connector's outbound request, and each connector's response body. An example of each can be found below.
+
+
+[.ex]
+=====
+[discrete.view]
+=== Listener Log Output
+
+The log output of the Listener will display metadata of the inbound request.
+
+[source,console]
+----
+DEBUG 2016-02-10 10:55:03,234 [[hello].HTTP_Listener_Configuration.worker.01] org.mule.module.http.internal.HttpMessageLogger: LISTENER
+GET / HTTP/1.1
+Host: localhost:8081
+User-Agent: curl/7.43.0
+Accept: */*
+----
+
+It will also display information about the response being sent back.
+
+[source,console]
+----
+LISTENER
+HTTP/1.1 200
+Transfer-Encoding: chunked
+Content-Type: application/json; charset=UTF-8
+Date: Wed, 10 Feb 2016 18:55:03 GMT
+
+2000
+{
+  "message" : "hello, world"
+}
+----
+
+[TIP]
+Chunked encoding will produce a separate log record for each chunk.
+
+[discrete.view]
+=== Request Log Output
+
+The log output of the Request will display metadata of the outbound request.
+
+[source,console]
+----
+DEBUG 2016-02-10 11:29:18,647 [[hello].http.requester.HTTP_Request_Configuration(1) SelectorRunner] org.mule.module.http.internal.HttpMessageLogger: REQUESTER
+GET /v3/hello HTTP/1.1
+Host: mocker-server.cloudhub.io:80
+User-Agent: AHC/1.0
+Connection: keep-alive
+Accept: */*
+----
+
+It will also display information about the response sent back from the target.
+
+[source,console]
+----
+DEBUG 2016-02-10 11:29:18,729 [[hello].http.requester.HTTP_Request_Configuration.worker(1)] org.mule.module.http.internal.HttpMessageLogger: REQUESTER
+HTTP/1.1 200
+Content-Type: application/json
+Date: Wed, 10 Feb 2016 19:29:18 GMT
+Server: nginx
+Content-Length: 10940
+Connection: keep-alive
+
+{
+  "message" : "Hello, world"
+}
+----
+
+=====
+
+=== Logging Packet Metadata
+
+At a lower level, it can be desirable to log the actual request and response packets transmitted over HTTP. This is achieved by enabling the `DEBUG` level on `com.ning.http.client.providers.grizzly`. This will log the metadata of the request packets from `AsyncHTTPClientFilter` and the response packets from `AhcEventFilter`. Unlike the `HttpMessageLogger`, this will not log request or response bodies.
+
+[.ex]
+=====
+[discrete.view]
+=== Request Log Output
+
+The log output of the request packet's metadata is as follows.
+
+[source,console]
+----
+DEBUG 2016-02-10 11:16:29,421 [[hello].http.requester.HTTP_Request_Configuration(1) SelectorRunner] com.ning.http.client.providers.grizzly.AsyncHttpClientFilter: REQUEST: HttpRequestPacket (
+   method=GET
+   url=/v3/hello
+   query=null
+   protocol=HTTP/1.1
+   content-length=-1
+   headers=[
+      Host=mocker-server.cloudhub.io:80
+      User-Agent=AHC/1.0
+      Connection=keep-alive
+      Accept=*/*]
+)
+----
+
+[discrete.view]
+=== Response Log Output
+
+The log output of the response packet's metadata is as follows.
+
+[source,console]
+----
+DEBUG 2016-02-10 11:16:29,508 [[hello].http.requester.HTTP_Request_Configuration.worker(1)] com.ning.http.client.providers.grizzly.AhcEventFilter: RESPONSE: HttpResponsePacket (
+  status=200
+  reason=
+  protocol=HTTP/1.1
+  content-length=10940
+  committed=false
+  headers=[
+      content-type=application/json
+      date=Wed, 10 Feb 2016 19:16:29 GMT
+      server=nginx
+      content-length=10940
+      connection=keep-alive]
+)
+----
+
+== See Also
+
+https://anypoint.mulesoft.com/exchange/68ef9520-24e9-4cf2-b2f5-620025690913/httphttps-connector/[HTTP Connector on Exchange]
