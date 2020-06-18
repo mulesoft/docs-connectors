@@ -1,0 +1,222 @@
+= XML Module Reference
+:page-aliases: 3.5@mule-runtime::xml-module-reference.adoc
+
+//3.3x
+
+The XML module contains several tools to help you read, transform, and write XML.
+
+In addition to the functionality described on this page, you can also use the xref:3.5@mule-runtime::sxc-module-reference.adoc[SXC Module Reference], which enables efficient XPath XML routing.
+
+== Supported XPath, XQuery, and XSLT Versions
+
+In 2013, the World Wide Web Consortium (http://www.w3.org[W3C]) published a new spec for version 3.0 of the XPath XQuery and XSLT standards. The new version of the standards is at "last call" status, and therefore highly unlikely to undergo major changes.
+
+Mule 3.6.0 provides basic support for version 3.0 of the standards. "Basic support" means that any feature of the specification is supported as long as it doesn't rely on schema awareness, high order functions, or streaming.
+
+Mule 3.6.0 also provides improved support for XPath 2.0, XSLT 2.0, and XQuery 1.0.
+
+IMPORTANT: We recommend upgrading from Mule 3.5 to 3.6.x to take advantage of these features.
+
+=== Important Changes in Mule 3.6.0
+
+The table below lists supported versions of the standards and their related components in Mule 3.6.0.
+
+[%header%autowidth.spread]
+|===
+|Component |Version |Supported |Changes in Mule 3.6.0
+|XPath |1 |No a|Deprecated in 3.6.0 (supported until Mule 4.0):*
+
+* `xpath2()` function, superseded by the xref:0.3.6@xpath.adoc[xpath3()] function
+* JXPath extractor
+* JXPath filter
+* Jaxen filter
+
+New function: xref:0.3.6@xpath.adoc[xpath3()], which includes improved return type handling. For details, see xref:0.3.6@xpath.adoc[XPath].
+
+| |2 |yes a|
+| |3 |Yes |
+|XQuery
+
+1
+
+Yes
+
+The xref:0.3.6@xslt-transformer.adoc[XSLT Transformer] now supports XSLT 3.0. The transformer's behavior and syntax remain unaltered, and you can manually select which XSLT version your transformer should use. For details, see the xref:0.3.6@xslt-transformer.adoc[3.6 XSLT Transformer] documentation.
+
+2
+
+Yes
+
+3
+
+Yes
+
+XSLT
+
+1
+
+Yes
+
+The xref:0.3.6@xquery-transformer.adoc[3.6 XQuery Transformer] now supports XQuery 3.0. The transformer's behavior and syntax remain unaltered, and you can manually select which XQuery version your transformer should use. For details, see the xref:0.3.6@xquery-transformer.adoc[3.6 XQuery Transformer] and the xref:0.3.6@xquery-support.adoc[3.6 XQuery Support].
+
+2
+
+Yes
+
+3
+
+Yes
+|===
+
+== XML Formats
+
+Mule understands a wide variety of XML Java representations:
+
+* org.w3c.dom.Document, org.w3c.dom.Element
+* org.dom4j.Document
+* javax.xml.transform.Source
+* InputStream, String, byte[]
+* OutputHandler
+* XMLStreamReader
+* org.mule.module.xml.transformer.DelayedResult
+
+Any transformer that accepts XML as an input also understands these types.
+
+== Transformers
+
+There are several standard transformers that process XML inside Mule.
+
+[%header,cols="2*"]
+|===
+|Transformer |Description
+|xref:xmlobject-transformers.adoc[XmlToObject to ObjectToXml] |Converts XML to a Java object and back again using http://x-stream.github.io/[XStream].
+|xref:jaxb-transformers.adoc[JAXB XmlToObject to JAXB ObjectToXml] |Converts XML to a Java object and back again using the http://java.sun.com/developer/technicalArticles/WebServices/jaxb/[JAXB] binding framework (ships with JDK6)
+|xref:xslt-transformer.adoc[XSLT] |Transforms XML payloads using XSLT.
+|xref:xquery-transformer.adoc[XQuery] |Transforms XML payloads using http://en.wikipedia.org/wiki/XQuery[XQuery].
+|xref:domtoxml-transformer.adoc[DomToXml to XmlToDom] |Converts DOM objects to XML and back again.
+|xref:xmltoxmlstreamreader-transformer.adoc[XmlToXMLStreamReader] |Converts XML from a message payload to a StAX XMLStreamReader.
+|xref:xpath-extractor-transformer.adoc[XPath Extractor] |Queries and extracts object graphs using XPath expressions using JAXP.
+|xref:jxpath-extractor-transformer.adoc[JXPath Extractor] _*Deprecated*_ |Queries and extracts object graphs using XPath expressions using JXPath. Deprecated in favor of the `xpath3()` function (see xref:0.3.6@xpath.adoc[3.6 XPath]).
+|xref:3.5@mule-runtime::xmlprettyprinter-transformer.adoc[XmlPrettyPrinter] |Allows you to output the XML with controlled formatting, including trimming white space and specifying the indent.
+|===
+
+=== Efficient Transformations with DelayedResult
+
+Mule contains a special XML output format called DelayedResult. This format allows very efficient XML transformations by delaying any XML serialization until an OutputStream is available.
+
+For example, here is an XSLT transformer set up to use DelayedResult:
+
+[source,xml,linenums]
+----
+<mxml:xslt-transformer name="transform-in"
+      xsl-file="xslt/transform.xslt"
+      returnClass="org.mule.module.xml.transformer.DelayedResult"/>
+----
+
+If the result of this transformation were being sent to an HTTP client, the HTTP client would ask Mule for an OutputHandler and pass in the OutputStream to it. Only then would Mule perform the transformation, writing the output directly to the OutputStream.
+
+If DelayedResult were not used, the XML result would first be written to an in-memory buffer before being written to the OutputStream. This will cause your XML processing to be slower.
+
+== Filters
+
+The XML module contains various XPath filters. For general details on how to use filters, see xref:3.5@mule-runtime::filters.adoc[Filters].
+
+=== XPath Filter
+
+[NOTE]
+Mule 3.6.0 and later versions support XPath 3.0, which is backwards-compatible with XPath 2.0. On the other hand, XPath 1.0 is deprecated, and while simple expressions may work, some expressions may be incompatible. For details, see xref:0.3.6@xpath.adoc[Mule 3.6 XPath].
+
+
+The XPath filter uses the JAXP libraries to filter XPath expressions.
+
+The following configuration routes messages to the "vm://echo" endpoint when the value of "/e:purchaseOrder/e:shipTo/@country" is "US".
+
+[source,xml,linenums]
+----
+<outbound>
+  <filtering-router>
+    <outbound-endpoint address="vm://echo" synchronous="true"/>
+    <mule-xml:xpath-filter pattern="/e:purchaseOrder/e:shipTo/@country" expectedValue="US">
+      <mule-xml:namespace prefix="e" uri="http://www.example.com"/>
+    </mule-xml:xpath-filter>
+  </filtering-router>
+....
+</outbound>
+----
+
+=== Schema Validation Filter
+
+The schema validation filter uses the JAXP libraries to validate your message against a schema.
+
+The following configuration validates your message against a schema called `schema.xsd` and a schema called `anotherSchema.xsd`.
+
+[source,xml,linenums]
+----
+<mule-xml:schema-validation-filter schemaLocations="com/myapp/schemas/schema.xsd, com/myapp/schemas/anotherSchema.xsd"/>
+----
+
+=== Jaxen Filter
+
+_*Deprecated*_
+
+[NOTE]
+====
+In Mule 3.6.0, the Jaxen filter will be deprecated, but is kept for backwards compatibility only. Instead, it is recommended to use the new function `xpath3`, which provides improved XPath support.
+
+For a detailed description of the `xpath3` function, see xref:0.3.6@xpath.adoc[XPath].
+====
+
+The Jaxen filter uses the Jaxen library to filter messages based on XPath expressions.
+
+The following configuration routes messages to the "vm://echo" endpoint when the value of "/e:purchaseOrder/e:shipTo/@country" is "US".
+
+[source,xml,linenums]
+----
+<outbound>
+  <filtering-router>
+    <outbound-endpoint address="vm://echo" synchronous="true"/>
+    <mule-xml:jaxen-filter pattern="/e:purchaseOrder/e:shipTo/@country" expectedValue="US">
+      <mule-xml:namespace prefix="e" uri="http://www.example.com"/>
+    </mule-xml:jaxen-filter>
+  </filtering-router>
+....
+</outbound>
+----
+
+=== JXPath Filter
+
+_*Deprecated*_
+
+[NOTE]
+====
+In Mule 3.6.0, the JXPath filter will be deprecated, but is kept for backwards compatibility only. Instead, it is recommended to use the new function `xpath3`, which provides improved XPath support.
+
+For a detailed description of the `xpath3` function, see xref:0.3.6@xpath.adoc[XPath].
+====
+
+The JXPath filter is very similar to the Jaxen filter. It is still used for historical purposes (it existed before the Jaxen filter).
+
+[source,xml,linenums]
+----
+<outbound>
+    <filtering-router>
+        <outbound-endpoint address="vm://echo" synchronous="true"/>
+        <mule-xml:jxpath-filter pattern="/e:purchaseOrder/e:shipTo/@country"
+                            expectedValue="US">
+            <mule-xml:namespace prefix="e" uri="http://www.example.com"/>
+        </mule-xml:jxpath-filter>
+    </filtering-router>
+....
+</outbound>
+----
+
+== Splitters
+
+The XML module contains two splitters, a filter-based splitter and a round-robin splitter.
+
+== XML Parsers
+
+In most cases, http://www.saxproject.org/about.html[SAX] is used to parse your XML. If you use CXF or the XmlToXMLStreamReader, use StAX instead.
+For more information, see the Jenkov http://tutorials.jenkov.com/java-xml/sax-vs-stax.html[Java SAX vs StAX] site.
+
+If you're using SAX, the SAX XML parser is determined by your JVM. If you want to change your SAX implementation, see the  http://www.saxproject.org/quickstart.html[Sax Project Quickstart].

@@ -1,0 +1,230 @@
+= Salesforce Contact Aggregation Example
+:page-aliases: 3.5@mule-runtime::salesforce-contact-aggregation-example.adoc
+
+This example application uses the xref:0.3.7@index.adoc[Salesforce connector] to query contacts from two separate Salesforce instances and determine which contacts are present in both instances. The section immediately below describes the functions of each of the flows in the application. The section further below describes the configuration of the Salesforce Global Connector Configuration through which the Mule application establishes a connection to Salesforce.
+
+Beyond this example, access xref:0.3.7@index.adoc[introductory] and link:/mule-user-guide/v/3.7/salesforce-connector-reference[reference] documentation for the Salesforce Connector.
+
+== Prerequisites
+
+This document assumes that you are familiar with Mule, the xref:6@studio::index.adoc[Anypoint Studio interface], xref:3.6@mule-runtime::global-elements.adoc[Global Elements], xref:3.6@mule-runtime::datasense.adoc[DataSense], and the xref:5@studio::datamapper-user-guide-and-reference.adoc[DataMapper transformer]. Further, it is assumed that you are familiar with Salesforce and have a http://developer.force.com/[developerforce] account. Learn more about xref:3.7@mule-runtime::flows-and-subflows.adoc[flows and subflows] to gain more insight into the design of this example.
+
+
+== Understanding the Flows
+
+The sections immediately below describe the functions of each of the flows.
+
+image::contact-aggr-flows.png[contact_aggr_flows]
+
+=== mainFlow
+
+Invoked by the *triggerFlow* (configured in a separate mflow file in the application), the mainFlow begins processing the message triggerFlow accepted via HTTP request. The mainFlow consists of four *Flow Ref* scopes, which successively call the four subflows in the application. The flow also references a xref:3.6@mule-runtime::catch-exception-strategy.adoc[catch exception strategy] to handle exceptions thrown. At runtime, the mainFlow begins by calling the *gatherDataFlow*, explained below the example.
+
+[source,xml,linenums]
+----
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:smtp="http://www.mulesoft.org/schema/mule/smtp"
+    xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/smtp http://www.mulesoft.org/schema/mule/smtp/current/mule-smtp.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+
+    <!-- In this file you should declare all your inbound endpoints and from here control the access to your application -->
+
+    <flow name="triggerFlow" processingStrategy="synchronous" doc:name="triggerFlow" doc:description="This is the simplest entry point to start the execution of your Template.
+Here you should:
+    * Define any inbound endpoints
+    * Handle any input parameter and transform it into the expected format by the mainFlow.
+Here you should not:
+    * Run validations against external systems
+    * Choose a flow of your application based on input parameters">
+      <http:inbound-endpoint exchange-pattern="request-response" host="localhost" port="${http.port}" path="generatereport" doc:name="Start Report Generation"/>
+      <flow name="mainFlow>
+        <http:inbound-endpoint host="0.0.0.0" port="8081" path="/" />
+      </flow>
+...
+</mule>
+----
+
+=== gatherDataFlow
+
+This flow contains two xref:3.6@mule-runtime::message-enricher.adoc[message enricher] scopes with a Salesforce connector in each. Each Salesforce connector connects to a Salesforce instance to retrieve all fields of type *Contact*. The message enricher for each connector stores this information in two xref:3.7@mule-runtime::mule-message-structure.adoc[flow variables], one for each Salesforce organization.
+
+At a later stage, the application accesses these two flow variables to determine which contacts are present in both organizations.
+
+[.ex]
+=====
+[discrete.view]
+=== STUDIO Visual Editor
+
+image::gatherdataflow.png[gatherDataFlow]
+
+[discrete.view]
+=== XML Editor or Standalone
+
+[source,xml,linenums]
+----
+<sub-flow name="gatherDataFlow" doc:name="gatherDataFlow">
+        <enricher source="#[payload]" target="#[flowVars['contactsFromOrgA']]" doc:name="Store result in FlowVar 'contactsFromOrgA'">
+            <sfdc:query config-ref="SalesforceA" query="dsql:SELECT Name, Email, Id  FROM Contact" doc:name="query all contacts from SalesForce instance A"/>
+        </enricher>
+        <enricher source="#[payload]" target="#[flowVars['contactsFromOrgB']]" doc:name="Store result in FlowVar 'contactsFromOrgB'">
+            <sfdc:query config-ref="SalesforceB" query="dsql:SELECT Name, Email, Id  FROM Contact" doc:name="query all contacts from SalesForce instance B"/>
+        </enricher>
+</sub-flow>
+----
+
+=====
+
+As you can see, each Salesforce connector is inside an enricher scope. The first Salesforce connector queries "Salesforce instance A" for contact data; Mule uses the enricher scope to record this data as in a flow variable, `contactsFromOrgA`. At this point, the application has all contacts from "Salesforce instance A" stored in this variable.
+
+Then, the second Salesforce connector and the second enricher repeat the above-described exercise with "Salesforce instance B", storing contact data for the instance in the flow variable `contactsFromOrgB`.
+
+Each Salesforce connector references a Salesforce xref:3.6@mule-runtime::global-elements.adoc[global element], which is configured with the connection parameters (user ID, password, etc.) for each Salesforce organization. To see the configuration for each global element, see the <<Salesforce Global Elements>> section.
+
+The table below lists the configuration for the Salesforce connector ("instance A"). This configuration is identical to that of the second Salesforce connector ("instance B"), except that each connector references a different global element.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+[%header%autowidth.spread]
+|===
+|Parameter |Value |Properties Editor Image
+|*Display Name* | `query all contacts from SalesForce instance A` .6+|image:sfdcconfiguration1.png[]
+|*Connector Configuration* |`SalesforceA`
+|*Operation* |`Query`
+|*Language* |`DataSense Query Language`
+|*Query Text* |`SELECT Name, Email, Id  FROM Contact`
+|*Fetch Size* |`100`
+|===
+
+[discrete.view]
+=== Standalone XML
+
+[source,xml,linenums]
+----
+<sfdc:query config-ref="SalesforceA" query="dsql:SELECT Name, Email, Id  FROM Contact" doc:name="query all contacts from SalesForce instance A"/>
+----
+
+=====
+
+After the application has created the two variables containing the contact information for both Salesforce organizations, mainFlow calls the aggregationFlow subflow.
+
+=== aggregationFlow
+
+This subflow contains only one element: a Java component, which invokes custom-built activity. This component takes both lists of contacts – the one contained in flow variable contactsFromOrgA and the one from contactsFromOrgB – and merges them into a single list. The application passes the merged list back to the mainFlow, then onwards to the *formatOutputFlow*.
+
+=== formatOutputFlow
+
+In this flow, a custom Java component searches merged contact list produced by aggregationFlow for elements with identical content in the `Email` field. Any that appear more than once signify contacts that exist in both Salesforce organizations. This Java component outputs these "duplicates" another list.
+
+Next, a xref:5@studio::datamapper-user-guide-and-reference.adoc[DataMapper transformer] maps the Java object to a CSV file which the flow then transforms to a string. The flow passes the message, now a string of duplicated email addresses back to the mainFlow. The mainFlow proceeds to send the message to the *outboundFlow* (configured in a separate mflow file in the application) to email the results to a pre-defined address.
+
+[source,xml,linenums]
+----
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:smtp="http://www.mulesoft.org/schema/mule/smtp"
+    xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/smtp http://www.mulesoft.org/schema/mule/smtp/current/mule-smtp.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+
+    <!-- In this file you should declare all your inbound endpoints, and from here control the access to your application. -->
+...
+      <flow name="outboundFlow" doc:name="outboundFlow" doc:description="This is the simplest output point to push the result of the data processing.
+Here you should:
+    * Call external systems through outbound endpoints
+Here you should not:
+    * Perform generic data transformation
+
+The outboundFlow is in this file in order to maintain the logical abstraction of the Template.">
+        <file:outbound-endpoint path="/Users/admin/_marcos/sfdc-templates/sfdc2sfdc-contact-aggregation-master/_output" outputPattern="result.txt" responseTimeout="10000" doc:name="Write output"/>
+    </flow>
+</mule>
+----
+
+== Salesforce Global Elements
+
+The tables below list the configuration for the Salesforce global element which establishes a connection to "Salesforce instance A".
+
+
+[.ex]
+=====
+[discrete.view]
+=== STUDIO Visual Editor
+
+[discrete]
+==== General Tab
+
+[%header%autowidth.spread]
+|===
+|Parameter |Value |Properties Editor
+|*Name* |`SalesforceA` .18+|image:sfglobalelem.png[SFglobalelem]
+|*Username* |Redacted. Use the appropriate user ID for your Salesforce instance.
+|*Password* |Redacted. Use the appropriate password for your Salesforce instance.
+|*Security Token* |Redacted. Use the appropriate security token for your Salesforce instance.
+|*URL* |Redacted. Use the appropriate security token for your Salesforce instance, such as `+https://salesforce.com/services/Soap/u/30.0+`
+|*Proxy Host* |
+|*Proxy Port* |
+|*Proxy Username* |
+|*Session Id* |
+|*Service Endpoint* |
+|*Enable DataSense* |True
+|*Time Object Store Reference* |
+|*Assignment Rule Id* |
+|*Client Id* |
+|*Batch Object Max Depth* |`5 (default)`
+|*Allow Field Truncation Support* |
+|*Use Default Rule* |
+|===
+
+[discrete]
+==== Pooling Profile Tab
+
+In this tab, all settings reflect their default values.
+
+[%header%autowidth.spread]
+|===
+|Parameter |Value |Properties Editor
+|*Max active* |`5`  .7+|image:sfglobalelem-connpooltab.png[SFglobalelem-connpooltab]
+|*Max idle* |`5`
+|*Initialisation policy* |`INITIALISE_ONE`
+|*Exhausted action* |`WHEN_EXHAUSTED_GROW`
+|*Max wait* |`5`
+|*Min eviction (ms)* |`1800000`
+|*Eviction check interval (ms)* |`-1`
+|===
+
+[discrete]
+==== Reconnection Tab
+
+In this tab, all settings reflect their default values.
+
+[%header%autowidth.spread]
+|===
+|Parameter |Value |Properties Editor
+|*Do not use a Reconnection strategy* |Check .2+|image:sfglobalelem-reconntab.png[SFglobalelem-reconntab]
+|*Run the reconnection in a separated thread* |Unchecked
+|===
+
+=====
+
+== See Also
+
+* Access the introductory material for the xref:0.3.7@index.adoc[Salesforce Connector].
+* Access link:/mule-user-guide/v/3.7/salesforce-connector-reference[full reference documentation] for the Salesforce Connector.
+* Learn more about xref:3.7@mule-runtime::mule-message-structure.adoc[flow variables].
+* Learn more about xref:3.7@mule-runtime::flows-and-subflows.adoc[Flows and Subflows].
+* Learn more about xref:3.7@mule-runtime::anypoint-connectors.adoc[Anypoint Connectors] in general.

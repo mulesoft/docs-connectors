@@ -1,0 +1,225 @@
+= HTTP Connector
+:keywords: anypoint studio, esb, connectors, http, https, http headers, query parameters, rest, raml
+:page-aliases: 3.8@mule-runtime::http-connector.adoc
+
+The HTTP connector sends and receives HTTP or HTTPS requests using a host, port, and address. Find the two important use cases for this component below.
+
+Depending on your needs, you can either:
+
+* Use the connector as an xref:http-listener-connector.adoc[HTTP Listener Connector] for requests that arrive at a certain address, subsequently generating an HTTP response
+* Use the connector as an xref:http-request-connector.adoc[HTTP Request Connector] to send requests to a certain address and receive the returned response
+
+Through additional configuration, the connector allows you to:
+
+* Use xref:tls-configuration.adoc[TLS] encryption to send or receive HTTPS requests.
+* Send xref:authentication-in-http-requests.adoc[Authenticated Requests] using Basic Authentication, Digest, or OAuth.
+
+[NOTE]
+====
+In Mule 3.6 and later versions, the HTTP and HTTPS endpoint-based connectors and transports have been replaced by a single HTTP operation-based connector which supports HTTPS.
+====
+
+== Using HTTP Connectors
+
+The HTTP connector can work in one of two ways, depending on where it is placed in a flow:
+
+* As an xref:http-listener-connector.adoc[HTTP Listener]
+* As an xref:http-request-connector.adoc[HTTP Request]
+
+== Quick References
+
+Use the HTTP Listener or HTTP Request quick reference for your editing environment: Studio or XML Editor.
+
+=== HTTP Listener Quick Reference for Studio
+
+To instantiate the connector as an HTTP listener, place it onto a blank Anypoint Studio canvas into the *Source* section of a new flow (the first element in the flow):
+
+.New Flow Showing Source and Process Phases
+image::source-flow-new-blank.png[show source and process section of flow]
+
+.Drag the HTTP Connector to the Source Side
+image::http-connector-drag-to-source.png[drag to source]
+
+.See the Connector Populate the Source Side
+image::http-connector-67263.png[http listener in source]
+
+=== HTTP Request Quick Reference for Studio
+
+To instantiate the connector as an HTTP request connector, you must place it into the *Process* section of a flow (anywhere except the first element in the flow).
+
+.Drag the HTTP Connector to the Process Side
+image::http-connector-drag-to-process.png[drag to process]
+
+.Flow Showing HTTP Connector in Process Side
+image::http-connector-c3457.png[http request conn in process side]
+
+=== HTTP Listener Quick Reference for XML Editor
+
+To instantiate the connector as an HTTP Listener Connector, add the following XML tag at the start of a flow:
+
+[source,xml]
+----
+<http:listener config-ref="HTTP_Listener_Configuration" path="/" />
+----
+
+This element must reference a global configuration element of the following type:
+
+[source,xml]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" />
+----
+
+=== HTTP Request Quick Reference for XML Editor
+
+To instantiate the connector as an HTTP Request Connector, add the following XML tag in any part of a flow:
+
+[source,xml]
+----
+<http:request config-ref="HTTP_Request_Configuration" path="/" method="GET" />
+----
+
+This element must reference a global configuration element of the following type:
+
+[source,xml]
+----
+<http:request-config name="HTTP_Request_Configuration" host="example.com" port="8081"/>
+----
+
+[TIP]
+* To migrate a project that uses the old xref:3.8@mule-runtime::deprecated-http-transport-reference.adoc[HTTP endpoint-based connector] to the new HTTP operation-based connector, see xref:migrating-to-the-new-http-connector.adoc[Migrating to the New HTTP Connector]. The old HTTP endpoint-based connector still works with Mule runtime 3.6, but it's deprecated and will eventually be removed.
+* You can edit the log4j2 configuration file to make the logging of the HTTP connector's activity a lot more verbose, if you need to. See xref:3.8@mule-runtime::logging-in-mule.adoc[Logging in Mule] for instructions.
+
+== Debugging with Mule Logs
+
+Gaining visibility into HTTP inbound and outbound behavior can be achieved by enabling underlying library loggers with `log4j2`.
+If you have never adjusted Mule logging levels in the past, read xref:3.8@mule-runtime::logging-in-mule.adoc#configuring-custom-logging-settings[configuring custom logging settings] before continuing.
+
+== Logging Listener and Request Activity
+
+When you select the `DEBUG` level on `org.mule.module.http.internal.HttpMessageLogger`,
+activity coming from all HTTP Listeners and HTTP Requests is logged.
+This includes the HTTP Listener's inbound request, HTTP Request's outbound request, and each response body.
+
+== HTTP Listener Log Output
+
+The log output of the HTTP Listener displays the metadata of the inbound request.
+
+[source,console]
+----
+DEBUG 2016-02-10 10:55:03,234 [[hello].HTTP_Listener_Configuration.worker.01] org.mule.module.http.internal.HttpMessageLogger: LISTENER
+GET / HTTP/1.1
+Host: localhost:8081
+User-Agent: curl/7.43.0
+Accept: */*
+----
+
+The log output also displays information about the response being sent back.
+
+[source,console]
+----
+LISTENER
+HTTP/1.1 200
+Transfer-Encoding: chunked
+Content-Type: application/json; charset=UTF-8
+Date: Wed, 10 Feb 2016 18:55:03 GMT
+
+2000
+{
+  "message" : "hello, world"
+}
+----
+
+[TIP]
+Chunked encoding produces a separate log record for each chunk.
+
+== HTTP Request Log Output
+
+The log output of the HTTP Request displays metadata of the outbound request.
+
+[source,console]
+----
+DEBUG 2016-02-10 11:29:18,647 [[hello].http.requester.HTTP_Request_Configuration(1) SelectorRunner] org.mule.module.http.internal.HttpMessageLogger: REQUESTER
+GET /v3/hello HTTP/1.1
+Host: mocker-server.cloudhub.io:80
+User-Agent: AHC/1.0
+Connection: keep-alive
+Accept: */*
+----
+
+The log output also displays information about the response sent back from the target.
+
+[source,console]
+----
+DEBUG 2016-02-10 11:29:18,729 [[hello].http.requester.HTTP_Request_Configuration.worker(1)] org.mule.module.http.internal.HttpMessageLogger: REQUESTER
+HTTP/1.1 200
+Content-Type: application/json
+Date: Wed, 10 Feb 2016 19:29:18 GMT
+Server: nginx
+Content-Length: 10940
+Connection: keep-alive
+
+{
+  "message" : "Hello, world"
+}
+----
+
+== Logging Packet Metadata
+
+If you wish to log the actual request and response packets transmitted over HTTP, enable the `DEBUG` level on `com.ning.http.client.providers.grizzly`.
+Once set, the log reports metadata of the request packets from `AsyncHTTPClientFilter` and the response packets from `AhcEventFilter`. Unlike the `HttpMessageLogger`, this setting does not log request or response bodies.
+
+== Request Packet Log Output
+
+Example of the log output of the request packet's metadata:
+
+[source,console]
+----
+DEBUG 2016-02-10 11:16:29,421 [[hello].http.requester.HTTP_Request_Configuration(1) SelectorRunner] com.ning.http.client.providers.grizzly.AsyncHttpClientFilter: REQUEST: HttpRequestPacket (
+   method=GET
+   url=/v3/hello
+   query=null
+   protocol=HTTP/1.1
+   content-length=-1
+   headers=[
+      Host=mocker-server.cloudhub.io:80
+      User-Agent=AHC/1.0
+      Connection=keep-alive
+      Accept=*/*]
+)
+----
+
+== Response Packet Log Output
+
+Example of the log output of the response packet's metadata:
+
+[source,console]
+----
+DEBUG 2016-02-10 11:16:29,508 [[hello].http.requester.HTTP_Request_Configuration.worker(1)] com.ning.http.client.providers.grizzly.AhcEventFilter: RESPONSE: HttpResponsePacket (
+  status=200
+  reason=
+  protocol=HTTP/1.1
+  content-length=10940
+  committed=false
+  headers=[
+      content-type=application/json
+      date=Wed, 10 Feb 2016 19:16:29 GMT
+      server=nginx
+      content-length=10940
+      connection=keep-alive]
+)
+----
+
+== Non-blocking Processing
+
+The HTTP Connector (both the HTTP Listener and the HTTP Request connector) can be used with a non-blocking processing strategy.
+With this strategy, while a message is waiting for a response from an external source, the message processor is still free to process other messages that arrive.
+
+[NOTE]
+Note that xref:3.8@mule-runtime::flow-processing-strategies.adoc#supported-non-blocking-components[not all Mule components] currently support the non-blocking processing strategy.
+If there are any unsupported components in a flow, they cause the flow to fall back to synchronous processing.
+
+== See Also
+
+* xref:http-connector-reference.adoc[HTTP Connector Reference] for the available XML configurable options in this connector
+* xref:3.8@mule-runtime::flow-processing-strategies.adoc#non-blocking-processing-strategy[Non-Blocking Processing Strategy]
+* https://anypoint.mulesoft.com/exchange/68ef9520-24e9-4cf2-b2f5-620025690913/httphttps-connector/[HTTP Connector on Exchange]

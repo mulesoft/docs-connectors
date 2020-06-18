@@ -1,0 +1,1438 @@
+= HTTP Listener Connector
+:keywords: anypoint studio, esb, connectors, http, https, http headers, query parameters, rest, raml
+:page-aliases: 3.6@mule-runtime::http-listener-connector.adoc
+
+The HTTP Listener Connector provides the most practical way to listen for HTTP requests.
+
+The connector can be set up to accept any request, or to only accept requests that are addressed to a very specific URI. You can choose what methods the connector can accept (GET, POST, etc). The request body is passed on to the next element you place in your flow as the message payload of a Mule Message, meanwhile headers, query parameters, URI parameters and other elements of the HTTP Request are passed on as inbound properties.
+
+This connector can also implement HTTPS protocol and encrypt your communications via TLS.
+
+The connector can also be configured to provide response codes and clarifications, both for success and error outcomes, allowing you to present different error messages depending on the case.
+
+In Studio, to instance the connector as an HTTP Listener Connector (and not an xref:http-request-connector.adoc[HTTP Request Connector]), you must place it into the *Source* section of a flow (ie: as the first element in the flow):
+
+image::add-listener.png[add+listener]
+
+== Minimum Configuration
+
+The simplest thing you can do with this connector is to listen for incoming HTTP requests that reach a given address. The following example shows the minimal configuration required for this connector:
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+In the connector component on your flow, the only required fields are the *Path*, which by default is `/`, and a configuration reference to a global element, which contains additional parameters.
+
+image::basic-listener-1.png[basic+listener+1]
+
+[discrete]
+==== Create a Listener Config Element
+
+Like with most connectors in Studio, a lot of the configuration is encapsulated in a separate reusable object that can then be referenced by as many instances of the connector as you like. This element defines a server connection to a particular network interface and port and handles incoming requests from it.
+
+[NOTE]
+The use of global configuration elements becomes specially useful when having multiple connectors that must use the same settings, as the server connection must only be defined once.
+
+image::basic-listener-2.png[basic+listener+2]
+
+[discrete]
+==== Minimum Configuration for the Global Element
+
+In the global element, the only required fields are *host* and a *port*, both have default values assigned to them:
+
+image::basic-listener-3.png[basic+listener+3]
+
+[NOTE]
+To listen on an specific port for every network interface in the server, you can use the host to `0.0.0.0`. If you set it to `localhost` then you will only be able to listen for incoming requests generated inside the server.
+
+*The above configuration will listen for HTTP requests in the address +http://www.example.com/test+[http://localhost:8081]*
+
+[discrete.view]
+=== XML Editor
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+----
+
+[discrete]
+==== Minimum Configuration for the Global Element
+
+Like with most connectors in Studio, a lot of the configuration is encapsulated in a separate reusable object that sits outside the flow and can then be referenced by as many instances of the connector as you like. This element defines a server connection to a particular network interface and port and handles incoming requests from it.
+
+In the global element, you need to provide a *host* and a *port*.
+
+[NOTE]
+To listen on an specific port for every network interface in the server, you can use the host to `0.0.0.0`. If you set it to `localhost` then you will only be able to listen for incoming requests generated inside the server.
+
+[discrete]
+==== Minimum Configuration for the Connector Instance
+
+After you have defined the listener-config, to actually handle an HTTP request you need to configure a flow with an http:listener element. In this connector instance, provide a *Path*, as well as a reference to a global element.
+
+*The above configuration will perform a GET request to +http://www.example.com/test+[http://localhost:8081]*
+
+=====
+
+Full XML Code:
+[source,xml,linenums]
+----
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+
+</mule>
+----
+
+== Routing Incoming Requests to Different Listeners
+
+You will probably want to expose several different flows in your application, the best way to do this is to expose each through a different HTTP Listener Connector, making them all share one single global configuration element. There are several different ways in which you can make sure that each request is routed to the appropriate flow, these are explained in the following sub sections.
+
+=== Global Routing Configuration
+
+In the connector configuration global element, you can set the *Host*, *Port* and *Base Path* properties to only process requests done to a specific address.
+
+By default, the connector configuration has its host set to `0.0.0.0`, this address is in fact a shortcut to simultaneously listen on all active IP addresses, (including `localhost`). In order to deploy a project to xref:runtime-manager::cloudhub.adoc[CloudHub], you must set the hosts of all the HTTP connectors to `0.0.0.0`. Otherwise, your application will run into conflicts with the inner workings of CloudHub
+
+[TIP]
+Keep in mind that if you're deploying on premises, because of security concerns, it's always advisable to set a specific host, such as `localhost` rather than leaving the default `0.0.0.0` to listen on to all addresses.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its *Path* to `/`
+. Create a Global Element for the Connector, set the *Host* to 0.0.0.0, leave the *Port* as the default `8081` and set the *Base Path* to ` mybasepath`
++
+image::0000.png[]
+
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Logger* component.
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" basePath="mybasepath" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" basePath="mybasepath" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"/>
+         <logger message="#[payload]"/>
+    </flow>
+</mule>
+----
+
+The example above accepts requests from all hosts, as long as they're done on the port 8081, so it will accept any of the following:
+
+* +http://localhost:8081/mybasepath+
+* +http://127.0.0.2:8081/mybasepath+
+
+=== Routing Based on Path
+
+In each connector instance in your flow, you can set the connector's *path* to listen only for requests that are made to a specific subdpath within the host, port and base path that is configured in the connector configuration element.
+
+Most likely, your application will expose several HTTP services that use the same host and port but different URI paths. You can route the incoming HTTP request to different flows by using an HTTP Listener Connector on each flow, all referencing the same configuration element (host, port and subpath) but having different paths.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its *Path* to `    account `
+. Create a Global Element for the Connector, set the *Host* to `localhost and `leave the *Port* as the default `8081`
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Logger* component.
+. Then create a second flow by dragging another HTTP Connector to the blank space below the first flow. In it, reference the same Connector Configuration element as in the other connector. This time, set the path to `employee`.
+. Complete this second flow by adding any other building block after the HTTP Connector, such as a *Logger* component.
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow1">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="account" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+    <flow name="basic_flow2">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="employee" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+     <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow1">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="account" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+    <flow name="basic_flow2">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="employee" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+
+</mule>
+----
+
+In the example above:
+
+* HTTP requests directed to http://localhost:8081/account are routed to the first flow.
+*  HTTP requests directed to http://localhost:8081/employee are routed to the second flow.
+
+[TIP]
+When the Listener global element receives a request that doesn’t match the path defined on any of the HTTP Connector Instances, then it will return an HTTP response with status code *404* (Resource Not Found).
+
+=== Using Wildcards in the Path
+
+You can also use `*` as a wildcard path, to listen for all incoming requests done to any path within the specified base path. You can also specify a partial path that ends in `*`, such as `mypath/*`, pointing to any path that begins as defined but that could also be extended with anything else.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its *Path* to` mypath/*`
++
+image::mypath.png[]
+
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Logger* component.
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="mypath/*" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+     <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="mypath/*" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+
+</mule>
+----
+
+The example above accepts requests from all hosts done on the port 8081, so it will accept any of the following:
+
+* http://localhost:8081/mypath
+* http://localhost:8081/mypath/foo
+* http://localhost:8081/mypath/bar/really/specific/address
+
+Another use case for wildcards is to listen for all requests with a URI that contains an undefined mid section in its path.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its *Path* to `  account/*/main-contact ` +
+Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Logger* component.
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="account/*/main-contact/" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+     <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="account/*/main-contact/" doc:name="HTTP"/>
+        <logger message="#[payload]"/>
+    </flow>
+
+</mule>
+----
+
+In the above example, the HTTP Listener receives every HTTP request who's URI starts with `/account/` and finishes with `/main-contact`, the segment in between could be anything. It will accept any of the following:
+
+*  http://localhost:8081/account/mulesoft/main-contact
+*   http://localhost:8081/account/foo/main-contact
+
+[NOTE]
+If using wild cards leads to a situation where a request's address happens to match the path of multiple listeners, then the listener with the *morst specific path* is ALWAYS be given priority, regardless of the order in which the connectors are defined. Only one connector handles each request. +
+For example, suppose there are two listeners, one listening on "account/(...)" and the other on "account/(...)/main-contact". If a request arrives for "account/mulesoft/main-contact", even though it matches the criteria of both connectors, only the more specific one handles the request: in this case the one that listens on "account/(...)/main-contact".
+
+A common scenario for using wildcards in this way is with a http://raml.org[RESTful API.] You can make the undefined section of the URI into a variable by adding a placeholder in your connector's *Path*. For example, in the path `account/{accountId}/main-contact`, the section `{accountId}` contains a placeholder that defines a variable by the name of *accountId*. As such, it is recognized by the connector as a URI Parameter and mapped into the Mule Flow as an inbound property, which can be easily referenced anywhere in the flow through a simple xref:3.6@mule-runtime::mule-expression-language-mel.adoc[MEL expression].
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its *Path* to `account/{accountId}/main-contact`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. To view the contents of the URI Parameter, add a *Logger* component and set the its Value field to the following MEL expresion:
+----
+#[message.inboundProperties.'http.uri.params'.accountId]
+----
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="account/{accountId}/main-contact" doc:name="HTTP"/>
+        <logger message="#[message.inboundProperties.'http.uri.params'.accountId]"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+     <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+   <flow name="basic_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="account/{accountId}/main-contact" doc:name="HTTP"/>
+        <logger message="#[message.inboundProperties.'http.uri.params'.accountId]"/>
+    </flow>
+
+</mule>
+----
+
+In the example above, the listener accepts the same set of requests as in the example before it: +
+
+*  http://localhost:8081/account/mulesoft/main-contact
+*   http://localhost:8081/account/foo/main-contact
+
+The difference is that the undefined section of the URI is now populated into a map in the inbound properties of the Mule Message that contains all the URI parameters in the request (`http.uri.params`). You can easily reference the value of this section of the URI through the MEL expression `#[message.inboundProperties.'http.uri.params'.accountId]`.
+
+Upon receiving the first of the two sample requests shown above, the URI parameter is mapped into the Mule Message and the  `http.uri.params` inbound property contains a map that holds the key `accountId`, matched with the value `mulesoft` . You have access to this information in any part of the flow after passing through the Connector.
+
+=== Routing Based on HTTP Methods
+
+You can configure a connector so that it only accepts requests that match a reduced list of HTTP methods *(* GET, POST, DELETE, etc). For example, you can create two different connectors that share one same path but that accept different types of requests – like one only accepting GET and the other only accepting POST – incoming requests would then be routed accordingly depending on their method.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its *Path* to `requests` and the *Allowed Methods* field to `GET`
+. Create a Global Element for the Connector, set the *Host* to `localhost`, leave the *Port* as the default `8081` and set the *Base Path* to `mypath`
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Set Payload* transformer. Set the Value field of the set payload transformer to `foo`
+. Create a second flow with another HTTP Listener Connector, set its *Path* to `requests` as well, but set the *Allowed Methods* field to POST. Assign it the existing Connector Configuration global element you already created for the previous connector by picking it out of the drop down list in the field.
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Set Payload* transformer. Set the Value field of the set payload transformer to `bar`
++
+image::listener-ex1.png[listener+ex1]
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+. Create an http:listener global configuration, set the *host* to localhost, the *port* to 8081 and the *basePath* to mypath.
+. Create two separate flows, with a http:listener connector each. Reference both connectors to the global element you just created, set the path in both to `requests`. In one, set *allowedMethods* to *GET*, on the other to *POST*.
+. Complete both flows by adding any building block after each HTTP Connector. To clearly see what occurs with your requests, add a *set-payload* element in each flow, and in one set the value to `foo`, on the other set it to `bar`
++
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" basePath="mypath" doc:name="HTTP Listener Configuration"/>
+    <flow name="GET_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="requests" doc:name="HTTP" allowedMethods="GET"/>
+        <set-payload doc:name="Set Payload" value="foo"/>
+    </flow>
+
+    <flow name="POST_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="requests" doc:name="HTTP" allowedMethods="POST" parseRequest="false"/>
+        <set-payload doc:name="Set Payload" value="bar"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" basePath="mypath" doc:name="HTTP Listener Configuration"/>
+
+    <flow name="GET_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="requests" doc:name="HTTP" allowedMethods="GET"/>
+        <set-payload doc:name="Set Payload" value="foo"/>
+    </flow>
+
+    <flow name="POST_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="requests" doc:name="HTTP" allowedMethods="POST" parseRequest="false"/>
+        <set-payload doc:name="Set Payload" value="bar"/>
+    </flow>
+</mule>
+----
+
+In the above example, requests done to the same address will be handled by one flow or the other based on the type of the request:
+
+* If you send a *GET* request to http://localhost:8081/mypath/requests, it will be handled by the *GET_flow* and the response will be `foo`.
+* If you send a *POST* request to http://localhost:8081/mypath/requests, it will be handled by the *POST_flow* and the response will be `bar`.
+* If you send a *DELETE* request to http://localhost:8081/mypath/requests, then neither of the Listener instances will accept this request, and the Listener global element will return an HTTP response with status code **405 Method Not Allowed**.
+
+[TIP]
+To send HTTP requests with methods other than GET, you can use a browser extension such as Postman (Google Chrome), or the curl command line utility. From there you can easily configure the HTTP method to use on your requests.
+
+== Mapping Between HTTP Requests and Mule Messages
+
+As with any other connector in Mule, each message received by the HTTP Listener Connector generates a Mule Message that is then processed through the remaining blocks in the flow where it's at. The diagram below illustrates the main parts of an HTTP request and how you can refer to them after it has been transformed into a Mule Message.
+
+image::http-request-parts-white3.png[http+request+parts+white3]
+
+[NOTE]
+====
+If the Path of the connector is defined as `{domain}/login`, then `mydomain` is considered a *URI Parameter*. It can be referenced by the following expression:
+
+----
+
+#[message.inboundProperties.'http.uri.params'.domain]
+----
+
+====
+
+=== The Request Body
+
+The HTTP request body is transformed by the connector into the payload of a Mule Message. The payload type is always `InputStream`, unless the *Content-Type* header of the request is either `application/x-www-form-urlencoded` or `multipart/form-data`. In both these cases, Mule parses the request to generate a Mule Message that is much simpler to consume.
+
+==== Requests with an `x-www-form-urlencoded` Type Body
+
+A typical use case is having a web page with an HTML form in it. When submitting this form, the page generates an HTTP Request with the header `Content-Type: application/x-www-form-urlencoded` and the form fields as key-value pairs encoded in the request body. The HTTP Connector takes the request body, automatically parses its content into a key-value map and sets it as the Mule message payload.
+
+Below is an example of an HTTP request produced by submitting a form:
+
+[source,text,linenums]
+----
+POST /submitform HTTP/1.1
+
+User-Agent: Mule/3.6
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 32
+
+firstname=Aaron&lastname=Aguilar+Acevedo&yearborn=1999
+----
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set the *Path* to `submitform`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. After the HTTP Connector, add a *Choice router*.
+. On the first choice of the router, add a *Set Payload* element. Set its Value field to the following expression:
++
+[source,mel,linenums]
+----
+#[server.dateTime.year-18 < payload.'yearborn']
+----
++
+Notice that this expression refers to one of the form parameters included in the request: `firstname`. After being received by the connector, it exists in the mule message payload as an item in a map.
+. On the Choice router, configure the condition for that path to be the following expression:
++
+[source,mel,linenums]
+----
+#[server.dateTime.year-18 < payload.'yearborn']
+----
++
+Once again, this expression refers to one of the incoming form parameters, `yearborn`.
+. Complete the flow by adding another *Set Payload* element in the default path of the Choice router. Set its Value field to:
++
+[source,mel,linenums]
+----
+#[server.dateTime.year-18 < payload.'yearborn']
+----
++
+image::ex3-flow.png[ex3+flow]
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+. Create an http:listener global configuration, set the *host* to localhost and the *port* to 8081
+. Create a flow with an http:listener connector. Reference your connector to the global element you just created, set the path to `submitform`.
++
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+    <flow name="RegisterUser">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="submitform" doc:name="HTTP"/>
+
+    </flow>
+----
+
+. After the HTTP Connector, add a Choice scope with two alternative paths. Set the first to be executed when the following MEL expression is true:
++
+[source,mel,linenums]
+----
+#[server.dateTime.year-18 &lt; payload.'yearborn']
+----
++
+Note that `yearborn` is one of the form parameters that is expected from incoming requests.
++
+[source,xml,linenums]
+----
+<choice doc:name="Choice">
+            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
+
+            </when>
+            <otherwise>
+
+            </otherwise>
+        </choice>
+----
+. Add a set-payload element on each alternative path, one to return a rejection notice, the other to return a success message. In both, refer to the fields of the incoming form parameters to construct the message.
++
+[source,xml,linenums]
+----
+<choice doc:name="Choice">
+            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
+                <set-payload value="Sorry #[payload.'firstname'], you're too young to register." doc:name="Too young"/>
+            </when>
+            <otherwise>
+                <set-payload value="Registration has been carried out successfuly! Wellcome #[payload.'firstname'] #[payload.'lastname']!" doc:name="Success"/>
+            </otherwise>
+        </choice>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+    <flow name="RegisterUser">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="submitform" doc:name="HTTP"/>
+        <choice doc:name="Choice">
+            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
+                <set-payload value="Sorry #[payload.'firstname'], you're too young to register." doc:name="Too young"/>
+            </when>
+            <otherwise>
+                <set-payload value="Registration has been carried out successfuly! Wellcome #[payload.'firstname'] #[payload.'lastname']!" doc:name="Success"/>
+            </otherwise>
+        </choice>
+    </flow>
+</mule>
+----
+
+The above example expects to receive a POST request from http://localhost:8081/submitform with a body that contains the following form parmeters: `firstname, lastname, yearborn`
+
+[source,text,linenums]
+----
+POST /submitform HTTP/1.1
+
+User-Agent: Mule/3.6
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 32
+
+firstname=Aaron&lastname=Aguilar+Acevedo&yearborn=1999
+----
+
+[TIP]
+====
+To send an HTTP request that contains form parameters, the easiest way is to use a browser extension such as Postman (Google Chrome), or the http://curl.haxx.se/[curl] command line utility. +
+If using Postman, make sure your form parameters are sent with the type `x-www-form-urlencoded`
+
+image::submit-form-aaron.png[submit+form+aaron]
+
+====
+
+When the request is received by the connector, it creates a Mule Message that contains a Map type payload with the following key/value pairs in it:
+
+----
+firstname: Aaron
+lastname: Aguilar Acevedo
+yearborn: 1999
+----
+
+[NOTE]
+ Notice how, in the case of the `lastname` parameter, whilst the value is encoded on the HTTP request (`Aguilar+Acevedo)`, the connector automatically decodes it for you when placing it in the Mule Message.
+
+On any of the remaining blocks on the flow, you can easily access the value of the elements in the Map payload by using MEL expressions to refer to their corresponding keys.
+
+In the example above, the value matching the `yearborn` key is obtained via the expression `#[payload.'yearborn']`. Depending on its value, one of two different paths is followed. The first path sets the payload to a message that rejects the registration, referencing the value matching the `firstname` key through a similar MEL expression; the second path accepts the registration and welcomes the user by name, referencing the `firstname` and `lastname` values.
+
+==== Requests with a `multipart/form-data` Type Body
+
+In some cases, submitting a form may also imply uploading a file. In these cases, the Content-Type for the HTTP request is `multipart/form-data`. In this case, the HTTP Connector takes the request body in and makes it into an attachment on the Mule message, it also automatically parses the content and outputs it as a key-value map within this attachment. The payload of the Mule message is Null. This same behavior applies to all kinds of multipart HTTP request. +
+
+Suppose the following HTML form is submitted:
+
+[source,xml,linenums]
+----
+<form action="http://server.com/cgi/handle"
+        enctype="multipart/form-data"
+        method="post">
+
+    What is your name? <INPUT type="text" name="name"><BR>
+    What is your quest? <INPUT type="file" name="quest"><BR>
+    What is your favorite color? <INPUT type="text" name="color"><BR>
+    <INPUT type="submit" value="Send"> <INPUT type="reset">
+
+</form>
+----
+
+This is what an HTTP request originated by the form above looks like:
+
+[source,text,linenums]
+----
+POST /accounts HTTP/1.1
+Host: localhost:8081
+Cache-Control: no-cache
+User-Agent: Mule/3.6
+Content-Type: multipart/form-data; boundary=AaB03x
+
+ --AaB03x
+Content-Disposition: form-data; name="name"
+
+MuleSoft
+ --AaB03x
+Content-Disposition: form-data; name="quest"; filename="myquest.png"
+Content-Type: image/png
+
+
+ --AaB03x
+Content-Disposition: form-data; name="color"
+
+blue
+ --AaB03x
+----
+
+When the HTTP Connector receives a request like this, it puts the form values into an *inbound attachment* and the message payload is left as a *null payload*. As the content of each form field is not of a simple type, these are represented as *Data Handlers*. Internally, each Data Handler contains a DataSource with the field's content.
+
+Once data is put in the Mule message, you can access it elsewhere in the flow.
+
+*  You can access the *content* of the `name` field through the expression  `#[message.inboundAttachments.‘name’.dataSource.content]`
+*  You can access the *Content-Disposition header* of the `name` field through the expression `#[message.inboundAttachments.‘name’.dataSource.getHeader(‘Content-Disposition’)]` +
+
+==== Disabling HTTP Request Body Parsing
+
+As shown in the last two examples, when the content type of the request is `application/x-www-form-urlencoded` or `multipart/form-data`, then the HTTP Listener automatically performs a message parsing. You can easily disable this parsing functionality if you want to.
+
+In Studio's visual editor, you can untick the *Parse Request* box in the *Advanced* tab. On the XML editor you can set the *parseRequest* attribute to **"false"**.
+
+[source,xml,linenums]
+----
+<http:listener config-ref="HTTP_Listener_Configuration" path="/" parseRequest="false"/>
+----
+
+=== HTTP Headers
+
+HTTP Headers are converted by the HTTP Connector into inbound properties in the Mule Message.
+
+Below is an HTTP Request that cointains a coupleof headers:
+
+[source,text,linenums]
+----
+GET /account HTTP/1.1
+Host: www.mulesoft.org
+Server: Mule/3.6
+----
+
+The above HTTP Request is transformed into a Mule Message with the following inbound properties:
+
+[source,text,linenums]
+----
+Host = www.mulesoft.org
+Server = Mule/3.6
+----
+
+In your Mule flow, you can access these headers through the following MEL expressions:
+
+[source,mel,linenums]
+----
+#[message.inboundProperties.’Host’]
+ #[message.inboundProperties.’Server’]
+----
+
+=== HTTP Custom Properties Request Line
+
+Besides headers and a body, an HTTP request is also composed of a request line. The HTTP request line is the content on the first line of the HTTP Request, it mainly contains the URI that is typed into the address bar when requesting content via a browser. For example:
+
+ `POST /mydomain/login/?user=aaron&age=32 HTTP/1.1` +
+
+This content is transformed into a set of inbound properties in the Mule Message, as shown below:
+
+image::http-request-line-parts.png[http+request+line+parts]
+
+[%header,cols="4*"]
+|===
+|*Property Name* |*Description* |*Default Value* |*Example Value*
+|*http.method* |The HTTP Request method + |- | `POST`
+|*http.request.uri* |The whole HTTP Request Line URI |- | `  /mydomain/login/?user=aaron&age=32`
+|*http.version* |The HTTP protocol version |- |HTTP/1.1
+|*http.request.path* |The HTTP Request Line, minus query parameters |- | `/mydomain/login`
+|*http.query.string* |The query string from the URI, without parsing |- | `user=aaron&age=32`
+|*http.query.params* |A Map with all the query parameters from the URI, parsed and URL decoded |Empty map a|
+ `user=aaron`
+
+ `age=32`
+
+|*http.uri.params* |When the HTTP Listener has URI parameter placeholders in its path, this Map is created with the holder name as key and the value is extracted from the request path * * |Empty map a|
+`domain=mydomain`
+
+For this to be generated, the Listener path must be defined as `{domain}/login`
+
+|*http.listener.path* |Value of the path attribute of the HTTP Listener that accepted the request. In case the global element had a base path configured, it will also be included |- |`  /mydomain/login` /*
+|*http.scheme* |The HTTP protocol scheme |- |HTTPS if the listener-config associated has TLS configuration (SSL). HTTP otherwise.
+|*http.remote.address* |The HTTP Request called remote address |  |
+|===
+
+== Generating the HTTP Response
+
+Once the request has been processed by the various elements in your flow, the message is returned back to the HTTP Connector to provide the requestor with a response. You can set up this response so that it contains the desired body, attachment, headers and status.
+
+image::http-super-basic.png[http+super+basic]
+
+=== HTTP Response Body
+
+The HTTP Response body will be generated from the resulting payload of the Mule Message after executing the flow. So whatever the payload is, the HTTP connector will try to generate a byte array with it and send it as the HTTP response body. The only exceptional scenarios are when the payload is a Map or there are attachments in the message.
+
+==== Sending a `x-www-form-urlencoded` Type Body
+
+When the Mule message that reaches the end of the flow has a payload of type *Map*, then the HTTP Connector automatically generates an `application/x-www-form-urlencoded` response body. It also adds the header `Content-Type: application/x-www-form-urlencoded`.
+
+==== Sending a `multipart/form-data` Type Body
+
+ When the Mule message that reaches the end of the flow contains outbound attachments, the HTTP Connector will create a `multipart/form-data` HTTP response body, using the message outbound attachments. The message payload is not used at all. You can also change the multipart type that you are returning by manually setting the response header Content-Type in the HTTP Listener Connector (see how to do it below).
+
+=== HTTP Response Headers
+
+The response message sent by the HTTP Listener Connector can also include HTTP headers. These can be added to the response in two different ways, as explained in the following sections.
+
+==== HTTP Response Headers from Outbound Properties
+
+When using an HTTP Listener Connector, whenever there are outbound properties included in the Mule Message that arrives to the end of the flow, each outbound property is transformed into an HTTP response header. It's easy to add properies to the Mule Message by using the xref:3.6@mule-runtime::property-transformer-reference.adoc[Property Transformer].
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its **Path **to `/`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081` `  `
+. Add two *Property transformers* in your flow after the HTTP Listener Connector.
+. Configure the first to set the property *date* to the expression `#[server.dateTime]`
+. Configure the second to set the property *expires* to the expression `#[server.dateTime.plusHours(1)]`
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false"/>
+        <set-property propertyName="date" value="#[server.dateTime]" doc:name="Property"/>
+        <set-property propertyName="expires" value="#[server.dateTime.plusHours(1)]" doc:name="Property"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false"/>
+        <set-property propertyName="date" value="#[server.dateTime]" doc:name="Property"/>
+        <set-property propertyName="expires" value="#[server.dateTime.plusHours(1)]" doc:name="Property"/>
+    </flow>
+</mule>
+----
+
+In the example above, two headers will be added to every response to a request to the app. Both headers take their values from xref:3.6@mule-runtime::mule-expression-language-date-and-time-functions.adoc[dateTime MEL expressions].
+
+===== Disabling this behavior
+
+If you wish, you can prevent outbound properties from being passed on as headers in the response.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+In the HTTP Listener Connector's properties editor, on the *Response Settings* section, tick the box labeled *Disable Properties* to prevent response messages from including outbound properties as headers.
+
+Keep in mind that this only affects responses when the execution of the flow is successful. If an exception is raised, then the fields in the Response Settings section won't be taken into account. Instead, the fields in the *Error Response Settings* are used. If you want to avoid properties from turning into headers in error response messages, tick the box labeled *Disable Properties* in the *Error Response Settings* section.
+
+[discrete.view]
+=== XML Editor
+
+Add a `http:response-builder` as a child element of the `http:listener`, in this child element, set the attribute `disablePropertiesAsHeaders="true"` to prevent response messages from including outbound properties as headers.
+
+Keep in mind that this only affects responses when the execution of the flow is successful. If an exception is raised, then the `http:response-builder` element won't be taken into account. Instead the `http:error-response-builder` is used. If you want to avoid properties from turning into headers in error response messages, set the attribute `disablePropertiesAsHeaders="true"` in the `http:error-response-builder` child element.
+
+For example:
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false">
+            <http:response-builder disablePropertiesAsHeaders="true"/>
+            <http:error-response-builder disablePropertiesAsHeaders="true"/>
+        </http:listener>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false">
+            <http:response-builder disablePropertiesAsHeaders="true"/>
+            <http:error-response-builder disablePropertiesAsHeaders="true"/>
+        </http:listener>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>
+----
+
+==== HTTP Response Headers from the Listener Configuration
+
+Another way to add HTTP headers to your response is by setting them directly in the HTTP Listener Connector response configuration.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its **Path **to `/`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081` `  `
+. In the HTTP Listener Connector's properties editor, on the *Response Settings* section, click the *Add Header* button twice to add two headers
+. In the first header, set the name to *date* and the value to the expression `#[server.dateTime]`
+. In the second header, set the name to *expires* and the value to the expression `#[server.dateTime.plusHours(1)]`
+. In the *Error Response Settings* section, click the *Add Header* button once to add one header
+. Set the header's name to *cache-control* and its value to `no-cache`
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Logger* component`.`
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+<flow name="HTTP_flow">
+    <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false">
+        <http:response-builder disablePropertiesAsHeaders="true">
+            <http:header headerName="date" value="#[server.dateTime]"/>
+            <http:header headerName="expires" value="#[server.dateTime.plusHours(1)]"/>
+        </http:response-builder>
+        <http:error-response-builder disablePropertiesAsHeaders="true">
+            <http:header headerName="cache-control" value="no-cache"/>
+        </http:error-response-builder>
+    </http:listener>
+    <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+</flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+     <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false">
+            <http:response-builder disablePropertiesAsHeaders="true">
+                <http:header headerName="date" value="#[server.dateTime]"/>
+                <http:header headerName="expires" value="#[server.dateTime.plusHours(1)]"/>
+            </http:response-builder>
+            <http:error-response-builder disablePropertiesAsHeaders="true">
+                <http:header headerName="cache-control" value="no-cache"/>
+            </http:error-response-builder>
+        </http:listener>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>
+----
+
+In the example above, when the flow is successfully executed, the HTTP Listener Connector adds the same two headers that are added in the previous example. In case the flow is not executed successfully, then those two headers aren't added, instead the header *cache-control* is added to the response.
+
+[WARNING]
+Remember that a flow is considered to execute successfully if there are no exceptions raised during the flow execution or if all exceptions are handled by catch-exception-strategies.
+
+You can also use a map to define response headers, which is useful when you don’t know the number of headers or what header names are needed in advance.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its **Path **to `/`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081` `  `
+. In the HTTP Listener Connector's properties editor, in the *Response Settings* section, click the *Add Header* button once
+. In the dropdown menu, select *headers* and assign it the expression  `#[flowVars.headersOut]`, which references a variable that will contain a map of headers
+. Add a Variable transformer to your flow, after the HTTP Connector, to create the variable that you just referenced
+. Set the variable's name to `headersOut` and its value to a map through the following xref:3.6@mule-runtime::mule-expression-language-mel.adoc[MEL expression]:  `#[['date': server.dateTime, 'expires' : server.dateTime.plusHours(1)]]`
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false">
+            <http:response-builder >
+                <http:headers expression="#[flowVars.headersOut]"/>
+            </http:response-builder>
+        </http:listener>
+        <set-variable variableName="headersOut" value="#[['date': server.dateTime, 'expires' : server.dateTime.plusHours(1)]]" doc:name="Variable"/>
+ </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false">
+            <http:response-builder >
+                <http:headers expression="#[flowVars.headersOut]"/>
+            </http:response-builder>
+        </http:listener>
+        <set-variable variableName="headersOut" value="#[['date': server.dateTime, 'expires' : server.dateTime.plusHours(1)]]" doc:name="Variable"/>
+    </flow>
+</mule>
+----
+
+In the example above, headers are not set individually, but rather taken from a map that could potentially be dynamically created and have any length and include any headers.
+
+=== HTTP Response Status Code and Reason Phrase
+
+You can configure your connector so that it responds to calls with a custom response, depending on the success or failure of the execution of the flow; you can also dynamically set these values depending on the case. For example, you can set different error status code numbers depending on what exception was raised, by having each error handler method set the value of this variable to its corresponding value.
+
+==== Status Code and Reason Phrase from Outbound Properties
+
+The status code and reason phrase are defined in the HTTP headers `http.status` and `http.reason` . As seen above, you can add headers to your response by creating outbound properties with the corrseponding names, these will be transformed into HTTP headers by the HTTP Listener Connector when the flow is done executing.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its **Path **to `/`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. Add two *Property transformers* in your flow after the HTTP Listener Connector.
+. Configure the first to set the property *http.status* to `500`
+. Configure the second to set the property *http.reason* to `Request successfully executed!`
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+<flow name="HTTP_flow">
+    <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false"/>
+    <set-property propertyName="http.status" value="500" doc:name="Property"/>
+    <set-property propertyName="http.reason" value="Request successfully executed!" doc:name="Property"/>
+</flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration"/>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false"/>
+        <set-property propertyName="http.status" value="500" doc:name="Property"/>
+        <set-property propertyName="http.reason" value="Request successfully executed!" doc:name="Property"/>
+    </flow>
+</mule>
+----
+
+In the example above, the outbound properties `http.status` and `http.reason` are transformed into headers in the HTTP response that are accepted as the status code and reason.
+
+==== Status Code and Reason Phrase from the Listener Configuration
+
+The HTTP Listener Connector itself also includes a feature that lets you set up these values. You can set up different headers separately for the event of a successful flow execution and in case of a failure.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set the *Path* to `login`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`
+. In the HTTP Connector's properties editor, in the Response Settings section, set the *Status Code* to 500 and the *Reason* to `Login Successful`
+. In the Error Response Settings section, set the Status Code to `#[errorStatusCode]` and the reason to `#[errorReasonPhrase]`
+. After the HTTP Connector, add a *Message* *Filter*. Click the edit button next to the Nested Filter field and assign it the following value:
++
+[source,mel,linenums]
+----
+#[message.inboundProperties.'http.query.params'.user == 'mule']
+----
++
+. After the filter, add a Set Payload element and set its *Value* field to `Log in Successful!`
+. Add a *Rollback Exception Strategy* to the Error Handling section of your flow.
+. Add two Variable transformers in this exception strategy. Configure the first to set the variable `errorStatusCode` to `404`, the second to set `errorReasonPhrase` to `Requested user does not exist`
++
+image::ex2-flow.png[ex2+flow]
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+. Create an http:listener global configuration, set the *host* to localhost and the *port* to 8081
++
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+----
+. Create a flow with an `+http:listener+` connector. Reference your connector to the global element you just created, set the path to `login`. Add two child elements to the connector: `+http:response-builder+` and `http:error-response-builder`.
++
+[source,xml,linenums]
+----
+<flow name="customResponseFlow">
+    <http:listener config-ref="HTTP_Listener_Configuration" path="login" doc:name="HTTP">
+            <http:response-builder reasonPhrase="Log in Successful" statusCode="500"/>
+            <http:error-response-builder statusCode="#[errorStatusCode]" reasonPhrase="#[errorReasonPhrase]"/>
+    </http:listener>
+</flow>
+----
+. After the HTTP connector, add a message filter, set it to evaluate the expression `#[message.inboundProperties.'http.query.params'.user == 'mule']`
++
+[source,xml,linenums]
+----
+<message-filter throwOnUnaccepted="true" doc:name="Fail if person does not exists">
+            <expression-filter expression="#[message.inboundProperties.'http.query.params'.user == 'mule']"/>
+        </message-filter>
+----
+. Add a set payload after your filter to add a success message to the response's body:
++
+[source,xml,linenums]
+----
+<set-payload value="Log in Successful!" doc:name="Set Payload"/>
+----
+. Add a rollback exception strategy to deal with the request in case the filter is not successfully passed:
++
+[source,xml,linenums]
+----
+<rollback-exception-strategy  doc:name="Rollback Exception Strategy">
+
+</rollback-exception-strategy>
+----
+. Inside your rollback strategy, add two set variable elements, one to set the value of `errorStatusCode` and the other to set the value of `errorReasonPhrase`. Note that these are the variables you set up in the HTTP Listener's `error-response-builder`.
++
+[source,xml,linenums]
+----
+<rollback-exception-strategy  doc:name="Rollback Exception Strategy">
+        <set-variable variableName="errorStatusCode" value="404" doc:name="Set status code"/>
+        <set-variable variableName="errorReasonPhrase" value="Requested user does not exist" doc:name="Set reason phrase"/>
+</rollback-exception-strategy>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+    <flow name="customResponseFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="login" doc:name="HTTP">
+            <http:response-builder reasonPhrase="Log in Successful" statusCode="500"/>
+            <http:error-response-builder statusCode="#[errorStatusCode]" reasonPhrase="#[errorReasonPhrase]"/>
+        </http:listener>
+        <message-filter throwOnUnaccepted="true" doc:name="Fail if person does not exists">
+            <expression-filter expression="#[message.inboundProperties.'http.query.params'.user == 'mule']"/>
+        </message-filter>
+        <set-payload value="Log in Successful!" doc:name="Set Payload"/>
+        <rollback-exception-strategy  doc:name="Rollback Exception Strategy">
+                <set-variable variableName="errorStatusCode" value="404" doc:name="Set status code"/>
+                <set-variable variableName="errorReasonPhrase" value="Requested user does not exist" doc:name="Set reason phrase"/>
+        </rollback-exception-strategy>
+    </flow>
+</mule>
+----
+
+The above example expects to receive requests in the address http://localhost:8081/login/, these requests must contain a query parameter named *user*. Depending on the value of this parameter, one of two things may occur:
+
+* When `user=mule` the filter evaluates to true, a set payload element sets the message payload to a success message, the HTTP Connector then sets the *Status Code* and *Reason* as `500 Log in Successful!`
+* When `user=anythingElse` the filter evaluates to false, the exception strategy is then called. In it, the variables that are assigned to the Error Status Code and the Error Reason in the HTTP Connector are assigned the values `404 Requested user does not exist`
+
+[TIP]
+====
+Note that in either case, the request response will not be displayed as the response body, so it won't be visible if you make your request throug a browser window.
+
+To be able to view the status code and explanation of a an HTTP request, you can use a browser extension such as https://chrome.google.com/webstore/detail/postman-rest-client/fdmmgilgnpjigdojojpjoooidkmcomcm[Postman] (Google Chrome), or the http://curl.haxx.se/[curl] command line utility.
+====
+
+[NOTE]
+If status code or reason phrase are defined as outbound properties and they are also defined in the HTTP Listener Connector, then the later will take precedence.
+
+=== HTTP Listener Streaming
+
+In order to know the length of an HTTP request body, HTTP requests and responses contain a header named Content-Length, which describes the expected length of the body. Using this value, the consumer of the HTTP message can know where the body ends. This implies that the body length must be known in advance, before writing the body, which is not always the case. For example, if we want to send the content of a file through HTTP, we would like to avoid having to read the whole file in memory in order to send it. Instead, we would like to stream the file content through the HTTP connection. In that case, the Transfer-Encoding header is used to send the HTTP message body in chunks, saving us from having to know the body length in advance. Each chunk is separated by a predefined line separator, which contains the length of the particular chunk.
+
+==== HTTP Listener Request with Transfer-Encoding:chunked
+
+When a client sends an HTTP request with a `Transfer-Encoding:chunked` header, the HTTP Listener Connector will automatically decode the entity body chunks into an InputStream.
+
+==== HTTP Listener Response with Transfer-Encoding:chunked
+
+The HTTP Listener Connector manually adds the `Content-Length` and `Transfer-Encoding:chunked` headers when necessary, based on the payload of the MuleMessage that is used to generate the HTTP response.
+
+* If the payload is an InputStream, the the HTTP Listener Connector adds a  `Transfer-Encoding:chunked` header to the response, to avoid loading the whole InputStream into memory.
+* In any other case, the HTTP Listener Connector computes the length of the payload and sets the value of the `Content-Length` header accordingly.
+* If the Content-Length or Transfer-Encoding headers are manually set by the user in the Response settings of the HTTP Listener Connector, then these will be honored.
+
+The user can override this behavior by using the `responseStreamingMode` attribute in the HTTP Listener Connector. Possible values for `responseStreamingMode` are:
+
+* AUTO (default): which provides the behavior depicted above.
+* ALWAYS: the listener always sends the response adding the `Transfer-Encoding:chunked` header
+* NEVER: the listener always computes the `Content-Length` header and avoids chunking.
+
+Notice that when setting this attribute to ALWAYS or NEVER,  the HTTP Listener Connector will honor this  configuration and ignore any attempts to set the Content-Length or Transfer-Encoding headers manually .
+
+== HTTPS Protocol Configuration
+
+You can set the connector to work with HTTPS protocol rather than HTTP protocol. This is set up at a global element level, all connector instances that reference a global element configured to use HTTPS will work with this protocol.
+
+If your connector's TLS/SSL configuration includes a trust store, then this implicitly enforces that incoming requests require client authentication. If your configuration includes both a trust store and a key store, then it will be implementing two-way TLS.
+
+See xref:tls-configuration.adoc[TLS Configuration] for more details.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Create a flow with an HTTP Listener Connector, set its **Path **to `/`
+. Create a Global Element for the Connector, set the *Host* to `localhost` and leave the *Port* as the default `8081`.  Select the *HTTPS* *Radio button*.
+. Select the *TLS/SSL* tab. Select the corresponding radio button and either provide your trust store / key store credentials, or add a reference to a global TLS configuration that contains these
+. Complete the flow by adding any other building block after the HTTP Connector, such as a *Logger* component.
+
+[discrete.view]
+=== XML Editor
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" protocol="HTTPS" host="localhost" port="8081"  doc:name="HTTP Listener Configuration">
+        <tls:context>
+            <tls:trust-store path="mytrustpath" password="mytrustpass"/>
+            <tls:key-store path="mykeypath" password="mypass" keyPassword="mykeypass"/>
+        </tls:context>
+    </http:listener-config>
+
+    <flow name="customResponseFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration1" path="/" doc:name="HTTP"/>
+        <logger level="INFO" doc:name="Logger"/>
+    </flow>
+----
+
+=====
+
+See full XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration">
+        <tls:context>
+            <tls:trust-store path="aaa" password="bbb"/>
+            <tls:key-store path="aaa" password="bbb" keyPassword="ccc"/>
+        </tls:context>
+    </http:listener-config>
+
+    <flow name="HTTP_flow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"  parseRequest="false">
+            <http:response-builder >
+                <http:headers expression="#[flowVars.headersOut]"/>
+            </http:response-builder>
+        </http:listener>
+        <set-variable variableName="headersOut" value="#[['Cache-Control': 'no-cache', 'Content-Length' : 32]]" doc:name="Variable"/>
+        <set-payload value="foo" doc:name="Set Payload"/>
+    </flow>
+</mule>
+----
+
+== Authentication
+
+You can implement Basic Auth on the incoming requests that arrive through the HTTP Listener Connector. To do this, you must add an additional XML element in your flow after your HTTP connector, referencing a Spring security component, as in the example below:
+
+[source,xml,linenums]
+----
+<spring:beans>
+    <ss:authentication-manager alias="authenticationManager">
+      <ss:authentication-provider>
+        <ss:user-service id="userService">
+          <ss:user name="user" password="password" authorities="ROLE_ADMIN" />
+          <ss:user name="anon" password="anon" authorities="ROLE_ANON" />
+        </ss:user-service>
+      </ss:authentication-provider>
+    </ss:authentication-manager>
+  </spring:beans>
+
+  <mule-ss:security-manager>
+      <mule-ss:delegate-security-provider name="memory-provider" delegate-ref="authenticationManager" />
+  </mule-ss:security-manager>
+
+  <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration" />
+
+  <flow name="SpringExample">
+    <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"/>
+    <http:basic-security-filter realm="mule-realm"/>
+  </flow>
+----
+
+See xref:3.6@mule-runtime::configuring-the-spring-security-manager.adoc[Configuring the Spring Security Manager] for more details.
+
+== Connection Attributes Configuration
+
+You can customize HTTP incoming connections by:
+
+* Setting the maximum time a connection can be idle
+* Enabling/disabling persistent HTTP connections
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+In the global configuration element setup window, the checkbox marked *Use Persistent Connection* defines if a connection established with a client will be used to process several request or just once.  Default value is true, so multiple requests will be handle by a single connection.
+
+If the box is checked, then you can also set up the *Connection Idle Timeout*, which defines the number of milliseconds that a connection can remain idle before it is closed. Default value is 30 seconds.
+
+[discrete.view]
+=== XML Editor
+
+In the global configuration element, the attribute `connectionIdleTimeout` can be used to define the number of milliseconds that a connection can remain idle before it is closed. Default value is 30 seconds.
+
+In the global configuration element, the attribute `usePersistentConnections` defines if a connection established with a client will be used to process several request or just once.  Default value is true, so multiple requests will be handle by a single connection.
+
+For example:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"  doc:name="HTTP Listener Configuration" usePersistentConnections="true"  connectionIdleTimeout="9000" />
+----
+
+=====
+
+== See Also
+
+* To send HTTP requests, see  xref:http-request-connector.adoc[HTTP Request Connector]
+*  xref:3.6@mule-runtime::consuming-a-rest-api.adoc[Consuming a REST API]
+*  xref:3.6@mule-runtime::rest-api-examples.adoc[REST API Examples]
+* See a xref:0.3.7@http-connector-reference.adoc[full Reference] of the available XML configurable options in this connector
+* xref:authentication-in-http-requests.adoc[Authentication in HTTP Requests] +
+* To update allplications that use the old HTTP endpoint based connector, see xref:migrating-to-the-new-http-connector.adoc[Migrating to the New HTTP Connector]
+* Consult a reference to the deprecated predecessor of this element,  xref:3.6@mule-runtime::http-transport-reference.adoc[HTTP Transport Reference]

@@ -1,0 +1,232 @@
+= JSON Support Reference
+:page-aliases: 3.5@mule-runtime::json-module-reference.adoc
+
+JSON, short for JavaScript Object Notation, is a lightweight data interchange format. JSON is a text-based, human-readable format for representing simple data structures and associative arrays (called objects).
+
+== Object Bindings
+
+Mule supports binding JSON data to objects and marshalling Java object to JSON using the [Jackson] Framework. Jackson uses annotations to describe how to map data to a Java object model. For example, use JSON data to map a person's information:
+
+[source,text,linenums]
+----
+{
+    "name":"John Doe",
+    "dob":"01/01/1970",
+    "emailAddresses":[
+        {
+            "type":"home",
+            "address":"john.doe@gmail.com"
+        },
+        {
+            "type":"work",
+            "address":"jdoe@bigco.com"
+        }
+    ]
+}
+----
+
+To map this JSON data to an object `Person`, use annotations to describe how to perform the mapping.
+
+We use the `@JSONAutoDetect` to say that field member names map directly to JSON field names:
+
+[source,java,linenums]
+----
+@JsonAutoDetect
+public class Person
+{
+    private String name;
+    private String dob;
+    private List<EmailAddress> emailAddresses;
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getDob() { return dob; }
+    public void setDob(String dob) { this.dob = dob; }
+    public List<EmailAddress> getEmailAddresses() { return emailAddresses; }
+    public void setEmailAddresses(List<EmailAddress> emailAddresses) { this.emailAddresses = emailAddresses; }
+}
+----
+
+The `EmailAddress` object in the _emailAddresses_ is just another JavaBean with the `@JsonAutoDetect` annotation.
+
+At this point Mule can figure out whether to perform a JSON transforms based on the parameters of the method being called. For example:
+
+[source,java,linenums]
+----
+public class PersonComponent {
+    public void processPerson(@Payload Person person)
+    {
+  //tickle
+    }
+}
+----
+
+This example receives the contents of the previous `people.json` file on an endpoint, Mule ensures that `Person.class` is an annotated JSON object, that we had receive JSON data from the JMS queue, and performs that conversion.
+
+== Global JSON Mapper
+
+The Jackson framework performs mapping through the `ObjectMapper`. This is an object that you can configure to serialise data and define mixins that add annotations to objects that you cannot change directly. You can also define a global `ObjectMapper`; a single mapper for all JSON transforms in your application. This is not required since Mule automatically creates a mapper for a transformer, but using a global mapper can be useful if you need to configure specific properties on the mapper or use mixins. To create a shared `ObjectMapper`, add the following to your Mule configuration file:
+
+[source,xml,linenums]
+----
+<json:mapper name="myMapper">
+    <json:mixin mixinClass="org.mule.module.json.transformers.FruitCollectionMixin"
+                        targetClass="org.mule.module.json.transformers.FruitCollection"/>
+    <json:mixin mixinClass="org.mule.module.json.transformers.AppleMixin"
+                        targetClass="org.mule.tck.testmodels.fruit.Apple"/>
+</json:mapper>
+----
+
+== Intercepting JSON Transforms
+
+So far we have discussed how Mule performs automatic JSON transforms. Sometimes you may want to intercept the transform, to do this, just create a transformer with a method return or parameter type of your JSON class:
+
+[source,java,linenums]
+----
+@Transformer(sourceTypes = {InputStream.class})
+public Person toPerson(String json, ObjectMapper mapper) throws JAXBException
+{
+    return (Person)mapper.readValue(in, Person.class);
+}
+----
+
+The `ObjectMapper` instance either creates for you or uses the globabl context for your application will be used. One reason for doing this would be to strip out some JSON elements and create objects from a subset of the JSON received. For more information about transforms see the [Using Transformers] section.
+
+== JSONPath
+
+There is no standard language currently for querying JSON data graphs in the same way XPATH can query XML documents. Mule provides a simple query syntax for working with JSON data in Java, called JSONPath.
+
+This query syntax provides a simple way to navigate a JSON data structure. The following JSON data demonstrates how to use JSONPath queries:
+
+[source,text,linenums]
+----
+{
+    "name":"John Doe",
+    "dob":"01/01/1970",
+    "emailAddresses":[
+        {
+            "type":"home",
+            "address":"john.doe@gmail.com"
+        },
+        {
+            "type":"work",
+            "address":"jdoe@bigco.com"
+        }
+    ]
+}
+----
+
+Select a child entry:
+
+[source,text,linenums]
+----
+name
+----
+
+To access array data, use square braces with an index value:
+
+[source,text,linenums]
+----
+emailAddresses[0]/type
+----
+
+Or where the route element is an array:
+
+[source,text,linenums]
+----
+[0]/arrayElement
+----
+
+To access multi-dimensional arrays:
+
+[source,text,linenums]
+----
+filters[1]/init[1][0]
+----
+
+This is rare, but if JSON property name contains a '/' the name needs to be in single quotes:
+
+[source,text,linenums]
+----
+results/'http://foo.com'/value
+----
+
+=== JSONPath in Expressions
+
+You can use JSONPath in [Mule expression] to query JSON message payloads for filtering or [enrichment].
+
+For example, to use JSONPath to perform content based routing:
+
+[source,xml,linenums]
+----
+<choice>
+  <when expression="emailAddresses[0]/type = 'home'" evaluator="json">
+    <append-string-transformer message="Home address is #[json:emailAddresses[0]/address]" />
+  </when>
+  <when expression="emailAddresses[0]/type = 'work'" evaluator="json">
+    <append-string-transformer message="Work address is #[json:emailAddresses[0]/address]" />
+  </when>
+  <otherwise>
+    <append-string-transformer message=" No email address found" />
+  </otherwise>
+</choice>
+----
+
+The expression evaluator name is 'JSON', the expression is any valid JSONPath expression.
+
+When doing boolean expressions such as in the example above, operations are supported:
+
+[%header%autowidth.spread]
+|===
+|Operator |Example
+|*=* |`emailAddresses[0]/type = 'foo' or emailAddresses[0]/flag = true`
+|*!=* |`emailAddresses[0]/type != null or emailAddresses[0]/flag != false`
+|===
+
+String comparisons need to be in a single quotes, "null" is recognized as null and boolean comparisons are supported. If checking numeric values just treat them as string.
+
+== Configuration Reference
+
+=== JSON Module
+
+The JSON module contains a number of tools to help you read, transform, and write JSON.
+
+=== Transformers
+
+These transformers specific to this transport. Note that these are added automatically to the Mule registry at start up. When doing automatic transformations these will be included when searching for the correct transformers.
+
+[%header%autowidth.spread]
+|===
+|Name |Description
+|json-to-object-transformer |A transformer that will convert a JSON encoded object graph to a java object. The object type is determined by the `returnClass` attribute. Note that this transformer supports Arrays and Lists. For example, to convert to a JSON string to an array of org.foo.Person, set the `returnClass=org.foo.Person[]`. The JSON engine can be configured using the jsonConfig attribute. This is an object reference to an instance of `net.sf.JsonConfig`. This can be created as a spring bean.
+|json-to-xml-transformer |Converts JSON string to an XML string.
+|xml-to-json-transformer |Converts XML string to JSON string.
+|json-xslt-transformer |Uses XSLT to transform a JSON string.
+|object-to-json-transformer |Converts a java object to a JSON encoded object that can be consumed by other languages such as Javascript or Ruby. The JSON Object mapper can be configured using the `mapper-ref` attribute. This is an object reference to an instance of: `org.codehaus.jackson.Mapper`. This can be created as a spring bean. Usually the default mapper is sufficient. Often users will want to configure exclusions or inclusions when serializing objects. This can be done by using the Jackson annotations directly on the object (see http://fasterxml.github.io/jackson-annotations/javadoc/2.1.1/[javadoc]) If it is not possible to annotate the object directly, mixins can be used to add annotations to an object using AOP. There is a good description of this method here: http://www.cowtowncoder.com/blog/archives/08-01-2009_08-31-2009.html. To configure mixins for you objects, either configure the mapper-ref attribute or register them with the transformer using the <serialization-mixin> element. The returnClass for this transformer is usually `java.lang.String, byte[]` can also be used. At this time the transformer does not support streaming.
+|===
+
+=== Filters
+
+Filters can be used to control which data is allowed to continue in the flow.
+
+[%header%autowidth.spread]
+|===
+|Name |Description
+|is-json-filter |A filter that will determine if the current message payload is a JSON encoded message.
+|json-schema-validation-filter |Validate JSON against an XML schema.
+|===
+
+=== Mapper
+
+The Jackson mapper to use with a JSON transformer. This isn't required but can be used to configure mixins on the mapper.
+
+.Attributes of <mapper...>
+|===
+|Name |Type |Required |Default |Description
+|name |string |yes | |The name of the mapper that is used to make a reference to it by the transformer elements.
+|===
+
+.Child Elements of <mapper...>
+|===
+|Name |Cardinality |Description
+|Mixin |0..1 |
+|===

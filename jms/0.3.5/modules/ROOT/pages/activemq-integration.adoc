@@ -1,0 +1,459 @@
+= ActiveMQ Integration
+:keywords: esb, mule, activemq
+:page-aliases: 3.5@mule-runtime::activemq-integration.adoc
+
+http://activemq.apache.org[Apache ActiveMQ] is a popular open source messaging provider which is easy to integrate with Mule. ActiveMQ supports the JMS 1.1 and J2EE 1.4 specifications and is released under the Apache 2.0 License.
+
+== Usage
+
+To configure ActiveMQ connector with most common settings, use `<jms:activemq-connector>` or `<jms:activemq-xa-connector>` (for XA transaction support) element in your Mule configuration,for example:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8" ?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:mule="http://www.mulesoft.org/schema/mule/core"
+      xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+    xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+
+  <jms:activemq-connector name="jmsConnector"
+                          brokerURL="tcp://localhost:61616"/>
+  <jms:activemq-xa-connector name="jmsXAConnector"
+                             brokerURL="tcp://localhost:61616"/>
+
+...
+----
+
+Also copy the JAR files you need to the Mule lib directory (`$MULE_HOME/lib/user`) or your application lib directory.
+
+[WARNING]
+====
+Adding https://repository.apache.org/content/repositories/releases/org/apache/activemq/activemq-all/[ActiveMq-all.jar]  creates conflicts with other dependencies, so please add only the jar files you need in relation to what you need ActiveMQ for:
+
+*JARs for Embedded ActiveMQ*
+
+apache-activemq-5.8.0/lib/activemq-kahadb-store-5.8.0.jar +
+apache-activemq-5.8.0/lib/activemq-protobuf-1.1.jar +
+apache-activemq-5.8.0/lib/activemq-openwire-legacy-5.8.0.jar +
+apache-activemq-5.8.0/lib/hawtbuf-1.9.jar +
+apache-activemq-5.8.0/lib/activemq-broker-5.8.0.jar +
+apache-activemq-5.8.0/lib/activemq-client-5.8.0.jar
+
+*JARs for External ActiveMQ*
+
+apache-activemq-5.8.0/lib/activemq-client-5.8.0.jar +
+apache-activemq-5.8.0/lib/hawtbuf-1.9.jar
+
+*JARs for Failover ActiveMQ*
+
+apache-activemq-5.8.0/lib/activemq-client-5.8.0.jar +
+apache-activemq-5.8.0/lib/hawtbuf-1.9.jar
+
+To include these .jar files in your project, simply right-click on your project and select **build path > add external archives**.
+====
+
+Mule will initialize the ActiveMQ connector with default instance of ActiveMQ connection factory and establish a TCP connection to the remote standalone broker running on local host and listening on port 61616.
+
+Use failover:// protocol to connect to the cluster of brokers, and pass additional ActiveMQ options as URI parameters, for example:
+
+[source,xml,linenums]
+----
+<jms:activemq-xa-connector name="jmsFailoverConnector"
+     brokerURL="failover:(tcp://primary:61616,tcp://secondary:61616)?randomize=false"/>
+----
+
+To create an embedded instance of ActiveMQ broker, i.e. broker running on the same Java VM as Mule, use vm:// protocol, for example:
+
+[source,xml,linenums]
+----
+<jms:activemq-connector name="jmsConnector" brokerURL="vm://localhost"/>
+----
+
+You may also use additional connector attributes (See “Configuration Reference” for more details)
+
+Sometimes it might be necessary to explicitly configure an instance of ActiveMQ connection factory, for example, to set redelivery policy, or other ActiveMQ-specific features that are not exposed through Mule connector parameters. To create custom ActiveMQ connection factory instance, first configure it using Spring, for example:
+
+[source,xml,linenums]
+----
+<bean name="connectionFactory"
+     class="org.apache.activemq.ActiveMQConnectionFactory">
+<!-- to support XA transactions, use org.apache.activemq.ActiveMQXAConnectionFactory instead -->
+    <property name="brokerURL"
+              value="tcp://activemqserver:61616"/>
+
+    <property name="redeliveryPolicy">
+        <bean class="org.apache.activemq.RedeliveryPolicy">
+            <property name="initialRedeliveryDelay"
+                      value="20000"/>
+            <property name="redeliveryDelay"
+                      value="20000"/>
+            <property name="maximumRedeliveries"
+                      value="10"/>
+       </bean>
+    </property>
+</bean>
+----
+
+Then reference this bean in `<jms:activemq-connector>`, for example:
+
+[source,xml]
+----
+<jms:activemq-connector name="jmsConnector" connectionFactory-ref="connectionFactory"/>
+----
+
+== Debugging ActiveMQ
+
+Debugging information for ActiveMQ can be enabled with the following log4j
+configuration. This provides debugging information on the REST queries sent
+between the connector and ActiveMQ service:
+
+[source,xml,linenums]
+----
+ <!-- Mule classes -->
+    <logger name="org.mule">
+        <level value="INFO"/>
+    </logger>
+    <logger name="com.mulesoft">
+        <level value="INFO"/>
+    </logger>
+----
+
+== ActiveMQ Connector Reference
+
+The activemq-connector element configures an ActiveMQ version of the JMS connector.
+
+.Attributes of <activemq-connector...>
+[%header,cols="25s,75a"]
+|===
+|Attribute |Description
+|connectionFactory-ref |Optional reference to the connection factory. A default connection factory is provided for vendor-specific JMS configurations.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|redeliveryHandlerFactory-ref |Reference to the redelivery handler.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|acknowledgementMode |The acknowledgement mode to use:
+
+* AUTO_ACKNOWLEDGE
+* CLIENT_ACKNOWLEDGE
+* DUPS_OK_ACKNOWLEDGE
+
+*Type*: enumeration +
+*Required*: no +
+*Default*: `AUTO_ACKNOWLEDGE`
+
+|clientId |The ID of the JMS client.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|durable |Whether to make all topic subscribers durable.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|noLocal |If set to true, a subscriber does not receive messages that were published by its own connection.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|persistentDelivery |If set to true, the JMS provider logs the message to stable storage as it is sent so that it can be recovered if delivery is unsuccessful. A client marks a message as persistent if the application may have problems if the message is lost in transit. A client marks a message as non-persistent if an occasional lost message is tolerable. Clients use delivery mode to tell a JMS provider how to balance message transport reliability/throughput. Delivery mode only covers the transport of the message to its destination. Retention of a message at the destination until its receipt is acknowledged is not guaranteed by a PERSISTENT delivery mode. Clients should assume that message retention policies are set administratively. Message retention policy governs the reliability of message delivery from destination to message consumer. For example, if a client's message storage space is exhausted, some messages as defined by a site specific message retention policy may be dropped. A message is guaranteed to be delivered once-and-only-once by a JMS Provider if the delivery mode of the message is persistent and if the destination has a sufficient message retention policy.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|honorQosHeaders |If set to true, the message's QoS headers are honored. If false (the default), the connector settings override the message headers.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|maxRedelivery |The maximum number of times to try to redeliver a message. Use -1 to accept messages with any redelivery count.
+
+*Type*: integer +
+*Required*: no +
+*Default*: none
+
+|cacheJmsSessions |Whether to cache and re-use the JMS session object instead of recreating the connection each time. *Note:* This attribute is for non-transactional use ONLY.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|eagerConsumer |Whether to create a consumer right when the connection is created instead of using lazy instantiation in the poll loop.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|specification |The JMS specification to use: 1.0.2b (the default) or 1.1.
+
+*Type*: enumeration +
+*Required*: no +
+*Default*: 1.0.2b
+
+|username |The user name for the connection.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|password |The password for the connection.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|numberOfConsumers |The number of concurrent consumers that are used to receive JMS messages. (*Note:* If you use this attribute, you should not configure the `numberOfConcurrentTransactedReceivers`, which has the same effect.)
+
+*Type*: integer +
+*Required*: no +
+*Default*: none
+
+|jndiInitialFactory |The initial factory class to use when connecting to JNDI. DEPRECATED: use jndiNameResolver-ref propertie to configure this value.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+
+|jndiProviderUrl |The URL to use when connecting to JNDI. DEPRECATED: use jndiNameResolver-ref propertie to configure this value.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|jndiProviderProperties-ref |Reference to a Map that contains additional provider properties. DEPRECATED: use jndiNameResolver-ref propertie to configure this value.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|connectionFactoryJndiName |The name to use when looking up the connection factory from JNDI.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|jndiDestinations |Set this attribute to true if you want to look up queues or topics from JNDI instead of creating them from the session.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|forceJndiDestinations |If set to true, Mule fails when a topic or queue cannot be retrieved from JNDI. If set to false, Mule creates a topic or queue from the JMS session if the JNDI lookup fails.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|disableTemporaryReplyToDestinations |If this is set to false (the default), when Mule performs the request or response calls, a temporary destination is automatically set up to receive a response from the remote JMS call.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|embeddedMode |Some application servers, like WebSphere AS, don't allow certain methods to be called on JMS objects, effectively limiting available features. Embedded mode tells Mule to avoid those whenever possible. Default is `false`.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: `false`
+
+|brokerURL |The URL used to connect to the JMS server. If not set, the default is `vm://localhost?broker.persistent=false&broker.useJmx=false`.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+|===
+
+
+.Child Elements of <activemq-connector...>
+[%headers,cols="30s,20a,50a"]
+|===
+|Name |Cardinality |Description
+|abstract-jndi-name-resolver
+|0..1
+|A placeholder for jndi-name-resolver strategy elements.
+|===
+
+
+== ActiveMQ XA Connector Reference
+
+The activemq-xa-connector element configures an ActiveMQ version of the JMS connector with XA transaction support.
+
+.Attributes of <activemq-connector...>
+[%header,cols="25s,75a"]
+|===
+|Attribute |Description
+|connectionFactory-ref |Optional reference to the connection factory. A default connection factory is provided for vendor-specific JMS configurations.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|redeliveryHandlerFactory-ref |Reference to the redelivery handler.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|acknowledgementMode |The acknowledgement mode to use:
+
+* AUTO_ACKNOWLEDGE
+* CLIENT_ACKNOWLEDGE
+* DUPS_OK_ACKNOWLEDGE
+
+*Type*: enumeration +
+*Required*: no +
+*Default*: `AUTO_ACKNOWLEDGE`
+
+|clientId |The ID of the JMS client.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|durable |Whether to make all topic subscribers durable. If the durable attribute is set to true, then the clientId must be provided.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|noLocal |If set to true, a subscriber does not receive messages that were published by its own connection.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|persistentDelivery |If set to true, the JMS provider logs the message to stable storage as it is sent so that it can be recovered if delivery is unsuccessful. A client marks a message as persistent if the application may have problems if the message is lost in transit. A client marks a message as non-persistent if an occasional lost message is tolerable. Clients use delivery mode to tell a JMS provider how to balance message transport reliability/throughput. Delivery mode only covers the transport of the message to its destination. Retention of a message at the destination until its receipt is acknowledged is not guaranteed by a PERSISTENT delivery mode. Clients should assume that message retention policies are set administratively. Message retention policy governs the reliability of message delivery from destination to message consumer. For example, if a client's message storage space is exhausted, some messages as defined by a site specific message retention policy may be dropped. A message is guaranteed to be delivered once-and-only-once by a JMS Provider if the delivery mode of the message is persistent and if the destination has a sufficient message retention policy.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|honorQosHeaders |If set to true, the message's QoS headers are honored. If false (the default), the connector settings override the message headers.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|maxRedelivery |The maximum number of times to try to redeliver a message. Use -1 to accept messages with any redelivery count.
+
+*Type*: integer +
+*Required*: no +
+*Default*: none
+
+|cacheJmsSessions |Whether to cache and re-use the JMS session object instead of recreating the connection each time. *Note:* This attribute is for non-transactional use ONLY.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|eagerConsumer |Whether to create a consumer right when the connection is created instead of using lazy instantiation in the poll loop.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|specification |The JMS specification to use: 1.0.2b (the default) or 1.1.
+
+*Type*: enumeration +
+*Required*: no +
+*Default*: 1.0.2b
+
+|username |The user name for the connection.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|password |The password for the connection.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|numberOfConsumers |The number of concurrent consumers that are used to receive JMS messages. (*Note:* If you use this attribute, you should not configure the `numberOfConcurrentTransactedReceivers`, which has the same effect.)
+
+*Type*: integer +
+*Required*: no +
+*Default*: none
+
+|jndiInitialFactory |The initial factory class to use when connecting to JNDI. DEPRECATED: use jndiNameResolver-ref propertie to configure this value.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+
+|jndiProviderUrl |The URL to use when connecting to JNDI. DEPRECATED: use jndiNameResolver-ref propertie to configure this value.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|jndiProviderProperties-ref |Reference to a Map that contains additional provider properties. DEPRECATED: use jndiNameResolver-ref propertie to configure this value.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|connectionFactoryJndiName |The name to use when looking up the connection factory from JNDI.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+
+|jndiDestinations |Set this attribute to true if you want to look up queues or topics from JNDI instead of creating them from the session.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|forceJndiDestinations |If set to true, Mule fails when a topic or queue cannot be retrieved from JNDI. If set to false, Mule creates a topic or queue from the JMS session if the JNDI lookup fails.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|disableTemporaryReplyToDestinations |If this is set to false (the default), when Mule performs the request or response calls, a temporary destination is automatically set up to receive a response from the remote JMS call.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: none
+
+|embeddedMode |Some application servers, like WebSphere AS, don't allow certain methods to be called on JMS objects, effectively limiting available features. Embedded mode tells Mule to avoid those whenever possible. Default is `false`.
+
+*Type*: boolean +
+*Required*: no +
+*Default*: `false`
+
+|brokerURL |The URL used to connect to the JMS server. If not set, the default is `vm://localhost?broker.persistent=false&broker.useJmx=false`.
+
+*Type*: string +
+*Required*: no +
+*Default*: none
+|===
+
+
+.Child Elements of <activemq-connector...>
+[%headers,cols="30s,20a,50a"]
+|===
+|Name |Cardinality |Description
+|abstract-jndi-name-resolver
+|0..1
+|A placeholder for jndi-name-resolver strategy elements.
+|===
