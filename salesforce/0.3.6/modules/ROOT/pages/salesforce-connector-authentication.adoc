@@ -1,0 +1,276 @@
+= Salesforce Connector Authentication
+:keywords: anypoint studio, esb, connector, endpoint, salesforce, authentication
+:page-aliases: 3.6@mule-runtime::salesforce-connector-authentication.adoc
+
+To access the data in a Salesforce instance, you need to authenticate your application's requests using OAuth  or basic authentication.
+
+Basic authentication is the easiest to implement. All you need to do is provide your credentials in a global configuration, then reference that global configuration in any Salesforce connectors in your application. Basic authentication is generally recommended for internal applications. Implementing OAuth, on the other hand, involves a few extra steps, but may be preferred if your service is exposed to external users, as it ensures better security for them.
+
+This document gives examples of OAuth and basic configurations, but focuses on basic authentication. For an in-depth explanation of how to connect to Salesforce through OAuth, see xref:3.6@mule-runtime::using-a-connector-to-access-an-oauth-api.adoc[Using a Connector to Access an OAuth API].
+
+== Assumptions
+
+This document assumes that you have a Salesforce account with access to data. It also assumes you are familiar with the xref:index.adoc[Salesforce Connector] in Anypoint Studio.
+
+== Basic Authentication
+
+To access Salesforce data, provide Salesforce with a:
+
+* Username
+
+* Password
+
+* Security Token
+
+[NOTE]
+====
+Do not confuse the Security Token required in Basic Authentication with the one required in OAuth authentication.
+
+Here, the token refers to your user, not to your application (as it does in OAuth). You don't need to register any apps to obtain this code: you can find it in your user's settings within your Salesforce account.
+====
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Obtain your user Security Token from your Salesforce account.
++
+Where do I get my Security Token?
+
+.. Log in to your Salesforce account. From your account menu (your account is labeled with your name), select *Setup*.
+
+.. In the left navigation bar, under the *My Settings* heading, click to expand the **Personal **folder.
+
+.. Click *Reset My Security Token*. Salesforce resets the token and emails you the new one.
+
+.. Access the email that Salesforce sent and copy the new token onto your local clipboard.
+
+
+. Create a new Mule Project and drag a Salesforce connector into your flow.
+
+. Specify the *Topic* value. This is a text string you use to organize records around common themes. Mule permits any topic string that Salesforce allows.
+
+. Enter the message processor's properties editor, then click the green plus sign to create a new xref:3.6@mule-runtime::global-elements.adoc[Global Element] to set up connection parameters.
+ +
+image::selectconnectorconfig.png[SelectConnectorConfig]
+
+. You are prompted to select between two types of global elements. Pick the one named *Salesforce*.
+
+. Provide the required credentials: *Username*, *Password*, and *Security Token*. (*URL* is optional; configure this only if you want to override the default URL.)
++
+image::ge-1.png[GE-1]
++
+[TIP]
+====
+In the image above, the fields hold xref:3.6@mule-runtime::configuring-properties.adoc[parametrized references] to a configuration file placed in the `src` folder of your project. You can also directly provide the actual values into the fields if you don't plan to change these.
+====
+
+. Click *Test Connection* to make sure the credentials are valid.
+
+[discrete.view]
+=== XML Editor
+
+. Obtain your user Security Token from your Salesforce account.
++
+Where do I get my Security Token?
+
+.. Log in to your Salesforce account. From your account menu (your account is labeled with your name), select *Setup*.
+
+.. In the left navigation bar, under the *My Settings* heading, click to expand the **Personal **folder.
+
+.. Click *Reset My Security Token*. Salesforce resets the token and emails you the new one.
+
+.. Access the email that Salesforce sent and copy the new token onto your local clipboard.
+
+. Create a new Mule Project and add an `sfdc:global-element` at the start of your file. xref:3.6@mule-runtime::global-elements.adoc[Global Elements] set up reusable connection parameters.
++
+[source,xml,linenums]
+----
+<sfdc:config name="Salesforce" username="${mule.env}.properties.username" password="${mule.env}.properties.password" securityToken="${mule.env}.properties.securityToken" url="${mule.env}.properties.url" doc:name="Salesforce">
+        <sfdc:connection-pooling-profile initialisationPolicy="INITIALISE_ONE" exhaustedAction="WHEN_EXHAUSTED_GROW"/>
+    </sfdc:config>
+----
++
+You must provide four required credentials: *username*, *password*, *securityToken*. The *url* parameter is optional. You can either directly provide these values in the fields or add xref:3.6@mule-runtime::configuring-properties.adoc[parameterized references] to a configuration file.
+
+. When adding a Salesforce message processor to a Mule flow, reference this global element through the attribute `config-ref`. The topic value is required and is a text string used to group records around a common theme. Mule permits any topic string that Salesforce allows.
++
+[source,xml,linenums]
+----
+<sfdc:subscribe-topic config-ref="Salesforce" topic="" doc:name="Salesforce (Streaming)"/>
+----
+=====
+
+=== Best Practices
+
+You can either hardcode your credentials into the Salesforce global configuration properties, or reference a configuration file that contains these values. For simpler maintenance and better re-usability of your project, Mule recommends that you use a configuration file. Keeping these values in a separate file is especially useful if you need to deploy to different environments (for example, production, development, QA) where your access credentials differ.
+
+=== Full Code Example
+
+The example below represents an example minimum configuration for a Salesforce connection using basic authentication.
+
+[source,xml,linenums]
+----
+<mule xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd">
+
+    <sfdc:config name="SalesforceConfig" username="${mule.env}.properties.username" password="${mule.env}.properties.password" securityToken="${mule.env}.properties.securityToken" doc:name="Salesforce">
+        <sfdc:connection-pooling-profile initialisationPolicy="INITIALISE_ONE" exhaustedAction="WHEN_EXHAUSTED_GROW"/>
+    </sfdc:config>
+
+    <flow name="salesforce-exFlow1" doc:name="salesforce-exFlow1">
+        <file:inbound-endpoint responseTimeout="10000" path="SomePath" doc:name="File"/>
+        <sfdc:create config-ref="Salesforce" type="Contact" doc:name="Salesforce">
+            <sfdc:objects ref="#[message.payload]"/>
+        </sfdc:create>
+    </flow>
+
+</mule>
+----
+
+== OAuth Authentication
+
+[WARNING]
+====
+Currently, when authenticating via OAuth, DataSense is not able to access Salesforce metadata, meaning that you miss out in some very practical design-time Studio features like autocompletion of returned fields, xref:5@studio::datamapper-concepts.adoc[DataMapper] auto detection of data structure, and exploring payload data via the metadata visualizer.
+====
+
+The Salesforce connector also supports authentication via the http://oauth.net/[OAuth] standard. The key benefit of OAuth is security for the end users of your service. Rather than supplying credentials directly to your third-party service (the OAuth client), a user only hands out security tokens that have limited scopes and duration. By giving a third-party service only limited access to his account, the user can mitigate his exposure; the more places where a user's actual credentials are being stored, the greater the chance of one of these being hacked and used maliciously.
+
+OAuth allows an API provider to:
+
+* Grant consumers of the API limited access to secure data
+
+* Avoid disclosing an end user's access credentials to an API consumer
+
+* Retain the authority to revoke the consumer’s access to an end user's secure data at any time
+
+To connect to Salesforce through OAuth, you must first register your application and obtain a *consumer token* and a *consumer secret*. Keep in mind that neither of these are the same as the access token used in basic authentication; these tokens refer to your application, not to your user.
+
+Once you have obtained these tokens, you must:
+
+*  Configure a global element that contains the OAuth connection credentials you obtained from Salesforce. Be sure to configure a callback URL.
+
+*  Create an authentication flow that includes an *Authorize* Salesforce message processor.
+
+*  Create a flow that receives the already authenticated users. Set the address of this flow to be the *Callback URL* that you set up in Salesforce when registering the service.
+
+For a detailed explanation of how perform these steps with Salesforce, read xref:3.6@mule-runtime::using-a-connector-to-access-an-oauth-api.adoc[Using a Connector to Access an OAuth API.]
+
+=== Full Code Example
+
+The example below represents an example minimum configuration for a Salesforce connection using OAuth authentication.
+
+[WARNING]
+====
+Note that for this example to work, you must provide a value for *consumerKey* and *consumerSecret*, obtained from registering an app to Salesforce's developer portal.
+====
+
+[source,xml,linenums]
+----
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:spring="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
+http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+
+    <sfdc:config-with-oauth name="salesforce-oauth"
+        consumerKey="" consumerSecret="" doc:name="Salesforce (OAuth)">
+        <sfdc:oauth-callback-config domain="localhost" localPort="8081" remotePort="8081" path="oauthcallback"/>
+    </sfdc:config-with-oauth>
+    <http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
+
+    <flow name="authorize" doc:name="authorize">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="authorize" doc:name="HTTP">
+            <http:response-builder statusCode="200" reasonPhrase="You have successfully authorized the connector. Your access token id is: #[flowVars.OAuthAccessTokenId]"/>
+            <http:error-response-builder statusCode="404" reasonPhrase="An error has occurred authorizing the connector"/>
+        </http:listener>
+        <sfdc:authorize config-ref="salesforce-oauth" display="PAGE" doc:name="Salesforce"/>
+    </flow>
+    <flow name="sfdctestFlow1" doc:name="sfdctestFlow1">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="run" doc:name="HTTP"/>
+        <sfdc:create config-ref="salesforce-oauth" type="Contact" accessTokenId="#[flowVars.OAuthAccessTokenId]" doc:name="Salesforce">
+            <sfdc:objects ref="#[payload]"/>
+        </sfdc:create>
+    </flow>
+    <flow name="unauthorize" doc:name="unauthorize">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="unauthorize" doc:name="HTTP">
+            <http:response-builder statusCode="200" reasonPhrase="You have successfully unauthorized the connector for #[message.inboundProperties.'http.query.params'.accessTokenId]"/>
+        </http:listener>
+        <sfdc:unauthorize config-ref="salesforce-oauth"
+            accessTokenId="#[message.inboundProperties.'http.query.params'.accessTokenId]" doc:name="Salesforce"/>
+    </flow>
+</mule>
+----
+
+== Enabling SAML SSO in a Salesforce Connector
+
+Implementing SSO over SAML gives organizations a solution to user management that separates service providers from identity providers. Salesforce currently provides support to different SSO and SAML configurations such as different SAML flows and by acting as both service provider and identity provider.
+
+For integration purposes, SSO is not as useful because SSO is browser oriented and not application oriented. This makes SSO not suitable for an application integration development.
+
+On the other hand OAuth2 is everything SSO is not on the application integration side. OAuth2 requires a single user interaction to authorize an application, and then the whole integration relies on a token stored in your application, that is, OAuth2 is application oriented.
+
+Mule solves SSO integration with Salesforce by providing both SAML and OAuth2. The Mule solution uses OAuth2 to get a token. On the authorization step, instead of logging into Salesforce, logs in to an identity provider.
+
+=== Configuring Salesforce for SAML and SSO
+
+See Salesforce's https://help.salesforce.com/HTViewHelpDoc?id=sso_saml.htm[Configuring SAML Settings for Single Sign-On]. Set up Salesforce SSO and SAML configuration according to your needs and your identity provider's configuration.
+
+Enable the `My domain` feature and redirect all logins on the domain to your identity provider URL.
+
+The `My Domain` feature lets you select a custom domain name for your application. A `My Domain` URL can be: `https://customer.my.salesforce.com/` for a production organization or `https://customer-developer-edition.my.salesforce.com/` for a Developer Edition. Configuring `My Domain` enables support for single sign-on, improves the user experience, and allows users to access deep links into their environment using SSO.
+
+Configure `My Domain` using Saleforce's *Setup* > *Company Profile* > *My Domain*. As users may not be authenticated when they arrive at Salesforce, a unique domain is the mechanism by which a specific organization's SAML configuration can be discovered. To take advantage of SAML for desktop and mobile apps, deploy My Domain, which greatly improves the user-experience for web browser based single sign-on.
+
+=== Mule Flow
+
+*Assumptions:*
+
+* Salesforce SAML configuration is complete
+
+* Salesforce Application is OAuth2 enabled (Consumer Key, Secret and Callback URL)
+
+[source,xml,linenums]
+----
+<sfdc:config-with-oauth name="Salesforce__OAuth_"  consumerKey="your_oauth2_key" consumerSecret="your_oauth2_secret" doc:name="Salesforce (OAuth)">
+    <sfdc:oauth-callback-config  domain="localhost" localPort="8082"  path="authcallback"/>
+</sfdc:config-with-oauth>
+<flow name="saml_authorize" doc:name="SAML Authorize">
+    <http:inbound-endpoint exchange-pattern="request-response" host="localhost" port="8080" doc:name="HTTP" path="authorize"/>
+    <set-payload doc:description="Setting up your organization domain" value="my-custom-domain-dev-ed.my.salesforce.com" doc:name="Set Payload"/>
+    <set-variable value="myuser" variableName="user" doc:name="Username that hit this endpoint" />
+    <sfdc:authorize authorizationUrl="https://#[payload]/services/oauth2/authorize" accessTokenId="#[user]" config-ref="Salesforce__OAuth_"display="POPUP" doc:name="Salesforce OAuth + SAML authorization"/>
+    <sfdc:get-user-info config-ref="Salesforce__OAuth_" doc:name="Salesforce" accessTokenId="#[user]"/>
+    <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+</flow>
+----
+
+*Note* : This flow may vary depending on your Mule application deployment. An < https:connector > is needed in case of cloud deployment (CloudHub).
+
+=== Flow Explanation
+
+At runtime, users access their Salesforce custom domain, which Mule stores. The authorization message processor uses the domain and Salesforce redirects the user to their custom domain's sign-in page, which is their identity provider's web page. +
+After logging in, the user is redirected to the resource requested initially which is the Oauth authentication request. The user allows the application, and the token is issued and stored at Mule.
+
+The most important part of this flow is the ability to use MEL expressions at the <sfdc:authorize> message processor. This gives the ability to dynamically configure at runtime (and optionally per user) the OAuth2 endpoints.
+
+== See Also
+
+* xref:salesforce-connector-reference.adoc[Salesforce Connector Reference]
+
+* Read about xref:3.6@mule-runtime::using-a-connector-to-access-an-oauth-api.adoc[connecting to OAuth APIs] with Mule
+
+* Learn more about http://oauth.net/[OAuth]
+
+* Refer to the http://wiki.developerforce.com/page/Using_OAuth_to_Authorize_External_Applications[Salesforce documentation] about authorizing your service via OAuth

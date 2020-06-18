@@ -1,0 +1,400 @@
+= Cassandra Connector Operations Reference
+:page-aliases: 3.8@mule-runtime::cassandra-connector-ops-reference.adoc
+
+The Cassandra connector was implemented using the DataStax Java Driver for Apache Cassandra 3.1. The connector exposes multiple operations that are described in the javadoc. Some of these operations accept some custom plain old Java objects (POJOs) as input parameters, which are needed for the DataSense functionality.
+
+== Add New Column
+
+Input for this operation is:
+
+* Parameter: a table name
+* Optional keyspace name
+* Payload: an AlterColumnInput POJO
++
+The POJO has the following fields:
++
+** Name of the column to be created
+** The data type for the new column
+
+----
+%dw 1.0
+%output application/java
+---
+{
+    "column": payload.column,
+    "type": payload.type
+} as :object {
+    class : "com.mulesoft.mule.cassandradb.metadata.AlterColumnInput"
+}
+----
+
+== Change Column Type
+
+You need to connect to a Cassandra database version that supports changing the column type as described in the Cassandra Connector Release Notes. This operation changes the data type of a column to another valid and compatible type as defined by the Cassandra Query Language (CQL) and shown in the following tables:
+
+*Valid Type Changes for Non-clustering Columns*
+
+[frame=none]
+|===
+| *Change From* | *Change To*
+| ascii, bigint, boolean, decimal, double, float, inet, int, timestamp, timeuuid, uuid, varchar, varint | blob
+| int | varint
+| text | varchar
+| timeuuid | uuid
+| varchar | text
+|===
+
+*Valid Type Changes for Clustering Columns*
+
+[frame=none]
+|===
+| *Change From* | *Change To*
+| int | varint
+| text | varchar
+| varchar | text
+|===
+
+Input for this operation is:
+
+* Parameter: a table name
+* Optional keyspace name
+* Payload: an AlterColumnInput POJO
++
+The POJO in the payload has fields for the following things:
++
+** The column name
+** The new DataType for that column
+
+----
+%dw 1.0
+%output application/java
+---
+{
+    "column": payload.column,
+    "type": payload.type
+} as :object {
+    class : "com.mulesoft.mule.cassandradb.metadata.AlterColumnInput"
+}
+----
+
+== Create Keyspace
+
+This operation accepts a custom POJO CreateKeyspaceInput as input.
+
+Input for this operation using SimpleStrategy is:
+
+* Keyspace name
+* Replication factor
+* Replication Strategy Class
+
+Pass the parameters using a Transform Message component to transform the payload to a Java object.
+
+*SimpleStrategy DataWeave Code Example*
+
+----
+%dw 1.0
+%output application/java
+---
+{
+    "keyspaceName": payload.keyspaceName,
+    "replicationFactor": payload.replicationFactor,
+    "replicationStrategyClass": payload.replicationStrategyClass
+} as :object {
+    class : "com.mulesoft.mule.cassandradb.metadata.CreateKeyspaceInput"
+}
+----
+
+Input for the parameters using NetworkTopologyStrategy is:
+
+* Keyspace Name
+* Data center names and replication values
+* Replication Strategy Class
+
+*NetworkTopologyStrategy DataWeave Code Example*
+
+----
+%dw 1.0
+%output application/java
+---
+{
+  firstDataCenter: {
+    name: payload.dcA,
+    value: payload.repfactorA
+  },
+  nextDataCenter: {
+    name: payload.dcB,
+    value: payload.repfactorB
+  },
+  nextDataCenter: {
+    name: payload.dcC,
+    value: payload.repfactorC
+  },
+  keyspaceName: payload.keyspaceName,
+  replicationStrategyClass: payload.replicationStrategyClass
+} as :object {
+    class : "com.mulesoft.mule.cassandradb.metadata.CreateKeyspaceInput"
+}
+----
+
+
+== Create Table
+
+This operation accepts a custom POJO CreateTableInput as input.
+
+Input for this operation is:
+
+* Column names
+* Table names
+* Optional keyspace name
+
+----
+%dw 1.0
+%output application/java
+---
+{
+    "columns": payload.columns,
+    "tableName": payload.tableName,
+    "keyspaceName": payload.keyspaceName
+} as :object {
+    class : "com.mulesoft.mule.cassandradb.metadata.CreateTableInput"
+}
+----
+
+In this example, the keyspaceName parameter is optional. If you do not provide this parameter, when you run the application, the table is created in the keyspace specified in `mule.app.properties`.
+
+== Delete Columns Value
+
+Input for this operation is:
+
+* Parameter: a table name as a parameter
+* Optional keyspace name
+* Payload: a `Map<String, Object>` having two records with the keys `where` and `columns`
+
+Similar to the **Update** operation, the `where` record represents the clause that specifies the primary keys of the objects to be updated. The `columns` record represents a `List<String>` containing the column names to be cleared.
+
+After invoking this operation when fetching the entities that were updated, the values for the columns specified in the **Delete Columns Value** operations are null.
+
+You can store collections in specific columns in Cassandra. In this operation, you can delete specific values from those collections without deleting the whole collection.
+
+The payload passed to the processor has the following structure:
+
+----
+%dw 1.0
+%output application/java
+---
+{
+    "columns":payload.columns,
+    "where":payload.where
+}
+----
+
+An HTTP request for deleting an element from a list looks like this:
+
+----
+{
+    "where":
+      {
+        "id": [1]
+      },
+      "columns": ["top_places[0]"]
+}
+----
+
+An HTTP request for deleting an element from a map looks like this:
+
+----
+{
+    "where":
+      {
+        "id": [1,2]
+      },
+      "columns": ["mapColumnName['keyName']"]
+}
+----
+
+== Delete Rows
+
+Input for this operation is:
+
+* Parameter: a table name
+* Optional keyspace name
+* Payload a `Map<String, Object>` with one record having the key `where` and a value `Map<String, Object>` containing the WHERE clause.
+
+If you want to delete a row from a table having a compound primary key,   in the `where` specify a map that contains the column names as keys and the column values as values. You can delete only one row at a time.
+
+----
+{
+    "where":
+      {
+        "id": 2,
+        "name": "name_to_delete"
+      }
+}
+----
+
+A compound primary key consists of multiple columns, one of which is the partition key. Others are clustering columns. In this example, id is the partition key and name is a clustering column.
+
+If you want to delete a row from a table having a simple primary key, in the `where` specify a map that contains a single entry with the column name as the key and a list of values as the value. Multiple rows can be deleted at once.
+
+----
+{
+    "where":
+      {
+        "id": [2,3]
+      }
+}
+----
+
+
+A simple primary key has a single column that is the partition key.
+
+== Drop Column
+
+Input for this operation is:
+
+* Parameter: a table name
+* Optional keyspace name
+* Payload: a column name
+
+== Drop Keyspace
+
+This operation accepts a String parameter representing the keyspace name.
+
+== Drop Table
+
+Input for this operation is:
+
+* A table name
+* The keyspace that contains the table
+
+== Execute CQL Query
+
+Input for this operation is:
+
+* A custom POJO (CQLQueryInput)
++
+A string representing the query. The query can be parametrized or not.
+* An optional list of parameters to pass to the parametrized query.
+
+=== Execute CQL Query Examples
+
+*Transform Message Payload*
+
+----
+%dw 1.0
+%output application/java
+---
+{
+    "cqlQuery": payload.cqlQuery,
+    "parameters": payload.parameters
+}
+as :object {
+    class : "com.mulesoft.mule.cassandradb.metadata.CQLQueryInput"
+}
+----
+
+*HTTP Request to the `<execute-cql-query>` Processor*
+
+----
+{
+"cqlQuery":"SELECT * FROM users WHERE id IN (?,?)",
+"parameters":
+    [2,3]
+}
+----
+
+== Get Table Names from Keyspace
+
+This operation has takes a string parameter specifying the keyspace name for the operation. The processor returns a list of tables in the specified keyspace.
+
+== Insert
+
+Input for this operation is:
+
+* Parameter: a table name as a parameter
+* Payload: a `Map<String, Object>` representing the entity to be inserted into the table.
+* Optional keyspace name
+
+=== Insert Examples
+
+*Transform Message Payload*
+
+----
+%dw 1.0
+%output application/java
+---
+{
+    "id": payload.id,
+    "name": payload.name,
+    "other_property": payload.other_property
+}
+----
+
+*Example of an HTTP request for the Insert Operation*
+
+----
+{
+    "id":3,
+    "name":"entity_name",
+    "other_property":other_property_value
+}
+----
+
+== Rename column
+
+Parameters for this operation are:
+
+* A table name
+* The old column name
+* The new column name
+
+== Select
+
+Input for this operation is:
+
+* A string representing the query
+* An optional list of type Object representing the parameters for the query.
+
+You can build a query using a query builder.
+
+== Update
+
+Input for this operation is:
+
+* Parameter: a table name
+* Optional keyspace name
+* Payload: `Map<String, Object>` with two records having the keys `where` and `columns`.
++
+** `where Map<String, Object>`
++
+Represents the clause that specifies the primary keys of the objects to be updated.
++
+----
+"where":
+      {
+        "id": 1,
+        "name": "bestseller1"
+      }
+----
++
+** `columns Map<String, Object>`
++
+Represents pairs containing the column name and the value to be set for that column.
++
+----
+"columns":
+    {
+    "name": "test value"
+    }
+----
+
+When you use the Transform Message component to set the payload for this operation, you see the details needed to set the payload.
+
+You can select which columns to update and specify the WHERE clause. The `columns` section contains all the columns of the table selected for the operation; whereas, in the `where` section only the columns that are part of the primary key are displayed. CQL syntax dictates that only columns in the primary key can be specified in the WHERE clause.
+
+
+== See Also
+
+* xref:release-notes::connector/cassandra-connector-release-notes.adoc[Cassandra Connector Release Notes]
+* https://docs.datastax.com/en/developer/java-driver/3.1/manual/[Datastax Java Driver for Apache Cassandra]
+* https://cassandra.apache.org/doc/old/CQL-3.0.html[CQL Documentation]

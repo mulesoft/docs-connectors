@@ -1,0 +1,325 @@
+= Migrating to the New HTTP Connector
+:keywords: anypoint studio, esb, connector, endpoint, http
+:page-aliases: 3.8@mule-runtime::migrating-to-the-new-http-connector.adoc
+
+If you are upgrading your projects to Mule 3.8 Runtime from an older version, one of the main adjustments you should consider doing is to replace any instances of the old xref:3.8@mule-runtime::deprecated-http-transport-reference.adoc[HTTP endpoint-based Connector] for the new high-performance xref:index.adoc[HTTP operation-based Connector]. The old HTTP endpoint-based Connector still does work with Mule 3.6 Runtime, but it's deprecated and will be eventually removed in future versions.
+
+The new connector offers an interface that is more consistent with other connectors in Mule. It also offers several improvements:
+
+* Incoming requests that include form parameters or attachments are automatically parsed by the connector into an easy to access format
+* More consistent definition of what gets transformed into the Mule message payload
+* Response codes and explanations are now handled by the listener connector itself. No need to use separate deprecated HTTP Response Builder to construct a response
+* Headers, query parameters, and uri parameters can be added to a request through a very simple interface
+* When referencing a http://raml.org[RAML] file in an HTTP Request Connector, Studio offers smart autocompletes based on the information on the RAML file, speeding your work and sparing you the need to refer to reference material
+
+== XML Connector Syntax
+
+The new HTTP Connector has different syntax from the old one. Besides a different name and different attributes, the new connector must always reference a xref:3.8@mule-runtime::global-elements.adoc[global element], this is consistent with how most of the other connectors in Mule work. Multiple connectors can reference one single global element that encapsulates many of the common configuration settings.
+
+On the old HTTP Connector, both for inbound and outbound endpoints, it was possible to set up the *exchange-pattern* so that messages only went in one direction, so inbound endpoints would send no request back to the requestor, and outbound endpoints would not listen for a response to their requests. *The new HTTP Connector always has a two way communication*.
+
+Below are two basic examples, stripped down to the minimum, showing how the syntax differs between the old and the new connector in a minimal implementation.
+
+=== Listen for HTTP Requests
+
+[.ex]
+=====
+[discrete.view]
+=== New HTTP Connector
+
+This is how to set up the new connector as a listener for incoming HTTP requests
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081"/>
+<flow name="test_flow">
+    <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="NEW HTTP Connector"/>
+    <...>
+</flow>
+----
+
+[discrete.view]
+=== Old HTTP Endpoint
+
+This is how to set up the old connector as a listener for incoming HTTP Requests
+
+[source,xml,linenums]
+----
+<flow name="test_flow">
+    <http:inbound-endpoint exchange-pattern="request-response" host="localhost" port="8081" path="/" doc:name="OLD HTTP Connector"/>
+    <...>
+</flow>
+----
+
+=====
+
+=== Send an HTTP Request
+
+[.ex]
+=====
+[discrete.view]
+=== New HTTP Connector
+
+This is how to set up the new HTTP Connector to send out an HTTP request to an external address
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_request_Configuration" host="localhost"
+port="8081"/>
+<flow name="test_flow">
+    <...>
+    <http:request config-ref="HTTP_request_Configuration" path="/" method="GET" doc:name="NEW HTTP Connector"/>
+</flow>
+----
+
+[discrete.view]
+=== Old HTTP Endpoint
+
+This is how to set up the old HTTP Connector to send out an HTTP request to an external address
+
+[source,xml,linenums]
+----
+<flow name="test_flow">
+    <...>
+    <http:outbound-endpoint exchange-pattern="request-response" host="localhost" port="8081" method="GET" doc:name="OLD HTTP Connector"/>
+</flow>
+----
+
+=====
+
+== Properties
+
+The tables below show what attributes are available for using within the old and the new connector elements in the XML editor. Some are valid in both, whilst others are either no longer in use or new.
+
+=== inbound-endpoint vs listener
+
+[%header,cols="5*"]
+|===
+a|
+*Name*
+
+ a|
+*Type*
+
+ |http:inbound-endpoint |http:listener a|
+*Description*
+
+|user |string |X |in global element |User name for authentication
+|password |string |X |in global element |Password for authentication
+|host |string |X |in global element |Host to connect to. Should be an address of a local network interface.
+|port |port number |X |in global element |Port number to use when a connection is made.
+|path |string |X |X |Path for the HTTP URL.
+|contentType |string |X |  |HTTP ContentType to use.
+|method |httpMethodTypes |X |  |HTTP method to use.
+|allowedMethods |httpMethodTypes |  |X |Accepted HTTP methods.
+|config-ref |  |  |X |Reference to a http:listener-config element.
+|keep-alive |boolean |X |  |DEPRECATED: Use keepAlive attribute instead.
+|keepAlive |boolean |X |  |Controls if the connection is kept alive.
+|doc:name |string |X |X |Name displayed in the Studio canvas.
+|===
+
+[WARNING]
+In the old `http:inbound-endpoint` the value of `path` cannot start with a slash. In the new `http:listener` the value of `path` can.
+
+=== outbound-endpoint vs request
+
+[%header,cols="5*"]
+|===
+a|
+*Name*
+
+ a|
+*Type*
+
+ a|
+*http:outbound-endpoint*
+
+ a|
+*http:request*
+
+ a|
+*Description*
+
+|followRedirects |boolean |X |X |If a request is made using GET that responds with a redirectLocation header, setting this to true will make the request on the redirect URL. This only works when using GET since you cannot automatically follow redirects when performing a POST (a restriction according to RFC 2616).
+|exceptionOnMessageError |boolean |X |  |If a request returns a status code greater or equal than 400 an exception will be thrown.
+|user |string |X |in global element |User name for authentication
+|password |string |X |in global element |Password for authentication
+|host |string |X | X |Host to connect to. Should be an address of a local network interface.
+|port |port number |X |X |Port number to use when a connection is made.
+|path |string |X | X |Path for the HTTP URL.
+|contentType |string |X |  |HTTP ContentType to use.
+|method |httpMethodTypes |X |X |HTTP method to use.
+|config-ref |  |  |X |Reference to a http:request-config element.
+|requestStreamingMode |'ALWAYS'/ 'NEVER' |  |X |Defines if streaming is enabled
+|sendBodyMode |'ALWAYS'/ 'NEVER' |  |X |Always/never send body in your requests, regardless of the HTTP method being used.
+|source |  |  |X |Where to take the body of the request from. Default: `#[payload]`
+|target |  |  |X |Where to place response body. Default: `#[payload]`
+|parseResponse |  |  |X |If true, it will parse the response if you receive multipart responses. If set to false, no parsing will be done
+|followRedirects |  |  |X |Defines if redirects will be followed or not.
+|keep-alive |boolean |X |  a|
+DEPRECATED: Use keepAlive attribute instead.
+
+|keepAlive |boolean |X |  |Controls if the connection is kept alive.
+|doc:name |string |X |X |Name displayed in the Studio canvas.
+|===
+
+[WARNING]
+In the old `http:outbound-endpoint` the value of `path` cannot start with a slash. In the new `http:request` the value of `path` can.
+
+== Mapping an HTTP Message to a Mule Message
+
+The new HTTP connector also differs from the old connector in how it maps elements of the HTTP request to elements in the Mule Message, overall it behaves in a more consistent and predictable way. It is important to mark these differences, as referencing these incoming elements from other blocks in your flow now requires employing different MEL expressions when using the new HTTP connector.
+
+Therefore, keep in mind that when replacing the old HTTP endpoint for the new HTTP connector, you must also verify that any element of the mule message that is originated by or destined to be sent to an HTTP connector is still being referenced appropriately in the other processors of your flow.
+
+Below is a representation of an HTTP Request, and the appropriate MEL expressions to reference each element in the HTTP request after it has entered a Mule flow via the HTTP Connector.
+
+image::http-request-parts-white-2.png[http+request+parts+white+2]
+
+[NOTE]
+====
+If the Path of the connector is defined as `{domain}/login`, then `mydomain` is considered a *URI Parameter*. It can be referenced via the following expression:
+
+----
+#[message.inboundProperties.'http.uri.params'.domain]
+----
+
+====
+
+=== The Request Body
+
+Incoming HTTP requests and responses are transformed by the connector into the payload of the Mule Message. With the old HTTP Connector, the payload type is always `InputStream`. With the new connector, this is normally the case as well, unless:
+
+*  the *Content-Type* header of the request is `application/x-www-form-urlencoded` or
+* the *Content-Type* header of the request is `multipart/form-data`.
+
+In both these cases, Mule parses the request to generate a Mule Message that is much simpler to consume. xref:http-listener-connector.adoc#the-request-body[Read More].
+
+Likewise, with outgoing requests and responses, the Mule Message payload is converted into a byte array and sent as the HTTP Request's body. With the old connector, this behavior is carried out always. With the new connector, this is normally the case, except in the following scenarios:
+
+* The Mule Message's Payload is a Map of keys and values
+* The Message has outbound attachments
+
+In both cases, Mule adds the corresponding headers to the HTTP request and builds the message body accordingly. xref:http-listener-connector.adoc#the-request-body[Read More].
+
+=== Mule Message Properties that Map to the HTTP Message
+
+The table below lists the HTTP specific properties of the Mule Message, these map to elements or characteristics of the HTTP request.
+
+These same properties can arrive into a flow as inboundProperties, or can affect the output of a flow as outboundProperties.
+
+If an HTTP request arrives to an HTTP Listener Connector, or an HTTP response returns to an HTTP Request Connector, and the request contains the necessary content or format, then the Mule message created by the connector will contain the matching inbound properties from the table below. If the Mule Message that arrives to an HTTP Request Connector, or to the end of a flow that begins with an HTTP Listener Connector any of these outbound properties, then the information on this property is used to construct the outgoing HTTP request.
+
+[%header%autowidth.spread]
+|===
+|Property |Description |in old HTTP |in new HTTP
+|`http.context.path` |Path that the HTTP endpoint is listening on |X |
+|`http.context.uri` |URI that the HTTP endpoint is listening on |X |
+|`http.headers` |Map containing all HTTP headers |X |
+|`http.method` |Name of the HTTP method of the request. |X |X
+|`http.query.params` |Map containing all the query parameters |X |X
+|`http.query.string` |The query string of the URL |X |X
+|`http.uri.params` |Map containing all URI parameters |  |X
+|`http.request.uri` |Path and query portions of the URL being accessed |X |
+|`http.listener.path` |Path portion of the URL being accessed |  |X
+|`http.request.path` |Path portion of the URL being accessed |X |X
+|`http.relative.path` |Relative path of the URI, in relation to the context path |X |
+|`http.status` |Status code associated with the latest response |X |X
+|`http.reason` |Explanation for status |  |X
+|`http.version` |The HTTP-Version |X |X
+|`http.scheme` |Either HTTP or HTTPS, depending on the protocol in use |  |X
+|===
+
+The table below shows how to reference each different element of the HTTP Request once it has entered a mule flow and has been mapped to an element of the Mule Message. It compares how to do so via the new HTTP object-based connector vs the old HTTP endpoint-based connector:
+
+[%header,cols="34,33,33"]
+|===
+|HTTP Element |Deprecated HTTP Endpoint Connector |New HTTP Connector
+|*Request Body* a|
+POST, PUT, DELETE Requests:  message payload, always unparsed.
+
+GET Requests: No body. The message payload is the URI subpath (as a string)
+
+ a|
+*The message payload is the request body*, as a byte array, regardless of the HTTP method.
+
+If body type is a *url encoded form* then the payload is a parsed *map* (see below)
+
+If body type is *multipart*, then payload is an *attachment* (see below)
+
+If there's no body, the payload is Null.
+
+|*Headers* a|
+Either as a distinct inbound property, or as part of the *http.headers* map
+
+*`#[message.inboundProperties.`*
+
+*`accept-language]`*
+
+*`#[message.inboundProperties.`*
+
+*`'http.headers'.accept-language]` +
+*
+
+ a|
+Each as a distinct inbound property (only)
+
+*`#[message.inboundProperties.`*
+
+*`accept-language]`*
+
+|*Form Parameters* a|
+*Bitmap* in the *payload*.
+
+Must then be parsed with the (deprecated) *Body to Parameter Map transformer*.
+
+ a|
+Key-value *map* in the *payload*, already parsed.
+
+*`#[payload.'language']`*
+
+(unless `parseRequest=false`).
+
+|*Query Parameters* a|
+Each as a distinct inbound property
+
+*`#[message.inboundProperties.age]`*
+
+ a|
+As elements in the **http.query.params** map
+
+*`#[message.inboundProperties.`*
+
+*`'http.query.params'.age]`*
+
+|*URI Parameters* a|
+Extract from *` http.request.path`* or *`http.relative.path`*
+
+ a|
+As elements in the **http.query.params** map
+
+*`#[message.inboundProperties.`*
+
+*`'http.uri.params'.domain]`*
+
+|*Attachments* a|
+*`#[message.inboundAttachments.`*
+
+*`'name'.dataSource.part]`*
+
+ a|
+*`#[message.inboundAttachments.`*
+
+*`'name'.dataSource.content]`*
+
+|===
+
+* A potential complication with the old endpoint is that both headers and query parameters are mapped to inbound properties in the mule message, as direct children of `inboundProperties` named after each header/query parameter name. In a scenario where a request contains both a header and a query parameter that share one same name, these properties would be represented identically in the mule message, and so one would overwrite the other. The new connector avoids this issue by placing query parameters inside the map *http.query.params* and hence keeping them distinct.
+
+[TIP]
+====
+For more details on the configuration and the workings of the new HTTP Connector, see:
+
+* xref:http-listener-connector.adoc[HTTP Listener Connector]
+* xref:http-request-connector.adoc[HTTP Request Connector]
+====

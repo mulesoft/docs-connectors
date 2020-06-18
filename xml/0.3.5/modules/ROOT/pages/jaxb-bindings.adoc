@@ -1,0 +1,116 @@
+= JAXB Bindings
+:keywords: mule, esb, studio, enterprise, jaxb, XML binding
+:page-aliases: 3.5@mule-runtime::jaxb-bindings.adoc
+
+Java Architecture for XML Binding (JAXB) allows Java developers to map Java classes to XML representations. JAXB provides two main features: the ability to marshal Java objects into XML and the inverse, that is, to unmarshal XML back into Java objects. In other words, JAXB allows storing and retrieving data in memory in any XML format, without the need to implement a specific set of XML loading and saving routines for the program's class structure.
+
+Mule supports binding frameworks such as JAXB and xref:3.7@mule-runtime::json-module-reference.adoc[Jackson]. These frameworks use annotations to describe how data is mapped to a Java object model. For example, lets say we have an XML file that describes a person. When we receive that Xml we want to convert it into a `Person` object. The XML looks like this-
+
+[source,xml,linenums]
+----
+<person>
+    <name>John Doe</name>
+    <dob>01/01/1970</dob>
+    <emailAddresses>
+        <emailAddress>
+            <type>home</type>
+            <address>john.doe@gmail.com</address>
+        </emailAddress>
+        <emailAddress>
+            <type>work</type>
+            <address>jdoe@bigco.com</address>
+        </emailAddress>
+    </emailAddresses>
+</person>
+----
+
+And we have an object `Person` we want to create from the XML. We use standard JAXB annotations to describe how to perform the mapping (The `EmailAddress` object is just another JavaBean with JAXB Annotations) -
+
+[source,java,linenums]
+----
+@XmlRootElement(name = "person")
+@XmlAccessorType(XmlAccessType.FIELD)
+public class Person
+{
+    private String name;
+    private String dob;
+
+    @XmlElementWrapper(name = "emailAddresses")
+    @XmlElement(name = "emailAddress")
+    private List<EmailAddress> emailAddresses;
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getDob() { return dob; }
+    public void setDob(String dob) { this.dob = dob; }
+    public List<EmailAddress> getEmailAddresses() { return emailAddresses; }
+    public void setEmailAddresses(List<EmailAddress> emailAddresses) { this.emailAddresses = emailAddresses; }
+}
+----
+
+At this point Mule can figure out whether to perform a JAXB transform based on the parameters of the method being called. For example to convert the incoming XML message to a `Person` object -
+
+[source,java,linenums]
+----
+public class PersonComponent {
+  public void processPerson(@Payload Person person)
+  {
+    //tickle
+  }
+}
+----
+
+Here we would receive the people.xml on a JMS queue, Mule would see that `Person.class` is an annotated JAXB object and that we had received XML from the JMS queue and perform the conversion.
+
+== Generated JAXB Classes
+
+Most often JAXB classes are generated from schema and this doesn't make a difference to Mule. In fact if `Person` was part of a set of generated classes, Mule would create a JAXBContext for all the generated classes and make that context available for the transform. When creating the context it looks for either a `jaxb.index` file or an `ObjectFactory` class in the package of the annotated class. Typically the JAXB code generator will create the jaxb.index file or the `ObjectFactory` class for you.
+
+== Custom JAXB Classes
+
+If you annotate your own classes and do not create a `jaxb.index` or `ObjectFactory` class, Mule will load just the required class into a `JAXBContext` for transformation.
+
+== Global JAXBContext
+
+It is possible to define a global `JAXBContext`; a single context that will be used for all transforms in your application. This context will always be used instead of Mule creating one for you. This can be useful if you need to configure specific properties on the context. To create a shared `JAXBContext` you can create a Spring bean in your Mule XML configuration file:
+
+[source,xml,linenums]
+----
+<mule ...>
+
+    <spring:bean name="myJaxb" class="javax.xml.bind.JAXBContext" factory-method="newInstance">
+         <!-- colon-separated (:) list of package names where JAXB classes exist -->
+        <spring:constructor-arg value="org.mule.jaxb.model"/>
+    </spring:bean>
+</mule>
+----
+
+[NOTE]
+====
+*JAXB without annotations* +
+
+Mule only recognizes JAXB classes that have been annotated, which means binding information defined in a `jaxb.xml` descriptor is not discovered.
+====
+
+== Intercepting JAXB Transforms
+
+So far we have discussed how Mule will perform automatic JAXB transforms. Sometimes you may want to intercept the transform, to do this Just create a transformer with a method return or param type of your JAXB class -
+
+[source,java,linenums]
+----
+@Transformer(sourceTypes = {String.class, InputStream.class})
+public Person toPerson(Document doc, JAXBContext context) throws JAXBException
+{
+    return (Person) context.createUnmarshaller().unmarshal(doc);
+}
+----
+
+The `JAXBContext` instance will either be created for you or the global context for you application will be used. One reason for doing this would be to strip out some XML elements and create objects from a subset of the XML received. For more information about transforms see the xref:3.6@mule-runtime::using-transformers.adoc[Using Transformers] section.
+
+== Using With Mule XML
+
+As you might expect you can explicitly configure JAXB transformers in the Mule XML. For more information see xref:0.3.6@jaxb-transformers.adoc[JAXB Transformers].
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]

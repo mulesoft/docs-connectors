@@ -1,0 +1,285 @@
+= XSLT Transformer
+:keywords: anypoint studio, transformers
+:page-aliases: 3.9@mule-runtime::xslt-transformer.adoc
+
+[TIP]
+====
+_*Mule 3.6.0 and later*_
+
+Mule 3.6.0 and later versions support XSLT version 3.0 for the XSLT transformer. The transformer's behavior and syntax remain unaltered from earlier versions. You can select which version of XSLT your transformer  uses with the `version` declaration (see below). For details on XML, XSLT, Xquery and XPath 3.0 support in Mule, see xref:index.adoc[XML Module Reference].
+====
+
+[WARNING]
+====
+Mule relies on Saxon HE which does not support streaming in XSLT transformation. This may result in memory problems when processing large files. +
+As the data needed for the transformation resides in memory, starting with heap size of 5x the size of the files to processed is an option, but this depends on the transformation to be performed. The recommended option for processing large file transformations is xref:3.9@mule-runtime::dataweave-examples.adoc#xml-basic[Dataweave].
+====
+
+== Declaring the XSLT Version
+
+To declare the XSLT version that the transformer should use, use the `version` attribute in the XSL template, as shown below.
+
+[source,xml,linenums]
+----
+<xsl:stylesheet version="3.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:template match="/">
+<users>
+  <xsl:copy-of select="." />
+</users>
+</xsl:template>
+</xsl:stylesheet>
+----
+
+== Example
+
+The following example shows how to configure an inline XSLT transformer that pulls parameters from the current message.
+
+To use the XSLT transformer, you add it to your Mule XML configuration as follows:
+
+[source,xml,linenums]
+----
+<mulexml:xslt-transformer name="xslt">
+  <mulexml:xslt-text>
+    <xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+      <xsl:output method="xml"/>
+      <xsl:param name="title"/>
+      <xsl:param name="rating"/>
+      <xsl:template match="catalog">
+      <xsl:element name="cd-listings">
+        <xsl:attribute name="title">
+          <xsl:value-of select="$title"/>
+        </xsl:attribute>
+        <xsl:attribute name="rating">
+          <xsl:value-of select="$rating"/>
+        </xsl:attribute>
+        <xsl:apply-templates/>
+      </xsl:element>
+      </xsl:template>
+
+      <xsl:template match="cd">
+      <xsl:element name="cd-title">
+        <xsl:value-of select = "title" />
+      </xsl:element>
+      </xsl:template>
+    </xsl:stylesheet>
+  </mulexml:xslt-text>
+  <mulexml:context-property key="title" value="#[header:ListTitle]"/>
+  <mulexml:context-property key="rating" value="#[header:ListRating]"/>
+----
+
+This example configures a transformer using inline XSLT expressions. It also defines two context parameters:
+
+[source,xml,linenums]
+----
+<mulexml:context-property key="title" value="#[header:ListTitle]"/>
+<mulexml:context-property key="rating" value="#[header:ListRating]"/>
+----
+
+These parameters are pulled from the current message and made available in the XSLT context so that they can be referenced in your XSLT statements. You can use any valid expression. In this example, the header evaluator is used to pull a header from the current message.
+
+Your configured XSLT transformer can be referenced by an endpoint. In the following example, the result is written to `System.out`. The test data looks like this:
+
+[source,xml,linenums]
+----
+<catalog>
+    <cd>
+        <title>Empire Burlesque</title>
+        <artist>Bob Dylan</artist>
+        <country>USA</country>
+        <company>Columbia</company>
+        <price>10.90</price>
+        <year>1985</year>
+    </cd>
+    <cd>
+        <title>Hide your heart</title>
+        <artist>Bonnie Tyler</artist>
+        <country>UK</country>
+        <company>CBS Records</company>
+        <price>9.90</price>
+        <year>1988</year>
+    </cd>
+----
+
+The result written to `System.out` looks like this:
+
+[source,xml,linenums]
+----
+<cd-listings title="MyList" rating="6">
+    <cd-title>Empire Burlesque</cd-title>
+    <cd-title>Hide your heart</cd-title>
+    <!-- ... </cd-listings> -->
+----
+
+The full configuration for this example is shown below.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xmlns:mule="http://www.mulesoft.org/schema/mule/core"
+      xmlns:mulexml="http://www.mulesoft.org/schema/mule/xml"
+      xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+      xmlns:stdio="http://www.mulesoft.org/schema/mule/stdio"
+      xmlns:spring="http://www.springframework.org/schema/beans"
+      xsi:schemaLocation="
+       http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+       http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+       http://www.mulesoft.org/schema/mule/stdio http://www.mulesoft.org/schema/mule/stdio/current/mule-stdio.xsd
+       http://www.mulesoft.org/schema/mule/xml http://www.mulesoft.org/schema/mule/xml/current/mule-xml.xsd
+       http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd">
+
+    <mulexml:xslt-transformer name="xslt">
+        <mulexml:xslt-text>
+            <xsl:stylesheet version="2.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+                        <xsl:output method="xml"/>
+                        <xsl:param name="title"/>
+                        <xsl:param name="rating"/>
+                        <xsl:template match="catalog">
+                        <xsl:element name="cd-listings">
+                            <xsl:attribute name="title">
+                                <xsl:value-of select="$title"/>
+                            </xsl:attribute>
+                            <xsl:attribute name="rating">
+                                <xsl:value-of select="$rating"/>
+                            </xsl:attribute>
+                            <xsl:apply-templates/>
+                        </xsl:element>
+                        </xsl:template>
+
+                        <xsl:template match="cd">
+                        <xsl:element name="cd-title">
+                            <xsl:value-of select = "title" />
+                        </xsl:element>
+                        </xsl:template>
+                    </xsl:stylesheet>
+        </mulexml:xslt-text>
+        <mulexml:context-property key="title" value="#[header:ListTitle]"/>
+        <mulexml:context-property key="rating" value="#[header:ListRating]"/>
+    </mulexml:xslt-transformer>
+
+<flow name="echoFlow">
+   <vm:inbound-endpoint exchange-pattern="one-way" path="test.in" transformer-refs="XSLT"/>
+   <echo-component/>
+</flow>
+</mule>
+----
+
+== Using Group-by Expressions on a Set of Nodes
+
+This example leverages one of the new features introduced by XSLT 3.0: using a group-by expression to create groups to operate on.
+
+The following XML contains a list of cities, each with its country and population:
+
+[source,xml,linenums]
+----
+<?xmlversion="1.0"encoding="UTF‐8"?>
+<cities>
+  <cityname="milan" country="italy" pop="5"/>
+  <cityname="paris" country="france" pop="7"/>
+  <cityname="munich"country="germany"pop="4"/>
+  <cityname="lyon" country="france" pop="2"/>
+  <cityname="venice"country="italy" pop="1"/>
+</cities>
+----
+
+The code sample below converts the XML to an HTML table showing each country with a comma-separated list of all its cities, followed by the sum total of their population:
+
+[source,xml,linenums]
+----
+<mulexml:xslt‐transformername="xslt">
+    <mulexml:xslt‐text>
+        <xsl:stylesheetxmlns:xsl="http://www.w3.org/1999/XSL/Transform"version="2.0">
+        <xsl:templatematch="/">
+            <table>
+            <xsl:for‐each‐groupselect="cities/city"group‐by="@country">
+                <tr>
+                <td>
+                    <xsl:value‐ofselect="@country"/>
+                </td>
+                <td>
+                    <xsl:value‐ofselect="current‐group()/@name"separator=","/>
+                </td>
+                <td>
+                    <xsl:value‐ofselect="sum(current‐group()/@pop)"/>
+                </td>
+                </tr>
+            </xsl:for‐each‐group>
+            </table>
+        </xsl:template>
+        </xsl:stylesheet>
+    </mulexml:xslt‐text>
+</mulexml:xslt‐transformer>
+----
+
+The output will be similar to this:
+
+[source,xml,linenums]
+----
+<table>
+    <tr>
+        <th>Country</th>
+        <th>CityList</th>
+        <th>Population</th>
+    </tr>
+    <tr>
+        <td>italy</td>
+        <td>milan,venice</td>
+        <td>6</td>
+    </tr>
+    <tr>
+        <td>france</td>
+        <td>paris,lyon</td>
+        <td>9</td>
+    </tr>
+    <tr>
+        <td>germany</td>
+        <td>munich</td>
+        <td>4</td>
+    </tr>
+</table>
+----
+
+== Testing the Transformer
+
+This transformer can be tested using the following functional test. Note that it uses `FunctionalTestCase`, which is part of Mule's xref:3.9@mule-runtime::functional-testing.adoc[Test support].
+
+[source,java,linenums]
+----
+public class XSLTWikiDocsTestCase extends FunctionalTestCase
+{
+    protected String getConfigResources()
+    {
+        return "org/mule/test/integration/xml/xslt-functional-test.xml";
+    }
+
+    public void testMessageTransform() throws Exception
+        {
+            //We're using Xml Unit to compare results
+            //Ignore whitespace and comments
+            XMLUnit.setIgnoreWhitespace(true);
+            XMLUnit.setIgnoreComments(true);
+
+            //Read in src and result data
+            String srcData = IOUtils.getResourceAsString(
+                    "org/mule/test/integration/xml/cd-catalog.xml", getClass());
+            String resultData = IOUtils.getResourceAsString(
+                    "org/mule/test/integration/xml/cd-catalog-result-with-params.xml", getClass());
+
+            //Create a new Mule Client
+            MuleClient client = new MuleClient(muleContext);
+
+            //These are the message properties that are passed into the XQuery context
+            Map<String, Object> props = new HashMap<String, Object>();
+            props.put("ListTitle", "MyList");
+            props.put("ListRating", new Integer(6));
+
+            //Invoke the flow
+            MuleMessage message = client.send("vm://test.in", srcData, props);
+            assertNotNull(message);
+            assertNull(message.getExceptionPayload());
+            //Compare results
+            assertTrue(XMLUnit.compareXML(message.getPayloadAsString(), resultData).similar());
+        }
+    }
+----

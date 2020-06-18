@@ -1,0 +1,88 @@
+= Handling Message Acknowledgement
+:keywords: jms, connector, consume, message, ack
+:page-aliases: connectors::ibm/ibm-mq-ack.adoc
+
+There are different acknowledgement configurations provided by the JMS connector.
+
+== Automatic Acknowledgement On Success
+
+The `AUTO ackMode` can be used in the `ibm-mq:listener` component, causing
+the automatic ACK of the received message *if and only if* the flow execution completes successfully.
+If an error occurs during the flow execution that causes it to
+terminate prematurely, then the message is not acknowledged and redelivery occurs.
+
+Another `ackMode` similar to `AUTO` is `DUPS_OK`. With `DUPS_OK` the message
+is acknowledged automatically upon the success of the flow execution but in a
+lazy fashion which may lead to duplicates since the message may be redelivered
+before the ACK is performed.
+
+== Immediate Acknowledgement
+
+Setting the `ackMode` to `IMMEDIATE` either in `ibm-mq:listener` or `ibm-mq:consume`
+operations causes the message to be automatically acknowledged once it is consumed,
+and prior to any processing of the message by the application.
+Having the message automatically acknowledged after it is received means that the
+message won't be redelivered if any error occurs during the processing of the
+message, so application logic like a dead letter queue has to be created to handle
+errors without losing messages.
+
+== Manual Acknowledgement
+
+As you may expect, the `MANUAL` `ackMode` delegates all the responsibility of
+performing the ACK on the message to the application logic.
+
+With this configuration, every message received by either the `listener` or
+`consume` operations has an `ackId` available in the Mule Message `attributes`
+which identifies this message uniquely for a given connection.
+
+The `ackId` that identifies the message passes to the `ibm-mq:ack` operation:
+
+[source,xml,linenums]
+----
+<flow name="consumerWithManualAck">
+    <ibm-mq:consume config-ref="JMS_config" destination="openTickets" ackMode="MANUAL"/>
+
+    <!--Do message processing-->
+    <logger message="#[payload]">
+
+    <ibm-mq:ack ackId="#[attributes.ackId]"/>
+</flow>
+----
+
+
+=== Manual Session Recovery
+
+When using the `MANUAL ackMode`, all messages that are received but not
+acknowledged won't be redelivered by the broker.
+If an error occurs during the message processing that prevents it
+from being acknowledged, the user is responsible for manually recovering all the
+messages in the session that have to be redelivered using the `recover-session` operation:
+
+[source,xml,linenums]
+----
+<flow name="consumerWithManualAck">
+    <ibm-mq:consume config-ref="JMS_config" destination="${destination}"
+                 ackMode="MANUAL" target="consumedMessage" targetValue="#[message]"/>
+
+    <!--Do message processing-->
+    <logger message="#[payload]">
+
+    <ibm-mq:ack ackId="#[vars.consumedMessage.attributes.ackId]"/>
+
+    <error-handler>
+        <on-error-propagate>
+            <!--In case of error, recover the session-->
+            <ibm-mq:recover-session ackId="#[vars.consumedMessage.attributes.ackId]"/>
+        </on-error-continue>
+    </error-handler>
+</flow>
+----
+
+Same as before, the connection used for recovering the session has to be the
+same as the one used for receiving the message.
+
+
+== See Also
+
+* xref:ibm-mq-topic-subscription.adoc[Using Topic Subscriptions]
+* xref:ibm-mq-listener.adoc[How To Listen For New Messages]

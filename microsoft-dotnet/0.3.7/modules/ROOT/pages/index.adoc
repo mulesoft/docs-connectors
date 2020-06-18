@@ -1,0 +1,331 @@
+= DotNet Connector Guide
+:keywords: dotnet connector, dotnet, dot net, microsoft, c#, c sharp, visual studio, visual basic
+:page-aliases: 3.7@mule-runtime::dotnet-connector-guide.adoc
+
+The DotNet Connector allows you to call .NET code from a Mule flow.
+
+*DotNet Documents*:
+
+* xref:dotnet-connector-user-guide.adoc[DotNet Connector User Guide]
+* xref:dotnet-connector-migration-guide.adoc[DotNet Connector Migration Guide]
+* xref:dotnet-connector-faqs.adoc[DotNet Connector FAQs]
+* xref:release-notes::connector/dotnet-connector-release-notes.adoc[DotNet Connector Release Notes]
+* link:{attachmentsdir}/dotnet-connector-samples.zip[dotnet-connector-samples.zip]
+
+== Prerequisites
+
+This document assumes that you are familiar with Mule, the xref:5@studio::index.adoc[Anypoint Studio interface], and xref:3.7@mule-runtime::global-elements.adoc[Global Elements]. Further, it is assumed that you are familiar with the Microsoft .NET Framework.
+
+To complete this tutorial, you need the following components installed on your machine:
+
+* The http://www.microsoft.com/net[Microsoft .NET framework]
+* Anypoint Studio, the graphical interface to Mule. See xref:6@studio::to-download-and-install-studio.adoc[Download and Launch Anypoint Studio] for details
+
+[WARNING]
+====
+The .NET connector version 1.0 is incompatible with version 2.0. Please refer to the xref:dotnet-connector-migration-guide.adoc[.NET connector migration guide] if you are an existing user of .NET connector 1.0.
+====
+
+== Installing the DotNet Connector in Anypoint Studio
+
+. In Anypoint Studio, click the Exchange icon in the Studio taskbar.
+. Click Login in Anypoint Exchange.
+. Search for the connector and click Install.
+. Follow the prompts to install the connector.
+
+When Studio has an update, a message displays in the lower right corner, which you can click to install the update.
+
+== Example
+
+This example introduces the DotNet Connector and shows you how to configure it to execute a method in a .NET assembly.
+
+The example uses the following Mule message processors:
+
+[%header%autowidth.spread]
+|===
+|Component |Description
+|*DotNet Connector* |Execute Microsoft .NET code from inside a Mule flow.
+|*HTTP Connector* |Enables the example application to receive and send HTTP requests.
+|*Set Payload Transformer* |The set payload transformer sets the payload to whatever you define. The payload can be a literal string or a Mule Expression.
+|*xref:5@studio::datamapper-concepts.adoc[DataMapper]* |The DataMapper is a Mule transformer that delivers simple, yet powerful, visual design of complex data transformations for use in Mule flows
+|===
+
+=== Step 1. Creating a .NET Component
+
+To create the .NET component that will be called from Mule, start Visual Studio and create a new C# Class Library project.
+
+To create a new project:
+
+. Select *File* > *New* > *Project*.
+
+. In the *New Project* dialog, select the Class Library template under Visual C#.  Name the Project “Test.SampleComponent”.
++
+image::dotnetcomponent.png[]
+
+. Create a class named `Sample` with the following code:
++
+[source,text,linenums]
+----
+namespace Test.SampleComponent
+{
+   public class Sample
+   {
+       public object ExecuteComplex(Person person)
+       {
+         person.Name += " updated from .net";
+         person.MyRide.Brand = person.MyRide.Brand.Replace("GM", Chevrolet");
+         person.MyRide.Model = person.MyRide.Model + " - " + "400x";
+         person.MyRide.ExteriorColor.Name += "ISH";
+         person.MyRide.ExteriorColor.RGB = "no clue";
+         return person;
+       }
+   }
+}
+----
+
+. Compile the project to create the `Test.SampleComponent.dll` assembly.
+
+. Copy the .dll file to the  `C:\Sample` directory.
+
+=== Step 2. Creating a New Anypoint Studio Project
+
+To begin building this application, start Anypoint Studio and create a new project.
+
+. Select *File* > *New* > *Mule Project*.
+
+. In the New Mule Project configuration menu, provide a name for this project: `dotnet_demo`.
+
+. Click *Finish*.
+
+A new project opens with a blank canvas for building the flow, and the palette with Message Processors to the right.
+
+=== Step 3. Creating a DotNet Global Element
+
+To create and configure a DotNet global element, follow these steps:
+
+. Click the *Global Elements* tab at the base of the canvas, then click *Create*.
+
+. Use *DotNet Connector* as filter to locate, then select the Global Type:
++
+image::global-type.png[]
+
+. Choose *DotNet: External Assembly* and click *OK*.
+
+. Configure the External Assembly global type:
++
+image::external-assembly.png[]
++
+[%header%autowidth.spread]
+|===
+|Parameter | Value
+|*Name* |Dot_Net_External_Assembly
+|*Enable DataSense* |True (select the check box)
+|*Scope* |Transient
+|*Grant Full Trust to the .NET assembly* |True (select the check box)
+|*Declared methods only* |True (select the check box)
+|*Assembly Path* |Path to the Test.SampleComponent.dll file
+|===
++
+You will reference this global element when configuring the DotNet connector.
+
+=== Step 4. Creating a Demo Flow
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+. Drag an HTTP connector into the canvas, then select it to open the properties editor console.
+
+. Add a new HTTP Listener Configuration global element:
+
+.. In *General Settings*, click Add *button*:
++
+image::httplistener.png[]
++
+..  Configure the following HTTP parameters:
++
+image::httparameters.png[]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|*Port* |8081
+|*Path* |dotnet
+|*Host* |localhost
+|*Exchange Patterns* |request-response
+|*Display Name* |HTTP (or any other name you prefer)
+|===
+
+. Reference the HTTP Listener Configuration global element:
++
+image::httpreference.png[]
+
+. Drag a set payload transformer into the canvas, then select it to open the properties editor console.
+
+. Configure the required filter parameters as follows:
++
+image::set-payload-1.png[]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|*Value* |`{ "name" : "bar", "lastName" :  "foo", "id" : 1, "myRide" : { "Model" : "Coupe", "Brand" : "GM", "Color" : { "Name" : "red", "RGB" : "123,220,213" } } }}`
+|*Display Name* |Set Payload (or any other name you prefer)
+|===
++
+[NOTE]
+====
+The string you enter in the *Value* field represents a serialized JSON object for a Person class:
+
+[source,text,linenums]
+----
+namespace Test.SampleComponent{
+  public class Person
+    {
+        public string Name {
+          get; set;
+        }
+        public int Id {
+          get; set;
+        }
+        public string LastName {
+          get; set;
+        }
+        public Car MyRide {
+          get; set;
+        }
+    }
+    public class Car
+    {
+       public string Model {
+         get; set;
+       }
+       public string Brand {
+         get; set;
+       }
+       public Color ExteriorColor {
+         get; set;
+       }
+    }
+}
+----
+====
+
+. Drag a DataMapper from the palette, and place it into the canvas after the Set Payload transformer.
+
+. Configure the parameters as follows:
++
+image::jsontoexecutecomplex.png[]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|*Display Name* |JSON to ExecuteComplex (or any other name you prefer)
+2+|*Input*
+|*Type* |JSON
+|*From Example* |True (Check)
+|*Sample* |Enter the path to the input.json sample file.
+|===
++
+[NOTE]
+====
+Before you run this application, create a JSON sample file named *input.json* and copy the following content into it:
+
+[source,text,linenums]
+----
+"person" : { "name" : "bar", "lastName" :  "foo", "id" : 1, "myRide" : { "Model" : "Coupe", "Brand" : "GM", "Color" : { "Name" : "red", "RGB" : "123,220,213" }  } }}
+----
+====
+
+. Click *Create Mapping*.
++
+image::datamapper-mappingscreen.png[]
+
+. Drag the DotNet connector in the Palette, then place it into the canvas after the set payload transformer. Configure the DotNet connector as shown below.
++
+image::dotnet-connector-screen.png[]
++
+[NOTE]
+====
+The “Type” drop down is the .Net type that will be reflected upon to see which method it should call. The “Method” reference is the method on the type that was selected in the “Type” dropdown which will be invoked by the connector.
+====
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|*Operation* |Execute
+|*Method name* |Test.SampleComponent.Sample.ExecuteComplex(Test.SampleComponent.Person person)
+|*Display Name* |DotNet Connector (or any other name you prefer)
+|*Config Reference* |Dot_Net_Resource_External_Assembly
+|===
++
+[NOTE]
+====
+Note that the *Config Reference* field references the DotNet global element created previously.
+====
+
+After completing the above steps, your application flow should look like this:
+
+image::complete-application-flow.png[]
+
+[discrete.view]
+=== XML Code
+
+[source,xml,linenums]
+----
+<mule xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:data-mapper="http://www.mulesoft.org/schema/mule/ee/data-mapper" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:dotnet="http://www.mulesoft.org/schema/mule/dotnet" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+ xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/dotnet http://www.mulesoft.org/schema/mule/dotnet/current/mule-dotnet.xsd
+http://www.mulesoft.org/schema/mule/ee/data-mapper http://www.mulesoft.org/schema/mule/ee/data-mapper/current/mule-data-mapper.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+ <dotnet:externalConfig name="DotNet_External_Assembly" scope="Transient" path="C:\Samples\Test.SampleComponent.dll" doc:name="DotNet: External Assembly"/>
+<http:listener-config name="HTTP_Listener_Configuration" host="0.0.0.0" port="8081" basePath="dotnet" doc:name="HTTP Listener Configuration"/>
+<http:connector name="HTTP_HTTPS" cookieSpec="netscape" validateConnections="true" sendBufferSize="0" receiveBufferSize="0" receiveBacklog="0" clientSoTimeout="10000" serverSoTimeout="10000" socketSoLinger="0" doc:name="HTTP-HTTPS"/>
+<data-mapper:config name="JSON_To_ExecuteComplex" transformationGraphPath="json_to_executecomplex.grf" doc:name="JSON_To_ExecuteComplex"/>
+ <flow name="dotnet-demoFlow1" doc:name="dotnet-demoFlow1">
+ <http:listener config-ref="HTTP_Listener_Configuration" path="/" doc:name="HTTP"/>
+ <data-mapper:transform config-ref="JSON_To_ExecuteComplex" doc:name="JSON To ExecuteComplex" path="dotnet"/>
+ <dotnet:execute config-ref="DotNet_External_Assembly" methodName="Test.SampleComponent.Sample, Test.SampleComponent, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null | ExecuteComplex(Test.SampleComponent.Person person) -&gt; System.Object" doc:name="DotNet"/>
+ </flow>
+</mule>
+----
+=====
+
+=== Step 5. Running the Application
+
+You are now ready to run the project! First, you can test run the application from Studio:
+
+. Right-click your application in the Package Explorer pane.
+
+. Select *Run As* > *Mule Application*.
+
+. Fire up a browser and go to `http://localhost:8081/dotnet/?name=foo&age=10` to see the results.
++
+image::run-application.png[]
+
+=== Step 6. About the Example Application
+
+The flow you built in Anypoint Studio contains message processors – including the HTTP Connector, Data Mapper, Set Payload Transformer and the DotNet Connector — and it is the "Mule messages" that carry data between these message processors.
+
+A Mule message contains the following components:
+
+* *Payload*: The actual data contained in the message
+
+* *Properties*: Message metadata, which can include user-defined parameters
+
+In this example, we can see the DotNet connector was able to receive parameters from Mule, and to create and return a new message payload that was routed by Mule back to the caller. The DotNet Connector allows .NET components to be used to provide custom logic to Mule flows.
+
+== See Also
+
+* Learn more about the DotNet connector in the:
+** xref:dotnet-connector-user-guide.adoc[DotNet Connector User Guide]
+** xref:anypoint-extensions-for-visual-studio.adoc[Anypoint Extensions for Visual Studio]
+** xref:dotnet-connector-migration-guide.adoc[DotNet Connector Migration Guide]
+** xref:dotnet-connector-faqs.adoc[DotNet Connector FAQs]
+** xref:release-notes::connector/dotnet-connector-release-notes.adoc[DotNet Connector Release Notes]
+
+* For code samples that illustrate more advanced scenarios, refer to the link:{attachmentsdir}/dotnet-connector-samples.zip[dotnet-connector-samples.zip] and the link:{attachmentsdir}/dotnet-connector-sdk.zip[dotnet-connector-sdk.zip].
