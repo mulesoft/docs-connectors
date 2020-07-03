@@ -1,0 +1,153 @@
+= Consume a Web Service - Mule 4
+
+
+You can start consuming SOAP operations from the configured service once your Web Service Consumer Connector configuration is created. If you have not created a Web Service Consumer configuration yet, see the xref:web-service-consumer-configure.adoc[Web Service Consumer Configuration Documentation]).
+
+The Web Service Consumer Connector contains a single `wsc:consume` operation, which has two important parameters&#8212;Operation (`operation`) and Message (`wsc:message`).
+
+Here is the basic syntax of the `wsc:consume` operation:
+
+.Basic Consume Operation Example
+[source,xml,linenums]
+----
+<wsc:consume config-ref="config" operation="clients-list">
+    <wsc:message>
+        <wsc:body>#[payload]</wsc:body>
+    </wsc:message>
+</wsc:consume>
+----
+
+If something goes wrong when dispatching the SOAP message, you will receive an `WSC:CANNOT_DISPATCH` error.
+
+== Operation Parameter
+
+The `operation` parameter defines which SOAP operation of the Web service to invoke. In design time, the operation parameter defines the input and output types for the `consume` operation. The types will change depending on which operation you choose.
+
+== Message Parameter
+
+The `message` parameter is a representation of the `SOAP:ENVELOP` that
+is composed of three elements: Body, Headers, and Attachments. All are optional.
+
+=== Body
+
+The `body` is the main part of the message. It contains the SOAP message that is intended for the ultimate endpoint of the SOAP message. This parameter is always an XML application-specific
+element.
+
+The `body` element accepts embedded DataWeave scripts as values so that you can construct the XML request without having a side effect on the message or having to use multiple components to create the request. By default, the value of the message body is `#[payload]`. This means that, by default, it expects that the incoming payload is the XML entity that is ready to be shipped to the service.
+
+Here is an example of a transformation inside the body element:
+
+.DataWeave expression inside the body parameter
+[source,xml,linenums]
+----
+<wsc:consume config-ref="config" operation="addClients">
+    <wsc:message>
+        <wsc:body>
+        #[
+        %dw 2.0
+        output application/xml
+        ns con http://service.soap.clients.namespace/
+        ---
+        con#clients: {
+            client: {
+                name: "Natasha",
+                lastname: "Ferrari"
+            },
+            client: {
+                name: "Lucas",
+                lastname: "Barzola"
+            }
+        }]
+        </wsc:body>
+    </wsc:message>
+</wsc:consume>
+----
+
+If the body is not a valid XML, or if the request cannot be created for some reason, you will get a `WSC:BAD_REQUEST` error.
+
+If no body content is provided, the Web Service Consumer attempts to generate one. This will only work for cases where no XML entity is expected in the body.
+
+=== Headers
+
+The optional `headers` element contains application-specific information (like authentication, payment, and so on) about the SOAP message. Like the `body` element, this element is an XML entity, and it can embed a DataWeave script as its value, for example:
+
+.DataWeave expression inside the headers parameter
+[source,xml,linenums]
+----
+<wsc:consume config-ref="config" operation="addClients">
+    <wsc:message>
+        <wsc:body>#[payload]</wsc:body>
+        <wsc:headers>
+          #[
+          %dw 2.0
+          output application/xml
+          ns con http://service.soap.clients.namespace/
+          ---
+          "headers": {
+              con#user: "NahuelMonin",
+              con#pass: "%M4g\/iT0Rn4!"
+          }]
+        </wsc:header>
+    </wsc:message>
+</wsc:consume>
+----
+
+In Anypoint Studio, after you drag the Web Service Consumer `Consume` operation to the canvas, the properties
+for the Web Service Consumer let you specify the SOAP headers in the *Headers* field.
+
+For more information on setting SOAP headers, see https://help.mulesoft.com/s/article/How-to-set-SOAP-header-for-Mule-4-Web-Service-Consumer[How to set SOAP headers in Web Service Consumer in Mule 4].
+
+=== Attachments
+
+The `attachments` element enables you to bind attachments to the SOAP message. To create attachments for transport over SOAP, you need to declare a DataWeave script in which each entry represents an attachment and its value provides the content of the attachment, for example:
+
+.DataWeave expression inside the attachments parameter
+[source,xml,linenums]
+----
+<wsc:consume config-ref="config" operation="addClients">
+    <wsc:message>
+        <wsc:body>#[payload]</wsc:body>
+        <wsc:attachments>
+          #[{ clientsJson: vars.jsonFile } ]
+        </wsc:attachments>
+    </wsc:message>
+</wsc:consume>
+----
+
+The example declares a new attachment called `clientsJson` the content of which is stored in the variable called `jsonFile`. This variable could be set from a `file:read` operation, for example.
+
+== Output
+
+The output of the `consume` operation represents an incoming SOAP message that contains the same elements that the `message` parameter has, and you can access each part of it.
+
+Here is an example:
+
+.DataWeave expression inside the body parameter
+[source,xml,linenums]
+----
+<flow name="output">
+  <wsc:consume config-ref="config" operation="addClients">
+      <wsc:message>
+          <wsc:body>#[payload]</wsc:body>
+      </wsc:message>
+  </wsc:consume>
+  <set-variable name="soap.body" value="#[payload.body]">
+  <set-variable name="soap.auth.header" value="#[payload.headers.auth]">
+  <set-variable name="soap.attachment.json" value="#[payload.attachments.json]">
+</flow>
+----
+
+The example stores the content of the body in a new variable called `soap.body`. It stores a header called `auth` in a `soap.auth.header` variable, and it stores the content of an attachment called `json` in a variable called `soap.attachment.json`.
+
+== Attributes
+
+When consuming a Web service operation, you might be interested not only in response content but also in metadata of the underlying transport used to dispatch the messages. For example, when you use
+HTTP, attributes carry HTTP headers that are bound to the HTTP request (`content-length`, `status`, and so on).
+
+The Web Service Consumer Connector uses the Mule Message Attributes to access this information.
+
+
+== See Also
+
+* xref:web-service-consumer-reference.adoc[Web Service Consumer Connector Reference]
+* xref:web-service-consumer-configure.adoc[To Configure the WSC]
