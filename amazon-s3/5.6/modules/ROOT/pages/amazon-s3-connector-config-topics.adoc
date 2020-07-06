@@ -9,6 +9,146 @@ In the `Create Object` operation, set the `Content Length` to a value greater th
 
 To encrypt objects that you want to store in S3 buckets using customer managed master keys, specify a Customer Master Key ID in the `KMS Master Key` field in the `Create Object` configuration.
 
+== Prerequisites for Source Operations
+
+For the On new Object and On Deleted object source operation, there are two types of situation:
+
+. Queue is specified, therefore already created
+. Queue will be created by source
+
+== Queue is already created
+
+Let's take a look at the first case: In order to properly use source operation, the user needs to have enabled these Actions for SQS queue
+
+[source,json,linenums]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:DeleteMessage",
+                "sqs:GetQueueUrl",
+                "sqs:ReceiveMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:QUEUE_NAME"
+        }
+    ]
+}
+----
+
+and for queue to be able to receive message when new object is created on bucket, we need to create permission in this form
+
+[source,json,linenums]
+----
+{
+  "Version": "2012-10-17",
+  "Id": "arn:aws:sqs:REGION:ACCOUNT_ID:QUEUE_NAME/SQSDefaultPolicy",
+  "Statement": [
+    {
+      "Sid": "Sid1593770403887",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "SQS:SendMessage",
+      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:QUEUE_NAME",
+      "Condition": {
+        "ArnLike": {
+          "aws:SourceArn": "arn:aws:s3:::BUCKET_NAME"
+        }
+      }
+    }
+  ]
+}
+----
+
+== Queue will be created by source
+
+For the second case, the source will create queue for you with the prefix MULE-S3-TRIGGER. Now the situation is different because the user needs to have also permission to create queue and also set queue attributes:
+
+[source,json,linenums]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:DeleteMessage",
+                "sqs:ReceiveMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:CreateQueue",
+                "sqs:SetQueueAttributes"
+            ],
+            "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:MULE-S3-TRIGGER-*"
+        }
+    ]
+}
+----
+
+Behind the scene for the queue, the source will add policy to this queue when S3 object is created in the bucket in the form
+
+
+[source,json,linenums]
+----
+{
+  "Version": "2012-10-17",
+  "Id": "example-ID",
+  "Statement": [
+    {
+      "Sid": "example-statement-ID",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "*"
+    },
+      "Action": "SQS:SendMessage",
+      "Resource":QUEUE_ARN,
+      "Condition": {
+        "ArnLike": {
+          "aws:SourceArn": "BUCKET_ARN"
+        }
+      }
+    }
+  ]
+}
+----
+
+== S3 Policy Bucket
+
+For the S3 policy, we use this form for both cases:
+
+[source,json,linenums]
+----
+{
+    "Version": "2012-10-17",
+    "Id": "Policy1593761427184",
+    "Statement": [
+        {
+            "Sid": "Stmt1593760119344",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "arn:aws:iam::ACCOUNT_ID:user/test"
+            },
+            "Action": "SPECIFIC_ACTION",
+            "Resource": "arn:aws:s3:::BUCKET_NAME/*"
+        },
+        {
+            "Sid": "Stmt1593760259223",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "arn:aws:iam::ACCOUNT_ID:user/test"
+            },
+            "Action": ["s3:PutBucketNotification", "s3:GetBucketNotification"],
+            "Resource": "arn:aws:s3:::BUCKET_NAME"
+        }
+    ]
+}
+----
+where *SPECIFIC_ACTION* is s3:PutObject or s3:DeleteObject based on the choosen source operation.
+
 == Next Step
 
 After you understand how to configure a master key and provide credentials, you can try out the xref:amazon-s3-connector-examples.adoc[Example].
