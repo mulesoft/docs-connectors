@@ -1,0 +1,376 @@
+= Salesforce - Examples - Mule 4
+
+[[accandtrans]]
+== Example: Accept and Transform Data
+
+The Mule flow sets up:
+
+* HTTP Listener: Accepts data from HTTP requests.
+* Transform Message: Transforms data structure and format to produce the output that the Salesforce connector expects.
+* Salesforce connector:
++
+** (Outbound) Connects with Salesforce and performs an operation to push data to Salesforce.
+** Triggers a flow according to the configuration.
+** Connects with Salesforce, and returns an `InputStream` with the query results.
+* Transform Message: Transforms a data structure and format to produce the output that the File connector endpoint expects.
+* File connector: Records data in a file, such as a CSV and saves it to a user-defined directory or location.
+
+=== Studio Flows
+
+* Set up HTTP Listener, Transform, and Create Account:
++
+image::salesforce-outbound.png[]
++
+* Schedule a trigger, query the result steam, transform the message, and write to a file:
++
+image::salesforce-inbound.png[]
+
+=== XML Flows
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+  xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+  http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+  http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/ee/core
+  http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/salesforce
+  http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+  http://www.mulesoft.org/schema/mule/file
+  http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+  <configuration-properties file="mule-app.properties"/>
+  <http:listener-config name="HTTP_Listener_config"
+   doc:name="HTTP Listener config" >
+  <http:listener-connection host="localhost" port="8081" />
+  </http:listener-config>
+  <salesforce:sfdc-config name="Salesforce_Sfdc_config"
+   doc:name="Salesforce SFDC config">
+    <salesforce:basic-connection
+    username="${salesforce.username}"
+    password="${salesforce.password}"
+    securityToken="${salesforce.securityToken}" />
+  </salesforce:sfdc-config>
+  <flow name="crud_app_template">
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/" doc:name="Listener" />
+    <parse-template location="form.html" doc:name="Parse Template"  />
+  </flow>
+  <flow name="create_accountFlow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/createAccount" doc:name="Listener"  />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+
+  Name: payload.Name,
+  AccountNumber: payload.AccountNumber,
+  BillingCity: payload.BillingCity
+}]]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:create doc:name="Create" type="Account"
+     config-ref="Salesforce_Sfdc_config"/>
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map {
+  id:$.id,
+  errors:$.errors,
+  success:$.success
+
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+  <flow name="delete_accountFlow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/delete" doc:name="Listener"  />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[payload.Id]]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:delete config-ref="Salesforce_Sfdc_config" doc:name="Delete" />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map {
+  id:$.id,
+  errors:$.errors,
+  success:$.success
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+  <flow name="query_accountFlow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/query" doc:name="Listener"  />
+    <salesforce:query config-ref="Salesforce_Sfdc_config" doc:name="Query" >
+      <salesforce:salesforce-query>
+      SELECT AccountNumber,BillingAddress,Id,Name FROM Account WHERE Name = ':name'
+      </salesforce:salesforce-query>
+      <salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+  name : payload.name
+}]]]></salesforce:parameters>
+    </salesforce:query>
+    <ee:transform doc:name="Transform Message"  >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map {
+    AccountNumber:$.AccountNumber,
+    BillingAddress:$.BillingAddress,
+    Id:$.Id,
+    Name:$.Name
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+  <flow name="update_accountFlow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/update" doc:name="Listener"  />
+    <ee:transform doc:name="Transform Message"  >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+
+  Name: payload.Name,
+  AccountNumber: payload.AccountNumber,
+  Id:payload.Id
+}]]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:update config-ref="Salesforce_Sfdc_config"
+     type="Account" doc:name="Update"  />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map {
+  id:$.id,
+  errors:$.errors,
+  success:$.success
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+  <flow name="upsert_accountFlow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/upsert" doc:name="Listener" />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+
+  Name: payload.Name,
+  AccountNumber: payload.AccountNumber,
+  Id:payload.Id
+}]]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:upsert config-ref="Salesforce_Sfdc_config"
+    externalIdFieldName="Id" type="Account" doc:name="Upsert" />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map {
+  id:$.id,
+  errors:$.errors,
+  success:$.success,
+  created:$.created
+
+  }]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+  <flow name="find_duplicates_for_account_flow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/findDuplicates" doc:name="Listener" />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[
+  payload
+]]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:find-duplicates config-ref="Salesforce_Sfdc_config"
+     type="Account"
+    doc:name="Find duplicates" />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  success: payload.success,
+  duplicateResults: {
+    (payload.duplicateResults map {
+      matchRecords: $.matchResults
+    }
+    )
+  },
+  duplicateRuleEntityType: payload.duplicateRuleEntityType,
+  duplicateRule: payload.duplicateRule,
+  allowSave: payload.allowSave,
+  errorMessage: payload.errorMessage
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+  <flow name="crud-appFlow" >
+    <http:listener doc:name="Listener"
+     config-ref="HTTP_Listener_config" path="/"/>
+    <salesforce:convert-lead doc:name="Convert lead"
+     config-ref="Salesforce_Sfdc_config"/>
+  </flow>
+</mule>
+----
+
+[[parentchild]]
+== Example: Create or Update an Object With Parent Child Relationships
+
+A Salesforce object can have standard or custom relationships between objects.
+
+The relationships between the objects are usually one-to-many parent child relationships, but can be any link between two objects residing in Salesforce.
+
+Creating or altering objects with relationships is challenging. This section shows how to perform an upsert for an object using the Salesforce connector.
+
+Create a structure in Salesforce for this relationship.
+
+This example assumes two custom types: `MyCustomObject` and `MyOtherCustomObject`.
+
+MyCustomObject must hold a relationship to a MyOtherCustomObject. When upserting a `MyCustomObject`, the POJO sent as input to the Salesforce connector looks like this:
+
+[source,xml,linenums]
+----
+{
+  ...
+  // MyCustomObject's fields ...
+  OtherObject__r:
+  {
+    CustomField__c : 'ABC123',
+    type: 'MyOtherCustomObject__c'
+  }
+}
+----
+
+`OtherObject` is the name of `MyCustomObject` field whose value must be a reference to a `MyOtherCustomObject` object. `OtherObject__r` indicates the name of the field that is set and that its a relationship to another object.
+
+The value of this field must be an object with two fields.
+
+A field named type with the referenced object type name as value. In this case a custom `MyOtherCustomObject` type.
+
+A field with value and name appropriate to identify the right instance
+of `MyOtherCustomObject` to reference. In this case is the one with a value of `ABC123` for the field named `CustomField`.
+
+The following XML example shows how to update these objects:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata"
+    xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking"
+    xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+    xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xmlns:spring="http://www.springframework.org/schema/beans"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.springframework.org/schema/beans
+    http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/sfdc
+http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
+http://www.mulesoft.org/schema/mule/ee/dw
+http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking
+http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
+    <sfdc:config name="Salesforce__Basic_Authentication"
+        username="username"
+        password="password"
+        securityToken="token"
+        url="https://test.salesforce.com/services/Soap/u/34.0"
+        doc:name="Salesforce: Basic Authentication"/>
+    <flow name="DirectUpsert" initialState="stopped">
+        <poll doc:name="Poll">
+            <fixed-frequency-scheduler frequency="10000" startDelay="5000"/>
+            <set-payload
+                value="#[ [ ['Name' :'test'+server.dateTime, 'field_1__c' : 'test', 'OtherObject__r' : ['CustomField__c' : 'customFieldValue', 'type': 'MyOtherCustomObject__c'] ] ] ]"
+                doc:name="Set Payload"/>
+        </poll>
+
+<sfdc:upsert config-ref="Salesforce__Basic_Authentication" externalIdFieldName="Id"
+    type="MyCustomObject__c" doc:name="Salesforce">
+<sfdc:objects ref="#[payload]"/>
+</sfdc:upsert>
+        <logger message="Upsert completed!" level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="TransformBefore" initialState="stopped">
+        <poll doc:name="Poll">
+            <fixed-frequency-scheduler frequency="10000" startDelay="5000"/>
+            <set-payload
+                value="#[ {'name' :&quot;Paul&quot;, 'customData' : 'JULY 11TH', 'parentRef':  'Carlos' } ]"
+                doc:name="Set Payload"/>
+        </poll>
+        <dw:transform-message metadata:id="7f3eb56a-b4ee-49db-8722-8b303c1c8e7a"
+            doc:name="Transform Message">
+            <dw:input-payload doc:sample="Input.dwl"/>
+            <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+[{
+  Name: payload.name,
+  field_1__c: payload.customData,
+  OtherObject__r: {'CustomField__c' : payload.parentRef, 'type': 'MyOtherCustomObject__c'}
+}]]]></dw:set-payload>
+        </dw:transform-message>
+        <sfdc:upsert config-ref="Salesforce__Basic_Authentication"
+            externalIdFieldName="Id" type="MyCustomObject__c" doc:name="Salesforce">
+            <sfdc:objects ref="#[payload]"/>
+        </sfdc:upsert>
+        <logger message="#[payload[0].created ? &quot;Created&quot; : &quot;Updated&quot;]"
+         level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>
+----
+
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
