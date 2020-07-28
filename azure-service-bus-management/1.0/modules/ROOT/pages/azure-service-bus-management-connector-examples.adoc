@@ -1,0 +1,211 @@
+= Azure Service Bus Management 1.0 Examples - Mule 4
+
+. Declare and complete the variables previously described in the corresponding YAML file (for example: `src/main/resources/properties/kafka-producer.yaml`), and load that properties file as a global element.
++
+For more information about using a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders]
+
+You can check more use cases on the demo `mule-azure-service-bus-management-crud-demo` .
+
+== Get Queue Example
+
+image::get-queue.png[Get Queue Studio]
+
+. Create a new Mule project in Studio.
+. In the Mule Palette view, search for *HTTP* and select the *Listener* operation:
+. Drag the *Listener* operation onto the canvas.
+. In the *Listener* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. Set the *Path* field to `/queue`.
+
+=== Add and Configure the Get Entity Operation
+
+The *Get Entity* operation returns the specified queue.
+
+. In the *Mule Palette* view, search for *azure* and select the Azure Service Bus Management connector *Get Entity* operation.
+. Drag the *Get Entity* operation onto the canvas, to the right of the *Listener*.
+.  In the *Get Entity* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Enter values for the *SMS Namespace*, *Shared Access Key Name*, and *Shared Access Key* fieldsand click *OK*.
+. In the *Entity(Queue or Topic)* field, enter the name of the queue for that you want to view.
+
+=== Add a Transform Message Component
+
+The *Transform Message* component formats the data and shows how the metadata is rendered for the output of the *Get Entity* operation:
+
+. In the Mule Palette view, search for *transform*:
++
+image::amazon-sqs-select-transform.png[select-transform]
++
+. Drag the *Transform Message* component onto the canvas, to the right of the *Get Entity* component.
+. In the *Transform Message* configuration, change the display name to `Getting Data`.
+. Overlay the brackets in the *Output* section with this XML:
+
+[source,xml,linenums]
+----
+%dw 2.0
+output application/json
+ns ns0 http://www.w3.org/2005/Atom
+ns ns01 http://schemas.microsoft.com/netservices/2010/10/servicebus/connect
+---
+{
+"title": payload.ns0#entry.ns0#title,
+"publishedAt": payload.ns0#entry.ns0#published,
+"lockDuration": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#LockDuration,
+"maxSize": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#MaxSizeInMegabytes,
+"requiresDuplicate": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#RequiresDuplicateDetection,
+"requiresSession": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#RequiresSession,
+"deadLettering": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#DeadLetteringOnMessageExpiration,
+"enabledBatched": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#EnableBatchedOperations,
+"defaultMTTL": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#DefaultMessageTimeToLive,
+"duplicateDetection": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#DuplicateDetectionHistoryTimeWindow,
+}
+----
+. Drag and drop a Logger component to the flow to see the queue just collected.
+. Save and run the project as a Mule Application.
+. Test the app by navigating to `http://127.0.0.1:8081/queue`
+
+=== XML Code for the Get Queue Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns:azure-service-bus-management="http://www.mulesoft.org/schema/mule/azure-service-bus-management"
+xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-management http://www.mulesoft.org/schema/mule/azure-service-bus-management/current/mule-azure-service-bus-management.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+<azure-service-bus-management:config name="Azure_Service_Bus_Management_Connector_Config" doc:name="Azure Service Bus Management Connector Config"  >
+<azure-service-bus-management:shared-access-signature-connection namespace="azure-management-testing" sharedAccessKeyName="RootManageSharedAccessKey" sharedAccessKey="FgBRI++kphTGJcr2OL8G3BLLAdAn3p7newgQ2Ixf7hk="/>
+</azure-service-bus-management:config>
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+<http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+<flow name="azure-management-flow"  >
+<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="queue"/>
+<azure-service-bus-management:get-by-entity doc:name="Get Entity" config-ref="Azure_Service_Bus_Management_Connector_Config" entity="your-queue"/>
+<ee:transform doc:name="Getting data"  >
+<ee:message >
+<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+ns ns0 http://www.w3.org/2005/Atom
+ns ns01 http://schemas.microsoft.com/netservices/2010/10/servicebus/connect
+---
+{
+"title": payload.ns0#entry.ns0#title,
+"publishedAt": payload.ns0#entry.ns0#published,
+"lockDuration": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#LockDuration,
+"maxSize": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#MaxSizeInMegabytes,
+"requiresDuplicate": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#RequiresDuplicateDetection,
+"requiresSession": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#RequiresSession,
+"deadLettering": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#DeadLetteringOnMessageExpiration,
+"enabledBatched": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#EnableBatchedOperations,
+"defaultMTTL": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#DefaultMessageTimeToLive,
+"duplicateDetection": payload.ns0#entry.ns0#content.ns01#QueueDescription.ns01#DuplicateDetectionHistoryTimeWindow,
+}]]></ee:set-payload>
+</ee:message>
+</ee:transform>
+<logger level="INFO" doc:name="Logger"  message="#[payload]"/>
+</flow>
+----
+
+== Create Topic Example
+
+image::create-topic.png[Create Topic Studio]
+
+. Create a new Mule project in Studio.
+. In the Mule Palette view, search for *HTTP* and select the *Listener* operation:
+. Drag the *Listener* operation onto the canvas.
+. In the *Listener* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Set the *Host* field to 0.0.0.0, the *Port* field to `808`, and click *Save*.
+. Set the *Path* field to `/topic`.
+
+=== Add and Configure the Create or Update Entity Operation
+
+. In the *Mule Palette* view, search for *azure service bus management* and select the *Create or Update Entity* operation.
+. Drag the *Create or Update Entity* operation onto the canvas, to the right of *Listener*.
+. Configure the Azure Service Bus Management connector global element with its environment values.
+. Fill the parameters of the operation.
+. Add a transform message after the connector and add an output like this:
+
+[source,xml,linenums]
+----
+%dw 2.0
+output application/json
+ns ns0 http://www.w3.org/2005/Atom
+ns ns01 http://schemas.microsoft.com/netservices/2010/10/servicebus/connect
+---
+{
+title: payload.ns0#entry.ns0#title,
+publishedAt: payload.ns0#entry.ns0#published,
+maxSize: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#MaxSizeInMegabytes,
+requiresDuplicate: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#RequiresDuplicateDetection,
+enableBatched: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#EnableBatchedOperations,
+defaultMTTL: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#DefaultMessageTimeToLive,
+duplicateDetection: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#DuplicateDetectionHistoryTimeWindow,
+}
+----
+
+. Drag and drop a Logger component to the flow to see the Topic just created.
+
+. Save and run the project as a Mule Application.
+. Test the app by navigatomg to `http://127.0.0.1:8081/topic`.
+
+=== XML for the Create Topic Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns:azure-service-bus-management="http://www.mulesoft.org/schema/mule/azure-service-bus-management"
+xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-management http://www.mulesoft.org/schema/mule/azure-service-bus-management/current/mule-azure-service-bus-management.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+<azure-service-bus-management:config name="Azure_Service_Bus_Management_Connector_Config" doc:name="Azure Service Bus Management Connector Config" doc:id="a59bdeee-75d3-4708-b3e1-923189366fcf" >
+<azure-service-bus-management:shared-access-signature-connection namespace="azure-management-testing" sharedAccessKeyName="RootManageSharedAccessKey" sharedAccessKey="FgBRI++kphTGJcr2OL8G3BLLAdAn3p7newgQ2Ixf7hk="/>
+</azure-service-bus-management:config>
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="d3ad3e78-e927-47fd-9aa9-997c5d3cb5ff" >
+<http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+<flow name="azure-management-flow" doc:id="2ca28772-b9ce-44ec-a0d3-68568789cb8e" >
+<http:listener doc:name="Listener" doc:id="60a97736-63e4-42bb-8487-e656cad985d6" config-ref="HTTP_Listener_config" path="topic"/>
+<azure-service-bus-management:update-by-entity doc:name="Create or Update Entity" doc:id="b7bda909-831f-4e05-b4da-810adb8b541d" config-ref="Azure_Service_Bus_Management_Connector_Config" entity="topicName">
+<azure-service-bus-management:content ><![CDATA[#['<?xml version="1.0" encoding="UTF-8"?>
+<entry xmlns="http://www.w3.org/2005/Atom">
+<content type="application/xml">
+<TopicDescription xmlns="http://schemas.microsoft.com/netservices/2010/10/servicebus/connect">
+<MaxSizeInMegabytes>1024</MaxSizeInMegabytes>
+<RequiresDuplicateDetection>false</RequiresDuplicateDetection>
+<EnableBatchedOperations>false</EnableBatchedOperations>
+<DefaultMessageTimeToLive>PT256204778H48M5S</DefaultMessageTimeToLive>
+<DuplicateDetectionHistoryTimeWindow>PT10M</DuplicateDetectionHistoryTimeWindow>
+</TopicDescription>
+</content>
+</entry>']]]></azure-service-bus-management:content>
+</azure-service-bus-management:update-by-entity>
+<ee:transform doc:name="Getting data" doc:id="67b79a1a-2eec-4ed5-a160-c44b14da829b" >
+<ee:message >
+<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+ns ns0 http://www.w3.org/2005/Atom
+ns ns01 http://schemas.microsoft.com/netservices/2010/10/servicebus/connect
+---
+{
+title: payload.ns0#entry.ns0#title,
+publishedAt: payload.ns0#entry.ns0#published,
+maxSize: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#MaxSizeInMegabytes,
+requiresDuplicate: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#RequiresDuplicateDetection,
+enableBatched: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#EnableBatchedOperations,
+defaultMTTL: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#DefaultMessageTimeToLive,
+duplicateDetection: payload.ns0#entry.ns0#content.ns01#TopicDescription.ns01#DuplicateDetectionHistoryTimeWindow,
+}]]></ee:set-payload>
+</ee:message>
+</ee:transform>
+<logger level="INFO" doc:name="Logger" doc:id="577d2989-1b0b-4c95-a16b-3cce4b4ccaca" message="#[payload]"/>
+</flow>
+</mule>
+----
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
