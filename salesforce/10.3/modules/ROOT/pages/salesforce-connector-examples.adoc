@@ -267,106 +267,78 @@ A Salesforce object can have standard or custom relationships between objects.
 
 The relationships between the objects are usually one-to-many parent child relationships, but can be any link between two objects residing in Salesforce.
 
-Creating or altering objects with relationships is challenging. This section shows how to perform an upsert for an object using Salesforce Connector.
+Creating or altering objects with relationships is challenging. This example shows how to create the object relationship structure in Salesforce to perform an upsert for an object using Salesforce Connector.
 
-Create a structure in Salesforce for this relationship.
+This example uses two custom Salesforce object types: `Component__c` and `Plane__c`. The `Plane__c` entity must already exist in your environment.
 
-This example assumes two custom types: `MyCustomObject` and `MyOtherCustomObject`.
+The `Component__c` and `Plane__c` objects must have a relationship with one another, and `Plane__r` specifies the name of the relationship between the two objects.
 
-MyCustomObject must hold a relationship to a MyOtherCustomObject. When upserting a `MyCustomObject`, the POJO sent as input to Salesforce Connector looks like this:
+When you upsert `Component__c`, the POJO that is sent as input to Salesforce Connector looks like this:
 
-[source,xml,linenums]
+[source,linenums]
 ----
-{
-  ...
-  // MyCustomObject's fields ...
-  OtherObject__r:
-  {
-    CustomField__c : 'ABC123',
-    type: 'MyOtherCustomObject__c'
-  }
-}
+[{
+	// Component__c's fields ...
+	Plane__r: {
+		"type": "Plane__c",
+		"Name": "Cobra"
+	}
+}]
 ----
 
-`OtherObject` is the name of `MyCustomObject` field whose value must be a reference to a `MyOtherCustomObject` object. `OtherObject__r` indicates the name of the field that is set and that its a relationship to another object.
+In addition to the fields of the `Component__c` object that you want to create, you must specify the relationship with the parent `Plane__c` object in the `Plane__r` field. 
 
-The value of this field must be an object with two fields.
+The value of the `Plane__r` field must be an object with two fields. In this example, there is: 
 
-A field named type with the referenced object type name as value. In this case a custom `MyOtherCustomObject` type.
+* A field named `type` with the referenced object named `Plane__c` as its value. 
+* A `Name` field with a value that identifies the correct instance (`Cobra) of `Plane__c` to reference. 
 
-A field with value and name appropriate to identify the right instance
-of `MyOtherCustomObject` to reference. In this case it is the one with a value of `ABC123` for the field named `CustomField`.
+This means that the `Component__c` that you are upserting has the entity `Plane__c` with the name `Cobra` as its parent. 
 
-The following XML example shows how to update these objects:
+The following XML example shows how to upsert these objects:
 
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata"
-    xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking"
-    xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
-    xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc"
-    xmlns="http://www.mulesoft.org/schema/mule/core"
-    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-  xmlns:spring="http://www.springframework.org/schema/beans"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://www.springframework.org/schema/beans
-    http://www.springframework.org/schema/beans/spring-beans-current.xsd
-http://www.mulesoft.org/schema/mule/sfdc
-http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd
-http://www.mulesoft.org/schema/mule/ee/dw
-http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
-http://www.mulesoft.org/schema/mule/core
-http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/ee/tracking
-http://www.mulesoft.org/schema/mule/ee/tracking/current/mule-tracking-ee.xsd">
-    <sfdc:config name="Salesforce__Basic_Authentication"
-        username="username"
-        password="password"
-        securityToken="token"
-        url="https://test.salesforce.com/services/Soap/u/34.0"
-        doc:name="Salesforce: Basic Authentication"/>
-    <flow name="DirectUpsert" initialState="stopped">
-        <poll doc:name="Poll">
-            <fixed-frequency-scheduler frequency="10000" startDelay="5000"/>
-            <set-payload
-                value="#[ [ ['Name' :'test'+server.dateTime, 'field_1__c' : 'test', 'OtherObject__r' : ['CustomField__c' : 'customFieldValue', 'type': 'MyOtherCustomObject__c'] ] ] ]"
-                doc:name="Set Payload"/>
-        </poll>
-
-<sfdc:upsert config-ref="Salesforce__Basic_Authentication" externalIdFieldName="Id"
-    type="MyCustomObject__c" doc:name="Salesforce">
-<sfdc:objects ref="#[payload]"/>
-</sfdc:upsert>
-        <logger message="Upsert completed!" level="INFO" doc:name="Logger"/>
-    </flow>
-    <flow name="TransformBefore" initialState="stopped">
-        <poll doc:name="Poll">
-            <fixed-frequency-scheduler frequency="10000" startDelay="5000"/>
-            <set-payload
-                value="#[ {'name' :&quot;Paul&quot;, 'customData' : 'JULY 11TH', 'parentRef':  'Carlos' } ]"
-                doc:name="Set Payload"/>
-        </poll>
-        <dw:transform-message metadata:id="7f3eb56a-b4ee-49db-8722-8b303c1c8e7a"
-            doc:name="Transform Message">
-            <dw:input-payload doc:sample="Input.dwl"/>
-            <dw:set-payload><![CDATA[%dw 1.0
-%output application/java
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="88f6a4cd-e00a-46c6-b0a0-aaf99fb2dd74" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="5605405f-3c7b-40d9-bc64-af06ebdfc8dd" >
+		<salesforce:basic-connection username="user" password="pass" securityToken="token" />
+	</salesforce:sfdc-config>
+	<flow name="Copy_of_idp-policy-benefitsFlow" doc:id="e26d68af-d4fb-45f3-9eaa-1f320ffba2b2" >
+		<http:listener doc:name="Listener" doc:id="e8014cfd-3af7-43ca-99ef-cd231cda02fd" config-ref="HTTP_Listener_config" path="/" />
+		<ee:transform doc:name="Transform Message" doc:id="a0353598-6084-4053-88ab-b2b67ecd4531" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
 ---
 [{
-  Name: payload.name,
-  field_1__c: payload.customData,
-  OtherObject__r: {'CustomField__c' : payload.parentRef, 'type': 'MyOtherCustomObject__c'}
-}]]]></dw:set-payload>
-        </dw:transform-message>
-        <sfdc:upsert config-ref="Salesforce__Basic_Authentication"
-            externalIdFieldName="Id" type="MyCustomObject__c" doc:name="Salesforce">
-            <sfdc:objects ref="#[payload]"/>
-        </sfdc:upsert>
-        <logger message="#[payload[0].created ? &quot;Created&quot; : &quot;Updated&quot;]"
-         level="INFO" doc:name="Logger"/>
-    </flow>
+	Name: "NewPlaneComponent",
+	Plane__r: {
+		"type": "Plane__c",
+		"Name": "Cobra"
+	}
+}]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert objectType="Component__c" doc:name="Upsert" doc:id="3bbdcfd6-09a4-43cf-bc75-19fb24ed33b1" config-ref="Salesforce_Config" externalIdFieldName="Id"/>
+		<ee:transform doc:name="Transform Message" doc:id="ed6dcb06-ef6a-4332-a715-e2f27498801b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
 </mule>
 ----
 
