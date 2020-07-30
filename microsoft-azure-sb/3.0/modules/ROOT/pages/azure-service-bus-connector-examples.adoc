@@ -1,6 +1,9 @@
 = Azure Service Bus Connector 3.0 Examples - Mule 4
 
-The examples in this section show how to send and receive messages. 
+The examples in this section show application flows that:
+
+* <<send-receive,Sends messages to and receives messages>> from Azure
+* <<send-listen-ack, Sends and listens for messages and receives an acknowledgment using the `MANUAL` acknowledgment type
 
 These examples use variables for some field values. You can either:
 
@@ -39,7 +42,7 @@ queue.name=mytestqueue
 . Save the file.
 . Open the *Global Element Configuration* and click *Test Connection* to verify your credentials.
 
-
+[[send-receive]]
 == Example Send and Receive Flow
 
 This flow shows an example of how to use the Send and Receive From Queue operations to  send and receive messages:
@@ -125,9 +128,91 @@ attributes]]></ee:set-variable>
 +
 . When you are prompted to regenerate `doc:id` values, click *Yes*.
 . Save the project.
-. At the base of the canvas, click 
-. 
 
+[[send-listen-ack]] 
+== Example Send, Listen, and Acknowledge the Message 
+
+This application flow uses the *Send* and *Message Listener* operations. The *Message Listener* is using the `MANUAL` acknowledgment type, which means that the application logic is responsible for acknowledging receipt of the message, so the *Complete* operation is also added to the same flow as the *Message Listener*.
+
+The following screenshot shows this flow:
+
+image::azure-service-bus-send-listen-manual-ack.png[This is the application flow that shows the way the Send, Message Listener, and Complete operations are used]
+
+To create this flow:
+
+. In the Studio canvas, click *Configuration XML*.
+. Delete all the contents after the line `<?xml version="1.0" encoding="UTF-8"?>`.
+. Copy and paste the following XML after the line `<?xml version="1.0" encoding="UTF-8"?>`:
++
+[source,xml,linenums]]
+----
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns:azure-service-bus-messaging="http://www.mulesoft.org/schema/mule/azure-service-bus-messaging" xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-messaging http://www.mulesoft.org/schema/mule/azure-service-bus-messaging/current/mule-azure-service-bus-messaging.xsd">
+	<configuration-properties file="mule-app.properties" doc:name="Configuration properties"/>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="290d1aa8-2e61-4707-8f04-65f0e5e4cf07" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<azure-service-bus-messaging:config name="Azure_Service_Bus_Messaging_Connector_Config" doc:name="Azure Service Bus Messaging Connector Config" doc:id="71d0e711-6d29-4eff-b640-00986a41dfbc" >
+		<azure-service-bus-messaging:sas-connection namespace="${azure.namespace}" sharedAccessKeyName="${azure.keyname}" sharedAccessKey="${azure.key}" />
+	</azure-service-bus-messaging:config>
+	<flow name="send-endpoint-flow" doc:id="2c8bce62-f192-4db2-9c70-792a5e78ac7f" >
+		<http:listener doc:name="Send Queue Endpoint" doc:id="aa79c404-2e41-4453-9fde-18b8ea74c805" config-ref="HTTP_Listener_config" path="/sendMessage" />
+		<ee:transform doc:name="Set Payload and Attributes" doc:id="bddebf8d-6d63-4db0-990f-94ecec23ddbd" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	key1: "value1",
+	key2: "value2 for Queue"
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="messageAttributes" ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	messageId: "messageId1234",
+	correlationStrategy: "AUTO",
+	correlationId: "correlationId",
+	label: "my_label",
+	partitionKey: "the_partition_key",
+	timeToLive: 60,
+	ttlTimeUnit: "SECONDS",
+	scheduledEnqueueTimeUtc: "2018-12-09 03:01:00.000",
+	properties: {
+		property1: "value1",
+		property2: "value2"
+	}
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<azure-service-bus-messaging:send doc:name="Queue Send" doc:id="50b3592c-f777-4667-b042-00fd266120e8" config-ref="Azure_Service_Bus_Messaging_Connector_Config" destinationName="${queue.name}" messageId='#[vars.messageAttributes.messageId]' correlationId="#[vars.messageAttributes.correlationId]" label="#[vars.messageAttributes.label]" sendCorrelationStrategy="#[vars.messageAttributes.correlationStrategy]" partitionKey="#[vars.messageAttributes.partitionKey]" timeToLive="#[vars.messageAttributes.timeToLive]" scheduledEnqueueTimeUtc='#[vars.messageAttributes.scheduledEnqueueTimeUtc  as LocalDateTime {format: "yyyy-MM-dd HH:mm:ss.SSS"}]' timeToLiveTimeUnit="#[vars.messageAttributes.ttlTimeUnit]" properties="#[vars.messageAttributes.properties]">
+		</azure-service-bus-messaging:send>
+	</flow>
+	<flow name="listener-manual-ack-flow" doc:id="541d4149-41b1-43e4-8d61-c16cf3ee502f" >
+		<azure-service-bus-messaging:message-listener doc:name="Message listener" doc:id="cb61833e-9e1f-48b3-9430-a83b47c11a4c" config-ref="Azure_Service_Bus_Messaging_Connector_Config" ackMode="MANUAL" destinationName="${queue.name}" numberOfConsumers="1"/>
+		<logger level="INFO" doc:name="Log the message" doc:id="d802b081-f3fc-4ec2-a23c-96bc0db3863c" message="#[payload]"/>
+		<ee:transform doc:name="Attributes to Json" doc:id="a509a361-4bd7-4c6e-81cc-39ad36e7b625" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+attributes]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log Attributes" doc:id="94e7254c-a197-4fa2-b437-b64719acb23d" message="#[payload]"/>
+		<azure-service-bus-messaging:complete-message doc:name="Ack of Message" doc:id="6aa7238b-3bc9-4a61-a39b-e1bd260ee7c5" config-ref="Azure_Service_Bus_Messaging_Connector_Config" lockToken="#[attributes.lockToken]" />
+		<logger level="INFO" doc:name="Log Lock Token" doc:id="a91eea3e-231a-4675-9457-b6c7366ab647" message='#["LockToken = " ++ payload.lockToken]'/>
+	</flow>
+</mule>
+----
 
 == See Also
 
