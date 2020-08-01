@@ -1,0 +1,159 @@
+= Web Service Consumer Example
+:page-aliases: 3.5@mule-runtime::web-service-consumer-example.adoc
+
+*_Enterprise, CloudHub_*
+
+This application illustrates how to consume an existing Web service. There are two kinds of operations the application performs in two separate flows: one flow issues T-shirt purchase orders, the other requests an inventory list.
+
+== Web Service Consumer
+
+The xref:index.adoc[Web Service Consumer] is a connector that encapsulates all the functionality related to consuming a Web service, greatly simplifying its implementation. Using the information contained in a service's WSDL, this connector enables you to configure a few details in order to establish the connection you need to consume a service from within your Mule application.
+
+== Prerequisites
+
+This document assumes that you are familiar with Mule ESB and the xref:5@studio::basic-studio-tutorial.adoc[Anypoint Studio interface]. To increase your familiarity with Studio, consider completing one or more xref:5@studio::basic-studio-tutorial.adoc[Anypoint Studio Tutorials]. Further, this example assumes you are familiar with XML coding and that you have a basic understanding of xref:3.5@mule-runtime::mule-application-architecture.adoc[Mule flows], SOAP as a Web service paradigm, and the practice of WSDL-first Web service development.
+
+This document describes the details of the example within the context of Anypoint Studio, Mule ESB’s graphical user interface (GUI), and includes configuration details for both the visual and XML editors.
+
+== Example Use Case
+
+This example application simulates consuming a Web service that belongs to a T-Shirt retailer. Through HTTP requests, customers can check availability of products and place purchase orders. When the consumer app receives an order request, it turns the JSON input into XML, adds an APIKey variable, then performs a request to the Web service, transforms the response into JSON and builds a final response to send back to the requester. +
+
+When the consumer app receives a list-inventory request, it forwards the request to the Web service, turns the response into JSON and builds a final response for the requester.
+
+== Set Up and Run the Example
+
+Complete the following procedure to create, then run this example in your own instance of Anypoint Studio. You can create template applications straight out of the box in Anypoint Studio and tweak the configurations to create your own customized application.
+
+Skip ahead to the xref:3.5@mule-runtime::xml-only-soap-web-service-example.adoc[XML-only SOAP Web Service Example] if you prefer to simply examine this example via screenshots and code snippets.
+
+. xref:3.5@mule-runtime::mule-examples.adoc[Create, then run] the example application in Anypoint Studio.
+. Send posts to your application via a browser extension such as Postman (for Google Chrome), or the http://curl.haxx.se/[curl] command-line utility. +
+* Send your request to the address `http://localhost:8081/orders`
+* Append the following JSON code to it:
+
+[source,text,linenums]
+----
+{
+  "email":"info@mulesoft.com",
+  "address1":"Corrientes 316",
+  "address2":"EP",
+  "city":"Buenos Aires",
+  "country":"Argentina",
+  "name":"MuleSoft Argentina",
+  "postalCode":"C1043AAQ",
+  "size":"L",
+  "stateOrProvince":"CABA"
+}
+----
+
+== How It Works
+
+The Client-Side T-Shirt API example consumes a SOAP-based Web service, which accepts two different kinds of requests, each handled in a different flow, accessed through a different HTTP path.
+
+
+=== orderTshirt Flow
+
+The orderTshirt flow accepts HTTP requests that are directed at its address, then turns the JSON payload into XML by using the DataMapper. As the consumed Web service requires an APIKey to be passed with every request, the flow creates an APIKey variable with a hardcoded value, then uses DataMapper to pass this variable to an XML header. With the XML envelope built, the flow then contacts the Web service via the Web Service Consumer. This flow is also responsible for returning a response to the caller to confirm that the order was processed, for this it first transforms the resulting response to JSON and then uses the HTTP Response Builder to set the content type to `application/json` to make it readable on a browser.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+image::ordertshirt.png[orderTshirt]
+
+[discrete.view]
+=== XML Editor
+
+[source,xml,linenums]
+----
+<flow doc:name="orderTshirt" name="orderTshirt">
+        <http:inbound-endpoint doc:name="HTTP" exchange-pattern="request-response" host="localhost" path="orders" port="8001"/>
+        <data-mapper:transform config-ref="json_to_xml_ordertshirt_" doc:name="JSON To Xml&lt;OrderTshirt>"/>
+        <set-variable doc:name="Set API Key" value="#['abc12345']" variableName="apiKey"/>
+        <data-mapper:transform config-ref="string_to_xml_authenticationheader_" doc:name="String To Xml&lt;AuthenticationHeader>" input-ref="#[flowVars[&quot;apiKey&quot;]]" target="#[message.outboundProperties[&quot;soap.header&quot;]]"/>
+        <ws:consumer config-ref="Web_Service_Consumer" doc:name="Order Tshirt" operation="OrderTshirt"/>
+        <data-mapper:transform config-ref="xml_ordertshirtresponse__to_json" doc:name="Xml&lt;OrderTshirtResponse> To JSON" returnClass="java.lang.String"/>
+        <http:response-builder contentType="application/json" doc:name="HTTP Response Builder" status="200"/>
+    </flow>
+----
+=====
+
+=== listInventory Flow
+
+When issued a "list inventory" request, the flow directs it to the Web service via the Web service consumer, its response is then transformed into a JSON by the DataMapper, then the HTTP Response Builder sets the message's content type to `application/json` to make it readable on a browser. Finally, the HTTP connector returns the response to the requester.
+
+[.ex]
+=====
+[discrete.view]
+=== Studio Visual Editor
+
+image::listinventory.png[listInventory]
+
+[discrete.view]
+=== XML Editor
+
+[source,xml,linenums]
+----
+<flow doc:name="listInventory" name="listInventory">
+        <http:inbound-endpoint doc:name="HTTP" exchange-pattern="request-response" host="localhost" path="inventory" port="8001"/>
+        <ws:consumer config-ref="Web_Service_Consumer" doc:name="List Inventory" operation="ListInventory"/>
+        <data-mapper:transform config-ref="xml_listinventoryresponse__to_json" doc:name="Xml&lt;ListInventoryResponse> To JSON" returnClass="java.lang.String"/>
+        <http:response-builder contentType="application/json" doc:name="HTTP Response Builder" status="200"/>
+    </flow>
+----
+=====
+
+=== Complete Code
+
+[.ex]
+=====
+[discrete.view]
+=== Visual Studio Editor
+
+image::full-flow.png[full+flow]
+
+[discrete.view]
+=== XML Editor
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:data-mapper="http://www.mulesoft.org/schema/mule/ee/data-mapper" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:spring="http://www.springframework.org/schema/beans" xmlns:tracking="http://www.mulesoft.org/schema/mule/ee/tracking" xmlns:ws="http://www.mulesoft.org/schema/mule/ws" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/3.5/mule.xsd
+http://www.mulesoft.org/schema/mule/ws http://www.mulesoft.org/schema/mule/ws/3.5/mule-ws.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/3.5/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/data-mapper http://www.mulesoft.org/schema/mule/ee/data-mapper/3.5/mule-data-mapper.xsd
+http://www.mulesoft.org/schema/mule/ee/tracking http://www.mulesoft.org/schema/mule/ee/tracking/3.5/mule-tracking-ee.xsd">
+    <ws:consumer-config doc:name="Web Service Consumer" name="Web_Service_Consumer" port="TshirtServicePort" service="TshirtService" serviceAddress="http://tshirt-service.cloudhub.io" wsdlLocation="C:\Users\studio\AnypointStudio\workspace-clean-2\tshirt-service-consumer\src\main\resources\tshirt.wsdl.xml"/>
+    <data-mapper:config doc:name="xml_listinventoryresponse__to_json" name="xml_listinventoryresponse__to_json" transformationGraphPath="xml_listinventoryresponse__to_json.grf"/>
+    <data-mapper:config doc:name="json_to_xml_ordertshirt_" name="json_to_xml_ordertshirt_" transformationGraphPath="json_to_xml_ordertshirt_.grf"/>
+    <data-mapper:config doc:name="xml_ordertshirtresponse__to_json" name="xml_ordertshirtresponse__to_json" transformationGraphPath="xml_ordertshirtresponse__to_json.grf"/>
+    <data-mapper:config doc:name="string_to_xml_authenticationheader_" name="string_to_xml_authenticationheader_" transformationGraphPath="string_to_xml_authenticationheader_.grf"/>
+
+    <flow doc:name="orderTshirt" name="orderTshirt">
+        <http:inbound-endpoint doc:name="HTTP" exchange-pattern="request-response" host="localhost" path="orders" port="8001"/>
+        <data-mapper:transform config-ref="json_to_xml_ordertshirt_" doc:name="JSON To Xml&lt;OrderTshirt>"/>
+        <set-variable doc:name="Set API Key" value="#['abc12345']" variableName="apiKey"/>
+        <data-mapper:transform config-ref="string_to_xml_authenticationheader_" doc:name="String To Xml&lt;AuthenticationHeader>" input-ref="#[flowVars[&quot;apiKey&quot;]]" target="#[message.outboundProperties[&quot;soap.header&quot;]]"/>
+        <ws:consumer config-ref="Web_Service_Consumer" doc:name="Order Tshirt" operation="OrderTshirt"/>
+        <data-mapper:transform config-ref="xml_ordertshirtresponse__to_json" doc:name="Xml&lt;OrderTshirtResponse> To JSON" returnClass="java.lang.String"/>
+        <http:response-builder contentType="application/json" doc:name="HTTP Response Builder" status="200"/>
+    </flow>
+    <flow doc:name="listInventory" name="listInventory">
+        <http:inbound-endpoint doc:name="HTTP" exchange-pattern="request-response" host="localhost" path="inventory" port="8001"/>
+        <ws:consumer config-ref="Web_Service_Consumer" doc:name="List Inventory" operation="ListInventory"/>
+        <data-mapper:transform config-ref="xml_listinventoryresponse__to_json" doc:name="Xml&lt;ListInventoryResponse> To JSON" returnClass="java.lang.String"/>
+        <http:response-builder contentType="application/json" doc:name="HTTP Response Builder" status="200"/>
+    </flow>
+</mule>
+----
+=====
+
+== See Also
+
+* Learn more about about the xref:web-service-consumer-reference.adoc[Web Service Consumer].
+* Learn more about the xref:3.5@mule-runtime::http-response-builder.adoc[HTTP Response Builder].
+* See xref:6@studio::datamapper-user-guide-and-reference.adoc[Anypoint DataMapper User Guide and Reference].
+* Learn more about how xref:api-manager::index.adoc[API Manager] can help you organize your organization's services.
