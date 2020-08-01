@@ -7,7 +7,155 @@ In the `Create Object` operation, set the `Content Length` to a value greater th
 
 == Use an AWS KMS Master Key
 
-To encrypt objects that you want to store in S3 buckets using customer managed master keys, specify a Customer Master Key ID in the `KMS Master Key` field in the `Create Object` configuration.
+To encrypt objects that you want to store in S3 buckets using customer-managed master keys, specify a Customer Master Key ID in the `KMS Master Key` field in the `Create Object` configuration.
+
+== Prerequisites for Source Operations
+
+Amazon S3 source operations use Amazon SQS for notification of when a new object is created or deleted in an S3 bucket. 
+
+There are two scenarios for the `On New Object` and `On Deleted Object` Amazon S3 source operations:
+
+. The <<queue-is-created,queue is already created>> and specified
+. The <<queue-created-by-source,queue is created>> by the source
+
+[[queue-is-created]]
+== Queue Is Already Created
+
+To correctly use a source for a queue that already exists, the user must have these actions enabled for the Amazon SQS queue:
+
+[source,json,linenums]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:DeleteMessage",
+                "sqs:GetQueueUrl",
+                "sqs:ReceiveMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:QUEUE_NAME"
+        }
+    ]
+}
+----
+
+Additionally, to enable the queue to receive messages when a new object is created or deleted in an S3 bucket, create a policy for the queue in this format:
+
+[source,json,linenums]
+----
+{
+  "Version": "2012-10-17",
+  "Id": "arn:aws:sqs:REGION:ACCOUNT_ID:QUEUE_NAME/SQSDefaultPolicy",
+  "Statement": [
+    {
+      "Sid": "Sid1593770403887",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "SQS:SendMessage",
+      "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:QUEUE_NAME",
+      "Condition": {
+        "ArnLike": {
+          "aws:SourceArn": "arn:aws:s3:::BUCKET_NAME"
+        }
+      }
+    }
+  ]
+}
+----
+
+[[queue-created-by-source]]
+== Queue Is Created by Source
+
+If the queue is created by the source operation, the queue name has the prefix `MULE-S3-TRIGGER`. 
+
+When the queue is created by the source, the user must have permission to both create a queue and set the queue attributes:
+
+[source,json,linenums]
+----
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:DeleteMessage",
+                "sqs:ReceiveMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:CreateQueue",
+                "sqs:SetQueueAttributes"
+                "sqs:GetQueueUrl"
+            ],
+            "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:MULE-S3-TRIGGER-*"
+        }
+    ]
+}
+----
+
+When the queue is created by the source operation, an SQS policy is added to the queue when the S3 object is created or deleted in the bucket in the following format:
+
+
+[source,json,linenums]
+----
+{
+  "Version": "2012-10-17",
+  "Id": "example-ID",
+  "Statement": [
+    {
+      "Sid": "example-statement-ID",
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "*"
+    },
+      "Action": "SQS:SendMessage",
+      "Resource":QUEUE_ARN,
+      "Condition": {
+        "ArnLike": {
+          "aws:SourceArn": "BUCKET_ARN"
+        }
+      }
+    }
+  ]
+}
+----
+
+== S3 Policy Bucket
+
+For the S3 policy, use this format for both cases:
+
+[source,json,linenums]
+----
+{
+    "Version": "2012-10-17",
+    "Id": "Policy1593761427184",
+    "Statement": [
+        {
+            "Sid": "Stmt1593760119344",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "arn:aws:iam::ACCOUNT_ID:user/test"
+            },
+            "Action": "SPECIFIC_ACTION",
+            "Resource": "arn:aws:s3:::BUCKET_NAME/*"
+        },
+        {
+            "Sid": "Stmt1593760259223",
+            "Effect": "Allow",
+            "Principal": {
+                "AWS": "arn:aws:iam::ACCOUNT_ID:user/test"
+            },
+            "Action": ["s3:PutBucketNotification", "s3:GetBucketNotification"],
+            "Resource": "arn:aws:s3:::BUCKET_NAME"
+        }
+    ]
+}
+----
+
+In this example, the *SPECIFIC_ACTION* is `s3:PutObject` or `s3:DeleteObject`, depending on the specified source operation.
 
 == Next Step
 
