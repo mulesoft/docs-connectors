@@ -3,41 +3,22 @@
 
 Read this topic to obtain additional configuration and usage information for Anypoint Connector for Salesforce (Salesforce Connector).
 
-[[customevents]]
-== Custom Event Notifications
+[[eventshandling]]
+== Handling Events with Salesforce Connector
 
-Salesforce Connector enables you to obtain custom event notifications. These notifications apply to general events that are not tied to Salesforce data changes.
+You can use Salesforce Connector as an inbound connector to stream data from Salesforce into your application. To use the connector in this capacity, use one of these input sources:
 
-To obtain custom event notifications:
+* Subscribe topic listener
+* Subscribe channel listener
+* Replay topic listener
+* Replay channel listener
 
-. Create a streaming channel by using the Publish streaming channel operation.
-+
-StreamingChannel is a special Salesforce object that represents a channel used to notify listeners of generic Streaming API events.
-+
-You can also create a streaming channel through Salesforce or https://workbench.developerforce.com/about.php[
-Workbench].
-+
-. Subscribe to the channel by using the Subscribe channel listener operation.
-+
-Salesforce Connector converts the custom events in your streaming channel to Mule events.
+For the Replay Topic Listener and Replay Channel Listener, in order to enable the *Resume from the Last Replay Id* functionality, the connector must store some information regarding the events that were successfully processed by the flow in which the listener is used. In order to do so, the connector is using the Object Store. For more details of how the Object Store is used check the <<objectstoreusage, Object Store Usage>> section.
 
-For more information about working with streaming channels, see <<streamingchannel,Create a Streaming Channel to Receive Data from Salesforce>> and <<receivedata,Receive Data from Salesforce>>.
+Please keep in mind that when deploying on a distributed environment(such as CloudHub), the source needs to run on the primary node. If the same source runs on multiple nodes, then you will experience duplicate event consumption.
 
-[[eventsandtopics]]
-== Events and Topics
-
-Your app can receive events by subscribing to an existing Salesforce topic or by creating a new topic and then subscribing to it.
-
-Each event that travels through your flow contains information about the Salesforce data that changed, including how the data changed and when the change occurred.
-
-Salesforce stores events for 24 hours. A subscriber to a topic or channel can retrieve events related to that topic or channel during the 24-hour retention window. After the retention window ends, the subscriber can retrieve newer events that have not yet expired.
-
-Salesforce assigns each broadcast event a numeric ID. IDs are incremented, but not necessarily by 1 for each consecutive event. For example, the event following the event with ID 999 can have an ID of 1025. A broadcast event ID is unique for the organization and channel. Salesforce does not reuse the IDs of deleted events.
-
-For information about processing events when streaming data to an app from Salesforce, see <<Receive Data from Salesforce>>.
-
-[[eventsreceive]]
-=== Receive Events for a Topic
+[[createtopic]]
+=== Create a Topic to Receive Data from Salesforce
 
 Before you can receive events for Salesforce changes associated with a topic, you must create the topic, if it does not exist. When you create a topic, the connector creates a PushTopic, which is a special object in Salesforce that binds a name (in this case, the topic's name) and a Salesforce Object Query Language (SOQL) query together. After you create a topic, you can subscribe to it by name.
 
@@ -56,6 +37,28 @@ pushTopic.Description = 'All records for the Account object';
 pushTopic.Query = 'SELECT Id, Name FROM Account';
 insert pushTopic;
 System.debug('Created new PushTopic: '+ pushTopic.Id);
+----
+
+[[createchannel]]
+=== Create a Streaming Channel to Receive Data from Salesforce
+
+To create a streaming channel, you must have the proper Salesforce Streaming API permissions enabled in your organization.
+
+Follow these steps to create a streaming channel:
+
+. Log in to your Salesforce Developer Edition organization.
+. Under *All Tabs (+)*, select *Streaming Channels*.
+. On the *Streaming Channels* tab, select *New* to create a new streaming channel.
+. Enter `/u/notifications/ExampleUserChannel` in the *Streaming Channel Name* field.
+. Enter an optional description.
+
+You can also create a streaming channel by using either the connector Create operation or the connector Publish streaming channel (`publish-streaming-channel`) operation. The following example uses the `publish-streaming-channel` operation:
+
+[source,xml,linenums]
+----
+<sfdc:publish-streaming-channel
+    name="/u/Notifications"
+    description="General notifications"/>
 ----
 
 [[topicsub]]
@@ -77,16 +80,41 @@ In the following XML example, Mule prints a message to the log at the INFO level
 
 You can subscribe to a topic that was not previously published in Salesforce. However, when the topic is published, you do not receive notifications regarding that topic unless you resubscribe to it.
 
-[[topicrep]]
-=== Replay a Topic
+Each event that travels through your flow contains information about the Salesforce data that changed, including how the data changed and when the change occurred.
 
-A subscriber can specify which events to receive. By default, a subscriber receives only the events that occur after subscribing. Events outside the 24-hour retention period are discarded.
+Salesforce stores events for 24 hours(or 72 hours for high-volume events). A subscriber to a topic or channel can retrieve events related to that topic or channel during the 24-hour retention window. After the retention window ends, the subscriber can retrieve newer events that have not yet expired.
+
+Salesforce assigns each broadcast event a numeric ID. IDs are incremented, but not necessarily by 1 for each consecutive event. For example, the event following the event with ID 999 can have an ID of 1025. A broadcast event ID is unique for the organization and channel. Salesforce does not reuse the IDs of deleted events.
+
+
+[[streamsub]]
+=== Subscribe to a Streaming Channel
+
+After you create a streaming channel, you can start receiving events by subscribing to the channel. The `subscribe-channel-listener` input source acts like an inbound endpoint. In this example, every time a subscription to `/u/TestStreaming` receives an event, it executes the rest of the flow and logs a message at the INFO level:
+[source,xml,linenums]
+----
+<flow name="notificationsChannelSubscription">
+  <!-- INBOUND ENDPOINT -->
+  <sfdc:subscribe-channel-listener streamingChannel="/u/TestStreaming"/>
+  <!-- REST OF YOUR FLOW -->
+  <logger level="INFO" message="Received an event: #[payload]"/>
+</flow>
+----
+
+The Streaming channel field of the Subscribe channel listener operation does not display change events that are available in the Salesforce environment in the current version of the connector(this feature will be added soon). However, your connector can subscribe to a streaming channel to obtain this information. For example, to subscribe to the `All Change Events` channel, use `/data/ChangeEvents` as the channel name to which you subscribe.
+
+For more information, see https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_subscribe_channels.htm[Subscription Channels] in the Salesforce Change Data Capture Developer Guide.
+
+[[topicrep]]
+=== Replay messages from a Topic
+
+A subscriber can specify which events to receive. By default, a subscriber receives only the events that occur after subscribing. Events outside the 24-hour(or 72-hour for high-volume events) retention period are discarded.
 
 The Replay Topic Listener operation provides these options:
 
 * `ALL`
 +
-Subscriber receives all events, including past events that are within the 24-hour retention period and new events sent after the client subscribes.
+Subscriber receives all events, including past events that are within the 24-hour(or 72-hour) retention period and new events sent after the client subscribes.
 * `ONLY_NEW`
 +
 Subscriber receives new events that are broadcast after the client subscribes.
@@ -96,7 +124,7 @@ Subscriber receives all events after the specified event `replayId`.
 
 If you specify either the `ALL` replay option or `ONLY_NEW` replay option, the `replayId` value is ignored.
 
-In Studio, the *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
+The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
 
 In the following XML example, the Replay topic listener acts like an inbound endpoint for the Logger component message:
 
@@ -110,82 +138,8 @@ In the following XML example, the Replay topic listener acts like an inbound end
 </flow>
 ----
 
-[[pushdata]]
-== Push Data to Salesforce
-
-You can use Salesforce Connector as an outbound connector in your flow to push data to Salesforce. To use the connector in this capacity, place Salesforce Connector to the right of an inbound endpoint in your flow.
-
-[[receivedata]]
-== Receive Data from Salesforce
-
-You can use Salesforce Connector as an inbound connector to stream data from Salesforce into your application. To use the connector in this capacity, use one of these input sources:
-
-* Subscribe topic listener
-* Subscribe channel listener
-* Replay topic listener
-* Replay channel listener
-
-Studio automatically converts the connector to Salesforce Streaming mode, which listens to notifications from the Salesforce Streaming API.
-
-In this example, Salesforce Connector listens to notifications on a topic and feeds the data into the flow:
-
-image::salesforce-studio-subscribe-streaming-channel.png[subscribe streaming channel]
-
-Streaming channels provide subscribers with notifications that are not limited to record-based events. You can use Salesforce Connector to work with Salesforce streaming channels.
-
-For more information about streaming channels, see the https://developer.salesforce.com/docs/atlas.en-us.api_streaming.meta/api_streaming/intro_stream.htm[Salesforce Streaming API].
-
-[[streamingchannel]]
-== Create a Streaming Channel to Receive Data from Salesforce
-
-To create a streaming channel, you must have the proper Salesforce Streaming API permissions enabled in your organization.
-
-Follow these steps to create a streaming channel:
-
-. Log in to your Salesforce Developer Edition organization.
-. Under *All Tabs (+)*, select *Streaming Channels*.
-. On the *Streaming Channels* tab, select *New* to create a new streaming channel.
-. Enter `/u/notifications/ExampleUserChannel` in the *Streaming Channel Name* field.
-. Enter an optional description.
-
-You can also create a streaming channel by using either the connector Create operation or the connector Publish streaming channel (`publish-streaming-channel`) operation. The following example uses the `publish-streaming-channel` operation:
-
-[source,xml,linenums]
-----
-<sfdc:publish-streaming-channel
-    name="/u/Notifications"
-    description="General notifications"/>
-----
-
-[[streamsub]]
-== Subscribe to a Streaming Channel
-
-After you create a streaming channel, you can start receiving events by subscribing to the channel. The `subscribe-channel-listener` input source acts like an inbound endpoint. In this example, every time a subscription to `/u/TestStreaming` receives an event, it executes the rest of the flow and logs a message at the INFO level:
-[source,xml,linenums]
-----
-<flow name="notificationsChannelSubscription">
-  <!-- INBOUND ENDPOINT -->
-  <sfdc:subscribe-channel-listener streamingChannel="/u/TestStreaming"/>
-  <!-- REST OF YOUR FLOW -->
-  <logger level="INFO" message="Received an event: #[payload]"/>
-</flow>
-----
-
-The Streaming channel field of the Subscribe channel listener operation does not display change events that are available in the Salesforce environment, because this information is not provided in the Salesforce API. However, your connector can subscribe to a streaming channel to obtain this information. For example, to subscribe to the `All Change Events` channel, use `/data/ChangeEvents` as the channel name to which you subscribe.
-
-For more information, see https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_subscribe_channels.htm[Subscription Channels] in the Salesforce Change Data Capture Developer Guide.
-
-=== Streaming Channel Inbound Properties
-
-This information gets passed along as inbound properties:
-
-* `channel` maps to the Channel JSON property.
-* `type` maps to the Type JSON property in data.
-* `createdDate` maps to the createdDate JSON property in data.
-
-Except for `channel`, each property inside an event is available as an inbound property.
-
-=== Replay Events from a Streaming Channel
+[[channelrep]]
+=== Replay messages from a Streaming Channel
 
 A streaming channel can replay notifications. The `replay-channel-listener` input source acts as an inbound endpoint. You can use it as shown in the following example:
 
@@ -201,7 +155,29 @@ A streaming channel can replay notifications. The `replay-channel-listener` inpu
 
 If you specify either the `ALL` replay option or the `ONLY_NEW` replay option, the `replayId` value is ignored.
 
-=== Push Events to a Streaming Channel
+The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
+
+[[customevents]]
+== Custom Event Notifications
+
+Salesforce Connector enables you to obtain custom event notifications. These notifications apply to general events that are not tied to Salesforce data changes.
+
+To obtain custom event notifications:
+
+. Create a streaming channel by using the Publish streaming channel operation.
++
+StreamingChannel is a special Salesforce object that represents a channel used to notify listeners of generic Streaming API events.
++
+You can also create a streaming channel through Salesforce or https://workbench.developerforce.com/about.php[Workbench].
++
+. Subscribe to the channel by using the Subscribe channel listener operation.
++
+Salesforce Connector converts the custom events in your streaming channel to Mule events.
+
+For more information about working with streaming channels, see <<createchannel,Create a Streaming Channel to Receive Data from Salesforce>> and <<eventshandling,Handling Events with Salesforce Connector>>.
+
+[[pushevents]]
+== Push Events to a Streaming Channel
 
 Salesforce enables you to push custom events to a specific streaming channel through the REST API. To do this, use https://workbench.developerforce.com/about.php[Workbench] or this connector.
 
