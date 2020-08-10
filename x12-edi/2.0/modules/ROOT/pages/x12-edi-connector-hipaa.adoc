@@ -1,0 +1,255 @@
+= X12 EDI Connector HIPAA
+
+Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[Premium]
+
+In addition to the base X12 standards, the X12 Module also supports the HIPAA (Health Insurance Portability and Accountability Act) standards based on X12 version 005010.
+
+The X12 Module HIPAA support includes:
+
+* X12 HIPAA EDI message-reading, message-validation, and message-writing
+* Integration with DataSense and DataWeave
+* HIPAA message packs for 005010X212, 005010X214B3, 005010X217, 005010X218, 005010X220A1, 005010X221A1, 005010X222A1, 005010X222A2, 005010X223A2, 005010X223A3, 005010X224A2, 005010X224A3, and 005010X279A1
+* The ability to customize the base X12 HIPAA schemas
+
+Most aspects of using HIPAA with the X12 Module are the same as using standard X12. The main differences are:
+
+* The form of the schemas.
+* Extent and type of validation performed.
+* Data structure representation.
+
+The supplied HIPAA schemas use different structures from base X12 schemas. The structure used for HIPAA reflects the way in which the same segments are used in different locations in a transaction set for different purposes, and often with different requirements for code sets and field usages. To help distinguish between the different usages, the HIPAA schemas use full names as segment keys. This differs from the approach used with basic X12 standards, where the segment keys normally use a numeric prefix along with the segment tag.
+
+HIPAA schemas also include details of code sets defined for elements. Data is validated against these code sets both when parsing and writing transaction sets.
+
+This page helps provides details of using the X12 Module for HIPAA transaction sets, and how usage differs from standard X12.
+
+== Prerequisites
+
+This document assumes that you are familiar with X12, HIPAA, Mule, Anypoint
+Connectors, Anypoint Studio, Mule flows, and Mule Global Elements.
+
+See the Release Notes for compatibility information. A link to the
+release notes is listed in the See Also section of this document.
+
+To use the X12 EDI connector in a production environment, you must
+have purchased a MuleSoft license for Anypoint B2B.
+
+== What's New in this Connector
+
+The data structures used by the X12 EDI Connector 2.x for HIPAA data differ from
+those in the 1.x version used with Mule 3.x.
+
+In the 1.x version of the connector, composite components are effectively in-lined
+at the point of use, so that each individual element
+nested within the composite component is given a key based on the
+containing segment and referenced directly from the map
+representing the segment.
+
+In the 2.x version of the connector each
+composite component is instead represented by a child map
+and the values within the composite have keys based on the composite identifier.
+
+This change in structure allows consistent mappings to be used for
+data in composite components, regardless of the containing
+segment or position within the segment.
+
+== To Configure for HIPAA Usage
+
+To use the X12 Module connector for HIPAA transaction sets you must:
+
+* Select one or more HIPAA schemas to be used.
+* Set the Form and Validation configuration parameter (`formValidation`) to 'HIPAA_SNIP1' or 'HIPAA_SNIP2', depending on the type of SNIP validation desired.
+
+=== To Determine HIPAA Schema Locations
+
+To use the connector, you need to know the locations of the schemas in your project. If you're using the out of the box HIPAA schemas and not customizing anything, the schema location follows the  `/hipaa/{version}/{transaction-set}.esl` pattern. For example, if you're using the `005010X222A2` version and the 837 transaction set, your schema location is `/hipaa/005010X222A2/837.esl`.
+
+If you’re using one or more custom schemas, you should put these under src/main/resources and refer to the location relative to this directory.
+For example, if you've put your HIPAA 837 schema under src/main/app/mypartner/837.esl, your schema location is `/mypartner/837.esl`.
+
+== About HIPAA Schema Definitions
+
+The X12 Module uses a YAML format called ESL (for EDI Schema Language) to represent both standard X12 and HIPAA schemas. The HIPAA standards are based on X12, but modify the corresponding X12 base standards in several respects including:
+
+* Multiple specialized definitions of HL (Hierarchical Level) loops, where a basic loop structure defined in X12 is expanded into several variations, often nested.
+* Modular loop definitions which may be reused at different points in the definition.
+* Distinguishing between different uses of a repeated segment by code values in a particular element.
+* Changing usage requirements for segments and segment components.
+
+To represent these features of HIPAA the ESL schema definitions are very different from standard X12 schemas. Here's a partial example, taken from the schema for the 005010X222A2 837 transaction set:
+
+[source,yaml,linenums]
+----
+form: HIPAA
+version: '005010X222A2'
+structures:
+- id: '837'
+  name: 'Health Care Claim'
+  class: 'HC'
+  areas:
+  - code: '1'
+    items:
+    - { idRef: 'ST_TransactionSetHeader', position: '0050', usage: M }
+    - { idRef: 'BHT_BeginningOfHierarchicalTransaction', position: '0100', usage: M }
+    - groupId: '1000A_Loop'
+      usage: O
+      items:
+      - { idRef: 'NM1_SubmitterName', position: '0200', usage: M }
+      - { idRef: 'PER_SubmitterEDIContactInformation', position: '0450', usage: M, count: 2 }
+    - groupId: '1000B_Loop'
+      usage: O
+      items:
+      - { idRef: 'NM1_ReceiverName', position: '0500', usage: M }
+  - code: '2'
+    items:
+    - groupId: '2000A_Loop'
+      count: '>1'
+      usage: M
+      items:
+      - { idRef: 'HL_BillingProviderHierarchicalLevel', position: '0010', usage: I }
+      - { idRef: 'PRV_BillingProviderSpecialtyInformation', position: '0030', usage: O }
+      - { idRef: 'CUR_ForeignCurrencyInformation', position: '0100', usage: O }
+      - groupId: '2010AA_Loop'
+        usage: O
+        items:
+        - { idRef: 'NM1_BillingProviderName', position: '0150', usage: M }
+        - { idRef: 'N3_BillingProviderAddress', position: '0250', usage: M }
+        - { idRef: 'N4_BillingProviderCityStateZIPCode', position: '0300', usage: M }
+        - { idRef: 'REF_BillingProviderTaxIdentification', position: '0350', usage: M }
+        - { idRef: 'REF_BillingProviderUPINLicenseInformation', position: '0360', usage: O, count: 2 }
+        - { idRef: 'PER_BillingProviderContactInformation', position: '0400', usage: O, count: 2 }
+      - { area: '3', usage: O }
+      - { area: '4', count: '>1', usage: O }
+  - code: '3'
+    items:
+    - groupId: '2010AB_Loop'
+      usage: O
+      items:
+      - { idRef: 'NM1_PayToAddressName', position: '0150', usage: O }
+      - { idRef: 'N3_PayToAddressADDRESS', position: '0250', usage: M }
+      - { idRef: 'N4_PayToAddressCityStateZIPCode', position: '0300', usage: M }
+    - groupId: '2010AC_Loop'
+      usage: O
+      items:
+      - { idRef: 'NM1_PayToPlanName', position: '0450', usage: O }
+      - { idRef: 'N3_PayToPlanAddress', position: '0550', usage: M }
+      - { idRef: 'N4_PayToPlanCityStateZIPCode', position: '0600', usage: M }
+      - { idRef: 'REF_PayToPlanSecondaryIdentification', position: '0650', usage: O }
+      - { idRef: 'REF_PayToPlanTaxIdentificationNumber', position: '0655', usage: M }
+----
+
+== About Areas Key
+
+In the above schema portion, the areas key has a value array of individual area definitions. Areas are similar to the breakdown of normal X12 transaction sets into header, detail, and summary sections, but provide much finer granularity.  Instead of the three fixed portions of a transaction set defined in X12, there may be twenty or more areas defined in a HIPAA transaction set.
+
+Each area is a reusable component of the definition, and is identified by a code character value, which by convention may be a single digit or single alpha character.
+
+Areas are referenced for inclusion in the definition with an area item in the component list. In an X12 schema definition, the list of components of a group or area may contain only segments, groups, and a group variation called wrapped (used for LS/LE loops, in X12 terms). In a HIPAA schema definition, the list of components may also contains area references. The effect of referencing an area is the same as if all the components of the area were inserted in the definition at the point of the reference.
+
+Referring back to the above schema portion, at the end of the components list for area code "2" are references to areas "3" and "4", with area "4" optionally repeating.
+
+The data structure for HIPAA messages maintains the X12 division into Heading, Detail, and Summary sections. The Heading is always the area with the lowest sort order code, the Detail is the next one (including all referenced areas), and the Summary is the highest sort order code.
+
+== About Code Sets
+
+The following is another portion of the same 005010X222A2 837 transaction set schema as used above, this portion shows the BHT_BeginningOfHierarchicalTransaction segment definition:
+
+[source,yaml,linenums]
+----
+- id: 'BHT_BeginningOfHierarchicalTransaction'
+  name: 'Beginning of Hierarchical Transaction'
+  varTag: 'BHT'
+  values:
+  - { id: '1005', name: 'Hierarchical Structure Code', usage: M, codeSet: { '0019': 'Information Source, Subscriber, Dependent' }, type: ID, length: 4 }
+  - { id: '353', name: 'Transaction Set Purpose Code', usage: M, codeSet: { '00': 'Original', '18': 'Reissue' }, type: ID, length: 2 }
+  - { id: '127', name: 'Originator Application Transaction Identifier', usage: M, type: AN, minLength: 1, maxLength: 50 }
+  - { id: '373', name: 'Transaction Set Creation Date', usage: M, type: DT, length: 8 }
+  - { id: '337', name: 'Transaction Set Creation Time', usage: M, type: TM, minLength: 4, maxLength: 8 }
+  - { id: '640', name: 'Claim or Encounter Identifier', usage: M, codeSet: { 'RP': 'Reporting', 'CH': 'Chargeable', '31': 'Subrogation Demand' }, type: ID, length: 2 }
+----
+
+The first, second, and last elements in this segment define `codeSet` values, in the form of an array of key-value pairs. The key in each pair is a particular value for the field which is allowed by the HIPAA standard, while the value for the key is the text description of that value from the standard.
+
+The X12 EDI Connector enforces these code sets for HIPAA documents, signaling an error if a transaction set uses an undefined value for a field (that is, a value not listed as a key in the `codeSet`) either when parsing or writing. In some cases, such as the first element of the BHT definition, only a single value is allowed. In other cases there may be many potential values.
+
+== About Segment Variants
+
+The following is a third portion of the same 005010X222A2 837 transaction set schema, this one showing two different DTP segment definitions:
+
+[source,yaml,linenums]
+----
+- id: 'DTP_DateAccident'
+  name: 'Date - Accident'
+  varTag: 'DTP'
+  values:
+  - { id: '374', name: 'Date Time Qualifier', usage: M, varValue: true, codeSet: { '439': 'Accident' }, type: ID, length: 3 }
+  - { id: '1250', name: 'Date Time Period Format Qualifier', usage: M, codeSet: { 'D8': 'Date Expressed in Format CCYYMMDD' }, type: ID, minLength: 2, maxLength: 3 }
+  - { id: '1251', name: 'Accident Date', usage: M, type: AN, minLength: 1, maxLength: 35 }
+- id: 'DTP_DateAcuteManifestation'
+  name: 'Date - Acute Manifestation'
+  varTag: 'DTP'
+  values:
+  - { id: '374', name: 'Date Time Qualifier', usage: M, varValue: true, codeSet: { '453': 'Acute Manifestation of a Chronic Condition' }, type: ID, length: 3 }
+  - { id: '1250', name: 'Date Time Period Format Qualifier', usage: M, codeSet: { 'D8': 'Date Expressed in Format CCYYMMDD' }, type: ID, minLength: 2, maxLength: 3 }
+  - { id: '1251', name: 'Acute Manifestation Date', usage: M, type: AN, minLength: 1, maxLength: 35 }
+----
+
+These two definitions apply to different instances of the DTP segment, as part of the 2300 Claim Information loop. In the transaction set structure these uses of the DTP segment occur essentially in the same position, matching two possible occurrences of a repeating DTP segment in the base X12 standard. But because the two uses of the segment are supplying different information the HIPAA standard gives them different names and interprets the DTP03 field in different ways.
+
+In this case the data value in the first field of the segment, the Date Time Qualifier field, identifies which variation of the segment is actually being used. Since the code set for this field has different values for each of these uses the value present in the field tells whether the DTP segment in a parsed document is a DTP_DateAccident or a DTP_DateAcuteManifestation (or any of several other uses of the DTP segment in the same position). The `varValue: true` flag in the schema definition indicates that this first field is used in this way to distinguish between variations.
+
+Note that even though the value of this field is effectively fixed for each use of the segment, it still must be set correctly when writing data. If you supply a different value for this field, or don't supply a value, you'll get an error when writing.
+
+== About Syntax Rules
+
+The following is a final example from the 005010X222A2 837 transaction set schema, to illustrate how syntax rules are represented:
+
+[source,yaml,linenums]
+----
+- id: 'N4_PayerCityStateZIPCode'
+  name: 'Payer City, State, ZIP Code'
+  varTag: 'N4'
+  values:
+  - { id: '19', name: 'Payer City Name', usage: M, type: AN, minLength: 2, maxLength: 30 }
+  - { id: '156', name: 'Payer State or Province Code', usage: O, type: ID, length: 2 }
+  - { id: '116', name: 'Payer Postal Zone or ZIP Code', usage: O, type: ID, minLength: 3, maxLength: 15 }
+  - { id: '26', name: 'Country Code', usage: O, type: ID, minLength: 2, maxLength: 3 }
+  - { id: '309', name: 'Location Qualifier', usage: U, type: ID, minLength: 1, maxLength: 2 }
+  - { id: '310', name: 'Location Identifier', usage: U, type: AN, minLength: 1, maxLength: 30 }
+  - { id: '1715', name: 'Country Subdivision Code', usage: O, type: ID, minLength: 1, maxLength: 3 }
+  rules:
+  - { type: E, items: [2, 7] }
+  - { type: C, items: [6, 5] }
+  - { type: C, items: [7, 4] }
+----
+
+Syntax rules are used in X12 and HIPAA to define relationships between values within a
+segment or composite. The rules are included in the schema at the same level as the
+list of values. The code for the type of rule is the same as used by X12 and HIPAA
+specifications, and the list of items gives the numbers of the values governed by the rule.
+
+In the case of the above example, the three rules say that:
+
+* Only one of N402 or N407 may be present (`{ type: E, items: [2, 7] }`)
+* If N406 is present, then N405 is required (`{ type: C, items: [6, 5] }`)
+* If N407 is present, then N404 is required (`{ type: C, items: [7, 4] }`)
+
+
+== To Modify Schemas
+
+Due to the differences between standard X12 and HIPAA schemas the use of overlay schemas to modify a base
+definition is not supported for HIPAA. Instead, the recommended approach to use for modifications is to
+extract the supplied HIPAA schema from inside the x12-schemas-2.0.0.jar, which can be found in the standard MuleSoft enterprise Maven repositories (under group ID com.mulesoft.connectors). You can copy a message structure schema from this JAR (which contains both standard X12 and HIPAA schemas) and modify the extracted schema to use
+directly. Unlike X12 schemas, which as supplied use a base set of segment, composite, and element
+definitions, the HIPAA schemas are self-contained. This makes it easy to make changes to the schema
+without needing to work with multiple files.
+
+== About Recommended Types of Testing from WEDI
+
+* Type 1: EDI syntax integrity testing – Testing of the EDI file for valid segments, segment order, element attributes, testing for numeric values in numeric data elements, validation of X12 or NCPDP syntax, and compliance with X12 and NCPDP rules. This validates the basic syntactical integrity of the EDI submission.
+* Type 2: HIPAA syntactical requirement testing – Testing for HIPAA Implementation Guide-specific syntax requirements, such as limits on repeat counts, used and not used qualifiers, codes, elements, and segments. Also included in this type is testing for HIPAA required or intra-segment situational data elements, testing for non-medical code sets as laid out in the WEDI SNIP implementation guide, and values and codes noted in the WEDI SNIP implementation guide using an X12 code list or table.
+** As the connector cannot determine a course of action for intra-segment situational data elements, intra-segment situational data elements aren't covered by the X12 EDI connector. Users need to set a validation logic outside of the connector.
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
