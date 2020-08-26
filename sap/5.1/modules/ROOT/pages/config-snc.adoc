@@ -1,51 +1,54 @@
-= Configure an SNC Connection
+= Configure a SAP Secure Network Communication Connection
+
+Enable a SAP Secure Network Communication (SNC) to take advantage of security features such as secure data communication between the SAP system client and server; application-level, end-to-end security; and the ability to change security products without impact on your SAP business applications. Enabling SNC requires you to configure the client environment, the SAP server, and Anypoint Connector for SAP (SAP Connector).
+
+*Which step generates your certificate?*
 
 == Prerequisites
 
-* SAP GUI application, which you can download from the MuleSoft SAP Resource Center
-* SAPCAR and SAP Cryptographic Libraries
-+
-If you are an S-User, download these libraries from the SAP Support Portal.
+* SAP GUI application, which you can download from the https://sites.google.com/a/mulesoft.com/sap/abc/libs-tools?authuser=0[MuleSoft SAP Resource Center]
+* The SAPCAR utility and SAP Cryptographic Library, which you can download from the SAP Support Portal if you are an S-user.
 * Access to an SAP ECC instance that can use SNC system variables
 * Access to the following transactions:
 ** STRUST (Trust Manager)
-** SM30 (View Maintenance)
+** SM30 (Table Maintenance) *This is Table Maintenace and not View Maintenance in the SAP docs. Also, they call SM30 a tool and not a transaction.*
 
 == Configure the Client Environment
 
-Configure the system variables that depend on the operating system you are using, and generate the PSE (personal security environment):
+Configure the system variables that depend on the operating system you are using, and generate the personal security environment (PSE):
 
-. Enter the following command to open your cmd or terminal and unpack the SAP Cryptographic Library using the SAPCAR utility:
+. Open your cd or terminal and use the SAPCAR utility to unpack the SAP Cryptographic Library:
 +
-`SAPCAR –xvf <name_of_the_file.SAR>
+`SAPCAR –xvf <file-name.SAR>`
 +
 . Configure the following environment variables: *(Do the variables vary by OS or are they the same and just configured differently?)*
 ** SNC_LIB
-** SECUDIR = `<Path_to_library>`
-** LD_LIBRARY_PATH = `<Path_to_library>\sapcrypto.dll`
-** SSF_LIBRARY_PATH = `<Path_to_library>\sapcrypto.dll`
+** SECUDIR = `<path_to_library>`
+** LD_LIBRARY_PATH = `<path_to_library>\sapcrypto.dll`
+** SSF_LIBRARY_PATH = `<path_to_library>\sapcrypto.dll`
 +
-For Windows, the `sapcrypto.dll` 64bit version must be in another path and added to a new variable called SNC_LIB_64.
+For Windows, the `sapcrypto.dll` 64-bit version must be in another path and added to a new variable called `SNC_LIB_64`.
 +
-In your cmd or terminal, use the following command to create the PSE:
+. Use the `sapgenpse` tool to create the PSE:
 +
 `sapgenpse gen_pse -v -p RFC.pse`
 +
-When you run this command, you must enter a password or PIN to use later and a distinguished name, which must be unique. You can check STRUST to see names that are already used.
+When you run this command, you must enter a password or PIN to use later and a distinguished name, which must be unique. You can use STRUST to see names that are already used.
 +
-. Enter this command to create the `cred_v2` file, which stores the credentials for the user who will access the PSE:
+. Use the `sapgenpse` tool to create the `cred_v2` file, which stores the credentials for accessing the PSE:
 +
-`sapgenpse seclogin -p RFC -O <user-credentials>`+
+`sapgenpse seclogin -p RFC -O <username>`+
 +
-where `<user-credentials>` are the *username only?*
+where `<user-credentials>` are xxx
 +
-. Enter this command to export the client’s certificate from the PSE:
+. Use the `sapgenpse` tool to export the client’s certificate from the PSE: *How are these credentials formatted and what can they include?*
 +
 `sapgenpse export_own_cert –v –p RFC –o RFC_MULE.crt`
 +
+
 == Configure the SAP Server
 
-Configure the import and export of certificates and the maintenance of tables that will authorize you to use SNC with your distinguished name.
+Configure the certificates and the tables that authorize you to use SNC with your distinguished name.
 
 === Check Distinguished Names at STRUST
 
@@ -56,15 +59,15 @@ View the SAP distinguished name and list of added certificates:
 
 === Import and Export Certificates
 
-After you generate your own certificate, you need to download the SAP instance certificate to link the certificate together.
+Download the SAP instance certificate to link it to your newly-generated certificate:
 
-. From the previous screenshot, click the glasses (first button on the left of the screen) to enable the edition mode, and then double click  `CN=SL-ABAP-IDP`.
-. Click the download button at the bottom of the screen and Center file path.
+. Click the glasses (first button on the left of the screen) to enable the edition mode, and then double click `CN=SL-ABAP-IDP`.
+. Click the download button at the bottom of the screen.
 . Click the import button to upload your certificate.
-. Click *Add to Certificate  List *and save.
-. Open a cmd or terminal and execute the following command:
+. Click *Add to Certificate List* and save.
+. Open a cmd or terminal and use the `sapgenpse` tool to *associate your certificate to your PSE*:
 +
-sapgenpse maintain_pk -v -a name_of_SAP_Server_Certificate.crt -p name_of_your_PSE.pse'
+`sapgenpse maintain_pk -v -a name_of_SAP_Server_Certificate.crt -p name_of_your_PSE.pse'
 
 === Authorize the SNC Client in SAP
 
@@ -76,9 +79,40 @@ Add a new entry to the `VSNCSYSACL` table view, to enable your distinguished nam
 . Select all of the checkboxes to activate the entries.
 . Click Save.
 +
-* If the server accepts the SNC name, it displays a `Canonical Name Determined` message on the SNC data box.
-* If the server does not accept the SNC name, it displays a `Canonical Name Not Determined` message on the SNC data box.
-+
-To address this issue:
-+
-.. Navigate to the *SM30* transaction, specify the `VUSREXTID` view, and click Maintain*.
+* If the server accepts the SNC name, it displays a `Canonical Name Determined` message on the SNC data box. *What should you do if the server does not accept the name?)
+. Enable the SAP user for the Mule app to use SNC:
+	.. Navigate to the *SM30* transaction, specify the `VUSREXTID` view, and click *Maintain*.
+	.. In the *External ID type* field, select `DN` as the work area.
+	.. Click *Continue*. (*Check this*)
+	.. In the *External ID* field, enter the distinguished name.
+	.. In the *Field*, enter the SAP user.
+	.. Select *Activated*.
+	.. Click *Save*. (*I don't see this on the screen.*)
+
+	== Configure the SNC Provider
+
+	Configure SAP Connector to enable SNC:
+
+. Access Anypoint Studio.
+. Select the name of the connector in the Studio canvas.
+. Click the plus sign (+) next to the *Connector configuration* field to access the global element configuration fields.
+3. On the *General* tab, configure the following required fields for simple connection provider authentication:
+* *Username*
+* *Password*
+* *SystemNumber*
+* *Client*
+* *ApplicationServerHost*
+* *Extended properties*, as described in xref:mule-runtime::sap-jco-extended-properties.adoc[SAP JCo Extended Properties].
+
+===Extended Property Examples
+
+==== Server Side Property Examples:
+
+[%autowidth.spread]
+|===
+|Property a|Example Value
+jco.server.snc_mode|  1
+jco.server.snc_partnername| p:CN=SL-ABAP-IDP)
+jco.server.snc_qop| 8
+jco.server.snc_myname| `p:CN=MVIDP, C=AR, O=MuleSoft, OU=IT`
+jco.server.snc_lib| `C:/SNC/64bit/sapcrypto.dll`
