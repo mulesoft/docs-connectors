@@ -177,6 +177,231 @@ For example:
 +
 image::amazon-sqs-logger2.png[log-message-count]
 
+== Create a Flow to Send a Large Message
+
+Start the example by creating a flow that sends a large message to the queue which will reference the payload location stored in the Amazon S3. This example requires following prerequisities: 
+
+. A file containing payload larger than 256KB.
+. Bucket created on the Amazon S3 which will be used for storing the large payload messages.
+
+Creating the flow involves creating a new Mule project and configuring a Listener component, File Read component, Transform message component, SQS Send Message operation, Logger component, SQS Get approximate number of messages operation, and a second Logger component.
+
+. Create a new Mule project in Studio.
+. In the Mule Palette view, search for *HTTP* and select the *Listener* operation:
++
+image:amazon-sqs-select-listener.png[select-listener]
++
+. Drag the *Listener* operation onto the canvas.
+. In the *Listener* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. Set the *Path* field to `/largePayload`:
++
+image::amazon-sqs-http-props.png[http-properties]
+
+=== Add a File Read Component to read the large payload
+
+. In the Mule Palette view, search for *File* and select the *File Read* operation:
++
+image::amazon-sqs-file-read.png[select-file-read]
++
+. Drag the *File Read* component onto the canvas, to the right of the *Listener* component.
+. In the *File Read* configuration, click *+* next to the *File Configuration* field to add a global element.
+. Configure the global element as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Connection | Check this parameter if you want to specify working directory
+|Working Directory | Directory to be considered as the root of every relative path used with this connector. Defaults to the user's home 
+|===
++
+In this case the file is going to be read from `src/main/resources` of the Mule application.
++
+For example:
++
+image::amazon-sqs-file-global-config.png[file-global-config]
++
+. Configure the following field in the properties window:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the connector operation
+|Connector Configuration |Global File configuration you just created
+|File Path | The path to the file to be read
+|===
++
+For example:
++
+image::amazon-sqs-file-config.png[file-config]
+
+=== Add a Transform Message Component to Attach the Metadata
+
+. In the Mule Palette view, search for *Transform Message*:
++
+image::amazon-sqs-select-transform.png[select-transform]
++
+. Drag the *Transform Message* component onto the canvas, to the right of the *File Read* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this XML:
++
+[source,dataweave,linenums]
+----
+{
+	delaySeconds: 0,
+	body: payload,
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}
+----
++
+The following screenshot shows the XML as it appears in the *Output* section of Studio:
++
+image::amazon-sqs-transform-message.png[transform-message]
+
+=== Add and Configure the SQS Send Message Operation
+
+. In the Mule Palette view, search for *SQS* and select the *Send message* operation:
++
+image::amazon-sqs-select-send.png[select-send-message]
++
+. Drag the *Send message* operation onto the canvas, to the right of the *Transform Message* component.
+. In the *Send message* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Configure the global element as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Name | Name used to reference the configuration. Use `Amazon_SQS_Large_Payload_Configuration` in this case
+|Session Token | Session token used to validate the temporary security credentials
+|Access Key |Alphanumeric text string that uniquely identifies the user who owns the account
+|Secret Key |Key that acts as a password
+|Region Endpoint | Queue region
+|Default Global Queue URL | Default Amazon SQS queue URL
+ credentials
+|===
++
+For example:
++
+image::amazon-sqs-studio-global-config-new.png[send-global-config]
++
+. Click on the *Advanced* tab of the Connection and choose between the *Expression or Bean Reference* or *Edit Inline* options within the *Large Payload Support* field.
+. Configure the parameters as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Description
+|Bucket | Name of the bucket which is going to be used for storing large message payloads. The bucket must be already created and configured in S3. Enabling this feature incurs additional charges for using AWS S3.
+|Message Size Threshold | The message size threshold value for storing message payloads in the Amazon S3. The default value for message size threshold is 256 KB. The maximum threshold size value is 256KB while the maximum message size is 2GB.
+|Message Size Threshold Unit | Represents the data unit for the message size threshold.
+|===
++
+For example:
++
+image::amazon-sqs-studio-large-payload-support.png[Configure Large Payload Support]
++
+. Select the *Configuration XML* tab to view the corresponding XML:
++
+[source,dataweave,linenums]
+----
+<sqs:config name="Amazon_SQS_Configuration"
+  doc:name="Amazon SQS Configuration"
+	defaultQueueUrl="${sqs.queueUrl}">
+	<sqs:basic-connection accessKey="${sqs.accessKey}"
+	secretKey="${sqs.secretKey}"
+	region="us-east-1"
+	sessionToken="${sqs.sessionToken}">
+	    <sqs:large-payload-support bucket="large-sqs-payload-bucket"
+            messageSizeThreshold="256" messageSizeThresholdUnit="KB" />
+    </sqs:basic-connection>
+</sqs:config>
+----
++
+. Configure the following fields in the properties window:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the connector operation
+|Connector Configuration |Global configuration you just created
+|Message |`payload`
+|Queue url |Amazon SQS queue URL.
+
+If provided, the value of this field takes precedence over the value of the *Default Global Queue URL* field on the *Global Configuration Elements* window.
+|===
++
+For example:
++
+image::amazon-sqs-send-message.png[send-message]
+
+=== Add a Logger Component to Display the Response in the Mule Console
+
+. In the Mule Palette view, search for *Logger*.
+. Drag the component onto the canvas, to the right of the *Send Message* component.
+. Configure the following fields:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the logger, such as `Log Response`
+|Message |`+++Sent Message: `#[payload]`+++`
+|Level |INFO (Default)
+|===
++
+For example:
++
+image::amazon-sqs-logger.png[logger]
+
+=== Obtain the Number of Messages in the Queue
+
+. In the Mule Palette view, search for *Amazon SQS*.
+. Select the *Get approximate number of messages* operation and drag it onto the canvas, to the right of the *Logger* component.
++
+. Configure the following field in the properties window:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Queue url |Amazon SQS queue URL
+|===
++
+For example:
++
+image::amazon-sqs-get-message-count.png[get-message-count]
+
+=== Add a Logger to Display the Number in the Mule Console
+
+. In the Mule Palette view, search for *Logger*.
+. Drag the component onto the canvas, to the right of the *Get approximate number of messages* component.
+. Configure the following fields:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the logger, such as `Log Count`
+|Message |`+++Approx. messages in queue: `#[payload]`+++`
+|Level |INFO (Default)
+|===
++
+For example:
++
+image::amazon-sqs-logger2.png[log-message-count]
+
 == Create a Flow to Receive Messages
 
 Finish this example by creating another flow to receive messages and log them before they are deleted from the queue.
@@ -192,7 +417,7 @@ image::amazon-sqs-select-receive.png[select-receive-messages]
 |===
 |Field |Value
 |Display Name |Name for the connector operation
-|Connector Configuration |Global configuration you created previously for Anypoint Connector for Amazon SQS (Amazon SQS Connector)
+|Connector Configuration |Global configuration you created previously `Amazon_SQS_Configuration`. If you want to receive large messages use `Amazon_SQS_Large_Payload_Configuration`
 |Number of Messages |10
 |Queue url | Amazon SQS queue URL.
 
@@ -222,21 +447,37 @@ Paste this code into your XML editor to quickly load the flow for this example u
 [source,xml,linenums]
 ----
 <mule xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
   http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
   http://www.mulesoft.org/schema/mule/ee/core
   http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/file 
+  http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
   http://www.mulesoft.org/schema/mule/sqs
 	http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd">
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
+	
 	<sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration"
 	defaultQueueUrl="${sqs.queueUrl}" >
 		<sqs:basic-connection accessKey="${sqs.accessKey}" secretKey="$sqs.secretKey}" region="us-east-1" />
 	</sqs:config>
+	
+	<sqs:config name="Amazon_SQS_Large_Payload_Configuration" doc:name="Amazon SQS Configuration"
+	defaultQueueUrl="${sqs.queueUrl}" >
+		<sqs:basic-connection accessKey="${sqs.accessKey}" secretKey="$sqs.secretKey}" region="us-east-1" >
+			<sqs:large-payload-support bucket="large-sqs-payload-bucket" messageSizeThreshold="256" messageSizeThresholdUnit="KB" />
+		</sqs:basic-connection> 
+	</sqs:config>
+	
+	<file:config name="File_Config" doc:name="File Config" >
+		<file:connection workingDir="${app.home}" />
+	</file:config>
+	
 	<flow name="sqs-send-messageFlow" >
 		<http:listener doc:name="Listener"
 		config-ref="HTTP_Listener_config"
@@ -281,9 +522,64 @@ output application/java
 		<logger level="INFO" doc:name="Log Count"
 		message="Sent Message: `#[payload]`"/>
 	</flow>
+
+	<flow name="sqs-send-LargeMessageFlow" >
+		<http:listener doc:name="Listener"
+		config-ref="HTTP_Listener_config"
+		path="/largePayload"/>
+		<file:read doc:name="Read" config-ref="File_Config" path="largePayload.txt"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	delaySeconds: 0,
+	body: payload,
+	messageAttributes: {
+		"AccountId": {
+			"stringValue" : "000123456",
+			"dataType" : "String.AccountId"
+		} as Object {
+			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		},
+		"NumberId": {
+			"stringValue" : "230.000000000000000001",
+			"dataType" : "Number"
+		} as Object {
+			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
+		}
+	} as Object {
+		class: "java.util.HashMap"
+	}
+} as Object {
+	class: "org.mule.extension.sqs.api.model.Message"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<sqs:send-message doc:name="Send message" configref="Amazon_SQS_Large_Payload_Configuration"/>
+		<logger level="INFO"
+		doc:name="Log Response"
+		message="payload"/>
+		<sqs:get-approximate-number-of-messages
+		doc:name="Get approximate number of messages"
+		config-ref="Amazon_SQS_Large_Payload_Configuration"
+		queueUrl="${sqs.queueUrl}"/>
+		<logger level="INFO" doc:name="Log Count"
+		message="Sent Message: `#[payload]`"/>
+	</flow>
+	
+	
+	
 	<flow name="sqs-receive-message-flow" >
 		<sqs:receivemessages doc:name="Receive messages"
 		config-ref="Amazon_SQS_Configuration"/>
+		<logger level="INFO" doc:name="Log Receipt" />
+	</flow>
+	
+	<flow name="sqs-receive-large-message-flow" >
+		<sqs:receivemessages doc:name="Receive messages"
+		config-ref="Amazon_SQS_Large_Payload_Configuration"/>
 		<logger level="INFO" doc:name="Log Receipt" />
 	</flow>
 </mule>
