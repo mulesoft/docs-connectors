@@ -1,47 +1,90 @@
-= Amazon SQS Connector 5.8 Examples - Mule 4
-:page-aliases: connectors::amazon/amazon-sqs-connector-examples.adoc
+= Create a Flow to Send a Large Message
 
-This example sends a message with metadata to an Amazon SQS queue and then receives it from the queue. The example is split into two flows:
+This example shows the creation of a flow that sends a large message to the queue, which will reference the payload location stored in the AWS S3 bucket. 
 
-. The first flow sends a message with metadata and gets the count of the messages in the queue to validate that the message was sent.
-. The second flow receives the message and logs the message body.
+== Prerequisites 
 
-image::amazon-sqs-message-flow.png[sqs-message-flow]
+You must have:
 
-This example uses variables for some field values. You can either replace the variables with their values in the code, or you can provide the values for each variable in the `src/main/resources/mule-artifact.properties` file.
+. A file containing a payload larger than 256KB
+. An AWS S3 bucket created on AWS S3 to use for storing the large payload messages
 
-Before you try the example, access Anypoint Studio (Studio), check whether the Mule Palette view displays entries for Amazon SNS and Amazon SQS. If not, follow the instructions in xref:amazon-sqs-connector-studio.adoc[Amazon SQS Studio Configuration] to install both connectors.
+[[create-mule-project]]
+== Create a Mule Project
 
-== Create a Flow to Send a Message
+In Studio, create a new Mule project in which to add and configure the connector: 
 
-Start the example by creating a flow that sends a message to the queue. Creating the flow involves creating a new Mule project and configuring a Listener component, Transform message component, SQS Send Message operation, Logger component, SQS Get approximate number of messages operation, and a second Logger component.
+. In Studio, select *File > New > Mule Project*.
+. Enter a name for your Mule project and click *Finish*.
 
-. Create a new Mule project in Studio.
-. In the Mule Palette view, search for *HTTP* and select the *Listener* operation:
+== Add and Configure a Listener
+
+. In the *Mule Palette* view, search for *HTTP* and select the *Listener* operation:
 +
 image:amazon-sqs-select-listener.png[select-listener]
 +
 . Drag the *Listener* operation onto the canvas.
 . In the *Listener* configuration, click *+* next to the *Connector configuration* field to add a global element.
 . Accept the defaults.
-. Set the *Path* field to `/`:
+. Set the *Path* field to `/largePayload`:
 +
 image::amazon-sqs-http-props.png[http-properties]
 
-=== Add a Transform Message Component to Attach the Metadata
+== Add and Configure a File Read Component 
 
-. In the Mule Palette view, search for *Transform Message*:
+Add and configure a *File Read* component to read the large payload:
+
+. In the *Mule Palette* view, search for *File* and select the *File Read* operation:
++
+image::amazon-sqs-file-read.png[select-file-read]
++
+. Drag the *File Read* component onto the canvas, to the right of the *Listener* component.
+. In the *File Read* configuration, click *+* next to the *File Configuration* field to add a global element.
+. Configure the global element as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Connection | Optionally, check this parameter to specify the working directory
+|Working Directory | Directory to use as the root of every relative path used with this connector. The default is your user home directory.
+|===
++
+In this example, the file is read from `src/main/resources` of the Mule application.
++
+For example:
++
+image::amazon-sqs-file-global-config.png[file-global-config]
++
+. Configure the following field in the properties window:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the connector operation
+|Connector Configuration |Global File configuration you previously created
+|File Path | Path to the file to read
+|===
++
+For example:
++
+image::amazon-sqs-file-config.png[file-config]
+
+== Add and Configure a Transform Message Component 
+
+Add the *Transform Message* Component to which to attach the metadata:
+
+. In the *Mule Palette* view, search for *Transform Message*:
 +
 image::amazon-sqs-select-transform.png[select-transform]
 +
-. Drag the *Transform Message* component onto the canvas, to the right of the *Listener* component.
+. Drag the *Transform Message* component onto the canvas, to the right of the *File Read* component.
 . In the *Transform Message* configuration, overlay the brackets in the *Output* section with this XML:
 +
 [source,dataweave,linenums]
 ----
 {
 	delaySeconds: 0,
-	body: "Hello World",
+	body: payload,
 	messageAttributes: {
 		"AccountId": {
 			"stringValue" : "000123456",
@@ -67,9 +110,9 @@ The following screenshot shows the XML as it appears in the *Output* section of 
 +
 image::amazon-sqs-transform-message.png[transform-message]
 
-=== Add and Configure the SQS Send Message Operation
+== Add and Configure the SQS Send Message Operation
 
-. In the Mule Palette view, search for *SQS* and select the *Send message* operation:
+. In the *Mule Palette* view, search for *SQS* and select the *Send message* operation:
 +
 image::amazon-sqs-select-send.png[select-send-message]
 +
@@ -80,7 +123,7 @@ image::amazon-sqs-select-send.png[select-send-message]
 [%header%autowidth.spread]
 |===
 |Field |Value
-|Name |Name used to reference the configuration
+|Name | Name used to reference the configuration. This example uses `Amazon_SQS_Large_Payload_Configuration`.
 |Session Token | Session token used to validate the temporary security credentials
 |Access Key |Alphanumeric text string that uniquely identifies the user who owns the account
 |Secret Key |Key that acts as a password
@@ -93,7 +136,27 @@ For example:
 +
 image::amazon-sqs-studio-global-config-new.png[send-global-config]
 +
-. Select the *Configuration XML* tab to view the corresponding XML:
+. In the Connection section, click on the *Advanced* tab.
+
+. In the *Large Payload Support* field, choose either:
+
+* *Expression or Bean Reference* 
+* *Edit Inline* 
+.. Configure the parameters as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Description
+|Bucket | Name of the AWS S3 bucket to use for storing large message payloads. The bucket must already be created and configured in AWS S3. Enabling this feature incurs additional charges for using AWS S3.
+|Message Size Threshold | The message size threshold value for storing message payloads in the AWS S3 bucket. The default value for message size threshold is 256 KB and the maximum threshold size value is 256KB. The maximum message size is 2GB.
+|Message Size Threshold Unit | Data unit for the message size threshold
+|===
++
+For example:
++
+image::amazon-sqs-studio-large-payload-support.png[Configure Large Payload Support]
++
+. At the base of the Studio canvas, click *Configuration XML* to view the corresponding XML:
 +
 [source,dataweave,linenums]
 ----
@@ -103,7 +166,10 @@ image::amazon-sqs-studio-global-config-new.png[send-global-config]
 	<sqs:basic-connection accessKey="${sqs.accessKey}"
 	secretKey="${sqs.secretKey}"
 	region="us-east-1"
-	sessionToken="${sqs.sessionToken}"/>
+	sessionToken="${sqs.sessionToken}">
+	    <sqs:large-payload-support bucket="large-sqs-payload-bucket"
+            messageSizeThreshold="256" messageSizeThresholdUnit="KB" />
+    </sqs:basic-connection>
 </sqs:config>
 ----
 +
@@ -113,7 +179,7 @@ image::amazon-sqs-studio-global-config-new.png[send-global-config]
 |===
 |Field |Value
 |Display Name |Name for the connector operation
-|Connector Configuration |Global configuration you just created
+|Connector Configuration |Global configuration you previously created for the *Send message* operation
 |Message |`payload`
 |Queue url |Amazon SQS queue URL.
 
@@ -124,10 +190,12 @@ For example:
 +
 image::amazon-sqs-send-message.png[send-message]
 
-=== Add a Logger Component to Display the Response in the Mule Console
+=== Add and Configure a Logger Component
 
-. In the Mule Palette view, search for *Logger*.
-. Drag the component onto the canvas, to the right of the *Send Message* component.
+Add and configure a *Logger* component to display the response in the Mule console:
+
+. In the *Mule Palette* view, search for *Logger*.
+. Drag the *Logger* component onto the canvas, to the right of the *Send Message* component.
 . Configure the following fields:
 +
 [%header%autowidth.spread]
@@ -144,25 +212,19 @@ image::amazon-sqs-logger.png[logger]
 
 === Obtain the Number of Messages in the Queue
 
-. In the Mule Palette view, search for *Amazon SQS*.
+. In the *Mule Palette* view, search for *Amazon SQS*.
 . Select the *Get approximate number of messages* operation and drag it onto the canvas, to the right of the *Logger* component.
 +
-. Configure the following field in the properties window:
-+
-[%header%autowidth.spread]
-|===
-|Field |Value
-|Queue url |Amazon SQS queue URL
-|===
-+
-For example:
+. Configure the *Queue url* field in the properties window, for example:
 +
 image::amazon-sqs-get-message-count.png[get-message-count]
 
-=== Add a Logger to Display the Number in the Mule Console
+=== Add and Configure a Logger Component
 
-. In the Mule Palette view, search for *Logger*.
-. Drag the component onto the canvas, to the right of the *Get approximate number of messages* component.
+Add and configure a *Logger* component to display the number of messages in the Mule console:
+
+. In the *Mule Palette* view, search for *Logger*.
+. Drag the *Logger* component onto the canvas, to the right of the *Get approximate number of messages* component.
 . Configure the following fields:
 +
 [%header%autowidth.spread]
@@ -217,7 +279,7 @@ image::amazon-sqs-receive-message.png[receive-message]
 
 == Example Mule Application XML Code
 
-Paste this code into your XML editor to quickly load the flow for this example use case into your Mule application. If needed, change the values to reflect your environment.
+Paste this code into your XML editor to load the flow for this example use case into your Mule application. If needed, change the values to reflect your environment.
 
 [source,xml,linenums]
 ----
@@ -359,8 +421,3 @@ output application/java
 	</flow>
 </mule>
 ----
-
-== See Also
-
-* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
-* https://help.mulesoft.com[MuleSoft Help Center]
