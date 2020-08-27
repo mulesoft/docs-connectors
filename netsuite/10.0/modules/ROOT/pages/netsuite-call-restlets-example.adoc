@@ -4,7 +4,6 @@ This example shows how to:
 
 * Create a script that calls NetSuite RESTlets that are deployed in NetSuite instances to create, retrieve, and delete a customer record
 * Deploy the RESTlet script
-* Import the `mule-netsuite-connector-restlet-demo` demo project into Studio
 * Configure the application's properties to connect to NetSuite and deploy the app
 
 == Prerequisites
@@ -101,24 +100,14 @@ image::netsuite-script-deployment.png[Script Deployment]
 + 
 . Write down the script and deploy numbers that appear in the external URL, because you need them to call the RESTlet later.
 
-== Import the Demo Project
+== Create a Mule Project
 
-Import the NetSuite Connector `mule-netsuite-connector-restlet-demo` into Studio and configure the NetSuite login credentials to connect to NetSuite: 
+In Studio, create a new Mule project and configure the credentials, deployed script, and deploy IDs to connect to NetSuite: 
 
-. Go to https://github.com/mulesoft/mule4-netsuite-connector and download the connector as a ZIP file. 
-. Unzip the downloaded ZIP file. 
-. In Studio, go to *File > Import*.
-. Select *Anypoint Studio > Anypoint Studio Project from File System* and click *Next*  
-. In *Project Root*, navigate to the `<download-location>-mule4-netsuite-connector-master/demo/mule-netsuite-connector-restlet-demo` folder and select it. 
-. In *Server runtime*, select *Mule Server* (4.1.1 or later).
-. Click *Finish*.
-
-== Configure the NeSuite Properties
-
-Configure the `mule-netsuite-connector-restlet-demo` demo to connect to NetSuite and deploy the app: 
-
-. In *Package Explorer*, open the `src/main/resources/mule-app.properties` file that is located in the folder of the project you imported.  
-. Configure the credentials, deployed script, and deploy IDs:
+. In Studio, select *File > New > Mule Project*.
+. Enter a name for your Mule project and click *Finish*.
+. In *Package Explorer*, open the `src/main/resources/mule-app.properties` file that is located in the Studio project you created.  
+. Configure the following values:
 +
 [source,javascript,linenums]
 ----
@@ -133,18 +122,119 @@ netsuite.deploy=
 ----
 +
 The `netsuite.script` and `netsuite.deploy` values are the values you wrote down in the last step of <<deploy-a-script-as-restlet,Create and Deploy a Script as a RESTlet>>. 
-. Click *Global Elements* at the base of the project's canvas.
-. In *Global Configuration Elements*, select *NetSuite Rest config* and click *Edit*.
-. Click *Test Connection* to ensure there is connectivity with the sandbox.
+
+
+[[add-connector-to-project]]
+== Add the Connector to Your Mule Project
+
+Add NetSuite Connector to your Mule project to automatically populate the XML code with the connector's namespace and schema location and add the required dependencies to the project's `pom.xml` file:
+
+. In the *Mule Palette* view, click *(X) Search in Exchange*.
+. In *Add Modules to Project*, type `netsuite` in the search field.
+. Click the connector name in *Available modules*.
+. Click *Add*.
+. Click *Finish*.
+
+== Create the App Flow
+
+. In the Studio canvas, click *Configuration XML*.
+. Delete all the contents after the line `<?xml version="1.0" encoding="UTF-8"?>`.
+. Copy and paste the following XML after the line `<?xml version="1.0" encoding="UTF-8"?>`:
 +
-A success message appears:
+[[source,xml,linenums]]
+----
+<mule xmlns:netsuite="http://www.mulesoft.org/schema/mule/netsuite"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/netsuite http://www.mulesoft.org/schema/mule/netsuite/current/mule-netsuite.xsd">
+	<configuration-properties file="mule-app.properties" doc:name="Configuration properties"/>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<netsuite:rest-config name="NetSuite_Rest_config" doc:name="NetSuite Rest config" >
+		<netsuite:restlet-token-connection
+				consumerKey="${netsuite.consumerKey}"
+				consumerSecret="${netsuite.consumerSecret}"
+				tokenId="${netsuite.tokenId}"
+				tokenSecret="${netsuite.tokenSecret}"
+				account="${netsuite.account}"
+				readTimeout="${netsuite.readTimeout}"
+				connectionTimeout="${netsuite.connectTimeout}"/>
+	</netsuite:rest-config>
+	<flow name="html-form-flow">
+        <http:listener config-ref="HTTP_Listener_config" path="/" doc:name="/"/>
+        <parse-template location="form.html" doc:name="Parse Template"/>
+    </flow>
+    <flow name="restletGet">
+        <http:listener config-ref="HTTP_Listener_config" path="/get" doc:name="/get"/>
+        <ee:transform doc:name="Transform GET Input" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+    "id": attributes.queryParams.id,
+    "recordtype": attributes.queryParams.recordtype
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <netsuite:call-restlet-get config-ref="NetSuite_Rest_config" script="${netsuite.script}" deploy="${netsuite.deploy}" doc:name="Call RESTlet (GET)" />
+        <ee:transform doc:name="to JSON" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <logger level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="restletPost">
+        <http:listener config-ref="HTTP_Listener_config" path="/post" doc:name="/post"/>
+        <ee:transform doc:name="Transform POST Input" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <netsuite:call-restlet-post config-ref="NetSuite_Rest_config" deploy="${netsuite.deploy}" script="${netsuite.script}" doc:name="NetSuite RESTlet (POST)"/>
+        <ee:transform doc:name="to JSON" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <logger level="INFO" doc:name="Logger"/>
+    </flow>
+    <flow name="restletDelete">
+        <http:listener config-ref="HTTP_Listener_config" path="/delete" doc:name="/delete"/>
+        <ee:transform doc:name="Transform DELETE Input" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+    "id": attributes.queryParams.id,
+    "recordtype": attributes.queryParams.'recordtype'
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <netsuite:call-restlet-delete config-ref="NetSuite_Rest_config" deploy="${netsuite.deploy}" script="${netsuite.script}" doc:name="NetSuite RESTlet (DELETE)"/>
+        <set-payload value="Record deleted successfully" doc:name="Set Payload"/>
+        <logger  level="INFO" doc:name="Logger"/>
+    </flow>
+	</mule>
+----
 +
-image::netsuite-demo-connection-test.png[Test Connection]
-+
-. Open a browser and access the URL `+http://localhost:8081+`. +
-You can see that the application deployed:
-+
-image::netsuite-demo-main-page.png[Demo Index]
+. Save the project.
 
 === About the Flows
 
@@ -164,9 +254,27 @@ image::netsuite-restlet-post.png[Flow Processor 1]
 +
 image::netsuite-restlet-delete.png[Flow Processor 1]
 
+== Run the App
+
+ Run, deploy, and verify the app: 
+ 
+. Click *Global Elements* at the base of the project's canvas.
+. In *Global Configuration Elements*, select *NetSuite Rest config* and click *Edit*.
+. Click *Test Connection* to ensure there is connectivity with the sandbox.
++
+A success message appears:
++
+image::netsuite-demo-connection-test.png[Test Connection]
+. Click the project name in *Package Explorer* and click *Run > Run As > Mule Application*. +
+In the console, look for the message `Mule is up and kicking` to verify that the application started successfully.
+. Open a browser and access the URL `+http://localhost:8081+`. +
+You can see that the application deployed:
++
+image::netsuite-demo-main-page.png[App Index]
+
 == See Also
 
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
 * xref:index.adoc[NetSuite Connector]
-* xref:netsuite-reference.adoc[NetSuite Connector 9.3 Reference]
+* xref:netsuite-reference.adoc[NetSuite Connector Reference]
 * https://help.mulesoft.com[MuleSoft Help Center]

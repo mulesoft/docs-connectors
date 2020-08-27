@@ -8,6 +8,7 @@ You might encounter the following issues when working with the Anypoint Connecto
 * <<logging-request-responses, The connector does not log requests and responses.>>
 * <<permissions-error, The connector returns a permissions error when fetching metadata.>>
 * <<search-entities, The connector is unable to search for certain types of objects.>>
+* <<item-fullfilment, The connector is unable to add a record with the `ITEM_FULLFILMENT` type.>>
 
 == Connectivity Test Failure During Application Startup [[connectivity-test-failure]]
 
@@ -77,3 +78,114 @@ To perform a search for Sales Order objects and other unsupported objects, you c
 
 * Develop a SuiteScript, deploy it as a RESTlet, and call it from the connector.
 * Create a saved search and call it from the connector.
+
+[[item-fullfilment]]
+== Unable to Add a Record With the ITEM_FULLFILMENT Type
+
+=== Symptom
+
+When you try to add a record with the `ITEM_FULLFILMENT` type, you get this error:
+
+----
+********************************************************************************
+Message               : org.mule.module.netsuite.extension.api.ItemFulfillmentShipStatus cannot be cast to java.lang.String
+Element               : item-fulfillment-bug-demoFlow/processors/3 @ item-fulfillment-bug-demo_(1):item-fulfillment-bug-demo.xml:67 (Add record)
+Element DSL           : <netsuite:add-record doc:name="Add record" doc:id="<doc-id>" config-ref="NetSuite_Config" recordType="ITEM_FULFILLMENT"></netsuite:add-record>
+Error type            : NETSUITE:UNKNOWN
+FlowStack             : at item-fulfillment-bug-demoFlow(item-fulfillment-bug-demoFlow/processors/3 @ item-fulfillment-bug-demo_(1):item-fulfillment-bug-demo.xml:67 (Add record))
+
+  (set debug level logging or '-Dmule.verbose.exceptions=true' for everything)
+----
+
+=== Solution
+
+You can't use the word `package` as an attribute inside the entity package list. 
+
+Use the following code as a template for your flow:
+
+[source,xml,linenums]
+----
+<ee:transform doc:name="Transform Message" doc:id="<doc-id>" >
+                <ee:message >
+                    <ee:set-payload ><![CDATA[%dw 2.0
+                    output application/java
+                    ---
+                    {
+                        createdFrom: {
+                            internalId: 1560,
+                        },
+                        itemList: {
+                            item: payload.itemList.item map (item , indexOfItem) -> {
+                                    orderLine: item.orderLine,
+                                    itemIsFulfilled: true,
+                                    quantity: 1
+                            }
+                        },
+                        packageList: {
+                            packageCollection: [{
+                                packageTrackingNumber: "9400110200GGTTT",
+                                packageWeight: 99.000,
+                                packageDescr: "Description"
+                            }]
+                        },
+                        shipMethod: {
+                            internalId: 528
+                        },
+                        shipStatus: 'SHIPPED'
+                    }]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+            <netsuite:add-record doc:name="Add record"
+                                 doc:id="65c72d9b-0419-4c1d-9a3a-2ba8eba59328" config-ref="requestBasedConfig"
+                                 recordType="ITEM_FULFILLMENT" />
+----
+
+You can use this sample flow if you need one:
+
+----
+ <netsuite:initialize doc:name="Initialize" doc:id="<doc-id>" config-ref="requestBasedConfig">
+                <netsuite:record-to-initialize ><![CDATA[#[%dw 2.0
+			output application/java
+			---
+			{
+				reference: {
+					internalId: 1560,
+						"type": 'SALES_ORDER'
+				},
+				"type": 'ITEM_FULFILLMENT'
+			}]]]></netsuite:record-to-initialize>
+            </netsuite:initialize>
+            <ee:transform doc:name="Transform Message" doc:id="<doc-id>" >
+                <ee:message >
+                    <ee:set-payload ><![CDATA[%dw 2.0
+                    output application/java
+                    ---
+                    {
+                        createdFrom: {
+                            internalId: 1560,
+                        },
+                        itemList: {
+                            item: payload.itemList.item map (item , indexOfItem) -> {
+                                    orderLine: item.orderLine,
+                                    itemIsFulfilled: true,
+                                    quantity: 1
+                            }
+                        },
+                        packageList: {
+                            packageCollection: [{
+                                packageTrackingNumber: "9400110200GGTTT",
+                                packageWeight: 99.000,
+                                packageDescr: "Description"
+                            }]
+                        },
+                        shipMethod: {
+                            internalId: 528
+                        },
+                        shipStatus: 'SHIPPED'
+                    }]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+            <netsuite:add-record doc:name="Add record"
+                                 doc:id="<doc-id>"
+                                 recordType="ITEM_FULFILLMENT" />
+----
