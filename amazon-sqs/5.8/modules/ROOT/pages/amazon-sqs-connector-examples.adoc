@@ -208,37 +208,21 @@ Paste this code into your XML editor to quickly load the flow for this example u
 [source,xml,linenums]
 ----
 <mule xmlns:sqs="http://www.mulesoft.org/schema/mule/sqs" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-	xmlns:file="http://www.mulesoft.org/schema/mule/file"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
   http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
   http://www.mulesoft.org/schema/mule/ee/core
   http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-  http://www.mulesoft.org/schema/mule/file 
-  http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
   http://www.mulesoft.org/schema/mule/sqs
 	http://www.mulesoft.org/schema/mule/sqs/current/mule-sqs.xsd">
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-	
 	<sqs:config name="Amazon_SQS_Configuration" doc:name="Amazon SQS Configuration"
 	defaultQueueUrl="${sqs.queueUrl}" >
 		<sqs:basic-connection accessKey="${sqs.accessKey}" secretKey="$sqs.secretKey}" region="us-east-1" />
 	</sqs:config>
-	
-	<sqs:config name="Amazon_SQS_Large_Payload_Configuration" doc:name="Amazon SQS Configuration"
-	defaultQueueUrl="${sqs.queueUrl}" >
-		<sqs:basic-connection accessKey="${sqs.accessKey}" secretKey="$sqs.secretKey}" region="us-east-1" >
-			<sqs:large-payload-support bucket="large-sqs-payload-bucket" messageSizeThreshold="256" messageSizeThresholdUnit="KB" />
-		</sqs:basic-connection> 
-	</sqs:config>
-	
-	<file:config name="File_Config" doc:name="File Config" >
-		<file:connection workingDir="${app.home}" />
-	</file:config>
-	
 	<flow name="sqs-send-messageFlow" >
 		<http:listener doc:name="Listener"
 		config-ref="HTTP_Listener_config"
@@ -283,64 +267,9 @@ output application/java
 		<logger level="INFO" doc:name="Log Count"
 		message="Sent Message: `#[payload]`"/>
 	</flow>
-
-	<flow name="sqs-send-LargeMessageFlow" >
-		<http:listener doc:name="Listener"
-		config-ref="HTTP_Listener_config"
-		path="/largePayload"/>
-		<file:read doc:name="Read" config-ref="File_Config" path="largePayload.txt"/>
-		<ee:transform doc:name="Transform Message" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/java
----
-{
-	delaySeconds: 0,
-	body: payload,
-	messageAttributes: {
-		"AccountId": {
-			"stringValue" : "000123456",
-			"dataType" : "String.AccountId"
-		} as Object {
-			class: "org.mule.extension.sqs.api.model.MessageAttributeValue"
-		},
-		"NumberId": {
-			"stringValue" : "230.000000000000000001",
-			"dataType" : "Number"
-		} as Object {
-			class : "org.mule.extension.sqs.api.model.MessageAttributeValue"
-		}
-	} as Object {
-		class: "java.util.HashMap"
-	}
-} as Object {
-	class: "org.mule.extension.sqs.api.model.Message"
-}]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
-		<sqs:send-message doc:name="Send message" configref="Amazon_SQS_Large_Payload_Configuration"/>
-		<logger level="INFO"
-		doc:name="Log Response"
-		message="payload"/>
-		<sqs:get-approximate-number-of-messages
-		doc:name="Get approximate number of messages"
-		config-ref="Amazon_SQS_Large_Payload_Configuration"
-		queueUrl="${sqs.queueUrl}"/>
-		<logger level="INFO" doc:name="Log Count"
-		message="Sent Message: `#[payload]`"/>
-	</flow>
-	
-	
-	
 	<flow name="sqs-receive-message-flow" >
 		<sqs:receivemessages doc:name="Receive messages"
 		config-ref="Amazon_SQS_Configuration"/>
-		<logger level="INFO" doc:name="Log Receipt" />
-	</flow>
-	
-	<flow name="sqs-receive-large-message-flow" >
-		<sqs:receivemessages doc:name="Receive messages"
-		config-ref="Amazon_SQS_Large_Payload_Configuration"/>
 		<logger level="INFO" doc:name="Log Receipt" />
 	</flow>
 </mule>
