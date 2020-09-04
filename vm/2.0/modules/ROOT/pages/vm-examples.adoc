@@ -7,6 +7,8 @@ In the following example, we take an incoming http message's attributes and put 
 
 The message received by the vm listener will contain its own message attributes, set by the listener source, and the payload will contain the attributes from the previous message. We then store the received information in an object store.
 
+First, we set up the configuration for an http listener, our vm queue and an object store.
+
 [source,xml,linenums]
 ----
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" basePath="/publish" >
@@ -21,8 +23,16 @@ The message received by the vm listener will contain its own message attributes,
 	</vm:config>
 
 	<os:object-store name="Object_store" doc:name="Object store" />
+----
 
-	<flow name="vm-exampleFlow" >
+Next, we will create flow which will:
+1. Listen for incoming http messages.
+2. Transform the current message (incoming http request) into a json structure that will contain the 'listenerPath' and 'method' attributes. In this transformation, we will also set a new custom attribute that we will call 'sizeAttribute'.
+3. Then we take our message's payload (the json we created) and attributes (our 'sizeAttribute') and create the message we will publish to our vm queue, which will contain the previous attributes from the http request and our new 'sizeAttribute' in its payload.
+
+[source,xml,linenums]
+----
+	<flow name="vm-publisherFlow" >
 		<http:listener config-ref="HTTP_Listener_config" path="/message"/>
 		<ee:transform>
 			<ee:message>
@@ -52,8 +62,15 @@ The message received by the vm listener will contain its own message attributes,
 			{'listenerPath': payload.listenerPath, 'method': payload.method, 'messageSize': attributes.sizeAttribute }]]]></vm:content>
 		</vm:publish>
 	</flow>
+----
 
-	<flow name="vm-exampleFlow1" >
+The last flow we will need is one that listens for incoming messages in our vm queue.
+
+In this flow we will print our incoming message's payload (the one we built in the previous flow) and attributes (which are set by the vm:listener source), and we will store the received 'method':'listenerPath' pair into an object store.
+
+[source,xml,linenums]
+----
+	<flow name="vm-listenerFlow" >
 		<vm:listener config-ref="VM_Config" queueName="testQueue1"/>
 		<logger level="INFO" message="#[payload]"/>
 		<logger level="INFO" message="#['VM message attributes: queue name ' ++ attributes.queueName as String]"/>
@@ -62,4 +79,3 @@ The message received by the vm listener will contain its own message attributes,
 		</os:store>
 	</flow>
 ----
-
