@@ -1,0 +1,65 @@
+= VM Connector - Mule 4
+:page-aliases: connectors::vm/vm-connector-examples.adoc
+
+In Mule 4 the only available method we have to propagate message attributes through a vm queue is through the message payload.
+
+In the following example, we take an incoming http message's attributes and put them into our message payload, which we will publish to our test queue. We also added a custom attribute of our own, which will also be sent in the message payload.
+
+The message received by the vm listener will contain its own message attributes, set by the listener source, and the payload will contain the attributes from the previous message. We then store the received information in an object store.
+
+[source,xml,linenums]
+----
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" basePath="/publish" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<vm:config name="VM_Config" doc:name="VM Config">
+		<vm:connection />
+		<vm:queues>
+	        <vm:queue queueName="testQueue1" queueType="TRANSIENT" />
+	    </vm:queues>
+	</vm:config>
+
+	<os:object-store name="Object_store" doc:name="Object store" />
+
+	<flow name="vm-exampleFlow" >
+		<http:listener config-ref="HTTP_Listener_config" path="/message"/>
+		<ee:transform>
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+					output application/json
+					---
+					{
+						listenerPath: attributes.listenerPath,
+						method: attributes.method
+					}
+					]]>
+				</ee:set-payload>
+				<ee:set-attributes><![CDATA[%dw 2.0
+				output application/json
+				---
+				{
+					sizeAttribute: sizeOf(attributes.listenerPath) + sizeOf(attributes.method)
+				}
+				]]></ee:set-attributes>
+			</ee:message>
+		</ee:transform>
+
+		<vm:publish doc:name="Publish" config-ref="VM_Config" queueName="testQueue1">
+			<vm:content ><![CDATA[#[%dw 2.0
+			output application/json
+			---
+			{'listenerPath': payload.listenerPath, 'method': payload.method, 'messageSize': attributes.sizeAttribute }]]]></vm:content>
+		</vm:publish>
+	</flow>
+
+	<flow name="vm-exampleFlow1" >
+		<vm:listener config-ref="VM_Config" queueName="testQueue1"/>
+		<logger level="INFO" message="#[payload]"/>
+		<logger level="INFO" message="#['VM message attributes: queue name ' ++ attributes.queueName as String]"/>
+		<os:store key="payload.method" objectStore="Object_store">
+			<os:value ><![CDATA[#[payload.listenerPath]]]></os:value>
+		</os:store>
+	</flow>
+----
+
