@@ -1,0 +1,119 @@
+= Apply Operation Examples
+
+The `apply` operation applies WSS information to a SOAP response according to the configuration specified in `WssOutboundConfig`.
+
+.Parameters
+[%header%autowidth.spread,cols="a*"]
+|===
+| Name | M | ES | Default Value | Type | Description
+| `response` | Yes | No | - | `TypedValue <InputStream>` | SOAP response
+| `version` | No | Yes | `SOAP_12` | `SoapVersion` | SOAP version: `SOAP_11` or `SOAP_12`
+|===
+
+Output::
+The output is a SOAP response that contains the header element `<wsse:Security></wsse:Security>`, resulting from applying the outbound configuration. The operation does not return any attributes.
+
+.Errors
+[%header%autowidth.spread,cols="a*"]
+|===
+| Namespace | Type | Parent | Description
+| WSS | SECURITY_APPLYING | n.a. | Thrown when failing to apply WSS in the response
+| WSS | MISSING_CERTIFICATE | n.a. | Thrown when unable to get a certificate from either the trustStore or the keystore
+|===
+
+[[encrypt]]
+== Encrypt
+
+This example shows you how to apply encryption using a keystore:
+
+.Encyption Example
+[source,XML,linenums]
+----
+<wss:outbound-config name="encryption-config">
+	<wss:encryption-config>
+		<wss:keystore-config path="certificates/sign-keystore.jks"
+password="mulepassword"
+alias="muleclient"
+keyPassword="mulepassword" />
+	</wss:encryption-config>
+</wss:outbound-config>
+
+<flow name="OrderTshirtServiceFlow">
+	<http:listener config-ref="HTTP-listener-config" path="/order" />
+	<flow-ref name="OrderTshirtFlowImpl" />
+	<wss:apply-wss config-ref="encryption-config" version="SOAP_12"/>
+</flow>
+----
+
+[[signature]]
+== Sign
+
+This exampe shows you how to sign a SOAP response using a keystore and the `RSAwithSHA1` algorithm:
+
+.Signature Example
+[source,XML,linenums]
+----
+<wss:outbound-config name="sign-config">
+	<wss:signature-config algorithm="RSAwithSHA1" >
+		<wss:keystore-config path="certificates/sign-keystore.jks"
+                            	password="mulepassword"
+					alias="muleclient"
+       	                    keyPassword="mulepassword" />
+	</wss:signature-config>
+</wss:outbound-config>
+
+<flow name="OrderTshirtServiceFlow">
+	<http:listener config-ref="HTTP-listener-config" path="/order" />
+	<flow-ref name="OrderTshirtFlowImpl" />
+	<wss:apply-wss config-ref="sign-config" version="SOAP_12"/>
+</flow>
+----
+
+[[encryption-signing-certificate]]
+== Encrypt and Sign a Certificate
+
+This example validates a signed request, saves the signing certificate, and uses it later in the `apply-wss` operation to sign the response:
+
+.Request Example
+[source,XML,linenums]
+----
+<soapenv:Envelope xmlns:ser="http://service.soap.service.mule.org/" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+   <soapenv:Header><wsse:Security xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"><ds:Signature Id="SIG-F8FAC4A91BEF76355615530303348205" xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"><ec:InclusiveNamespaces PrefixList="ser soapenv" xmlns:ec="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:CanonicalizationMethod><ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><ds:Reference URI="#id-F8FAC4A91BEF76355615530303348174"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"><ec:InclusiveNamespaces PrefixList="ser" xmlns:ec="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transform></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><ds:DigestValue>yLFLEkH4/MjYbZ4viZxjou9/4os=</ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue>YF5nsQ2+9E0emipolARuUDnL4G1CItWw8t3xuCJI5DVTFJ6RNgvJTqKQz6s2MAC1EFnL0ZE7kdCO
+aopxUafPdlPkpfLeJOxMwggWTrjlszOoSq8ALLKybvhioBQYwV5Fm9rB04yalvbWCjCvQTaq83KH
+WPpzKWfLXHXG4JV6m5Rue90ybfYHIM+FOgmC9CBbQX29wPz9pDCh1bGydEiSbyWje/frec0Jlw9M
+vOCzPz5TbDJdOmVIKoSHTWPpeV3lZIG9vLYd4CYpw54CsZtc20QzWAF/DPlLC8TsL0rIgIxDCKYb
+lFlAANVcl1CabqPziNBhep+9cB/oNHca3BVSQw==</ds:SignatureValue><ds:KeyInfo Id="KI-F8FAC4A91BEF76355615530303348132"><wsse:SecurityTokenReference wsu:Id="STR-F8FAC4A91BEF76355615530303348153"><ds:X509Data><ds:X509IssuerSerial><ds:X509IssuerName>CN=Unknown,OU=Unknown,O=Unknown,L=Unknown,ST=Unknown,C=US</ds:X509IssuerName><ds:X509SerialNumber>1545521240</ds:X509SerialNumber></ds:X509IssuerSerial></ds:X509Data></wsse:SecurityTokenReference></ds:KeyInfo></ds:Signature></wsse:Security></soapenv:Header>
+   <soapenv:Body wsu:Id="id-F8FAC4A91BEF76355615530303348174" xmlns:wsu="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd">
+      <ser:echo>
+         <!--Optional:-->
+         <text>test</text>
+      </ser:echo>
+   </soapenv:Body>
+</soapenv:Envelope>
+----
+
+
+.Encyption Example
+[source,XML,linenums]
+----
+<wss:inbound-config name="validate-signature-config">
+   <wss:verify-signature-config>
+       <wss:truststore-config path="certificates/verify-signature-truststore.jks"
+					password="mulepassword" />
+   </wss:verify-signature-config>
+</wss:inbound-config>
+
+<wss:outbound-config name="encryption-without-keystore-config">
+   <wss:encryption-config />
+</wss:outbound-config>
+
+<flow name="OrderTshirtServiceFlow">
+	<http:listener config-ref="HTTP-listener-config" path="/order" />
+	<wss:validate-wss config-ref="validate-signature-config" version="SOAP_12" />
+	<flow-ref name="OrderTshirtFlowImpl" />
+	<wss:apply-wss config-ref="encryption-without-keystore-config"
+					version="SOAP_12" />
+</flow>
+----
+
+
