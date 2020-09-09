@@ -1,81 +1,20 @@
-= VM Connector - Mule 4
+= VM Connector Examples
 :page-aliases: connectors::vm/vm-connector-examples.adoc
 
-In Mule 4 the only available method we have to propagate message attributes through a vm queue is through the message payload.
+To fully benefit from using Anypoint Connector for Virtual Machine (VM) (VM Connector), see the following examples of configuring the connector operations:
 
-In the following example, we take an incoming http message's attributes and put them into our message payload, which we will publish to our test queue. We also added a custom attribute of our own, which will also be sent in the message payload.
+* xref:vm-dynamic-routing.adoc[Dynamic Routing with the VM Connector] +
+Configure the *VM Publish* operation to dynamic route messages to different queues depending on certain conditions.
+* xref:vm-propagate-messages.adoc[Propagate Message Attributes with the VM Connector] +
+Configure both the *VM Publish* operation *VM Listener* source to propagate message attributes through a VM queue via the message payload.
+* xref:vm-publish-across-apps.adoc[Send Messages across Different Apps with the VM Connector ] +
+Configure the *VM Publish*, *VM Listener* and *VM Consume* operations to send messages across different apps.
+* xref:vm-publish-listen.adoc[Publish and Listen to Messages through the VM Connector] +
+Configure the *VM Publish* operation and *VM Listener* source to publish a message that is received by a different flow.
+* xref:vm-publish-response.adoc[Publish Message and Get a Response through the VM Connector] +
+Configure the *VM Publish consume* operation to publish a message and get a response back.
 
-The message received by the vm listener will contain its own message attributes, set by the listener source, and the payload will contain the attributes from the previous message. We then store the received information in an object store.
+== See Also
 
-First, we set up the configuration for an http listener, our vm queue and an object store.
-
-[source,xml,linenums]
-----
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" basePath="/publish" >
-		<http:listener-connection host="0.0.0.0" port="8081" />
-	</http:listener-config>
-
-	<vm:config name="VM_Config" doc:name="VM Config">
-		<vm:connection />
-		<vm:queues>
-	        <vm:queue queueName="testQueue1" queueType="TRANSIENT" />
-	    </vm:queues>
-	</vm:config>
-
-	<os:object-store name="Object_store" doc:name="Object store" />
-----
-
-Next, we will create flow which will:
-1. Listen for incoming http messages.
-2. Transform the current message (incoming http request) into a json structure that will contain the 'listenerPath' and 'method' attributes. In this transformation, we will also set a new custom attribute that we will call 'sizeAttribute'.
-3. Then we take our message's payload (the json we created) and attributes (our 'sizeAttribute') and create the message we will publish to our vm queue, which will contain the previous attributes from the http request and our new 'sizeAttribute' in its payload.
-
-[source,xml,linenums]
-----
-	<flow name="vm-publisherFlow" >
-		<http:listener config-ref="HTTP_Listener_config" path="/message"/>
-		<ee:transform>
-			<ee:message>
-				<ee:set-payload><![CDATA[%dw 2.0
-					output application/json
-					---
-					{
-						listenerPath: attributes.listenerPath,
-						method: attributes.method
-					}
-					]]>
-				</ee:set-payload>
-				<ee:set-attributes><![CDATA[%dw 2.0
-				output application/json
-				---
-				{
-					sizeAttribute: sizeOf(attributes.listenerPath) + sizeOf(attributes.method)
-				}
-				]]></ee:set-attributes>
-			</ee:message>
-		</ee:transform>
-
-		<vm:publish doc:name="Publish" config-ref="VM_Config" queueName="testQueue1">
-			<vm:content ><![CDATA[#[%dw 2.0
-			output application/json
-			---
-			{'listenerPath': payload.listenerPath, 'method': payload.method, 'messageSize': attributes.sizeAttribute }]]]></vm:content>
-		</vm:publish>
-	</flow>
-----
-
-The last flow we will need is one that listens for incoming messages in our vm queue.
-
-In this flow we will print our incoming message's payload (the one we built in the previous flow) and attributes (which are set by the vm:listener source), and we will store the received 'method':'listenerPath' pair into an object store.
-
-[source,xml,linenums]
-----
-	<flow name="vm-listenerFlow" >
-		<vm:listener config-ref="VM_Config" queueName="testQueue1"/>
-		<logger level="INFO" message="#[payload]"/>
-		<logger level="INFO" message="#['VM message attributes: queue name ' ++ attributes.queueName as String]"/>
-		<os:store key="payload.method" objectStore="Object_store">
-			<os:value ><![CDATA[#[payload.listenerPath]]]></os:value>
-		</os:store>
-	</flow>
-----
+xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+https://help.mulesoft.com[MuleSoft Help Center]
