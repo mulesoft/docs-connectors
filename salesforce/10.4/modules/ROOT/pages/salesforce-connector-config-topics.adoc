@@ -1,0 +1,97 @@
+= Salesforce Connector 10.4 Additional Configuration - Mule 4 
+:page-aliases: connectors::salesforce/salesforce-connector-config-topics.adoc
+
+Configure these Anypoint Connector for Salesforce (Salesforce Connector) operations to:
+
+* Load data in batches
+* Specify a Lead ID for a Lead Convert Request operation
+* Use the Replay topic and Replay channel listener operations
+* Configure a redelivery policy
+
+[[batchdata]]
+== Load Data in Batches
+
+The Salesforce Bulk API loads batches of your organization's data into Salesforce. Salesforce Connector provides the *Create* and *Create Bulk* operations for working with the Bulk API.
+
+For all bulk operations, Salesforce handles the creation process in the background. The connector replies with a `BatchInfo` object, which contains the ID of the batch and the ID of the job it creates to upload the batched objects.
+
+In Salesforce, you can track the status of bulk data load jobs and their associated batches by using the job ID for Bulk Data Load Jobs:
+
+. Click *<YOUR_NAME > Setup > Monitoring > Bulk Data Load Jobs*.
+. Click the job ID to view the job detail page.
+
+The job detail page includes a list of all the batches related to the job. The list provides `View Request` and `View Response` links for each batch. If the batch is a CSV file, the links return the request or response in CSV format. If the batch is an XML file, the links return the request or response in XML format.
+
+[[leadconvert]]
+== Specify a Lead Convert Request ID
+
+To specify a lead ID for a `LeadConvertRequest` operation, use a DataWeave transform message. When you use a transform message before the operation, you must add the `leadId` field, because the metadata for the operation doesn't specify it:
+
+[source,example,linenums]
+----
+<ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+    leadId: "LEAD_ID",
+    accountId: "ACCOUNT_ID",
+    convertedStatus: "Closed - Converted",
+    doNotCreateOpportunity: true
+} as Object {
+    class : "org.mule.extension.salesforce.api.core.LeadConvertRequest"
+}]]></ee:set-payload>
+            </ee:message>
+</ee:transform>
+----
+
+[[objectstoreusage]]
+== Object Store Usage
+
+Both Salesforce Connector and Mule use an object store to persist data for features such as automatic message replay and message redelivery:
+
+* Object Store for on-premises deployments of Mule apps has no transaction limits.
+* The free version of Object Store for CloudHub deployments of Mule apps has a limit of 10 transactions per second. 
+
+For more information about object store versions, see https://docs.mulesoft.com/object-store/#object-store-notes[Object Store Notes].
+
+
+=== Replay Topic and Replay Channel Listener Operations
+
+The *Replay topic* and *Replay channel listener* operations have the option to continue from the last replay ID they received before restarting the application.
+
+When a Mule app starts for the first time, the connector creates an object store that is used to save data related to messages that were processed successfully or that failed:
+
+* For each message that was processed successfully, the information stored consists of a replay ID associated with the message.
+* For each message that failed, the information stored consists of a number that represents the lowest replay ID for which the processing failed.
+
+These two structures ensure that no message is processed twice and that when the application is restarted, it can reprocess the failed messages.
+
+For each message that comes through a topic or streaming channel to which the connector is subscribed, the connector updates the object store information using up to four transactions.
+
+
+=== Message Redelivery for Input Sources
+
+You can configure a redelivery policy for input sources by setting the number of redelivery attempts to try after an initial failure. You can specify an object store for this policy. If you don't specify an object store, Mule creates a non-persistent object store.
+
+The number of transactions used to interact with the object store varies based on the number of retries configured for the redelivery policy.
+
+For more information about configuring a redelivery policy, see xref:mule-runtime::redelivery-policy.adoc[Redelivery Policy].
+
+=== OAuth 2.0 Connection Type
+
+When configuring an OAuth 2.0 connection, you can specify an object store that stores each resource owner's ID data. If you don't specify an object store, Mule automatically provisions the default object store.
+
+The app interacts with the object store automatically when a new resource owner is authenticated, the access token is refreshed, or the access token is invalidated.
+
+== Clear Fields by Updating Field Value to Null
+
+In Salesforce Connector 10.x, to clear a field, you must use an *Update* or *Upsert* request operation and set the name of the fields you want to nullify in the *fieldsToNull* field, for example:
+
+image::salesforce-connector-10-set-fields-to-null.png[Set a field to null ]
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
