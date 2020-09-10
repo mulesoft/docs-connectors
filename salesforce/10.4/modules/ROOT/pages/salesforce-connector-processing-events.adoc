@@ -1,16 +1,14 @@
 = Processing Events With Salesforce Connector
 
-You can use Anypoint Connector for Salesforce (Salesforce Connector) as an inbound connector to stream data from Salesforce into your application. To use the connector in this capacity, use one of these sources:
+You can use Anypoint Connector for Salesforce (Salesforce Connector) as an inbound connector to stream data from Salesforce into your application. To use the connector this way, use one of these source operations:
 
-* Subscribe topic listener
-* Subscribe channel listener
-* Replay topic listener
-* Replay channel listener
-
-To enable the *Resume from the Last Replay Id* functionality for the Replay Topic Listener and Replay Channel Listener source operations, the connector must store some information about the events that were successfully processed by the flow in which the source operation is used. The connector uses Object Store to store that information. For more details about how Object Store is used, see <<objectstoreusage, Object Store Usage>>.
+* *Subscribe topic listener*
+* *Subscribe channel listener*
+* *Replay topic listener*
+* *Replay channel listener*
 
 [NOTE]
-When deploying apps on a distributed environment (such as CloudHub), the source must run on the primary node. If the same source runs on multiple nodes, it causes duplicate event consumption.
+When deploying apps on a distributed environment (such as a runtime cluster), the source operation must run on the primary node. If the same source runs on multiple nodes, it causes duplicate event consumption.
 
 == Prerequisites
 
@@ -19,6 +17,43 @@ To process events with Salesforce Connector, ensure you meet the following prere
 * You must have access to the Salesforce target resource.
 * Before you can receive events for Salesforce changes associated with a topic, you must create the topic, if it does not exist. 
 * You must have the required Salesforce Streaming API permissions enabled in your organization.
+
+[[objectstoreusage]]
+== Object Store Usage
+
+Both Salesforce Connector and Mule use an object store to persist data for features such as automatic message replay and message redelivery:
+
+* The object store included in Mule for on-premises deployments of Mule apps has no transaction limits.
+* The free version of Object Store for CloudHub deployments of Mule apps has a limit of 10 transactions per second. 
+
+For more information about object store versions, see https://docs.mulesoft.com/object-store/#object-store-notes[Object Store Notes].
+
+
+=== Replay Topic and Replay Channel Listener Operations
+
+The *Replay topic* and *Replay channel listener* operations have the option to continue from the last replay ID they received before restarting the application.
+
+When a Mule app starts for the first time, the connector creates an object store that is used to save data related to messages that were processed successfully or that failed:
+
+* For each message that was processed successfully, the information stored consists of a replay ID associated with the message.
+* For each message that failed, the information stored consists of a number that represents the lowest replay ID for which the processing failed.
+
+These two structures ensure that no message is processed twice and that when the application is restarted, it can reprocess the failed messages.
+
+For each message that comes through a topic or streaming channel to which the connector is subscribed, the connector updates the object store information using up to four transactions.
+
+=== Resume from the Last Replay ID
+
+To enable the *Resume from the Last Replay Id* functionality for the *Replay Topic Listener* and *Replay Channel Listener* source operations, the connector must store some information about the events that were successfully processed by the flow in which the source operation is used. The connector uses Object Store to store that information. 
+
+The way Object Store is used to store the necessary data for the *Resume from the Last Replay Id* varies depending on the environment:
+
+* When a Mule application is running locally, the connector creates a persistent store in the file system. This way, if the application is stopped and restarted, or if there was a connection issue that triggered a reconnection, the data that was saved in the object store is not lost and the connector can continue processing messages at the point where it previously stopped.
+* When running the application in a cluster, either with the nodes on the same machine, or with the nodes on different machines, a distributed in-memory object store is used. This way, if the primary node (the one consuming the messages) shuts down, the node that takes over for the primary node will not consume the same messages again, but will continue from where the previous node stopped processing the messages. +
+If the cluster is stopped, the data from the object store is lost, so when the cluster restarted the messages might be reprocessed again depending on the configuration at the source level. +
+If you need data to be persisted so that the application can continue processing events when restarted, the object store can be configured to use a database as the persistence layer. For more information, see xref:mule-runtime::creating-and-managing-a-cluster-manually.adoc[Creating and Managing a Cluster]).
+* When running the application in CloudHub, if you are using multiple workers, all of the workers receive and process the events.
+
 
 [[createtopic]]
 == Create a Topic to Receive Data from Salesforce
@@ -105,7 +140,7 @@ After you create a streaming channel, you can start receiving events by subscrib
 </flow>
 ----
 
-The *Streaming channel* field of the *Subscribe channel listener* operation does not display change events that are available in the Salesforce environment in the current version of the connector. However, your connector can subscribe to a streaming channel to obtain this information. For example, to subscribe to the `All Change Events` channel, use `/data/ChangeEvents` as the channel name to which to subscribe.
+The *Streaming channel* field of the *Subscribe channel listener* operation does not display change events that are available in the Salesforce environment. However, your connector can subscribe to a streaming channel to obtain this information. For example, to subscribe to the `All Change Events` channel, use `/data/ChangeEvents` as the channel name to which to subscribe.
 
 For more information, see https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_subscribe_channels.htm[Subscription Channels] in the Salesforce Change Data Capture Developer Guide.
 
@@ -130,7 +165,7 @@ If you specify either the `ALL` replay option or `ONLY_NEW` replay option, the `
 
 The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
 
-To support the *Resume from Last Replay ID* feature, the connector uses a persistent object store to keep different details regarding the processed messages. This feature is enhanced in Salesforce Connector 10.x to reduce message loss probability and to avoid processing duplicate messages. For more details about how Object Store is used, check the xref:salesforce-connector-config-topics.adoc#objectstoreusage[Object Store Usage] section.
+To support the *Resume from Last Replay ID* feature, the connector uses a persistent object store to keep different details regarding the processed messages. This feature is enhanced in Salesforce Connector 10.x to reduce message loss probability and to avoid processing duplicate messages. For more details about how Object Store is used, check the <<objectstoreusage,Object Store Usage>> section.
 
 In the following XML example, the *Replay topic listener* operation acts like an inbound endpoint for the Logger component message:
 
@@ -163,7 +198,7 @@ If you specify either the `ALL` replay option or the `ONLY_NEW` replay option, t
 
 The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
 
-To support the *Resume from Last Replay ID* feature, the connector uses a persistent object store to keep different details regarding the processed messages. This feature is enhanced in Salesforce Connector 10.x to reduce message loss probability and to avoid processing duplicate messages. For more details about how Object Store is used, check the xref:salesforce-connector-config-topics.adoc#objectstoreusage[Object Store Usage] section.
+To support the *Resume from Last Replay ID* feature, the connector uses a persistent object store to keep different details regarding the processed messages. This feature is enhanced in Salesforce Connector 10.x to reduce message loss probability and to avoid processing duplicate messages. For more details about how Object Store is used, check the <<objectstoreusage,Object Store Usage>> section.
 
 [[customevents]]
 == Custom Event Notifications
@@ -238,5 +273,6 @@ The JSON received as a response from the push event operation looks something li
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
 * xref:salesforce-connector-config-topics.adoc[Additional Configuration]
 * xref:salesforce-connector-examples.adoc[Examples]
+* xref:mule-runtime::creating-and-managing-a-cluster-manually.adoc[Creating and Managing a Cluster]
 * xref:salesforce-connector-troubleshoot.adoc[Troubleshoot]
 * https://help.mulesoft.com[MuleSoft Help Center]
