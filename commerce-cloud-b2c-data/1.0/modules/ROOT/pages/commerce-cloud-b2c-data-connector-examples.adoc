@@ -1,0 +1,186 @@
+= Commerce Cloud B2C Data Connector Examples - Mule 4
+
+== Create a Customer After Submitting an Order in Anypoint Studio 7
+
+Commerce Cloud B2C Data Connector is an operation-based connector, which means that when you add the connector to your flow, you need to configure a specific operation for the connector to perform. 
+
+Commerce Cloud B2C Data Connector supports three connection types. This example uses the Customer Auth Connection Provider connection configuration.
+
+This use case shows how a guest user logs in to the Shop API and submits a basket of products, with shopping details. The successful submission of this order leads to registering the guest user as a customer. 
+
+The use case requires you to follow these steps:
+
+. Create a new Mule application in Anypoint Studio (Studio), configuring port 8081 as HTTP Listener and the path as `/registrationPostCheckout`.
+
+image::shop-api/shop-connector-example/shop-connector-http-listener-config.jpg[]
+
+[start = 2]
+. Add Variable, Post Basket, Post Order, and Post Customer operations to the flow.
+
+image::shop-api/shop-connector-example/shop-connector-post-checkout-flow.jpg[]
+
+[start = 3]
+. Obtain the required body for the Post Basket operation from the postman and save it into Variable.
+
+image::shop-api/shop-connector-example/shop-connector-basket-body-variable.jpg[]
+
+[start = 4]
+. A sample Post Basket operation payload is shown here:
+
+[source,xml,linenums]
+----
+{	
+	"billing_address": {
+        "_type": "order_address",
+        "address1": "Parvati",
+        "address2": "Swargate",
+        "city": "Pune",
+        "country_code": "IN",
+        "first_name": "User",
+        "full_name": "User -1",
+        "id": "a26b936e00a8e27190ee5248c3",
+        "last_name": "1",
+        "phone": "123456789",
+        "postal_code": "411001",
+        "post_box": "PUNE",
+        "second_name": "C.",
+        "state_code": "MH"
+    },
+    "product_items" : [{
+  "product_id": "609717716671M",
+  "quantity": 1,
+  "shipment_id": "me"
+}],
+"payment_instruments":[
+	{
+		"payment_method_id": "PayPal"
+	}],
+	"shipments":[
+		{
+		"shipping_address":	{
+	"address1": "Parvati",
+	"address2": "Swargate",
+	"city": "Pune",
+	"country_code": "IN",
+	"first_name": "User-1",
+	"last_name": "1",
+	"phone": "123456789",
+	"post_box": "PUNE",
+	"postal_code": "411001",
+	"second_name": "C.",
+	"state_code": "MH"
+},
+	"shipping_method":{
+  "id": "003"
+}
+		}]
+
+}
+----
+
+[start = 5]
+. Either select the Customer Auth Connection Provider configuration from Shop API Connector and configure it with the required values or add a new configuration by clicking the green plus (+) symbol.
+
+image::shop-api/shop-connector-example/shop-connector-customer-configuration.jpg[]
+
+[start = 6]
+. If you have added new connection details, test your connection.
+
+. Complete the required fields for the Post Basket operation and save the configuration.
+
+image::shop-api/shop-connector-example/shop-connector-post-basket-config.jpg[]
+
+[start = 8]
+. Complete the required fields for the Post Order operation and save the configuration.
+
+image::shop-api/shop-connector-example/shop-connector-post-order-config.jpg[]
+
+[start = 9]
+. Supply the required body for the Post Customers operation and save the configuration.
+
+image::shop-api/shop-connector-example/shop-connector-post-customer.jpg[]
+
+[start = 10]
+. Save the Mule project.
+
+. Run the project as a Mule application by right-clicking the project name in Package Explorer and selecting Run As > Mule Application.
+
+. Navigate to http://localhost:8081/registrationPostCheckout, open Postman, and check the response.
+
+. You should see a new Customer and Placed Order success message.
+
+=== To Create a Mule Project Using XML
+
+. Create new Mule Application
+. Click the Configuration XML tab at the base of the canvas.
+. Copy and paste the following code:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:shop="http://www.mulesoft.org/schema/mule/shop"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/shop http://www.mulesoft.org/schema/mule/shop/current/mule-shop.xsd">
+	<shop:shop-jwt-and-oauth2-configuration-config name="Shop_Connector_Guest_JWT_Token" doc:name="Shop Connector Shop jwt and oauth 2 configuration" >
+		<shop:customers-auth-connection username="User098" password="Mr@56@7W67" baseUri="https://student28-training-eu06-dw.demandware.net/s/RefArch/dw/shop/v19_5" />
+	</shop:shop-jwt-and-oauth2-configuration-config>
+	<flow name="registrationPostCheckoutFlow">
+		<http:listener doc:name="8081/registrationPostCheckout" config-ref="HTTP_Listener_config" path="/registrationPostCheckout">
+		<http:error-response statusCode="#[error.errorMessage.attributes.statusCode]">
+               <http:body ><![CDATA[#[output application/json
+---
+error.errorMessage.payload]]]></http:body>
+           </http:error-response>
+           </http:listener>
+		<set-variable doc:name="basket" variableName="basket" value="#[payload]"/>
+		<shop:create-baskets doc:name="Post Baskets" config-ref="Shop_Connector_Guest_JWT_Token">
+			<shop:content ><![CDATA[#[vars.basket]]]></shop:content>
+			<shop:custom-headers><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.guestToken
+}]]]></shop:custom-headers>
+		</shop:create-baskets>
+		<shop:create-orders doc:name="Post Orders" config-ref="Shop_Connector_Guest_JWT_Token">
+			<shop:content ><![CDATA[#[output application/json
+---
+{
+	basket_id:payload.basket_id
+}]]]></shop:content>
+			<shop:custom-headers ><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.guestToken
+}]]]></shop:custom-headers>
+		</shop:create-orders>
+		<shop:create-customers doc:name="Post Customers" config-ref="Shop_Connector_Guest_JWT_Token">
+			<shop:content ><![CDATA[#[output application/json
+---
+{
+  "customer": {
+    "email": "UseCase@gmail.com",
+    "first_name": "USE",
+    "last_name": "CASE",
+    "login": "useCase" ++ (randomInt(999) as String)
+  },
+  "password": "useCase@123"
+}]]]></shop:content>
+			<shop:custom-headers ><![CDATA[#[output application/java
+---
+{
+	"Authorization" : vars.guestToken
+}]]]></shop:custom-headers>
+		</shop:create-customers>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:commerce-cloud-b2c-data-connector-reference.adoc[Commerce Cloud B2C Data Connector Reference]
+* https://help.mulesoft.com[MuleSoft Help Center]
