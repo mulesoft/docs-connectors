@@ -9,7 +9,6 @@ Upgrade Anypoint Connector for Workday (Workday Connector) to version 13.x.x.
 |===
 |From Version | To Version
 |12.1.0 |13.x.x
-|11.1.x |12.x.x
 |===
 
 == What's Changed
@@ -21,236 +20,23 @@ Upgrade Anypoint Connector for Workday (Workday Connector) to version 13.x.x.
 * Remove version from the `workday:config-version-34-config`. From now on it is only `workday:config`
 * Remove version from the `workday:basic-authentication-api-v34-connection`. From now on it is only `workday:basic-authentication-api-connection`
 
-=== 12.1
-
-This release adds support for client certificate (x.509) authentication.
-
-=== 12.0
-
-This release contains the following changes:
-
-* Upgraded the Workday API to 34.0
-* Added the `Student Core` operation, which enables you to invoke the Workday Student Core Web Service
-* Replaced the `On New Objects` input source with the `On Modified Objects` input source, which polls data more efficiently
-+
-For more information, see <<on-modified-objects,On Modified Objects Input Source>>.
-+
-* Changed all operations so that they return headers as attributes
-* Added the ability to create response timeouts for the input source (`On Modified Objects`) and all connector operations by using the new `Response Timeout` and `Response Timeout Unit` fields
-* Split the connection timeout fields into value and time unit fields
-+
-For more information, see <<changes-in-connection-types,Changes in Connection Types>>.
-+
-* Removed the `blocking` field from the `Reconnect` and `Reconnect Forever` objects
-* Removed the `WORKDAY:UNKNOWN` error type
-
-[[changes-in-connection-types]]
-== Changes in Connection Types
-
-Starting with version 12.0.0, the following fields are now split into value and time unit fields:
-
-// [cols="50,50"]
-[%header%autowidth.spread]
-|===
-|Field in v11.1.x | Replaced By
-|Connection Idle Timeout
-|Connection Idle Timeout and Connection Idle Timeout Unit
-|Connction Timeout |Connection Timeout and Connection Timeout Unit
-|===
-
-[[on-modified-objects]]
-== On Modified Objects Input Source
-
-In version 11.1.x, the `On New Objects` input source polled data in a Workday resource from the beginning of the specified time interval to the present. It did this for each worker in the Workday instance, which caused large time inefficiencies when the instance contained thousands of workers.
-
-Starting in version 12.0.0, the `On Modified Objects` input source always polls the latest data in the specified time interval. After one poll iteration, the input source sets the earliest moment as the previous latest moment and the latest moment as the current date and time. These changes to polling make the `On Modified Objects` input source much more efficient than the `On New Objects` input source.
-
-You can use the `On Modified Objects` input source with the following web services and operations:
-
-* `Human Resources` Web Service
-** `Get Job Profiles` operation
-* `Recruiting` Web Service
-** `Get Evergreen Requisitions` operation
-** `Get Job Requisitions` operation
-* `Staffing` Web Service
-** `Get Workers` operation
-** `Get Positions` operation
-
-The following example of how to use the `On Modified Objects` input source includes these events:
-
-* `HTTP Listener` listens for events on the `localhost:8081/put-worker` path.
-+
-When `HTTP Listener` detects an event on that path, it initiates the first flow. This flow creates a new position and hires the new worker for the created position.
-+
-* The `On Modified Objects` input source listens for data changes on the server.
-+
-When the input source receives a message that a new worker was hired, it initiates the second flow. This flow logs the worker information to the Anypoint Studio console.
-
-Paste this code into your XML editor to quickly load the flow for this example into your Mule app. If needed, change the values to reflect your environment.
-
-[source,xml,linenums]
-----
-<?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns:workday="http://www.mulesoft.org/schema/mule/workday" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-    xmlns:http="http://www.mulesoft.org/schema/mule/http"
-    xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/workday http://www.mulesoft.org/schema/mule/workday/current/mule-workday.xsd">
-    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
-        <http:listener-connection host="0.0.0.0" port="8081" />
-    </http:listener-config>
-
-    <workday:config-version-34-config
-            name="Workday-Config" doc:name="Workday Config version 34"  timeZone="UTC+01:00">
-        <workday:basic-authentication-api-v34-connection userName="user" password="password" tenantName="tenant" hostName="host.com"/>
-    </workday:config-version-34-config>
-    <flow name="create-worker-flow" >
-        <http:listener doc:name="/put-worker" config-ref="HTTP_Listener_config" path="/put-worker" />
-        <ee:transform doc:name="testData">
-            <ee:message>
-            </ee:message>
-            <ee:variables >
-                <ee:set-variable variableName="testData" ><![CDATA[%dw 2.0
-output application/java
-var randomNumber = randomInt(999999999) as String
----
-{
-        countryReference: "USA",
-        countryReferenceID: "bc33aa3152ec42d4995f4791a106ed09",
-        communicationUsageTypeID: "Home",
-        currentDate: (now() - |P1D|) as Date,
-        employeeEmailAddress: "test_email" ++ randomNumber ++ "@gmail.com",
-        employeeFirstName: "Jim",
-        employeeLastName: "Jones_" ++ randomNumber,
-        employeeTypeID: "Casual",
-        jobPositionTitle: "test-position-"  ++ randomNumber,
-        jobProfileID: "37600",
-        locationID:  "San_Francisco_site" ,
-        organizationReferenceID: "Human_Resources_supervisory",
-        positionTimeTypeID: "Full_time"
-}]]></ee:set-variable>
-            </ee:variables>
-        </ee:transform>
-        <ee:transform doc:name="Prepare Create Position Request">
-            <ee:message >
-                <ee:set-payload ><![CDATA[%dw 2.0
-output application/xml
-ns ns0 urn:com.workday/bsvc
----
-{
-    ns0#Create_Position_Request @(ns0#version: "v33.2"): {
-        ns0#Create_Position_Data: {
-            ns0#Supervisory_Organization_Reference @(ns0#"Descriptor": "Descriptive"): {
-                ns0#ID @(ns0#"type": "Organization_Reference_ID"): vars.testData.organizationReferenceID
-            },
-            ns0#Position_Data: {
-                ns0#Job_Posting_Title: vars.testData.jobPositionTitle
-            },
-            ns0#Position_Group_Restrictions_Data: {
-                ns0#Availability_Date : vars.testData.currentDate,
-                ns0#Earliest_Hire_Date: vars.testData.currentDate
-            }
-        }
-    }
-}]]></ee:set-payload>
-            </ee:message>
-        </ee:transform>
-        <workday:staffing operation="Create_Position" doc:name="Create Position" config-ref="Workday-Config"/>
-        <ee:transform doc:name="Prepare Hire Employee Request">
-            <ee:message >
-                <ee:set-payload ><![CDATA[%dw 2.0
-output application/xml
-ns ns0 urn:com.workday/bsvc
----
-{
-    ns0#Hire_Employee_Request @(ns0#version: "v33.2"): {
-        ns0#Hire_Employee_Data:{
-            ns0#Applicant_Data: {
-            ns0#Personal_Data: {
-             ns0#Name_Data: {
-               ns0#Legal_Name_Data: {
-                ns0#Name_Detail_Data: {
-                  ns0#Country_Reference @(ns0#"Descriptor": "Country_Reference"): {
-                    ns0#ID @(ns0#"type": "ISO_3166-1_Alpha-3_Code"): vars.testData.countryReference
-                },
-                ns0#First_Name: vars.testData.employeeFirstName,
-                ns0#Last_Name: vars.testData.employeeLastName,
-              }
-            }
-            },
-            ns0#Contact_Data: {
-                ns0#Email_Address_Data @(ns0#"Delete": "false" , ns0#"Do_Not_Replace_All": "false") : {
-                    ns0#Email_Address : vars.testData.employeeEmailAddress,
-                    ns0#Usage_Data @(ns0#"Public": "false"): {
-                        ns0#Type_Data @(ns0#"Primary": "true") : {
-                            ns0#Type_Reference @(ns0# "Descriptor": "Type_Reference"): {
-                                ns0#ID @(ns0#"type": "Communication_Usage_Type_ID "): vars.testData.communicationUsageTypeID
-                            }
-                      }
-                    }
-                }
-            }
-          }
-        },
-        ns0#Organization_Reference @(ns0# "Descriptor": "Organization_Reference"): {
-            ns0#ID @(ns0#"type": "Organization_Reference_ID"): vars.testData.organizationReferenceID
-        },
-        ns0#Position_Reference @(ns0# "Descriptor": "Position_Reference"): {
-            ns0#ID @(ns0#"type": "WID"): payload.ns0#Create_Position_Response.ns0#Position_Reference.ns0#ID
-        },
-        ns0#Hire_Date: vars.testData.currentDate,
-        ns0#Hire_Employee_Event_Data: {
-            ns0#Employee_Type_Reference @(ns0# "Descriptor": "Hire_Reference"): {
-                ns0#ID @(ns0#"type": "Employee_Type_ID "): vars.testData.employeeTypeID
-            },
-            ns0#Position_Details: {
-                ns0#Job_Profile_Reference @(ns0# "Descriptor": "Hire_Reference"): {
-                    ns0#ID @(ns0#"type": "Job_Profile_ID "): vars.testData.jobProfileID
-                },
-                ns0#Location_Reference @(ns0# "Descriptor": "Hire_Reference"): {
-                    ns0#ID @(ns0#"type": "Location_ID"): vars.testData.locationID
-                },
-                ns0#Position_Time_Type_Reference @(ns0# "Descriptor": "Hire_Reference"): {
-                    ns0#ID @(ns0#"type": "Position_Time_Type_ID"): vars.testData.positionTimeTypeID
-                }
-            }
-        }
-      }
-    }
-}]]></ee:set-payload>
-            </ee:message>
-        </ee:transform>
-        <workday:staffing operation="Hire_Employee" doc:name="Hire Employee" config-ref="Workday-Config" />
-    </flow>
-    <flow name="listener-flow" >
-        <workday:modified-objects-listener objectType="WORKERS" doc:name="On Modified Objects Listener" config-ref="Workday-Config">
-            <scheduling-strategy >
-                <fixed-frequency />
-            </scheduling-strategy>
-        </workday:modified-objects-listener>
-        <logger level="INFO" doc:name="Logger - On Modified Objects" message='#[payload]'/>
-    </flow>
-    </mule>
-----
-
 == Upgrade Prerequisites
 
-Before you upgrade Workday Connector from version 11.1.x to version 12.x.x, you must:
+Before you upgrade Workday Connector from version 12.1.0 to version 13.x.x, you must:
 
 . Create a backup of your files, data, and configuration in case you need to restore the connector to the previous version.
-. Install Workday Connector 12.x.x to replace the Workday operations that were previously included in Workday Connector 11.1.x.
+. Install Workday Connector 13.x.x to replace the Workday operations that were previously included in Workday Connector 12.1.0.
 
 == Upgrade Steps
 
-Follow these steps to perform the upgrade from Workday Connector 11.1.x to Workday Connector 12.x.x:
+Follow these steps to perform the upgrade from Workday Connector 12.1.0 to Workday Connector 13.x.x:
 
 . In Studio, create a Mule project.
 . In the *Mule Palette* view, click *Search in Exchange*.
 . In the *Add Dependencies to Project* window, enter `workday` in the search field.
 . In the *Available modules* section, select *Workday Connector - Mule 4* and click *Add*.
 . Click *Finish*.
-. Verify that the `workday-connector` dependency version is `12.x.x` in the `pom.xml` file.
+. Verify that the `workday-connector` dependency version is `13.x.x` in the `pom.xml` file.
 
 Studio upgrades the connector automatically.
 
@@ -269,7 +55,7 @@ If there are problems with caching the parameters and caching the metadata, try 
 
 == Revert the Upgrade
 
-If you must revert to the previous version of Workday Connector, change the `workday-connector` dependency version `12.x.x` in the project's `pom.xml` file to the previous version.
+If you must revert to the previous version of Workday Connector, change the `workday-connector` dependency version `13.x.x` in the project's `pom.xml` file to the previous version.
 
 You must update the project's `pom.xml` file in Studio.
 
