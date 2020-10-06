@@ -566,6 +566,46 @@ Use DataWeave for all data transformations before the invocation to the callable
 	</db:stored-procedure>
 ----
 
+[[use_pooling_profile_stored_procedures]]
+== Use Pooling Profile on Stored Procedures
+Since the Stored Procedure operation closes the connection it receives once the flow it contains is completed, using a Pooling Profile which provides fewer connections than the ones the flow uses will make the whole flow hang.
+
+A plausible solution would be to increase the size of the pool. But sometimes this is not posible so another workaround can be applied by using the VM Connector: we can narrow the life of the connection to be just like the one of a VM's Message. This way every call to the Store Procedure is executed, its result consumed, and the connection associated to it closed and returned back to the pool.
+
+[source,xml,linenums]
+----
+	<db:config name="Database_Config">
+		<db:generic-connection url="someUrl" user="someUser" password="somePassword" driverClassName="someDriver">
+			<db:pooling-profile maxPoolSize="10">
+			</db:pooling-profile>
+		</db:generic-connection>
+	</db:config>
+	
+	<vm:config name="VM_Config">
+		<vm:queues >
+			<vm:queue queueName="testQueue" />
+		</vm:queues>
+	</vm:config>
+	
+	<flow name="processingFlow">
+		<foreach collection="#[1 to 11]">
+			<logger level="INFO" message="#['Starting Iteration ' ++ payload as String]" />
+			<vm:publish config-ref="VM_Config" queueName="testQueue"/>
+			<logger level="INFO" message="#['Finishing Iteration ' ++ payload as String]"/>
+		</foreach>
+	</flow>
+
+	<flow name="coolFlow">
+		<vm:listener config-ref="VM_Config" queueName="testQueue" numberOfConsumers="1"/>
+		<db:stored-procedure config-ref="Database_Config">
+				<db:sql><![CDATA[{call testProc2()}]]></db:sql>
+			</db:stored-procedure>
+		<logger level="INFO" message="#[output application/json --- payload.resultSet1]" />
+	</flow>
+----
+
+This way when the processingFlow's foreach element reaches the eleventh iteration the Stored Procedure operation won't hang since the Pool will be able to provide a connection.
+
 [[execute_ddl_statements]]
 == Execute DDL Statements
 
