@@ -1,0 +1,132 @@
+= Sending Emails with the Email Connector
+:keywords: email, connector, configuration, smtp, send, smtps
+:page-aliases: connectors::email/email-send.adoc
+
+Email Connector can send messages over SMTP and SMTPS.
+
+== Configuring the Connector
+
+Separate configuration types are available for listing emails stored in a server:
+
+* SMTP
+* SMTPS (secured by TLS)
+
+
+=== SMTP Configuration Type
+
+Here is an example of an SMTP configuration:
+
+.SMTP Configuration
+[source,xml,linenums]
+----
+<email:smtp-config name="smtp">
+    <email:stmp-connection host="smtp.gmail.com" port="995" user="user1@domain.com" password="#passwordvalue!"/>
+</email:smtp-config>
+----
+
+=== Secured Configuration Type
+
+The SMTPS connection type provides a TLS Configuration field in which you can set the TLS context. The configuration enables SSL/TLS encryption and sends encrypted messages over the secured version of the SMTP protocol, SMTPS.
+
+Here is an SMTPS example:
+
+.SMTP Configuration with TLS
+[source,xml,linenums]
+----
+<email:smtp-config name="smtp">
+    <email:stmps-connection host="pop.gmail.com" port="995" user="user2@domain.com" password="#passwordvalue"/>
+        <tls:context enabledProtocols="TLSv1.2,SSLv3">
+            <tls:key-store path="aKeystore" password="password"/>
+            <tls:trust-store path="aTruststore.jks" password="changeit"/>
+        </tls:context>
+    </email:smtps-connection>
+</email:smtp-config>
+----
+
+== Sending an Email
+
+This example that sends an email:
+
+[source,xml,linenums]
+----
+<email:send config-ref="smtp" subject="IMPORTANT!" fromAddress="user3@domain.com">
+    <email:to-addresses>
+        <email:to-address value="user1@domain.com"/>
+        <email:to-address value="user2@domain.com"/>
+    </email:to-addresses>
+    <email:body contentType="text/html">
+        <email:content><![CDATA["<h1>Hello this is an important message</h1>"]]></email:content>
+    </email:body>
+</email:send>
+----
+
+In the example above, `to-addresses` contains the primary recipient addresses of the
+outgoing email. The `fromAddress` attribute is the email sender address, and the `subject` is the email subject.
+
+The `body` is composed of `content` text and a `contentType` that specifies the
+mime type of the content (for example, `text/xml` or `text/plain`). If no `body` is specified, the content of the message payload is used by default. If that payload is not `text`, the operation will fail with an `EMAIL:SEND` error.
+
+
+== Sending Attachments
+
+When sending attachments over SMTP, you need to use DataWeave to handle the attachments.
+
+In this example, a flow reads a JSON file using the File connector, then uses the Email connector to send the contents of the file as an attachment over SMTP:
+
+[source,xml,linenums]
+----
+<flow name="attachment">
+  <file:read path="/file.json"/>
+  <email:send config-ref="config">
+      <email:to-addresses>
+          <email:to-address value="example@domain.com"/>
+      </email:to-addresses>
+      <email:body>
+          <email:content><![CDATA["<h1>Hello this is an important message</h1>"]]></email:content>
+      </email:body>
+      <email:attachments>
+        #[{
+          'json-attachment' : payload
+        }]
+      </email:attachments>
+  </email:send>
+</flow>
+----
+
+As you can see, `email:attachments` expects a DataWeave expression in which
+each element is an attachment. For instance, the example above adds a new attachment
+named `json-attachment`. Notice that `payload` is the content of the JSON file that was read by the File connector.
+
+You can send multiple attachments of different media types, for example, you might want to send a JSON element, then a text element, and also a file. To do this, add them to your attachments element like this:
+
+[source,xml,linenums]
+----
+</flow>
+    <set-variable variableName="json" value="#[output application/json --- {address: '221B Baker Street'}]" mimeType="application/json"/>
+    <set-variable variableName="textPlain" value="This is the email text attachment for John Watson" mimeType="text/plain"/>
+    <set-variable variableName="octetStream" value="#[vars.textPlain]" mimeType="application/octet-stream"/>
+
+    <email:send config-ref="config">
+        <email:to-addresses>
+            <email:to-address value="user4@domain.com"/>
+        </email:to-addresses>
+        <email:body contentType="text/plain">
+            <email:content>Email Content</email:content>
+        </email:body>
+        <email:attachments>#[
+            {
+                'text-attachment' : vars.textPlain,
+                'json-attachment' : vars.json,
+                'stream-attachment' : vars.octetStream
+            }]
+        </email:attachments>
+    </email:send>
+
+    <logger level="INFO" doc:name="Logger" message="#['Message Id ' ++ correlationId as String]" />
+</flow>
+----
+
+Notice that each attachment had its own media type previously set.
+
+The Send operation will return a message containing an `HttpRequestAttributes` object in the Message attributes section containing all the information used to send the email to the SMTP server (Request Path, Headers, and so on). The payload that was set
+immediately before the Send operation was performed will be the output payload of the operation as well.

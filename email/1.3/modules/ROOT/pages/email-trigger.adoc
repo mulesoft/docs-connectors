@@ -1,0 +1,182 @@
+= Triggering a Flow When a New Email is Received
+:page-aliases: connectors::email/email-trigger.adoc
+
+The Email connector provides a listener (called On New Email in the Studio and
+Design Center UIs) that polls an email folder from a mailbox for all the unread
+emails in it, generating a new message for each email that is found.
+
+The key part of this functionality is how to determine that an email is new.
+There are three strategies for making this determination:
+
+* Setting the `deleteAfterRetrieve` parameter to true. This setting deletes each
+email from the mailbox folder after it has been processed so that all emails
+found in the next poll will be new.
+* Using a matcher to filter the polled emails.
+* The IMAP protocol also can take advantage of the `watermark` parameter to
+only pick emails that have been received after the last poll was executed.
+
+== Listener
+
+The Email Connector provides two listeners that function similarly for the
+IMAP and POP3 protocols. However, the name of the XML element used depends
+on the email protocol:
+
+* `listener-imap`
+* `listener-pop3`
+
+You can configure a `scheduling-strategy` on the listener to change the polling frequency of the components.
+
+.Example: IMAP Email Listener (On New Email Trigger)
+[source, xml, linenums]
+----
+<flow name="OnNewEmail">
+    <email:listener-imap config-ref="imap-config">
+        <scheduling-strategy>
+            <fixed-frequency frequency="2000"/>
+        </scheduling-strategy>
+    </email:listener-imap>
+    <flow-ref name="processEmail"/>
+</flow>
+----
+
+.Example: POP3 Email Listener (On New Email Trigger)
+[source, xml, linenums]
+----
+<flow name="OnNewEmail">
+    <email:listener-pop3 config-ref="pop3-config">
+        <scheduling-strategy>
+            <fixed-frequency frequency="2000"/>
+        </scheduling-strategy>
+    </email:listener-pop3>
+    <flow-ref name="processEmail"/>
+</flow>
+----
+
+=== Delete After Retrieve
+
+Both the POP3 and IMAP listeners can set the `deleteAfterRetrieve` parameter to
+`true`, enabling the deletion of the polled emails after processing is complete.
+This feature is disabled by default to avoid deleting emails by mistake.
+
+.Example: Delete After Retrieve
+[source, xml, linenums]
+----
+<flow name="OnNewEmailDeleteAfterProcessed">
+    <email:listener-pop3 config-ref="pop3-config" deleteAfterRetrieve="true">
+        <scheduling-strategy>
+            <fixed-frequency/>
+        </scheduling-strategy>
+    </email:listener-pop3>
+    <flow-ref name="processEmail"/>
+</flow>
+----
+
+This parameter is commonly used with the POP3 protocol because there is no
+watermark support for it. By deleting processed emails, you can ensure that
+the next processed emails are new ones.
+
+Is is important to understand that this feature *DELETE* the emails from
+the configured Mailbox Folder.
+
+== Watermarking
+
+The Email connector can watermark emails when over the IMAP protocol, filtering
+emails based on their received date.
+
+To enable watermark using the `listener-imap` trigger, just set the watermark
+parameter to `true` so that dispatched messages only contain emails received
+after the last poll executed.
+
+.Example: IMAP Watermark Email Listener
+[source, xml, linenums]
+----
+<flow name="OnNewEmailWatermark">
+    <email:listener-imap config-ref="imap-config" watermark="true">
+        <scheduling-strategy>
+            <fixed-frequency/>
+        </scheduling-strategy>
+    </email:listener-imap>
+    <flow-ref name="processEmail"/>
+</flow>
+----
+
+== Matchers
+
+Custom matcher configurations provide another way of filtering the dispatched
+messages.
+
+Both the POP3 and IMAP listeners have their own matchers that can filter emails
+by dates, addresses, subject, and flags (SEEN, ANSWERED, and so on).
+
+.Example: Email Listener with Matcher
+[source, xml, linenums]
+----
+<flow name="OnNewEmailWatermark">
+    <email:listener-imap config-ref="imap-config">
+        <scheduling-strategy>
+            <fixed-frequency/>
+        </scheduling-strategy>
+        <email:imap-matcher subjectRegex="IMPORTANT"/>
+    </email:listener-imap>
+    <flow-ref name="processEmail"/>
+</flow>
+----
+
+The example above only dispatches email messages that contain the word
+"IMPORTANT" in their subject.
+
+== Naming Strategy for Attachments
+
+Email Connector provides a parameter for the List and On New Email operations that enables you to specify a strategy for naming attachments. This parameter is set at the configuration level, but can be overridden at the operation level.
+
+You can specify one of the following values for the parameter:
+
+* `NAME` (default) +
+When the value is set to `NAME`, the connector names the attachment after the value of the `filename` field in the `Content-Disposition` line of the attachment (this is the standard and recommended way of setting the name for an attachment). If the `filename` field is not present or is empty, then the attachment is named "Unnamed".
+If multiple attachments have no name then they are called "Unnamed", "Unnamed_1", "Unnamed_2", and so on so that they can be addressed individually.
+* `NAME_HEADERS` +
+When the value is set to `NAME_HEADERS`, the connector first tries to obtain the name from the `filename` field in the `Content-Disposition` line (the same as when using `NAME`). If that fails, the connector looks for the `name` header in the `Content-Type` line of the attachment. If the `name` header is not present or is empty, then the attachment is named "Unnamed".
+* `NAME_HEADERS_SUBJECT` +
+When the value is set to `NAME_HEADERS_SUBJECT`, the connector tries the two previously described strategies. If both fail, then the connector checks if the attachment itself is an email (a nested message) and looks for the subject of the email. If the subject is not empty, then the attachment is named after the subject. Otherwise, the attachment is named "Unnamed".
+
+== Enable Remote Search for IMAP
+
+When using both, On New Email and matchers in IMAP, you can specify whether you want the filters to be applied server-side. By setting remoteSearchFilterEnabled to `true` you are indicating that you want the filters to be applied on the server side.
+
+This featured is disabled by default because some email servers might not be fully compliant with rfc-3501's search terms. Activating it will diminish traffic by reducing the amount of emails brought to client side for processing.
+
+For this feature to be fully functional, the email server should at least
+=== Examples
+
+.Email Configuration with Naming Strategy
+[source, xml, linenums]
+----
+<email:imap-config name="gmail" attachmentNamingStrategy="NAME_HEADERS">
+  <email:imap-connection host="imap.gmail.com" port="993" user="user@gmail.com" password="mypassword">
+  </email:imap-connection>
+</email:imap-config>
+----
+
+.Email Listener (On New Email) overriding the Naming Strategy
+[source, xml, linenums]
+----
+<email:listener-imap config-ref="gmail" attachmentNamingStrategy="NAME_HEADERS_SUBJECT">
+    <scheduling-strategy>
+        <fixed-frequency/>
+    </scheduling-strategy>
+</email:listener-imap>
+----
+
+.Email Listener (On New Email) enabling Remote Search
+
+This example enables server side filtering to exclude all answered emails.
+
+[source, xml, linenums]
+----
+<email:listener-imap config-ref="gmail" remoteSearchFilterEnabled="true">
+    <scheduling-strategy>
+        <fixed-frequency/>
+    </scheduling-strategy>
+    <email:imap-matcher answered="EXCLUDE"/>
+</email:listener-imap>
+----
