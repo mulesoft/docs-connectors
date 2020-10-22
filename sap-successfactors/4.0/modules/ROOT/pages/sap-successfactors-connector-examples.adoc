@@ -2,22 +2,24 @@
 
 These examples show how to create flows to invoke some of SuccessFactor's standard operations, including how to:
 
-* <<create-query-flow,Create a Query flow>>
-* <<create-entry,Create an Entry>>
-* <<get-entity-by-id,Get entity by ID>>
-* <<update-entry,Update and Entry>>
+* <<create-query-flow,Create a query to query across entities>>
+* <<create-entry,Create an entry on SuccessFactors>>
+* <<get-entity-by-id,Get an entity by ID>>
+* <<update-entry,Create and update an entry on SuccessFactors>>
+* <<delete-entry, Delete an entry from SuccessFactors>>
 
 == Prerequisites
 
 To build and run these flows, you need:
 
 * OpenJDK 8 or 11
-* Anypoint Studio with Mule 4.2.2 or later
+* Anypoint Studio 7.1 or later
+* Mule 4.2.2 or later
 * SuccessFactors Connector 3.x or later
 * SuccessFactors credentials to send OData API requests
-* DataWeave
+* DataWeave 2.0
 
-=== Steps
+=== Prerequisite Steps
 
 . <<create-mule-project,Create a Mule Project>>
 . <<specify-credentials,Specify Your Credentials>>
@@ -70,7 +72,7 @@ image::sap-successfactors-basic-config.png
 A success message appears.
 
 [[create-query-flow]]
-== Create the Query Flow 
+== Create the Query Operation Flow 
 
 Create a flow that uses the *Query* operation to perform queries over entities of a specified type:
 
@@ -96,12 +98,41 @@ payload
 ----
 + 
 . Add a *Logger* component to the end of the flow that takes a `payload` (or `#[payload]`) as the message.
-. Deploy or run your app. 
-. To test the app, navigate to `http://localhost:8081/list`.
 
 The following image shows the SuccessFactors *Query* operation flow:
 
 image::sap-successfactors-query-flow.png[Mule flow using an HTTP Listener source, SuccessFactory Query operation, Transform Message, and Logger components]
+
+=== XML for Creating a Query
+
+This is the XML for the *Query* operation flow:
+
+[source,xml,linenums]
+----
+<flow name="Query" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config2" path="/list"/>
+        <successfactors:query entitySetName="User" doc:name="Query" config-ref="SuccessFactors_Configuration" >
+		</successfactors:query>
+		<ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+----
+
+=== Test the Flow
+
+To test the flow:
+
+. Run the app.
+. Open a browswer.
+. Navigate to `http://localhost:8081/list`.
 
 [[create-entry]]
 == Create an Entry on SuccessFactors Example
@@ -112,7 +143,7 @@ image::sap-successfactors-ops-1.png[Mule flow using an HTTP Listener source, Suc
 
 === XML for Creating an Entry
 
-This is the XML for the *Create entity* flow:
+This is the XML for the *Create entity* operation flow:
 
 [source,xml,linenums]
 ----
@@ -261,6 +292,68 @@ To test the flow:
 . Run the app.
 . Open a browswer.
 . Navigate to `http://localhost:8081/update`.
+
+[[delete-entry]]
+== Delete an Entry on SuccessFactors
+
+The following flow uses the SuccessFactors *Delete entity* operation to delete an entry on SuccessFactors:
+
+image::sap-successfactors-delete.png[Mule flow using an HTTP Listener source, SuccessFactors Create entity and Delete entity operations, Transform Message and Logger components]
+
+=== XML for Updating an Entry
+
+This is the XML for the *Delete entity* operation flow:
+
+[source,xml,linenums]
+----
+<flow name="Delete-Entry" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config" path="/delete"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: nowTime ,
+	mdfSystemExternalCode:"TV60" ++ uuid(),
+	cust_effectiveStatus:"A"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:create-entity entitySetName="cust_VendorInfo" doc:name="Create entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[output application/java
+var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: payload.effectiveStartDate,
+	mdfSystemExternalCode: payload.mdfSystemExternalCode,
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:delete-entity entitySetName="cust_VendorInfo" doc:name="Delete entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+----
+
+=== Test the Flow
+
+To test the flow:
+
+. Run the app.
+. Open a browswer.
+. Navigate to `http://localhost:8081/delete`.
 
 == XML for SuccessFactor Operations
 
