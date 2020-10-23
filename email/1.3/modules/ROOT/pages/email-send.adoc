@@ -1,15 +1,126 @@
-= Sending Emails with the Email Connector
+= Send Emails with the Email Connector - Mule 4
 :keywords: email, connector, configuration, smtp, send, smtps
 :page-aliases: connectors::email/email-send.adoc
 
-Email Connector can send messages over SMTP and SMTPS.
+Anypoint Connector for Email (Email Connector) can send messages over SMTP and SMTPS protocols using the *Send* operation. The following examples show how to configure Email Connector to send emails and attachments, both in Anypoint Studio and the XML editor:
 
-== Configuring the Connector
+* <<send-email,Send Emails>> +
+Configure the Email Connector *Send* operation to send emails over a SMTPS protocol.
 
-Separate configuration types are available for listing emails stored in a server:
+* <<send-attachments,Send Attachments>> +
+Configure the File Connector *Read* operation to read a JSON file, and the Email Connector *Send* operation to send the file as an attachment over a SMTP protocol.
 
-* SMTP
-* SMTPS (secured by TLS)
+[[send-emails]]
+== Send Emails
+
+The following example illustrates how to send emails over the SMTPS protocol. The flow initiates by a *Scheduler* component, and then the *Send* operation sends the email.
+The SMTPS connection type enables SSL/TLS encryption and sends encrypted messages over the secured version of the SMTP protocol.
+
+The following screenshot shows the Anypoint Studio app flow for this example:
+
+.Email Connector Send messages over SMTPS
+image::email-send-flow.png[Email Connector Send messages over SMTPS flow]
+
+To create the flow: +
+
+. Create a new Mule project in Studio.
+. In the *Mule Palette* view, select the *Scheduler* component and drag it on to the canvas. +
+The source initiates a flow when a time-based condition is met.
+. Drag the Email *Send* operation to the right of the *Scheduler* source. +
+. On the *Send* configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to configure a global element for the operation.
+. For *Connection*, select *SMTPS Connection*.
+. In the *General* tab, enter the following values:
++
+* *Host* +
+`pop.gmail.com`
+* *Port* +
+`995`
+* *User* +
+`user3@domain.com`
+* *Password* +
+`passwordconnection`
++
+. For *TLS Configuration* select *Edit inline*.
+. In the *Trust Store Configuration* section, enter the following values:
++
+* *Path* +
+`aTruststore.jks`
+* *Password* +
+`passwordtrust`
++
+. In the *Key Store Configuration* section, enter the following values:
++
+* *Path* +
+`aKeystore`
+* *Password*
+`passwordkey`
++
+. In the *Advanced* section, set *Enabled Protocols* to `TLSv1.2,SSLv3`.
+. Click *OK* to close the configuration.
+
+The following screenshot shows the *Email SMTPS* configuration:
+
+.Email SMTPS configuration
+image::email-smtps-configuration.png[Email SMTPS configuration]
+
+[start=12]
+. In the *Send* operation configuration screen, set the following values:
++
+* *From address* +
+`user1@domain.com`
+* *To addresses* +
+`Edit inline`
++
+. Click the (*+*) plus sign to add `user2@domain.com` and `user3@domain.com` as addresses.
+. Set *Subject* to `IMPORTANT!`.
+. Set *Content* to `"<h1>Hello this is an important message</h1>"` and *ContentType* to `text/html`. +
+If no *Body* content is specified, the content of the message payload is used by default. If that payload is not `text`, the operation fails with an `EMAIL:SEND` error.
+. Save the app.
+
+The following screenshot shows the *Send* operation configuration:
+
+.Email Send operation configuration
+image::email-send-configuration.png[Email Send operation configuration]
+
+=== XML for Send Emails
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<email:smtp-config name="Email_SMTP" >
+		<email:smtps-connection host="pop.gmail.com" port="995" user="user1@domain.com" password="passwordvalue" >
+			<tls:context enabledProtocols="TLSv1.2,SSLv3" >
+				<tls:trust-store path="aTruststore.jks" password="changeit" />
+				<tls:key-store path="aKeystore" password="password" />
+			</tls:context>
+		</email:smtps-connection>
+	</email:smtp-config>
+	<flow name="emailconnectorFlow">
+		<scheduler>
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+		</scheduler>
+		<email:send config-ref="Email_SMTP" fromAddress="user1@domain.com" subject="IMPORTANT!">
+			<email:to-addresses >
+				<email:to-address value="user3@domain.com" />
+        <email:to-address value="user2@domain.com" />
+			</email:to-addresses>
+			<email:body contentType="text/html" >
+				<email:content ><![CDATA["<h1>Hello this is an important message</h1>"]]></email:content>
+			</email:body>
+		</email:send>
+	</flow>
+</mule>
+----
 
 
 === SMTP Configuration Type
@@ -24,54 +135,27 @@ Here is an example of an SMTP configuration:
 </email:smtp-config>
 ----
 
-=== Secured Configuration Type
 
-The SMTPS connection type provides a TLS Configuration field in which you can set the TLS context. The configuration enables SSL/TLS encryption and sends encrypted messages over the secured version of the SMTP protocol, SMTPS.
+[[send-attachments]]
+== Send Attachments
 
-Here is an SMTPS example:
+The following example illustrates how to send emails and attachments over the SMTP protocol. Use DataWeave to handle the attachments. The flow reads a JSON file using the File Connector *Read* operation, then uses the Email Connector *Send* operation to send the contents of the file as an attachment:
 
-.SMTP Configuration with TLS
-[source,xml,linenums]
-----
-<email:smtp-config name="smtp">
-    <email:stmps-connection host="pop.gmail.com" port="995" user="user2@domain.com" password="#passwordvalue"/>
-        <tls:context enabledProtocols="TLSv1.2,SSLv3">
-            <tls:key-store path="aKeystore" password="password"/>
-            <tls:trust-store path="aTruststore.jks" password="changeit"/>
-        </tls:context>
-    </email:smtps-connection>
-</email:smtp-config>
-----
+The following screenshot shows the Anypoint Studio app flow for this example:
 
-== Sending an Email
+.Email Connector Send attachments over SMTP
+image::email-attachment-flow.png[Email Connector Send attachments over SMTP]
 
-This example that sends an email:
+To create the flow: +
 
-[source,xml,linenums]
-----
-<email:send config-ref="smtp" subject="IMPORTANT!" fromAddress="user3@domain.com">
-    <email:to-addresses>
-        <email:to-address value="user1@domain.com"/>
-        <email:to-address value="user2@domain.com"/>
-    </email:to-addresses>
-    <email:body contentType="text/html">
-        <email:content><![CDATA["<h1>Hello this is an important message</h1>"]]></email:content>
-    </email:body>
-</email:send>
-----
+. Create a new Mule project in Studio.
+. In the *Mule Palette* view, select the *Scheduler* component and drag it on to the canvas. +
+The source initiates a flow when a time-based condition is met.
+. Drag the Email *Send* operation to the right of the *Scheduler* source. +
+. On the *Send* configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to configure a global element for the operation.
+. For *Connection*, select *SMTPS Connection*.
+. In the *General* tab, enter the following values:
 
-In the example above, `to-addresses` contains the primary recipient addresses of the
-outgoing email. The `fromAddress` attribute is the email sender address, and the `subject` is the email subject.
-
-The `body` is composed of `content` text and a `contentType` that specifies the
-mime type of the content (for example, `text/xml` or `text/plain`). If no `body` is specified, the content of the message payload is used by default. If that payload is not `text`, the operation will fail with an `EMAIL:SEND` error.
-
-
-== Sending Attachments
-
-When sending attachments over SMTP, you need to use DataWeave to handle the attachments.
-
-In this example, a flow reads a JSON file using the File connector, then uses the Email connector to send the contents of the file as an attachment over SMTP:
 
 [source,xml,linenums]
 ----
