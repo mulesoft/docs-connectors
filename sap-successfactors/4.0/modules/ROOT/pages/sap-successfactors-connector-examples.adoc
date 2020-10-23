@@ -1,161 +1,538 @@
 = SAP SuccessFactors Connector 4.0 - Examples - Mule 4
 
+These examples show how to create flows to invoke some of SAP SuccessFactor's standard operations, including how to:
+
+* <<create-query-flow,Create a query>> to query across entities.
+* <<create-entry,Create an entry in SuccessFactors>>.
+* <<get-entity-by-id,Get an entity by ID>>.
+* <<update-entry,Create and update an entry>> in SuccessFactors.
+* <<delete-entry, Delete an entry from SuccessFactors>>.
+
+== Prerequisites
+
+To build and run these flows, you need:
+
+* OpenJDK 8 or 11
+* Anypoint Studio 7.1 or later
+* Mule 4.2.2 or later
+* SuccessFactors Connector 3.x or later
+* SuccessFactors credentials to send OData API requests
+* DataWeave 2.0
+
+=== Prerequisite Steps
+
+. <<create-mule-project,Create a Mule Project>>
+. <<specify-credentials,Specify Your Credentials>>
+. <<configure-global-element,Configure a Global Element>>
+
+[[create-mule-project]]
+=== Create a Mule Project
+
+In Studio, create a new Mule project in which to add and configure the connector: 
+
+. In Studio, select *File > New > Mule Project*.
+. In *Project Name*, enter a name for your Mule project. +
+This example uses the name `successfactors-operations`. 
+. Click *Finish*.
+
+=== Specify Your Credentials
+
+. In *Package Explorer*, under `/src/main/resources/`, create a file named `mule-app.properties`. 
+. Specify your credentials for connecting to SuccessFactors, for example:
++
+----
+config.companyId=<your-company-id>
+config.userName=<successfactors-username>
+config.password=<successfactors-password>
+----
++ 
+. Save the file. 
+
+[[configure-global-element]]
+=== Configure a Global Element for the Connector
+
+Configure a global element to provide the authentication credentials that the connector requires to access the target SuccessFactors system.
+
+. At the base of the Studio canvas, click *Global Elements*. 
+. Select *SAP SuccessFactors Config* and click *Edit*. 
+. In the SAP SuccessFactors Configuration window, enter the connection credentials as follows:
+* *Company ID*: `${config.companyId}`
+* *User Name*: `${config.userName}`
+* *Password*:`${config.password}`
+. From the *Data Center's Endpoint URL* drop-down, select the SuccessFactor's Web API URL. 
++
+The following image shows an example of configuring Basic authentication:
++
+.Basic authentication fields
+image::sap-successfactors-basic-config.png
++
+. Click *OK*. 
+. Click *Test Connection* to verify the connection to SAP SuccessFactors.
++
+A success message appears.
+
+[[create-query-flow]]
+== Create the Query Operation Flow 
+
+Create a flow that uses the *Query* operation to perform queries over entities of a specified type:
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. On the *Listener* configuration screen, optionally change the value of the *Display Name* field.
+. Specify `/list` for the *Path* field.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Listener* in the app.
+.. On the *General* tab, specify connection information for the connector.
+.. Click *Test Connection* to confirm that Mule can connect with the specified server.
+.. Click *OK*.
+. In the *Mule Palette* view, select *SAP SuccessFactors*, then select the *Query* operation and drag it on to the Studio canvas to the right of the *Listener* operation. 
+. In the left pane of the *Mule Palette*, click *Favorites*.
+. Select *Transform Message* and drag it on to the Studio canvas to the right of the *Query* operation. +
+The *Transform Message* component transforms the data structure and format to produce the output the connector expects, in this case, `application/json`:
++
+----
+%dw 2.0
+output application/json
+---
+payload
+
+----
++ 
+. Add a *Logger* component to the end of the flow that takes a `payload` (or `#[payload]`) as the message.
+
+The following image shows the SuccessFactors *Query* operation flow:
+
+image::sap-successfactors-query-flow.png[Mule flow using an HTTP Listener source, SuccessFactory Query operation, Transform Message, and Logger components]
+
+=== XML for Creating a Query
+
+This is the XML for the *Query* operation flow:
+
+[source,xml,linenums]
+----
+<flow name="Query" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config2" path="/list"/>
+        <successfactors:query entitySetName="User" doc:name="Query" config-ref="SuccessFactors_Configuration" >
+		</successfactors:query>
+		<ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+----
+
+=== Test the Flow
+
+To test the flow:
+
+. Run the app.
+. Open a browser.
+. Navigate to `\http://localhost:8081/list`.
+
+[[create-entry]]
+== Create an Entry on SuccessFactors Example
+
+The following flow uses the SuccessFactors *Create entity* operation to create an entry on SuccessFactors:
+
+image::sap-successfactors-ops-1.png[Mule flow using an HTTP Listener source, SuccessFactors Create entity operation, Transform Message and Logger components]
+
+=== XML for Creating an Entry
+
+This is the XML for the *Create entity* operation flow:
+
+[source,xml,linenums]
+----
+<flow name="Create-Entry">
+           <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/createVendor"/>
+           <ee:transform doc:name="Transform Message">
+               <ee:message >
+                   <ee:set-payload ><![CDATA[%dw 2.0
+   output application/java
+   ---
+   {
+       vendorCode: "XYZ123ABC",
+       effectiveStartDate: "2018-07-08T00:00:00"  as DateTime,
+       effectiveStatus: "I"
+   }]]></ee:set-payload>
+               </ee:message>
+           </ee:transform>
+           <successfactors:create-entity doc:name="Create entity"
+	   config-ref="SuccessFactors_Configuration" entitySetName="VendorInfo"/>
+           <ee:transform doc:name="Transform Message" >
+               <ee:message >
+                   <ee:set-payload ><![CDATA[%dw 2.0
+   output application/json
+   ---
+   payload]]></ee:set-payload>
+               </ee:message>
+           </ee:transform>
+           <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+       </flow>
+----
+
+=== Test the Flow
+
+To test the flow:
+
+. Run the app.
+. Open a browser.
+. Navigate to `+http://localhost:8081/create+`.
+
+[[get-entity-by-id]]
+== Get Entity by ID Flow
+
+The following flow uses the *Get entity by id* operation to retrieve an entity by ID:
+
+image::xref:sap-successfactors-get-entity-by-id.png[Mule flow using an HTTP Listener source, SuccessFactors Get entity by id operation, Transform Message and Logger components]
+
+=== XML for Getting an Entity by ID
+
+This is the XML for the *Get entity by id* flow:
+
+[source,xml,linenums]
+----
+<flow name="Get-Entity-by-Id">
+           <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/getById"/>
+           <ee:transform doc:name="Transform Message">
+               <ee:message>
+                   <ee:set-payload><![CDATA[%dw 2.0
+   output application/java
+   ---
+   {
+   	effectiveStartDate: attributes.queryParams.effectiveStartDate as DateTime,
+   	vendorCode: attributes.queryParams.vendorCode
+   }]]></ee:set-payload>
+               </ee:message>
+           </ee:transform>
+   		<successfactors:get-entity-by-id entitySetName="VendorInfo" doc:name="Get entity by id"
+		config-ref="SuccessFactors_Configuration" />
+           <ee:transform doc:name="Transform Message">
+               <ee:message >
+                   <ee:set-payload ><![CDATA[%dw 2.0
+   output application/json
+   ---
+   payload]]></ee:set-payload>
+               </ee:message>
+           </ee:transform>
+           <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+       </flow>
+----
+
+=== Test the Flow
+
+To test the flow:
+
+. Run the app.
+. Open a browser.
+. Navigate to `\http://localhost:8081/getById`.
+
+[[update-entry]]
+== Update an Entry on SuccessFactors
+
+The following flow uses the SuccessFactors *Update* operation to update an entry on SuccessFactors:
+
+image::sap-successfactors-create-and-update.png[Mule flow using an HTTP Listener source, SuccessFactors Create entity and Update operations, Transform Message and Logger components]
+
+=== XML for Updating an Entry
+
+This is the XML for the *Update* operation flow:
+
+[source,xml,linenums]
+----
+<flow name="Update" >
+        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/update"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: nowTime ,
+	mdfSystemExternalCode:"TV60" ++ uuid(),
+	cust_effectiveStatus:"A"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:create-entity entitySetName="cust_VendorInfo" doc:name="Create entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[output application/java
+var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: payload.effectiveStartDate,
+	mdfSystemExternalCode: payload.mdfSystemExternalCode,
+	cust_effectiveStatus: payload.cust_effectiveStatus
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:update entitySetName="cust_VendorInfo" doc:name="Update"  
+        config-ref="SuccessFactors_Configuration"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+----
+
+=== Test the Flow
+
+To test the flow:
+
+. Run the app.
+. Open a browser.
+. Navigate to `\http://localhost:8081/update`.
+
+[[delete-entry]]
+== Delete an Entry on SuccessFactors
+
+The following flow uses the SuccessFactors *Delete entity* operation to delete an entry on SuccessFactors:
+
+image::sap-successfactors-delete.png[Mule flow using an HTTP Listener source, SuccessFactors Create entity and Delete entity operations, Transform Message and Logger components]
+
+=== XML for Updating an Entry
+
+This is the XML for the *Delete entity* operation flow:
+
+[source,xml,linenums]
+----
+<flow name="Delete-Entry" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config" path="/delete"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: nowTime ,
+	mdfSystemExternalCode:"TV60" ++ uuid(),
+	cust_effectiveStatus:"A"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:create-entity entitySetName="cust_VendorInfo" doc:name="Create entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[output application/java
+var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: payload.effectiveStartDate,
+	mdfSystemExternalCode: payload.mdfSystemExternalCode,
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:delete-entity entitySetName="cust_VendorInfo" doc:name="Delete entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+----
+
+=== Test the Flow
+
+To test the flow:
+
+. Run the app.
+. Open a browser.
+. Navigate to `\http://localhost:8081/delete`.
+
+== XML for SuccessFactor Operations
+
+Paste this code into your Studio XML editor to quickly load all of the flows for these examples into your Mule app:
+
+[source,xml,linenums]
+----
+?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:successfactors="http://www.mulesoft.org/schema/mule/successfactors" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/successfactors http://www.mulesoft.org/schema/mule/successfactors/current/mule-successfactors.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+    <successfactors:config name="SuccessFactors_Configuration" doc:name="SuccessFactors Configuration" >
+        <successfactors:basic-connection companyId="${config.companyId}" userName="${config.userName}" password="${config.password}" endpointUrl="https://api4.successfactors.com/odata/v2/"/>
+    </successfactors:config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <http:listener-config name="HTTP_Listener_config1" doc:name="HTTP Listener config" >
+		<http:listener-connection host="localhost" port="8081" />
+	</http:listener-config>
+	<http:listener-config name="HTTP_Listener_config2" doc:name="HTTP Listener config" >
+		<http:listener-connection host="localhost" port="8081" />
+	</http:listener-config>
+	<flow name="Query" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config2" path="/list"/>
+        <successfactors:query entitySetName="User" doc:name="Query" config-ref="SuccessFactors_Configuration" >
+		</successfactors:query>
+		<ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+
+    <flow name="Create-Entry" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config" path="/create"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: nowTime ,
+	mdfSystemExternalCode:"TV60" ++ uuid(),
+	cust_effectiveStatus:"A"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:create-entity doc:name="Create entity"  config-ref="SuccessFactors_Configuration" entitySetName="cust_VendorInfo"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+
+    <flow name="Get-Entity-by-Id" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config" path="/getById"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	userId: "PSADMIN"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:get-entity-by-id entitySetName="User" doc:name="Get entity by id" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+    <flow name="Update" >
+        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/update"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: nowTime ,
+	mdfSystemExternalCode:"TV60" ++ uuid(),
+	cust_effectiveStatus:"A"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:create-entity entitySetName="cust_VendorInfo" doc:name="Create entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[output application/java
+var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: payload.effectiveStartDate,
+	mdfSystemExternalCode: payload.mdfSystemExternalCode,
+	cust_effectiveStatus: payload.cust_effectiveStatus
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:update entitySetName="cust_VendorInfo" doc:name="Update"  
+        config-ref="SuccessFactors_Configuration"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
 
 
-////
-While each example differs, all connector examples should have the following components:
-
-An introductory paragraph that states what the example depicts. This paragraph should explicitly state why the example is helpful to the audience, and it can provide other necessary contextual information.
-
-A screenshot of each Studio flow that the user is creating
-
-Step-by-step instructions for creating the example in Studio
-
-The resulting XML that users can paste into the Studio XML editor. You must remove the  attributes from the XML before including it in the topic. 
-
-If the example contains multiple flows or is long and complex, break up the example into subsections that reflect logical chunks of functionality. For example, the Apache Kafka Connector Examples topic shows how to publish a message for Apache Kafka and then retrieve it. It has one subsection for each flow plus one for the XML:
-
-Create the Producer Flow
-Create the Consumer Flow
-XML for Consuming and Publishing a Topic
-
-The Amazon SQS Connector Examples topic also contains two flows: one for publishing an Amazon SQS topic and one for consuming the published topic. However, the first flow consists of many components. This topic breaks up the first flow into additional subsections:
-
-Create a Flow to Send a Message
-Add a Transform Message Component to Attach the Metadata
-Add and Configure the SQS Send Message Operation
-Add a Logger Component to Display the Response in the Mule Console
-Obtain the Number of Messages in the Queue
-Add a Logger to Display the Number in the Mule Console 
-Create a Flow to Receive Messages
-Example Mule Application XML Code
-
-If your Examples topic contains multiple examples, create a hyperlinked list of examples in the topic introduction, as shown in the Template for Creating Multiple Examples in One Examples Topic, or use the Template for Using Multiple Examples Topics.
-//// 
-
-// Put Examples here -- You may need to obtain these from the 
-// code repo /demo folder.
-
-Template for a Single Example
-
-// Use this template to include a single example in the Examples topic. 
-// For examples of this template, see Amazon SQS Connector Examples and Apache Kafka Connector Examples.
-
-= <connector> Example - Mule 4
-
-<Introductory text>
-The following text can be in the same paragraph as the introductory text or in a separate paragraph, depending on the introductory paragraph length.
-This example uses variables for some field values. You can either:
-Replace the variables with their values in the code.
-Provide the values for each variable in a properties file and then refer to that file from the connector configuration.
-If you don’t know how to use a properties file, see Configuring Property Placeholders.
-Use subsections, if needed, to show the configuration steps.
-== Subsection 1 
-== Subsection 2
-== Subsection 3
-.
-.
-.
-
-// Add these steps to the end of the numbered list:
-. Save the project. 
-. Test the app by sending a <REST command> request to <url>.
-
-== XML for <what the example shows>
-
-Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
-
-// <Copy the XML from Studio and paste it here. 
-// Remove the  attributes from the XML before including it in the topic.>
-
-// If you aren’t splitting the example into subsections, add these subsections instead:
-
-== Steps for <what the example shows>
-
-// Add these steps to the end of the numbered list:
-. Save the project. 
-. Test the app by sending a <REST command> request to <url>.
-
-== XML for <what the example shows>
-
-Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
-
-// <Copy the XML from Studio and paste it here. 
-// Remove the  attributes from the XML before including it in the topic.>
-
-Template for Including Multiple Examples in One Examples Topic
-
-// Use this template under one of these circumstances to include multiple examples in the 
-// Examples topic:
-
-// The examples are related. 
-// There are only a few examples and the documentation for each one is fairly short.
-
-////
-For an example of this template, see NetSuite Connector 10.0 Examples - Mule 4. Consider using the Template for Including Multiple Examples in One Examples Topic if you have multiple, unrelated examples.
-////
-
-= <connector> Examples - Mule 4
-
-The following examples show how to <action> with <connector-name>: 
-
-<Hyperlink 1>
-<short description of the example>
-<Hyperlink 2>
-<short description of the example>
-.
-.
-.
-These examples use variables for some field values. You can either:
-Replace the variables with their values in the code
-Provide the values for each variable in a properties file and then refer to that file from the connector configuration.
-If you don’t know how to use a properties file, see Configuring Property Placeholders.
-
-== <Example 1>
-
-// Use subsections, if needed, to show configuration steps. 
-=== Subsection 1 
-=== Subsection 2
-=== Subsection 3
-.
-.
-.
-// Add these steps to the end of the numbered list:
-. Save the project. 
-. Test the app by sending a <REST command> request to <url>.
-
-=== XML for <what the example shows>
-
-Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
-
-// <Copy the XML from Studio and paste it here. 
-// Remove the  attributes from the XML before including it in the topic.>
-
-// If you aren’t splitting the example into subsections, add these subsections instead:
-
-=== Steps for <what the example shows>
-
-// Add these steps to the end of the numbered list:
-. Save the project. 
-. Test the app by sending a <REST command> request to <url>.
-
-=== XML for <what the example shows>
-
-Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
-
-// <Copy the XML from Studio and paste it here. 
-// Remove the  attributes from the XML before including it in the topic.>
-
-== <Example 2>
-
-// Same template for Example 1
-
-== <Example 3>
-.
-.
-.
+    <flow name="Delete-Entry" >
+        <http:listener doc:name="Listener" 
+        config-ref="HTTP_Listener_config" path="/delete"/>
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: nowTime ,
+	mdfSystemExternalCode:"TV60" ++ uuid(),
+	cust_effectiveStatus:"A"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:create-entity entitySetName="cust_VendorInfo" doc:name="Create entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message>
+                <ee:set-payload><![CDATA[output application/java
+var nowTime = (now()  as String {format:"yyyy-MM-dd"} ++ "T00:00Z[UTC]") as DateTime
+---
+{
+	effectiveStartDate: payload.effectiveStartDate,
+	mdfSystemExternalCode: payload.mdfSystemExternalCode,
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <successfactors:delete-entity entitySetName="cust_VendorInfo" doc:name="Delete entity" 
+        config-ref="SuccessFactors_Configuration" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+    </flow>
+</mule>
+----
 
 == See Also
 
-* xref:connectors::introduction/anypoint-connector-authentication.adoc[Anypoint Connector Authentication]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
 * https://help.mulesoft.com[MuleSoft Help Center]
