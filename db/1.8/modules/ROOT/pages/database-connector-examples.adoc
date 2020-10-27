@@ -566,6 +566,127 @@ Use DataWeave for all data transformations before the invocation to the callable
 	</db:stored-procedure>
 ----
 
+== Calling Oracle Stored Procedure with User-Defined Types (UDT)
+
+Oracle allows for the user to define their own custom data types known as User-Defined Types (UDT). This example will show you how to call an Oracle stored procedure that uses UDTs for its input and output parameters using mule.
+
+First initialize your database with the following script.
+
+[source,xml,linenums]
+----
+
+--CREATE CUSTOM DATA TYPES (UDTs)
+CREATE OR REPLACE TYPE PHONE_NUMBER AS object(areaCode VARCHAR2(10), phoneNumber VARCHAR2(20));
+CREATE OR REPLACE TYPE PHONE_NUMBER_ARRAY AS VARRAY(10) OF PHONE_NUMBER;
+CREATE OR REPLACE TYPE PERSON IS OBJECT(firstName VARCHAR(50), surname VARCHAR(50), age NUMBER, phoneNumbers PHONE_NUMBER_ARRAY);
+CREATE OR REPLACE TYPE PEOPLE IS TABLE OF PERSON;
+
+CREATE OR REPLACE TYPE PHONE_BOOK AS VARRAY(10) OF VARCHAR2(200);
+
+
+--CREATE TABLE HUMANS;
+CREATE TABLE HUMANS(
+  firstName VARCHAR(50),
+  surname VARCHAR(50),
+  age NUMBER,
+  phoneNumbers PHONE_NUMBER_ARRAY
+);
+
+--CREATE STORED PROCEDURE
+create or replace procedure PROC_INSERT_HUMANS(people IN PEOPLE, contactList OUT PHONE_BOOK) IS
+    phoneBook PHONE_BOOK := PHONE_BOOK();
+    BEGIN
+        FOR idx IN people.first .. people.last LOOP
+            IF people(idx).age < 100 THEN
+                INSERT INTO HUMANS(firstName, surname, age, phoneNumbers)
+                VALUES(people(idx).firstName, people(idx).surname, people(idx).age, people(idx).phoneNumbers);
+            END IF;
+        END LOOP;
+
+        FOR humanContact IN (SELECT * FROM  HUMANS h, TABLE(h.phoneNumbers) n) LOOP
+            phoneBook.EXTEND(1);
+            phoneBook(phoneBook.COUNT) := humanContact.surname || ',' || humanContact.firstname || ':' || humanContact.areaCode ||'-'|| humanContact.phoneNumber;
+        END LOOP;
+
+        contactList := phonebook;
+
+        COMMIT;
+END PROC_INSERT_HUMANS;
+----
+
+This script will create the following UDTs: `PEOPLE`, `PERSON`, `PHONE_NUMBER`, `PHONE_NUMBER_ARRAY` and `PHONE_BOOK`. Note that the order in which we define them is important because some of the types are nested. For example, the type PERSON is defined as an object that contains a PHONE_NUMBER_ARRAY as one of its members.
+
+This script will also create a table called `HUMANS` and a stored procedure called `PROC_INSERT_HUMANS`.
+This stored procedure will expect to receive an object of type `PEOPLE` as its input parameter, and will insert into the table `HUMANS` all those people whose age is less than 100.
+This procedure also defines a parameter of type `PHONE_BOOK`, where we will expect to receive the contact list of all the people previously inserted into the table HUMANS as an output.
+
+Next, you will need to create the following mule app.
+
+[source,xml,linenums]
+----
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<db:config name="dbConfig" doc:name="Database Config" >
+		<db:oracle-connection host="localhost" user="SYS as SYSDBA" password="Oradoc_db1" instance="ORCLCDB">
+			<db:column-types>
+				<db:column-type id="2003" typeName="PEOPLE"/>
+				<db:column-type id="2003" typeName="PHONE_NUMBER"/>
+				<db:column-type id="2008" typeName="PERSON" />
+				<db:column-type id="2003" typeName="PHONE_NUMBER_ARRAY"/>
+				<db:column-type id="2003" typeName="PHONE_BOOK"/>
+			</db:column-types>
+		</db:oracle-connection>
+	</db:config>
+
+	<flow name="oracle-udtsFlow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/oracle"/>
+
+		<set-payload value="#[[
+		  {'name':'Anthony J', 'surname':'Crowley', 'age': 6000, 'phoneNumber': {'areaCode':'020', 'phoneNumber': '777'}},
+	      {'name':'A.Z', 'surname':'Fell', 'age': 6000, 'phoneNumber':{'areaCode':'020', 'phoneNumber': '888'}},
+	      {'name':'Adam', 'surname':'Young', 'age': 11, 'phoneNumber':{'areaCode':'046', 'phoneNumber': '666'}},
+	      {'name':'Anathema', 'surname':'Device', 'age': 27, 'phoneNumber':{'areaCode':'020', 'phoneNumber': '123'}},
+	     ]]" doc:name="Set Payload" mimeType="application/java"/>
+
+
+	   <ee:transform doc:name="Transform Message - Prepare UDT">
+			<ee:variables>
+				<ee:set-variable variableName="in_people_tab"><![CDATA[%dw 2.0
+				output application/java
+				fun toPhoneNumberArray(phoneNumber) = Db::createArray("dbConfig", "PHONE_NUMBER_ARRAY",[Db::createStruct("dbConfig", "PHONE_NUMBER", [phoneNumber.areaCode, phoneNumber.phoneNumber])])
+				fun toPerson(person) = Db::createStruct("dbConfig", "PERSON", [person.name, person.surname, person.age, toPhoneNumberArray(person.phoneNumber)])
+				---
+				Db::createArray("dbConfig", "PEOPLE", payload map (item, index) -> ( toPerson(item) ) )
+				]]></ee:set-variable>
+			</ee:variables>
+	   </ee:transform>
+
+		<db:stored-procedure doc:name="Stored procedure" config-ref="dbConfig">
+			<db:sql>{ call proc_insert_humans(:people, :phoneBook) }</db:sql>
+			<db:input-parameters><![CDATA[#[{
+				people: vars.in_people_tab
+			}]]]></db:input-parameters>
+			<db:output-parameters >
+				<db:output-parameter key="phoneBook" customType="PHONE_BOOK" />
+			</db:output-parameters>
+		</db:stored-procedure>
+
+		<ee:transform doc:name="Transform Message - response to JSON" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+					output application/json
+					---
+					payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+
+----
+
+To test this application, hit the http endpoint using the following curl command from your terminal: `curl localhost:8081/oracle`.
+
 
 [[execute_ddl_statements]]
 == Execute DDL Statements
