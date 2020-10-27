@@ -620,7 +620,9 @@ This script will also create a table called `HUMANS` and a stored procedure call
 This stored procedure will expect to receive an object of type `PEOPLE` as its input parameter, and will insert into the table `HUMANS` all those people whose age is less than 100.
 This procedure also defines a parameter of type `PHONE_BOOK`, where we will expect to receive the contact list of all the people previously inserted into the table HUMANS as an output.
 
-Next, you will need to create the following mule app.
+Next, you will need to create the your mule application.
+
+We begin by creating the configuration for an http listener which we will use to trigger the flow and our database configuration, where we will need to list all the UDTs that we previously created in our database.
 
 [source,xml,linenums]
 ----
@@ -633,13 +635,20 @@ Next, you will need to create the following mule app.
 			<db:column-types>
 				<db:column-type id="2003" typeName="PEOPLE"/>
 				<db:column-type id="2003" typeName="PHONE_NUMBER"/>
-				<db:column-type id="2008" typeName="PERSON" />
+				<db:column-type id="2008" typeName="PERSON"/>
 				<db:column-type id="2003" typeName="PHONE_NUMBER_ARRAY"/>
 				<db:column-type id="2003" typeName="PHONE_BOOK"/>
 			</db:column-types>
 		</db:oracle-connection>
 	</db:config>
+----
 
+Next, we create our flow, which will be triggered by an HTTP endpoint. We will set a list of items that we want to send for the stored procedure to process.
+
+In order to do this, we will first need to transform these JSON objects into an object that can be mapped to the type PEOPLE, which is the data type our stored procedure expects for its input parameter. In the Transform element we will use the functions `Db::createStruct` and `Db::createArray` to create said objects.
+
+[source,xml,linenums]
+----
 	<flow name="oracle-udtsFlow">
 		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/oracle"/>
 
@@ -662,9 +671,16 @@ Next, you will need to create the following mule app.
 				]]></ee:set-variable>
 			</ee:variables>
 	   </ee:transform>
+----
 
+To finish our app, we invoke the stored procedure using the Database Connector. Here, we will map the output of our transformation, which is stored in the variable called `in_people_tab`, to our input parameter, and we will also define an output parameter with the custom type `PHONE_BOOK`.
+
+Our stored procedure should return the list of phone numbers of all the people added to the table `HUMANS`.
+
+[source,xml,linenums]
+----
 		<db:stored-procedure doc:name="Stored procedure" config-ref="dbConfig">
-			<db:sql>{ call proc_insert_humans(:people, :phoneBook) }</db:sql>
+			<db:sql>{ call PROC_INSERT_HUMANS(:people, :phoneBook) }</db:sql>
 			<db:input-parameters><![CDATA[#[{
 				people: vars.in_people_tab
 			}]]]></db:input-parameters>
@@ -685,8 +701,35 @@ Next, you will need to create the following mule app.
 
 ----
 
-To test this application, hit the http endpoint using the following curl command from your terminal: `curl localhost:8081/oracle`.
+To test this application, hit the HTTP endpoint using the following curl command from your terminal: `curl localhost:8081/oracle`.
 
+There are two functions which are essential to map application data to our custom types: `Db::createStruct` and `Db::createArray`.
+
+=== Create Struct Function
+
+The Create Struct function is a DataWeave function used to create JDBC Struct objects based on the Type Name and their correspondent properties.
+
+In our previous example, types `PERSON` and `PHONE_NUMBER` are Struct objects.
+
+The Create Struct function expects the following parameters, in order:
+  * configName: a string with the name of the configuration in charge of creating the Struct Type. In the previous example: `dbConfig`.
+  * typeName: a string with the name of the Struct type to create. In the previous example: `PERSON` or `PHONE_NUMBER`.
+  * values: an array of values that conforms the Struct properties. In the previous example: an array with the property values for a `PHONE_NUMBER` like ['046', '666'].
+
+=== Create Array Function
+
+The Create Array function is a DataWeave function used to create JDBC Array objects based on the Array Type.
+
+In our previous example, types `PHONE_NUMBER_ARRAY`, `PEOPLE` and `PHONE_BOOK` are based on the Array Type.
+
+The Create Array function expects the following parameters, in order:
+  * configName: a string with the name of the configuration in charge of creating the Array Type. In the previous example: `dbConfig`.
+  * typeName: a string with the name of the Array type to create. In the previous example: `PEOPLE` or `PHONE_NUMBER_ARRAY`.
+  * values: an array of values that conforms the Array Type. In the previous example: an array of `PERSON` objects (created using the Create Struct function).
+
+Note that these functions can be combined and used to create subtypes (or nested types). In our example, you will notice that the type `PERSON` contains `PHONE_NUMBER_ARRAY` objects. At the same time, the `PHONE_NUMBER_ARRAY` type is defined as an array of `PHONE_NUMBER`s.
+
+You can combine these functions to complex types as you please, just be sure to pick `Create Array Function` when the UDT you are matching to is based on the Array Type.
 
 [[execute_ddl_statements]]
 == Execute DDL Statements
