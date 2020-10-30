@@ -1,47 +1,40 @@
 = Call Oracle Stored Procedure with User-Defined Types (UDT) Example - Mule 4
 
-Oracle enables you to define your own custom data types known as User-Defined Types (UDT). The following example shows how to call the stored procedure with an object of type `PEOPLE` (a UDT) as input. This object contains a list of `PERSON` objects (also a UDT). Only the people whose `age` is less than 100 should be inserted into the table. The stored procedure will produce an output of type `PHONE_BOOK` which is a list of varchars containing the phone numbers of the people added to the table. The example also shows how to use `createStruct` and `createArray` DataWeave functions to map application data to your custom types.
+Oracle enables you to create your custom data types, known as _user-defined types (UDTs)_. The following example shows how to configure Anypoint Connector for Database (Database Connector) *Stored procedure* operation in a Mule application to call a stored procedure with UDTs from an Oracle database. +
+The stored procedure performs two actions: +
+
+* Inserts the first name, last name, age, area code, and phone number of people whose age is less than 100 into a table
+* Returns a list of phone numbers of all the people added to the table
+
+To accomplish this example, you must: +
+
+* Run a script to create UDTs, the table, and the stored procedure
+* Configure an Oracle database connection
+* Create the Mule application
+* Use `createStruct` and `createArray` DataWeave functions to map application data to custom types
+* Run and test the application with curl commands
 
 The following screenshot shows the Anypoint Studio app flow for this example:
 
-.Oracle UDTs Flow
+.Oracle Stored procedure with UDTs Flow
 image::database-oracle-udt-flow.png[Oracle UDTs Flow in Anypoint Studio]
 
 
-== DataWeave createStruct and createArray Functions
+== Create the UDTs, the Table and the Stored Procedure
 
-The example uses the `createStruct` and `createArray` DataWeave functions to map application data to our custom types.
+Before configuring the Oracle database connection and creating the Mule application, use your desired SQL client tool to run an `.sql` script that creates in the database, these UDTs:
 
-The `createStruct` function creates JDBC Struct objects based on the `Name` type and their correspondent properties. In our example, types `PERSON` and `PHONE_NUMBER` are struct objects. The function expects the following parameters in order:
+. `PEOPLE`
+. `PERSON`
+. `PHONE_NUMBER`
+. `PHONE_NUMBER_ARRAY`
+. `PHONE_BOOK`
 
-* `configName` +
-A string with the name of the configuration in charge of creating the `Struct` type, in our example is `dbConfig`.
-* `typeName` +
-A string with the name of the `Struct` type to create, in our example is `PERSON` or `PHONE_NUMBER`.
-* `values` +
-An array of values that conforms the `Struct` properties, in our example an array with the property values for `PHONE_NUMBER` is `['046', '666']`.
+Because some UDTs contain others, the order in which they are defined is important. For example, the object type `PERSON` must be defined before its member `PHONE_NUMBER_ARRAY` is defined.
 
-The `createArray` function creates JDBC Array objects based on the `Array` type. In our example, types `PHONE_NUMBER_ARRAY`, `PEOPLE` and `PHONE_BOOK` are array objects. The function expects the following parameters in order:
+The script also creates a table called `HUMANS` and a stored procedure called `PROC_INSERT_HUMANS`. This stored procedure is intended to receive as an input parameter an object of type `PEOPLE`, from which it takes all the people whose age is less than 100 and inserts them into the table `HUMANS`. The stored procedure also defines an output parameter of type `PHONE_BOOK` that comprises a list of the phone numbers of all the people previously inserted into the `HUMANS` table
 
-* `configName` +
-A string with the name of the configuration in charge of creating the `Array` type, in our example is `dbConfig`.
-* `typeName` +
-A string with the name of the `Array` type to create, in our example is `PEOPLE` or `PHONE_NUMBER_ARRAY`.
-* `values` +
-An array of values that conforms the `Array` type, in our example is an array of `PERSON` objects created using the `createStruct` function.
-
-Note that you can combine and use these functions to create subtypes or nested types. In our example, the type `PERSON` contains the `PHONE_NUMBER_ARRAY` objects. At the same time, the type `PHONE_NUMBER_ARRAY` is defined as an array of `PHONE_NUMBER`.
-
-Additionally, you can combine these functions for complex types, ensure to use the `createArray` function when you are matching to an UDT based on the `Array` type.
-
-
-== Initialize the Oracle Database
-
-First, initialize the Oracle database using your desired SQL client tool by running the following script that creates these UDTs: `PEOPLE`, `PERSON`, `PHONE_NUMBER`, `PHONE_NUMBER_ARRAY` and `PHONE_BOOK`. The order in which these UDTs are defined is important because some of the types are nested. For example, the type `PERSON` is defined as an object that contains a `PHONE_NUMBER_ARRAY` as one of its members. The script also creates a table called `HUMANS` and a stored procedure called `PROC_INSERT_HUMANS`. +
-
-This stored procedure expects to receive an object of type `PEOPLE` as its input parameter, and will insert into the table `HUMANS` all the people whose age is less than 100. The stored procedure also defines a parameter of type `PHONE_BOOK`, that expects to receive the contact list of all the people previously inserted into the table `HUMANS` as an output.
-
-Script to initialize:
+The script that runs to create these UDTs, the table, and the stored procedure is as follows:
 
 [source,xml,linenums]
 ----
@@ -85,14 +78,15 @@ create or replace procedure PROC_INSERT_HUMANS(people IN PEOPLE, contactList OUT
 END PROC_INSERT_HUMANS;
 ----
 
-== Configure Global Elements
+== Configure an Oracle Database Connection
 
-Next, in Anypoint Studio configure an *HTTP Listener config* global element for the HTTP *Listener* source that initiates the flow, and a *Database Config* global element to list all the UDTs that were previously created in the Oracle database:
+After you create your UDTs, the table and stored procedure in the Oracle database, go to Anypoint Studio to configure the Oracle database connection:
 
 . Create a new Mule project in Studio.
 . Navigate to the *Global Elements* view.
 . Click *Create* to open the *Choose Global Type* view.
-. In the *Filter* field write `http`, select *HTTP Listener config* and click *OK*.
+. In the *Filter* field, type `http`, select *HTTP Listener config*, and click *OK*. +
+This configuration is for the HTTP *Listener* source that initiates the Mule application flow.
 . In the *HTTP Listener config* window, set the following parameters:
 
 * *Protocol* +
@@ -105,15 +99,15 @@ Next, in Anypoint Studio configure an *HTTP Listener config* global element for 
 [start=4]
 . Click *OK*.
 . In the *Global Elements* view, click *Create* to open the *Choose Global Type* view.
-. In the *Filter* field write `database`, select *Database Config* and click *OK*.
+. In the *Filter* field, type `database`, select *Database Config*, and click *OK*.
 . In the *Database Config* window, set the *Name* field to `dbConfig`.
 . In the *Connection* field, select *Oracle Connection*.
 . Click *Configure* to add the required Oracle JDBC driver and select either: +
 +
 * *Use local file* +
-Install the library using a local file.
+Installs the library by using a local file.
 * *Add Maven dependency* +
-Install a Maven dependency to add to the project.
+Installs a Maven dependency to add to the project.
 +
 [start=10]
 . In the *Connection* section, set the following parameters: +
@@ -131,7 +125,8 @@ Install a Maven dependency to add to the project.
 +
 [start=11]
 . On the *Advanced* tab, set the *Column types* field to *Edit inline*.
-. Click the plus sign (*+*) to add new column types, set the *Id* and *Type name* fields with the following values:
+. Click the plus sign (*+*) to add new column types to list all the UDTs that were previously created.
+. Specify the following values in the *Id* and *Type name* fields:
 +
 [%header,cols="30a,70a"]
 |===
@@ -143,7 +138,7 @@ Install a Maven dependency to add to the project.
 | 2003 |  `PHONE_BOOK`
 |===
 +
-[start=13]
+[start=14]
 . Click *Finish* to close the *Column type* window.
 . Click *Test Connection* to confirm that Mule can connect to the database.
 . Click *OK*.
@@ -153,7 +148,7 @@ The following screenshot shows the HTTP Listener global element configuration in
 .HTTP Listener configuration
 image::database-oracleudt-example-1.png[HTTP Listener configuration]
 
-The following screenshots shows the Database global element configuration in Studio:
+The following screenshots show the Database global element configuration in Studio:
 
 .Database Config General cofiguration
 image::database-oracleudt-example-2.png[Database Config General configuration setting Host, Port, User, Password and Instance values parameters]
@@ -162,17 +157,21 @@ image::database-oracleudt-example-2.png[Database Config General configuration se
 image::database-oracleudt-example-3.png[Database Config advanced configuration setting Column types values]
 
 
-== Create and Run for your Mule App
+== Create, Run and Test the Mule Application
 
-Create the Mule app flow in Anypoint Studio:
+After you configure the Oracle database connection, create, run an test the Mule application to call the store procedure.
+
+=== Configure the HTTP Listener and Set Payload Component
+
+To create the Mule flow:
 
 . In the *Mule Palette* view, select the HTTP *Listener* source and drag it on to the canvas. +
-The source listens for incoming HTTP messages attributes.
+The source initiates the flow by listening for incoming HTTP message attributes.
 . In the *Connector configuration* field, select `HTTP_Listener_config` global configuration.
 . Set the *Path* field to `/oracle`.
 . Drag a *Set Payload* component to the right of *Listener*. +
-This component set a list of items to send to the stored procedure to process.
-. In the *Value* field, set the following code for the list of items: +
+This component creates a list of items to send to the stored procedure for processing.
+. In the *Value* field, specify items to be listed: +
 +
 [source,xml,linenums]
 ----
@@ -183,18 +182,21 @@ This component set a list of items to send to the stored procedure to process.
 	]
 ----
 +
+. Set the *Mime Type* field to `application/java`.
 
 .Set Payload configuration
 image::database-oracleudt-example-4.png[Set payload configuration]
 
-[start=7]
-. Set the *Mime Type* field to `application/java`
+=== Configure the Transform Message Component with DataWeave Functions
+
+Continue creating the Mule application using a *Transform Message* component with `createStruct` and `createArray` DataWeave functions that map application data to the example custom user data types:
+
 . Drag a *Transform Message* component to the right of *Set Payload*. +
-This component transforms the JSON objects into an object that can be mapped to the data type `PEOPLE` that the stored procedure expects as its input parameter.
-. Double click the component in the Studio canvas, and set the name to `Transform Message - Prepare UDT`.
+This component transforms the JSON objects into an object that can be mapped to the data type `PEOPLE` that the stored procedure expects as an input parameter.
+. Double-click the component in the Studio canvas and set the name to `Transform Message - Prepare UDT`.
 . In the *Output* source code view of the component, click the *Edit Current Target* button.
-. In the *Selection dialog* box, set the *Output* field to `Variable`, the *Variable name* to `in_people_tab`, and click *OK*.
-. In the *Output* field, set the following DataWeave expression that contains the `createStruct`  and `createArray` functions to create said object:
+. In the *Selection dialog* box, set the *Output* field to `Variable` and the *Variable name* to `in_people_tab`, and then click *OK*.
+. In the *Output* field, specify the following DataWeave expression that contains the `createStruct`  and `createArray` functions:
 +
 [source,DataWeave,linenums]
 ----
@@ -211,14 +213,38 @@ Db::createArray("dbConfig", "PEOPLE", payload map (item, index) -> ( toPerson(it
 .Transform Message configuration
 image::database-oracleudt-example-6.png[Transform Message configuration]
 
+The `createStruct` function creates JDBC struct objects based on the `Name` type and their corresponding properties. In the example, types `PERSON` and `PHONE_NUMBER` are struct objects. The function expects the following parameters in order:
 
-[start=13]
+* `configName` +
+A string with the name of the configuration that creates the `Struct` type: in this example, `dbConfig`
+* `typeName` +
+A string with the name of the `Struct` type to create: in this example, `PERSON` or `PHONE_NUMBER`
+* `values` +
+An array of values that conforms to the `Struct` properties: in this example, for `PHONE_NUMBER`, `['046', '666']`
+
+The `createArray` function creates JDBC array objects based on the `Array` type. In this example, types `PHONE_NUMBER_ARRAY`, `PEOPLE`, and `PHONE_BOOK` are array objects. The function expects the following parameters in order:
+
+* `configName` +
+A string with the name of the configuration that creates the `Array` type: in this example, `dbConfig`
+* `typeName` +
+A string with the name of the `Array` type to create: in this example, `PEOPLE` or `PHONE_NUMBER_ARRAY`
+* `values` +
+An array of values that conforms to the `Array` type: in this example, is an array of `PERSON` objects created using the `createStruct` function
+
+Note that you can combine and use these functions to create subtypes or nested types. In this example, the type `PERSON` contains the `PHONE_NUMBER_ARRAY` objects. At the same time, the type `PHONE_NUMBER_ARRAY` is defined as an array of `PHONE_NUMBER`.
+
+Additionally, you can combine these functions for complex types if you use the `createArray` function when you are matching to a UDT based on the `Array` type.
+
+=== Configure the Stored Procedure Operation
+
+Use the Database Connector *Stored Procedure* operation to call the Oracle stored procedure with UDTs:
+
 . Drag a *Stored procedure* operation to the right of *Transform Message*. +
 This operation calls the stored procedure using Database Connector.
 . In the *Connector configuration* field, select `dbConfig` global configuration.
-. In the *SQL Query Text* field enter `{ call proc_insert_humans(:people, :phoneBook) }`. +
-. In the *Input Parameters* field enter `{ people: vars.in_people_tab}` +
-To map the output of our transformation, which is stored in the variable called `in_people_tab` to our input parameter.
+. In the *SQL Query Text* field, enter `{ call proc_insert_humans(:people, :phoneBook) }`. +
+. In the *Input Parameters* field, enter `{ people: vars.in_people_tab}` +
+This step maps the output of the transformation, which is stored in the variable called `in_people_tab` to the input parameter.
 . In the *Output Parametrs* field, select `Edit inline` and click the plus sign (*+*) to set a custom parameter:
 
 * *Key* +
@@ -229,11 +255,11 @@ To map the output of our transformation, which is stored in the variable called 
 .Stored procedure configuration
 image::database-oracleudt-example-5.png[Stored procedure configuration]
 
-[start=18]
+[start=6]
 . Drag a second *Transform Message* component to the right of *Stored procedure*.
-. Double click the component in the Studio canvas, and set the name to `Transform Message - response to JSON`
+. Double-click the component in the Studio canvas and set the name to `Transform Message - response to JSON`.
 . In the *Output* source code view of the component, set the following DataWeave expression:
-+
+
 [source,DataWeave,linenums]
 ----
 %dw 2.0
@@ -241,9 +267,13 @@ output application/json
 ---
 payload
 ----
-+
-[start=20]
-. Save the project.
+
+
+=== Run and Test the Mule Application
+
+To complete and test the Mule application:
+
+. Save the project in Studio.
 . Test the app by using the following curl command in your terminal: `curl localhost:8081/oracle`. +
 The stored procedure should return the list of phone numbers of all the people added to the table `HUMANS`.
 
