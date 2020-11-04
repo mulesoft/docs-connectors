@@ -1,220 +1,33 @@
 = Database Examples
 :page-aliases: connectors::db/db-connector-query.adoc, connectors::db/db-connector-insert-update-delete.adoc, connectors::db/db-connector-sp.adoc, connectors::db/db-connector-ddl.adoc, connectors::db/db-connector-bulk-ops-ref.adoc, connectors::db/db-connector-datatypes-ref.adoc, connectors::db/db-connector-transactions-ref.adoc, connectors::db/db-connector-execute-script-ref.adoc, connectors::db/database-connector-examples.adoc
 
-Anypoint Connector for Database (Database Connector) examples help you configure database connections, configure connection pools, query the database, and execute stored procedures, DDL statements, and bulk operations.
+Anypoint Connector for Database (Database Connector) examples help you configure database connections, query a database, execute stored procedures, execute DDL statements, execute scripts, execute database transactions, use bulk operations, and define custom data types:
 
-== Configure a Database Connection
+* xref:database-connector-connection.adoc[Configure a Database Connection] +
+Connect to both popular and generic database. Additionally, configure the connector to connect to a global data source, set a JDBC driver, configure connection pooling, and connection to an Oracle database with TNS.
+* <<query-database,Query a Database>> +
+Configure the *Select* operation to query data from a database.
+* <<insert-update-delete,Insert, Update, and Delete Data>> +
+Configure the *Insert*, *Update* and *Delete* operations to manage data.
+* <<execute-stored-procedures,Execute Stored Procedures>> +
+Configure the *Stored Procedure* operation to combine `input`, `output`, and `input-output` parameters. Additionally, configure dates on stored procedures.
+* xref:database-connector-udt-stored-procedure.adoc[Call an Oracle Stored Procedure That Uses UDTs] +
+Configure the *Stored procedure* operation to call an Oracle database stored procedure that uses UDTs for its input and output parameters. Additionally, use `createStruct` and `createArray` DataWeave functions to map application data to your custom types.
+* <<execute-ddl-statements,Execute DDL Statements>> +
+Configure the *Execute DDL* operation to execute DDL statements that create or modify data within tables or other data structures.
+* <<execute-bulk-operations,Execute Bulk Operations>> +
+Configure the *Bulk insert*, *Bulk update*, and *Bulk delete* operations for use  when each input parameter can take only one value.
+* <<execute-script,Execute Script>> +
+Configure the *Execute script* operation to execute a script as a single statement.
+* <<data-types,Define Custom Data Types>> +
+Define custom data types to use when connected to a particular connection provider.
+* <<database-transactions,Execute Database Transactions>> +
+Execute database operations in the context of a transaction.
 
-Database Connector can connect to any database for which a JDBC driver is available. To make it easier to connect to the most popular databases (such as MySQL, Oracle, and Microsoft SQL Server), the connector includes a series of different connection types.
-
-The generic connection type is useful in these cases:
-
-* When you want to connect to a database for which MuleSoft does not provide a specific connection type.
-* When you want to connect to one of the supported databases, but you are using custom options that are not included in the connection types.
-
-A generic connection requires:
-
-* Driver class name
-* Connection URL
-
-Some of these examples show configurations for common connection types. You can also use this connector for more advanced use cases, such as connecting to a global data source, configuring a JDBC driver, and configuring connection pooling.
-
-=== Connect to MySQL
-
-This example shows how to connect to a MySQL database:
-
-[source,xml,linenums]
-----
-<db:config name="dbConfig">
-  <db:my-sql-connection
-  host="0.0.0.0"
-  port="3306"
-  user="Max"
-  password="POWERS"
-  database="someSchema"/>
-</db:config>
-----
-
-=== Connect to Oracle
-
-This example shows how to connect to an Oracle database:
-
-[source,xml,linenums]
-----
-<db:config name="dbConfig">
-  <db:oracle-connection
-  host="192.168.99.100"
-  port="1521" instance="xe"
-  user="system"
-  password="oracle" />
-</db :config >
-----
-
-=== Connect to Microsoft SQL Server
-
-This example shows how to connect to a Microsoft SQL Server database:
-
-[source,xml,linenums]
-----
-<db:config name="dbConfig">
-    <db:mssql-connection
-    host="0.0.0.0"
-    port="553"
-    user="Max"
-    password="mypassword"
-    databaseName="microsoftDB" />
-</db:config>
-----
-
-[[generic_db]]
-=== Connect to a Generic Database
-
-This example shows how to connect to an H2 database:
-
-[source,xml,linenums]
-----
-<db:config name="dbConfig">
-    <db:generic-connection driverClassName="org.h2.Driver"
-    url="jdbc:h2:file:/tmp/datasenseDB"/>
-</db:config>
-----
-
-=== Connect to a Global DataSource
-
-When you set up a <<generic_db, generic connection>>, the connector uses the information you provide to generate a JDBC `DataSource`. In some cases, you might want to create your own `DataSource`. To do this, the database configuration supports a `data-source-connection` element that allows you to reference a `DataSource` that is defined through the Spring module.
-
-To connect to a global `DataSource`:
-
-. Create a Spring configuration file containing a Bean such as this one:
-+
-[source,xml,linenums]
-----
-<bean id="jdbcDataSource" class="org.enhydra.jdbc.standard.StandardDataSource"
- destroy-method="shutdown">
-   <property name="driverName" value="org.apache.derby.jdbc.EmbeddedDriver"/>
-   <property name="url" value="jdbc:derby:muleEmbeddedDB;create=true"/>
-</bean>
-----
-+
-The previous example creates a custom enhydra `DataSource` that connects to a Derby database.
-+
-. Reference your Spring configuration file using the Spring module, and use the `DataSource` in a connection:
-+
-[source,xml,linenums]
-----
-<spring:config name="datasource" files="datasource-config.xml" />
-
-<db:config name="dbConfig">
-   <db:data-source-connection dataSourceRef="jdbcDataSource" />
-</db:config>
-----
-
-=== Set the JDBC Driver
-
-After you configure the connections, you can supply the JDBC driver. The following example shows how to supply a driver for the MySQL database.
-
-Other than the need to specify a driver dependency, the steps are the same as for any other database.
-
-. Add the driver as a dependency in your project's `pom.xml` file:
-+
-[source,xml,linenums]
-----
-<dependency>
-    <groupId>mysql</groupId>
-    <artifactId>mysql-connector-java</artifactId>
-    <version>5.1.6</version>
-</dependency>
-----
-+
-. Through your `pom.xml`, make Mule expose the driver dependency to the Database Connector, for example:
-+
-[source,xml,linenums]
-----
-<build>
-    <plugins>
-        <!-- Only used to declare the shared libraries-->
-        <plugin>
-            <groupId>org.mule.tools.maven</groupId>
-            <artifactId>mule-maven-plugin</artifactId>
-            <version>1.0.0</version>
-            <configuration>
-                <sharedLibraries>
-                    <sharedLibrary>
-                        <groupId>mysql</groupId>
-                        <artifactId>mysql-connector-java</artifactId>
-                    </sharedLibrary>
-                </sharedLibraries>
-            </configuration>
-        </plugin>
-    </plugins>
-</build>
-----
-
-=== Configure Connection Pools
-
-Establishing connections is costly in terms of connector and relational database management system (RDBMS) network and processing overhead. The solution is to build a connection pool that provides several available connections. Use the `<db:pooling-profile>` element, rather than the standard Mule `<pooling-profile>` element, for this purpose.
-
-This example shows how to use the `db:pooling-profile` element:
-
-[source,xml,linenums]
-----
-<db:config name="dbConfig">
-    <db:my-sql-connection database="mozart_test" host="${host}" password="${password}" port="${port}" user="${user}">
-        <db:pooling-profile acquireIncrement="1" maxPoolSize="5" maxWait="0" maxWaitUnit="SECONDS" minPoolSize="0" preparedStatementCacheSize="5"/>
-    </db:my-sql-connection>
-</db:config>
-----
-
-All connection configuration elements, except the global data source reference, accept the pooling profile. In JDBC, pooling occurs at the data source level. To do pooling, you have to configure the global data source. The software cannot add it on the fly.
-
-Unlike other connectors such as FTP or SFTP, the Database Connector uses the `<db:pooling-profile>` instead of the standard `<pooling-profile>`. This is because databases have special pooling attributes, such as `preparedStatementCacheSize`.
-
-Besides the main profile properties:
-
-    * `maxPoolSize`
-    * `minPoolSize`
-    * `acquireIncrement`
-    * `preparedStatementCacheSize`
-    * `maxWait`
-    * `maxWaitUnit`
-    * `maxIdleTime`
-
-Which can be specified as indicated in the previous example, for any Database provider, you can now set additional specific properties if you have the need to do so. These additional properties do not override any of the main properties, if any of those were previously set.
-
-The following example shows you how to add properties to your database pooling profile using the `db:additional-properties` element:
-
-[source,xml,linenums]
-----
-<db:config name="dbConfig">
-    <db:my-sql-connection database="mozart_test" host="${host}" password="${password}" port="${port}" user="${user}">
-            <db:pooling-profile maxPoolSize="1" maxWait="1" minPoolSize="0" maxWaitUnit="SECONDS">
-                <db:additional-properties>
-                    <db:additional-property key="checkoutTimeout" value="1000"/>
-                    <db:additional-property key="idleConnectionTestPeriod" value="2" />
-                </db:additional-properties>
-            </db:pooling-profile>
-    </db:my-sql-connection>
-</db:config>
-----
-
-For further information about parameters and connection type capabilities, see xref:database-documentation.adoc[the Database Connector Reference].
-
-=== Create an Oracle Database Connection with TNS Names
-
-To create an Oracle connection that relies on the `tnsnames.ora` file, use the Database Connector and provide configuration details in the
-connector configuration. For this to work you have to add the http://download.oracle.com/otn/utilities_drivers/jdbc/11204/ojdbc6.jar[ojdbc6.jar] file
-as a dependency in your project build path.
-
-If a firewall is between your Mule instance and the database, use the `ENABLE=BROKEN` parameter to enable a keep-alive connection at the TNS connection. If a keep-alive connection is not set, the connection might drop traffic due to expiring inactivity timers.
-
-For example, you can configure a database URL in the Database
-Connector's *General* tab in Anypoint Studio, and supply this URL:
-
-`jdbc:oracle:thin:${oracle.user}/${oracle.password}@(DESCRIPTION=(ENABLE=BROKEN)(FAILOVER=ON)(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=${oracle.host1})(PORT=${oracle.port}))(ADDRESS=(PROTOCOL=TCP)(HOST=${oracle.host2})(PORT=${oracle.port}))(CONNECT_DATA=(SERVICE_NAME=${oracle.service})))`
-
+[[query-database]]
 == Query a Database
 
-When you configure a database operation using the Database Connector, there are several ways to add variable values to the SQL statement you execute in the database.
+When you configure a database operation using Database Connector, there are several ways to add variable values to the SQL statement you execute in the database.
 
 === Use Input Parameters to Protect Database Queries
 
@@ -278,7 +91,7 @@ In the following example, you can see how a full expression is used to produce t
 Dynamic queries are necessary in the above example and cannot be treated like Input parameters; Input parameters can be applied only to parameters in a `WHERE` clause. To modify any other part of the query, you should use DataWeave’s interpolation operator.
 
 [NOTE]
-In Mule 3, the concept of select was split in parameterized and dynamic queries, and you couldn’t use both at the same time. You had to choose between having a dynamic query or having the advantages of using parameters (SQL Injection protection, PreparedStatement optimization, and so on). Furthermore, the syntax to do one or the other was different, so you had to learn two different ways of doing the same thing. But with the Database Connector in Mule 4, you can now use both methods at the same time by using expressions in the query.
+In Mule 3, the concept of select was split in parameterized and dynamic queries, and you couldn’t use both at the same time. You had to choose between having a dynamic query or having the advantages of using parameters (SQL Injection protection, PreparedStatement optimization, and so on). Furthermore, the syntax to do one or the other was different, so you had to learn two different ways of doing the same thing. But with Database Connector in Mule 4, you can now use both methods at the same time by using expressions in the query.
 
 
 === Stream Large Results
@@ -326,9 +139,10 @@ Generally, it's recommended to set a timeout on the query. To manage timeouts, c
 </db:select>
 ----
 
-== Insert, Update, and Delete Data with the Database Connector
+[[insert-update-delete]]
+== Insert, Update, and Delete Data
 
-The Database Connector supports `insert`, `update`, and `delete` operations.
+Database Connector supports `insert`, `update`, and `delete` operations.
 Similar to the select operation, these operations support dynamic queries and
 parameterization by using embedded DataWeave transformations while also
 supporting `fetchSize`, `maxRows`, and `timeout` parameters. Although examples of input
@@ -353,7 +167,7 @@ CREATE TABLE electronic(
 )
 ----
 
-For an example of creating a table using the Database Connector, check how to <<execute_ddl_statements,Execute DDL Statements>>.
+For an example of creating a table using Database Connector, check how to <<execute_ddl_statements,Execute DDL Statements>>.
 
 Given that the table is already created and there is a connection configuration named `dbConfig`,
 the following operation inserts a new record in the `electronic` table:
@@ -474,6 +288,7 @@ Given the table defined in the example for `insert`, the following operation
 </db:delete>
 ----
 
+[[execute-stored-procedures]]
 == Execute Stored Procedures
 
 Invoke stored procedures that combine `input`, `output``, and `input-output` parameters.
@@ -566,8 +381,7 @@ Use DataWeave for all data transformations before the invocation to the callable
 	</db:stored-procedure>
 ----
 
-
-[[execute_ddl_statements]]
+[[execute-ddl-statements]]
 == Execute DDL Statements
 
 Data Definition Language (DDL) statements, are special types of SQL statements that do not directly access or modify data. Instead, they create, modify, or destroy data structures, stored procedures, and so on. You can also use DDL statements to create or modify data within tables or other data structures.
@@ -594,6 +408,8 @@ Suppose you have a database schema named `Products`, and you also have a connect
 
 The `Execute DDL` operation creates a table and returns `0` unless there is an error.
 
+
+[[execute-bulk-operations]]
 == Execute Bulk Operations
 
 The `insert`, `update`, and `delete` operations can be used for the cases in which each input parameter can take only one value. Alternatively, bulk operations allow you to run a single query using a set of parameters values.
@@ -667,6 +483,8 @@ It may happen that while some statements in the bulk operation can be successful
 
 In both cases, whenever an error occurs you can examine your application logs to see which caused the failure. When this occurs a single exception is thrown describing what went wrong.
 
+
+[[data-types]]
 == Database Connector Data Types Reference
 
 The following examples include information about database input parameters and defining custom data types you can use when connected to a particular connection provider.
@@ -702,6 +520,7 @@ There are exclusive and common parameters for each connection provider, such as 
 </db:config>
 ----
 
+[[database-transactions]]
 == Database Transactions
 
 You can execute database operations in the context of a transaction. Each operation has a `transactionalAction` value that specifies the type of joining action that operations can take regarding the active transaction if there is one. For example, the `select` operation has the following possible actions:
@@ -747,6 +566,7 @@ If these queries are executed in the context of an already existing transaction,
 </try>
 ----
 
+[[execute-script]]
 == Execute Script Reference
 
 This operation executes a script of random length as a single statement. Execute script differs from other operations in the following ways:
