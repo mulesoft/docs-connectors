@@ -3,7 +3,128 @@ ifndef::env-site,env-github[]
 include::_attributes.adoc[]
 endif::[]
 
+== Configuration
+* For basic configuration walkthrough see:
+  xref:amazon-kinesis-connector-studio.adoc[]
 
+* To gain better understanding of the basic configuration required see:
+  xref:amazon-kinesis-connector-config-topics.adoc[]
+
+* To explore advanced configuration options see:
+  xref:amazon-kinesis-connector-advanced-config.adoc[]
+
+== Sources
+For the Kinesis Data Streams Connector, these sources are available:
+
+* *Kinesis Stream Listener*: A source for the Kinesis Stream Records.
+
+=== Parameters
+*Kinesis Stream Listener*
+
+.General Tab
+****
+
+.Stream Initial Position
+|===
+|Field| Value |Meaning
+
+|Absolute Position|EMPTY, FIRST or LATEST|Where should the listener start reading from the stream on first run (and subsequent runs if checkpointing is disabled)
+|Timestamp|ISO timestamp| Instead of the Absolute Position you can specify the date and time from which to start reading. In case the timestamp is too old the stream will start in the FIRST position. e.g.: `2020-10-20T12:00:00.000Z`
+|===
+
+.Listener Params
+|===
+|Field| Value |Meaning
+
+|Stream Name|String|Where should the listener start reading from the stream on first run (and subsequent runs if checkpointing is disabled).
+|Shard Config|Inline or Bean Ref.| see <<ShardConfig>> table.
+|Application Name|String|The name of this application. Can be the same for multiple listeners but doesn't have to be. This value is also used as part of the name for the DynamoDB table where checkpoint information is stored.
+|Consumer ID|String|Unique name for this listener.s
+|===
+WARNING: Two listeners can't share the same Consumer ID, this needs to be unique for each.
+
+[[ShardConfig]]
+.Shard Config
+|===
+|Field| Value |Meaning
+
+|Shard ID|String|name of the Kinesis Stream shard e.g.: `shardId-000000000000`
+|At Sequence Number|Number|A valid sequence number denoting where the listener should start listening on this shard (inclusive).
+|After Sequence Number|Number|A valid sequence number denoting where the listener should start listening on this shard (exclusive).
+|Absolute Position|EMPTY, FIRST or LATEST|Where the listener should start reading from this stream in absolute terms.
+|Timestamp|ISO timestamp| Instead of the Absolute Position you can specify the date and time from which to start reading. In case the timestamp is too old the stream will start in the FIRST position. e.g.: `2020-10-20T12:00:00.000Z`
+|===
+****
+
+== Operations
+
+* <<checkpoint>>
+* <<putRecord>>
+
+[[checkpoint]]
+== Checkpoint
+`<kinesis:checkpoint>`
+
+When the operation is performed, the current position of the screen denoted by its ConsumerID is watermarked (checkpointed).
+
+This allows the *Kinesis Stream Listener* source to continue from where it last ended in case of a shutdown or a failure.
+
+[[putRecord]]
+== Put Record
+`<kinesis:put-record>`
+
+Submit data record into the KPL library.
+
+Depending on your configuration this Record might be published immediatelly, or
+it might wait for additional time or data if <<Aggregation>> and/or <<Collection>> is enabled.
+
+=== Parameters
+
+.General Tab
+****
+.General
+|===
+|Field      | Value      | Meaning
+
+|Stream Name| String    | Name of the stream where the record will be put.
+|Data       | Binary    | The data to send
+|===
+****
+
+.Advanced Tab
+****
+.General
+|===
+|Field              | Value       | Meaning
+
+|Partition Key      | String (256)| Used as input to a hash function that maps the partition key and associated data to a specific shard. All data records with the same partition key map to the same shard within the stream. If not provided the connector will use a UUID generator to supply partition key value.
+|Explicit Hash Key  | Binary      | The hash value used to explicitly determine the shard the data record is assigned to by overriding the partition key hash.
+|===
+****
+
+== Additional Information
+[[Aggregation]]
+=== Aggregation
+`default: ENABLED`
+`Max Size: 51200 Bytes (50KB)`
+
+You can disable this option in the global configuration, in the advanced tab
+
+ Aggregation refers to the storage of multiple records in a Kinesis Data Streams record. Aggregation allows customers to increase the number of records sent per API call, which effectively increases producer throughput.
+
+source: https://docs.aws.amazon.com/streams/latest/dev/kinesis-kpl-concepts.html#kinesis-kpl-concepts-collection[AWS Kinesis Documentation]
+
+[[Collection]]
+=== Collection
+`default: ENABLED`
+`Max Size: 5242880 Bytes (5MB)`
+
+There's no direct way to disable collection and it's not advised to disable this as this option saves a lot of API calls.
+however if you wish to turn it off you can set the *CollectionMaxCount* option to 1 in the global configuration advanced tab.
+
+ Collection refers to batching multiple Kinesis Data Streams records and sending them in a single HTTP request with a call to the API operation PutRecords, instead of sending each Kinesis Data Streams record in its own HTTP request.
+
+source: https://docs.aws.amazon.com/streams/latest/dev/kinesis-kpl-concepts.html#kinesis-kpl-concepts-collection[AWS Kinesis Documentation]
 
 == See Also
 
