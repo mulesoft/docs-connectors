@@ -20,7 +20,7 @@ The Configuration for the connector. Contains both consumer and producer parts.
 | Name | Type | Description | Default Value | Required
 |Name | String | The name for this configuration. Connectors reference the configuration with this name. | | *x*{nbsp}
 | Connection a| <<Config_Connection, Kinesis Connection>>
-| The connection types that can be provided to this configuration. | | *x*{nbsp}
+ | The connection types that can be provided to this configuration. | | *x*{nbsp}
 | Default Stream Name a| String |  The default stream name. |  | {nbsp}
 | Default Application Name a| String |  The default application name. |  | {nbsp}
 | Name a| String |  The identifier of this element used to reference it in other components |  | *x*{nbsp}
@@ -74,7 +74,7 @@ The Configuration for the connector. Contains both consumer and producer parts.
 | Max Connections a| Number |  Maximum number of connections to open to the backend. HTTP requests are sent in parallel over multiple connections. Setting this too high may impact latency and consume additional resources without increasing throughput. |  24 | {nbsp}
 | Min Connections a| Number |  Minimum number of connections to keep open to the backend. There should be no need to increase this in general. |  1 | {nbsp}
 | Rate Limit a| Number |  The rate limit prevents the producer from sending data too fast to a shard. Such a limit is useful for reducing bandwidth and CPU cycle wastage from sending requests that we know are going to fail from throttling. Kinesis enforces limits on both the number of records and number of bytes per second. This setting applies to both. The default value of 150% is chosen to allow a single producer instance to completely saturate the allowance for a shard. This is an aggressive setting. If you prefer to reduce throttling errors rather than completely saturate the shard, consider reducing this setting. |  150 | {nbsp}
-| Record TTL a| Number |  This setting is useful if your application cannot or does not wish to tolerate late records. Records will still incur network latency after they leave the KPL, so take that into consideration when choosing a value for this setting. |  30 | {nbsp}
+| Record TTL a| Number |  Records that do not get successfully put within the limit are failed. This setting is useful if your application cannot or does not wish to tolerate late records. Records will still incur network latency after they leave the KPL, so take that into consideration when choosing a value for this setting. |  30 | {nbsp}
 | Record TTL Unit a| Enumeration, one of:
 
 ** NANOSECONDS
@@ -144,7 +144,7 @@ Connects to AWS Kinesis through the use of a user provided access and secret key
 `<kinesis:checkpoint>`
 
 
-The operation checkpoint current position of a listener into DynamoDB table. The listeners must be in MANUAL Ack mode.
+The operation checkpoint current position of a listener into DynamoDB table. Upon failover, the connector will start fetching records after the checkpointed position.
 
 
 === Parameters
@@ -153,10 +153,12 @@ The operation checkpoint current position of a listener into DynamoDB table. The
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | *x*{nbsp}
-| Consumer ID a| String |  the unique id of the consumer which is used for shard lease management. |  | *x*{nbsp}
+| Stream Name a| String |  The stream name. |  | {nbsp}
+| Application Name a| String |  Represents DynamoDB table which holds data about current stream positions. |  | {nbsp}
+| Shard ID a| String |  The shard ID. |  | {nbsp}
+| Sequence Number a| String |  A sequence number at which to checkpoint in the shard. |  | {nbsp}
+| Subsequence Number a| Number |  A subsequence number at which to checkpoint within the shard. |  | {nbsp}
 | Config Ref a| ConfigurationProvider |  The name of the configuration to be used to execute this component |  | *x*{nbsp}
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  A retry strategy in case of connectivity errors |  | {nbsp}
 |===
 
 
@@ -166,10 +168,8 @@ The operation checkpoint current position of a listener into DynamoDB table. The
 
 === Throws
 
-* KINESIS:CONNECTIVITY {nbsp}
 * KINESIS:ILLEGAL_STATE {nbsp}
 * KINESIS:INVALID_ARGUMENT {nbsp}
-* KINESIS:RETRY_EXHAUSTED {nbsp}
 * KINESIS:TIMEOUT {nbsp}
 * KINESIS:UNAUTHORIZED {nbsp}
 
@@ -179,7 +179,7 @@ The operation checkpoint current position of a listener into DynamoDB table. The
 `<kinesis:put-record>`
 
 
-he operation puts a record into a Kinesis Data Stream.
+The operation puts a record into a Kinesis Data Stream.
 
 
 === Parameters
@@ -188,10 +188,10 @@ he operation puts a record into a Kinesis Data Stream.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | *x*{nbsp}
-| Stream Name a| String |  the stream name |  | {nbsp}
-| Partition Key a| String |  the partition key |  | {nbsp}
-| Explicit Hash Key a| String |  the explicitHashKey value is normally computed with the MD5 function of the record partition key but you can override the Explicit Hash Key with explicitHashKey field. |  | {nbsp}
-| Data a| Any |  the content. Up to 1MB. |  #[payload] | {nbsp}
+| Stream Name a| String |  The stream name. |  | {nbsp}
+| Partition Key a| String |  The partition key, if not provided the connector generates UUID for its value. |  | {nbsp}
+| Explicit Hash Key a| String |  The value to override the Explicit Hash Key which is normally computed with the MD5 function of the record partition key. |  | {nbsp}
+| Data a| Any |  The content. Up to 1MB in size. |  #[payload] | {nbsp}
 | Config Ref a| ConfigurationProvider |  The name of the configuration to be used to execute this component |  | *x*{nbsp}
 | Streaming Strategy a| * <<RepeatableInMemoryStream>>
 * <<RepeatableFileStoreStream>>
@@ -250,8 +250,7 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message |  | {nbsp}
 | Stream Name a| String |  The stream name. |  | {nbsp}
 | Application Name a| String |  Represents DynamoDB table which holds data about current stream positions. If the table doesn't exist, then the connector creates a new one at initial position. |  | {nbsp}
-| Consumer ID a| String |  The unique id of the consumer which is used for shard lease management. The consumer iD must be unique, otherwise the InvalidArgumentException is thrown. We need the param for Seek operation as well as for DynamoDB lease management. The KCL LeaseManager object uses the ID to identify which shard is reserved for Consumer with ConsumerId. The Consumer ID must be unique for the Application Name. |  | *x*{nbsp}
-| Shard Configs a| Array of <<ShardConfig>> |  The subscription configuration. If it is not N/A, the source listens only from selected shards. |  | {nbsp}
+| Shard Configs a| Array of <<ShardConfig>> |  The shard configuration. If specified the source will listen only from selected shards. |  | {nbsp}
 | Max Batch Size a| Number |  The maximum number of records that a batch can carry. |  10000 | {nbsp}
 | Max Leases For Worker a| Number |  Number of shards which the listener can subscribe to in parallel. |  2137483647 | {nbsp}
 | Shard Prioritization a| Enumeration, one of:
@@ -261,6 +260,16 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 | Max Depth a| Number |  Any shard that is deeper than max depth, will be excluded from processing. The field is used only by PARENTS_FIRST_SHARD_PRIORITIZATION shard prioritization. |  | {nbsp}
 | Read Capacity Units a| Number |  The maximum number of strongly consistent reads consumed per second before DynamoDB returns a ThrottlingException. |  10 | {nbsp}
 | Write Capacity Units a| Number |  The maximum number of writes consumed per second before DynamoDB returns a ThrottlingException. |  10 | {nbsp}
+| Failover Time a| Number |  Duration of a lease for a worker. |  10 | {nbsp}
+| Failover Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for failover time field. |  SECONDS | {nbsp}
 | Checkpoint On Complete a| Boolean |  Whether the source should checkpoint the current reading position to DynamoDB after records were processed by the owning flow, without taking into account if the processing finished successfully or not. |  true | {nbsp}
 | Absolute Position a| Enumeration, one of:
 
@@ -293,10 +302,10 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 | Field | Type | Description | Default Value | Required
 | Host a| String | Host where the proxy requests will be sent. |  | x
 | Port a| Number | Port where the proxy requests will be sent. |  | x
-| Username a| String | The username to authenticate against the proxy. |  |
-| Password a| String | The password to authenticate against the proxy. |  |
-| Non Proxy Hosts a| Array of String | A list of hosts against which the proxy should not be used. |  |
-| Ntlm Domain a| String | The domain to authenticate against the proxy. |  |
+| Username a| String | The username to authenticate against the proxy. |  | 
+| Password a| String | The password to authenticate against the proxy. |  | 
+| Non Proxy Hosts a| Array of String | A list of hosts against which the proxy should not be used. |  | 
+| Ntlm Domain a| String | The domain to authenticate against the proxy. |  | 
 |======================
 
 [[Tls]]
@@ -305,13 +314,13 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Enabled Protocols a| String | A comma separated list of protocols enabled for this context. |  |
-| Enabled Cipher Suites a| String | A comma separated list of cipher suites enabled for this context. |  |
-| Trust Store a| <<TrustStore>> |  |  |
-| Key Store a| <<KeyStore>> |  |  |
+| Enabled Protocols a| String | A comma separated list of protocols enabled for this context. |  | 
+| Enabled Cipher Suites a| String | A comma separated list of cipher suites enabled for this context. |  | 
+| Trust Store a| <<TrustStore>> |  |  | 
+| Key Store a| <<KeyStore>> |  |  | 
 | Revocation Check a| * <<StandardRevocationCheck>>
 * <<CustomOcspResponder>>
-* <<CrlFile>> |  |  |
+* <<CrlFile>> |  |  | 
 |======================
 
 [[TrustStore]]
@@ -320,11 +329,11 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Path a| String | The location (which will be resolved relative to the current classpath and file system, if possible) of the trust store. |  |
-| Password a| String | The password used to protect the trust store. |  |
-| Type a| String | The type of store used. |  |
-| Algorithm a| String | The algorithm used by the trust store. |  |
-| Insecure a| Boolean | If true, no certificate validations will be performed, rendering connections vulnerable to attacks. Use at your own risk. |  |
+| Path a| String | The location (which will be resolved relative to the current classpath and file system, if possible) of the trust store. |  | 
+| Password a| String | The password used to protect the trust store. |  | 
+| Type a| String | The type of store used. |  | 
+| Algorithm a| String | The algorithm used by the trust store. |  | 
+| Insecure a| Boolean | If true, no certificate validations will be performed, rendering connections vulnerable to attacks. Use at your own risk. |  | 
 |======================
 
 [[KeyStore]]
@@ -333,12 +342,12 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Path a| String | The location (which will be resolved relative to the current classpath and file system, if possible) of the key store. |  |
-| Type a| String | The type of store used. |  |
-| Alias a| String | When the key store contains many private keys, this attribute indicates the alias of the key that should be used. If not defined, the first key in the file will be used by default. |  |
-| Key Password a| String | The password used to protect the private key. |  |
-| Password a| String | The password used to protect the key store. |  |
-| Algorithm a| String | The algorithm used by the key store. |  |
+| Path a| String | The location (which will be resolved relative to the current classpath and file system, if possible) of the key store. |  | 
+| Type a| String | The type of store used. |  | 
+| Alias a| String | When the key store contains many private keys, this attribute indicates the alias of the key that should be used. If not defined, the first key in the file will be used by default. |  | 
+| Key Password a| String | The password used to protect the private key. |  | 
+| Password a| String | The password used to protect the key store. |  | 
+| Algorithm a| String | The algorithm used by the key store. |  | 
 |======================
 
 [[StandardRevocationCheck]]
@@ -347,10 +356,10 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Only End Entities a| Boolean | Only verify the last element of the certificate chain. |  |
-| Prefer Crls a| Boolean | Try CRL instead of OCSP first. |  |
-| No Fallback a| Boolean | Do not use the secondary checking method (the one not selected before). |  |
-| Soft Fail a| Boolean | Avoid verification failure when the revocation server can not be reached or is busy. |  |
+| Only End Entities a| Boolean | Only verify the last element of the certificate chain. |  | 
+| Prefer Crls a| Boolean | Try CRL instead of OCSP first. |  | 
+| No Fallback a| Boolean | Do not use the secondary checking method (the one not selected before). |  | 
+| Soft Fail a| Boolean | Avoid verification failure when the revocation server can not be reached or is busy. |  | 
 |======================
 
 [[CustomOcspResponder]]
@@ -359,8 +368,8 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Url a| String | The URL of the OCSP responder. |  |
-| Cert Alias a| String | Alias of the signing certificate for the OCSP response (must be in the trust store), if present. |  |
+| Url a| String | The URL of the OCSP responder. |  | 
+| Cert Alias a| String | Alias of the signing certificate for the OCSP response (must be in the trust store), if present. |  | 
 |======================
 
 [[CrlFile]]
@@ -369,7 +378,7 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Path a| String | The path to the CRL file. |  |
+| Path a| String | The path to the CRL file. |  | 
 |======================
 
 [[Role]]
@@ -380,8 +389,8 @@ The Listener uses Kinesis Client Library (KCL) which listens from a specific ini
 | Field | Type | Description | Default Value | Required
 | Arn a| String | The Amazon Resource Name (ARN) of the role to assume. |  | x
 | External Id a| String | A unique identifier that might be required when you assume a role in another account. If the administrator of the
-account to which the role belongs provides an external ID, then provide that value in the ExternalId parameter. |  |
-| Duration a| Number | The duration of the role session. | 3600 |
+ account to which the role belongs provides an external ID, then provide that value in the ExternalId parameter. |  | 
+| Duration a| Number | The duration of the role session. | 3600 | 
 | Duration Time Unit a| Enumeration, one of:
 
 ** NANOSECONDS
@@ -390,11 +399,10 @@ account to which the role belongs provides an external ID, then provide that val
 ** SECONDS
 ** MINUTES
 ** HOURS
-** DAYS | A #duration | SECONDS |
+** DAYS | A #duration | SECONDS | 
 | Referred Policy Arns a| Array of String | The Amazon Resource Names (ARNs) of the IAM managed policies that you want to use as managed session policies.
-The policies must exist in the same account as the role. |  |
-| Tags a| Object | The Amazon Resource Names (ARNs) of the IAM managed policies that you want to use as managed session policies.
-The policies must exist in the same account as the role. |  |
+ The policies must exist in the same account as the role. |  | 
+| Tags a| Object | A list of session tags that you want to pass. Each session tag consists of a key name and an associated value. |  | 
 |======================
 
 [[Reconnection]]
@@ -403,9 +411,9 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Fails Deployment a| Boolean | When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment will fail if the test doesn't pass after exhausting the associated reconnection strategy |  |
+| Fails Deployment a| Boolean | When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment will fail if the test doesn't pass after exhausting the associated reconnection strategy |  | 
 | Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> | The reconnection strategy to use |  |
+* <<ReconnectForever>> | The reconnection strategy to use |  | 
 |======================
 
 [[Reconnect]]
@@ -414,9 +422,9 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Frequency a| Number | How often (in ms) to reconnect |  |
-| Blocking a| Boolean | If false, the reconnection strategy will run in a separate, non-blocking thread |  |
-| Count a| Number | How many reconnection attempts to make |  |
+| Frequency a| Number | How often (in ms) to reconnect |  | 
+| Blocking a| Boolean | If false, the reconnection strategy will run in a separate, non-blocking thread |  | 
+| Count a| Number | How many reconnection attempts to make |  | 
 |======================
 
 [[ReconnectForever]]
@@ -425,8 +433,8 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Frequency a| Number | How often (in ms) to reconnect |  |
-| Blocking a| Boolean | If false, the reconnection strategy will run in a separate, non-blocking thread |  |
+| Frequency a| Number | How often (in ms) to reconnect |  | 
+| Blocking a| Boolean | If false, the reconnection strategy will run in a separate, non-blocking thread |  | 
 |======================
 
 [[RecordAttributes]]
@@ -435,13 +443,13 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Aggregated a| Boolean |  |  |
-| Approximate Arrival Timestamp a| String |  |  |
-| Encryption Type a| String |  |  |
-| Explicit Hash Key a| String |  |  |
-| Partition Key a| String |  |  |
-| Sequence Number a| String |  |  |
-| Sub Sequence Number a| Number |  |  |
+| Aggregated a| Boolean |  |  | 
+| Approximate Arrival Timestamp a| String |  |  | 
+| Encryption Type a| String |  |  | 
+| Partition Key a| String |  |  | 
+| Sequence Number a| String |  |  | 
+| Shard Id a| String |  |  | 
+| Sub Sequence Number a| Number |  |  | 
 |======================
 
 [[RedeliveryPolicy]]
@@ -450,10 +458,10 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Max Redelivery Count a| Number | The maximum number of times a message can be redelivered and processed unsuccessfully before triggering process-failed-message |  |
-| Message Digest Algorithm a| String | The secure hashing algorithm to use. If not set, the default is SHA-256. |  |
-| Message Identifier a| <<RedeliveryPolicyMessageIdentifier>> | Defines which strategy is used to identify the messages. |  |
-| Object Store a| ObjectStore | The object store where the redelivery counter for each message is going to be stored. |  |
+| Max Redelivery Count a| Number | The maximum number of times a message can be redelivered and processed unsuccessfully before triggering process-failed-message |  | 
+| Message Digest Algorithm a| String | The secure hashing algorithm to use. If not set, the default is SHA-256. |  | 
+| Message Identifier a| <<RedeliveryPolicyMessageIdentifier>> | Defines which strategy is used to identify the messages. |  | 
+| Object Store a| ObjectStore | The object store where the redelivery counter for each message is going to be stored. |  | 
 |======================
 
 [[RedeliveryPolicyMessageIdentifier]]
@@ -462,8 +470,8 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Use Secure Hash a| Boolean | Whether to use a secure hash algorithm to identify a redelivered message |  |
-| Id Expression a| String | Defines one or more expressions to use to determine when a message has been redelivered. This property may only be set if useSecureHash is false. |  |
+| Use Secure Hash a| Boolean | Whether to use a secure hash algorithm to identify a redelivered message |  | 
+| Id Expression a| String | Defines one or more expressions to use to determine when a message has been redelivered. This property may only be set if useSecureHash is false. |  | 
 |======================
 
 [[ShardConfig]]
@@ -482,13 +490,13 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| At Sequence Number a| String |  |  |
-| After Sequence Number a| String |  |  |
+| At Sequence Number a| String |  |  | 
+| After Sequence Number a| String |  |  | 
 | Absolute Position a| Enumeration, one of:
 
 ** LATEST
-** FIRST |  |  |
-| Timestamp a| DateTime |  |  |
+** FIRST |  |  | 
+| Timestamp a| DateTime |  |  | 
 |======================
 
 [[RepeatableInMemoryStream]]
@@ -497,15 +505,15 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| Initial Buffer Size a| Number | This is the amount of memory that will be allocated in order to consume the stream and provide random access to it. If the stream contains more data than can be fit into this buffer, then it will be expanded by according to the bufferSizeIncrement attribute, with an upper limit of maxInMemorySize. |  |
-| Buffer Size Increment a| Number | This is by how much will be buffer size by expanded if it exceeds its initial size. Setting a value of zero or lower will mean that the buffer should not expand, meaning that a STREAM_MAXIMUM_SIZE_EXCEEDED error will be raised when the buffer gets full. |  |
-| Max Buffer Size a| Number | This is the maximum amount of memory that will be used. If more than that is used then a STREAM_MAXIMUM_SIZE_EXCEEDED error will be raised. A value lower or equal to zero means no limit. |  |
+| Initial Buffer Size a| Number | This is the amount of memory that will be allocated in order to consume the stream and provide random access to it. If the stream contains more data than can be fit into this buffer, then it will be expanded by according to the bufferSizeIncrement attribute, with an upper limit of maxInMemorySize. |  | 
+| Buffer Size Increment a| Number | This is by how much will be buffer size by expanded if it exceeds its initial size. Setting a value of zero or lower will mean that the buffer should not expand, meaning that a STREAM_MAXIMUM_SIZE_EXCEEDED error will be raised when the buffer gets full. |  | 
+| Max Buffer Size a| Number | This is the maximum amount of memory that will be used. If more than that is used then a STREAM_MAXIMUM_SIZE_EXCEEDED error will be raised. A value lower or equal to zero means no limit. |  | 
 | Buffer Unit a| Enumeration, one of:
 
 ** BYTE
 ** KB
 ** MB
-** GB | The unit in which all these attributes are expressed |  |
+** GB | The unit in which all these attributes are expressed |  | 
 |======================
 
 [[RepeatableFileStoreStream]]
@@ -514,12 +522,12 @@ The policies must exist in the same account as the role. |  |
 [cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
 |======================
 | Field | Type | Description | Default Value | Required
-| In Memory Size a| Number | Defines the maximum memory that the stream should use to keep data in memory. If more than that is consumed then it will start to buffer the content on disk. |  |
+| In Memory Size a| Number | Defines the maximum memory that the stream should use to keep data in memory. If more than that is consumed then it will start to buffer the content on disk. |  | 
 | Buffer Unit a| Enumeration, one of:
 
 ** BYTE
 ** KB
 ** MB
-** GB | The unit in which maxInMemorySize is expressed |  |
+** GB | The unit in which maxInMemorySize is expressed |  | 
 |======================
 
