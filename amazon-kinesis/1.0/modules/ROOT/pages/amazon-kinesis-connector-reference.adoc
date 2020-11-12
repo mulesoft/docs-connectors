@@ -15,7 +15,7 @@ The configuration for the connector. You can use this configuration for both the
 |===
 | Name | Type | Description | Default Value | Required
 |Name | String | The name for this configuration. Connectors reference the configuration with this name. | | x
-| The connection types to provide to this configuration. | | x
+| Connection a| <<Config_Connection, Kinesis Connection>> | The connection types to provide to this configuration. | | x
 | Default Stream Name a| String |  The default stream name. |  |
 | Default Application Name a| String |  The default application name. |  |
 | Aggregation Enabled a| Boolean |  When `true`, multiple user data records are packed into a single Amazon Kinesis data  record. |  true |
@@ -68,7 +68,7 @@ The configuration for the connector. You can use this configuration for both the
 | Max Connections a| Number |  Maximum number of connections to open to the backend. HTTP requests are sent in parallel over multiple connections. Setting this value too high can impact latency and consume additional resources without increasing throughput. |  24 |
 | Min Connections a| Number |  Minimum number of connections to keep open to the backend. In most cases, there is no need to increase value. |  1 |
 | Rate Limit a| Number |  Limits the number of data records per second and number of bytes per second sent to a shard. This limit can reduce bandwidth and CPU cycle wastage from sending requests that will fail from throttling. The default value, 150%, enables a single producer instance to completely saturate the allowance for a shard. To reduce throttling errors rather than completely saturate the shard, consider reducing this setting. |  150% |
-| Record TTL a| Number |  Use this setting if your app uses late data stream records. When setting this value, take into consideration the fact that data records still incur network latency after they leave the Amazon Kinesis Producer Library (KPL). |  30 |
+| Record TTL a| Number | Time limit for data records to be put. Records that are not successfully put within this limit fail. When setting this value, take into consideration the fact that data records still incur network latency after they leave the Amazon Kinesis Producer Library (KPL). |  30 |
 | Record TTL Unit a| Enumeration, one of:
 
 ** NANOSECONDS
@@ -135,8 +135,7 @@ Connects to AWS Kinesis through the use of a user-specified access and secret ke
 `<kinesis:checkpoint>`
 
 
-The operation checkpoint current position of a listener into DynamoDB table. Upon failover, the connector starts fetching records after the checkpointed position.
-
+The operation checkpoint position of a listener into the Amazon DynamoDB table. Upon failover, the connector starts fetching records that are located after the check pointed position.
 
 === Parameters
 
@@ -144,10 +143,11 @@ The operation checkpoint current position of a listener into DynamoDB table. Upo
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
-| Consumer ID a| String |  The unique identifier of the consumer. This identifier is used for shard lease management. |  | x
-| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  | x
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  A retry strategy in case of connectivity errors |  |
+| Application Name a| String |  Name of the DynamoDB table that holds data about the current stream positions. |  |
+| Shard ID a| String |  The shard identifier. |  |
+| Sequence Number a| String |  A sequence number at which to checkpoint in the shard. |  |
+| Subsequence Number a| Number |  A subsequence number at which to checkpoint within the shard. |  |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  | *x*
 |===
 
 
@@ -157,11 +157,10 @@ The operation checkpoint current position of a listener into DynamoDB table. Upo
 
 === Throws
 
-* KINESIS:ILLEGAL_STATE {nbsp}
-* KINESIS:INVALID_ARGUMENT {nbsp}
-* KINESIS:TIMEOUT {nbsp}
-* KINESIS:UNAUTHORIZED {nbsp}
-
+* KINESIS:ILLEGAL_STATE
+* KINESIS:INVALID_ARGUMENT
+* KINESIS:TIMEOUT
+* KINESIS:UNAUTHORIZED
 
 [[PutRecord]]
 == Put Record
@@ -176,9 +175,9 @@ Puts a data record into an Amazon Kinesis data stream.
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
 | Stream Name a| String |  The stream name |  |
-| Partition Key a| String |  The partition key |  |
+| Partition Key a| String |  The partition key. If not provided, the connector generates a UUID for this value. |  |
 | Explicit Hash Key a| String |  Overrides the Amazon Kinesis Data Streams explicitHashKey value, which is normally computed with using MD5 function of the data record partition key. |  |
-| Data a| Any |  The content to put in the Amazon Kinesis data stream. This can be 1MB. |  #[payload] |
+| Data a| Any |  The content to put in the Amazon Kinesis data stream. This can be upt o 1 MB in size. |  #[payload] |
 | Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  | x
 | Streaming Strategy a| * <<RepeatableInMemoryStream>>
 * <<RepeatableFileStoreStream>>
@@ -233,15 +232,15 @@ Uses the Amazon Kinesis Client Library (KCL) to listen from a specified point in
 ** DROP |  Strategy that Mule applies when the flow receives more messages than it can handle |  WAIT |
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Policy for processing the redelivery of a message |  |
 | Stream Name a| String |  The stream name. |  |
-| Application Name a| String |  The DynamoDB table that holds data about current stream positions. If the table doesn't exist, then the connector creates a new one at the initial position. |  |
+| Application Name a| String |  Name of the DynamoDB table that holds data about current stream positions. If the table doesn't exist, then the connector creates a new one at the initial position. |  |
 | Consumer ID a| String |  The unique ID of the consumer used for shard lease management. This value must be unique, or an `InvalidArgumentException` message is thrown. This value is used for the *Seek* operation and for Amazon DynamoDB lease management. The KCL LeaseManager object uses the ID to identify which shard is reserved for the consumer identified by the consumer ID. The Consumer ID must be unique for the application name. |  | x
-| Shard Configs a| Array of <<ShardConfig>> |  The subscription configuration. If it is not N/A, the listener listens from selected shards only. |  |
+| Shard Configs a| Array of <<ShardConfig>> |  The shard configuration. If specified, the listener listens only from selected shards. |  |
 | Max Batch Size a| Number |  The maximum number of data records that a batch can carry. |  10000 |
 | Max Leases For Worker a| Number |  Number of shards to which the listener can subscribe in parallel. |  2137483647 |
 | Shard Prioritization a| Enumeration, one of:
 
 ** PARENTS_FIRST_SHARD_PRIORITIZATION
-** NO_OP_SHARD_PRIORITIZATION |  Logic used to prioritize or filter the shards before their execution. The options are:
+** NO_OP_SHARD_PRIORITIZATION | Logic used to prioritize or filter the shards before their execution. The options are:
 
 * PARENTS_FIRST_SHARD_PRIORITIZATION
 Prioritizes parent shards first and limits the number of shards that are available for initialization based on their depth (*Max Depth* field).
@@ -250,7 +249,17 @@ Returns the original list of shards without any modifications. |  NO_OP_SHARD_PR
 | Max Depth a| Number |  Used by the PARENTS_FIRST_SHARD_PRIORITIZATION shard prioritization option. Any shard that is deeper than this value is excluded from processing.  |  |
 | Read Capacity Units a| Number |  The maximum number of strongly consistent reads consumed per second before Amazon DynamoDB returns a ThrottlingException. |  10 |
 | Write Capacity Units a| Number |  The maximum number of writes consumed per second before Amazon DynamoDB returns a ThrottlingException. |  10 |
-| Checkpoint On Complete a| Boolean |  If 'true', the listener checkpoints the current reading position to Amazon DynamoDB after data records are processed by the owning flow, without taking into account whether the processing finished successfully. |  true |
+| Failover Time a| Number |  Duration of a lease for a worker. |  10 |
+| Failover Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Failover Time* field. |  SECONDS |
+| Checkpoint On Complete a| Boolean |  If `true`, the listener checkpoints the current reading position to Amazon DynamoDB after data records are processed by the owning flow, without taking into account whether the processing finished successfully. |  true |
 | Absolute Position a| Enumeration, one of:
 
 ** LATEST
@@ -287,7 +296,7 @@ Returns the original list of shards without any modifications. |  NO_OP_SHARD_PR
 |===
 
 [[Tls]]
-=== Tls
+=== TLS
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
@@ -377,11 +386,10 @@ account to which the role belongs provides an external ID, then provide that val
 ** SECONDS
 ** MINUTES
 ** HOURS
-** DAYS | A #duration | SECONDS |
+** DAYS | Time unit for the *Duration* field | SECONDS |
 | Referred Policy Arns a| Array of String | The Amazon Resource Names (ARNs) of the IAM-managed policies to use as managed session policies.
 The policies must exist in the same account as the role. |  |
-| Tags a| Object | The Amazon Resource Names (ARNs) of the IAM managed policies that you want to use as managed session policies.
-The policies must exist in the same account as the role. |  |
+| Tags a| Object | A list of session tags that you want to pass. Each session tag consists of a key name and an associated value. |  |
 |===
 
 [[Reconnection]]
@@ -426,10 +434,11 @@ The policies must exist in the same account as the role. |  |
 | Approximate Arrival Timestamp a| String |  |  |
 | Encryption Type a| String |  |  |
 | Partition Key a| String |  |  |
+| Partition Key a| String |  |  |
 | Sequence Number a| String |  |  |
 | Shard Id a| String |  |  |
 | Sub Sequence Number a| Number |  |  |
-|======================
+|===
 
 [[RedeliveryPolicy]]
 === Redelivery Policy
