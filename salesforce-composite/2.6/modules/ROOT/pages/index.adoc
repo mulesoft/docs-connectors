@@ -1,0 +1,496 @@
+= Salesforce Composite Connector 2.6 - Mule 4
+
+Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[Select]
+
+Anypoint Connector for Salesforce Composite enables you to work with the Salesforce Batch and SObject Tree APIs. The connector exposes convenient methods for preparing subordinate requests, executing them in one batch, and parsing the results. Also it offers the posibility of creating SObject Trees through an operation separate from the batch ones, called createSobjectTree. This connector provides DataSense for preparing subordinate requests and parsing responses. DataSense is also provided for execution, and for creating SObject trees.
+
+For information about compatibility and fixed issues, see xref:release-notes::connector/salesforce-composite-connector-release-notes-mule-4.adoc[Salesforce Composite Connector Release Notes]
+
+
+== Prerequisites
+
+To use this connector, you should be familiar with:
+
+* Salesforce Composite
+* Mule runtime engine (Mule) concepts, including elements in a Mule flow and global elements
+* Anypoint Connectors
+* Anypoint Studio
+
+You must have login credentials to test your connection to the target resource.
+
+== POM File Information
+
+[source,xml,linenums]
+----
+<dependency>
+  <groupId>com.mulesoft.connectors</groupId>
+  <artifactId>mule-salesforce-composite-connector</artifactId>
+  <version>x.x.x</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+Verify that the connector `version` corresponds to the one you are using.
+
+To obtain the most up-to-date `pom.xml` file information:
+
+. Go to https://www.mulesoft.com/exchange/[Anypoint Exchange].
+. In Exchange, click *Login* and supply your Anypoint Platform username and password.
+. In Exchange, search for the connector name.
+. Click *Dependency Snippets*.
+
+== Connect in Design Center
+
+. Click a trigger such as an HTTP Listener or Scheduler trigger.
+. To create an optional global element for the connector, click Reusable Configurations. You can only use OAuth with username and password Authentication:
++
+image::salesforce-composite-choose-global-type.png[Choose OAuth with Username and Password Authentication]
++
+. Select the plus sign to add a component.
+. Select the connector as a component.
++
+image::salesforce-composite-create-sobject-tree-flow.png[Connector as a component]
++
+. Configure these fields for the Create SObject Tree operation:
++
+** SObject Root Type +
+The type of the root of the tree to create
+** SObject Tree +
+The entire structure of the tree to create
++
+image::salesforce-composite-create-sobject-tree-operation.png[Create SObject Tree operation]
+
+=== Required Parameters for the OAuth with Username and Password Configuration
+
+* Consumer Key +
+The consumer key for the Salesforce connected app
+* Consumer Secret +
+The consumer secret for the connector to access Salesforce
+* Username +
+The Salesforce username
+* Password +
+The corresponding password
+* Security Token +
+The corresponding security token
++
+image::salesforce-composite-dc-basic-auth.png[Design Center basic auth]
+
+== Add the Connector in Studio
+
+. In Studio, create a Mule project.
+. In the *Mule Palette* view, click *(X) Search in Exchange*.
+. In *Add Modules to Project*, type `composite` in the search field.
+. Click this connector's name in *Available modules*.
+. Click *Add*.
+. Click *Finish*.
+
+When Studio has an update, a message displays in the lower right corner, which you can click to install the update.
+
+=== Configure the Connector in Studio
+
+. Drag the connector to the Studio canvas.
+. To create a global element for the connector, configure these fields:
++
+* OAuth with Username and Password Authentication:
++
+** Consumer Key +
+The consumer key for the Salesforce connected app
+** Consumer Secret +
+The consumer secret for the connector to access Salesforce
+** Username +
+The Salesforce username
+** Password +
+The corresponding password
+** Security Token +
+The corresponding security token
++
+image::salesforce-composite-studio-basic-auth.png[Studio basic auth]
+
+== Studio Example
+
+* Listener(HTTP) +
+Accepts data from HTTP requests
+* Transform message +
+Transforms the HTTP input accordingly
+* Salesforce Composite Connector +
+Connects with Salesforce and executes the create SObject tree operation
+* Transform message +
+Outputs the results of the Create SObject tree operation in JSON format
++
+image::salesforce-composite-studio-use-case.png[Studio use case]
+
+=== XML for the Studio Example
+
+Paste this XML code into Anypoint Studio to experiment with the flow described in the previous section.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce-composite="http://www.mulesoft.org/schema/mule/salesforce-composite"
+xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+   xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+   http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core
+http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce-composite
+http://www.mulesoft.org/schema/mule/salesforce-composite/current/mule-salesforce-composite.xsd">
+	<configuration-properties file="mule-app.properties"/>
+	<http:listener-config name="HTTP_Listener_config"
+   doc:name="HTTP Listener config">
+		<http:listener-connection host="localhost" port="8081" />
+	</http:listener-config>
+	<salesforce-composite:composite-config name="Salesforce_Composite_Salesforce_Composite"
+   doc:name="Salesforce Composite Salesforce Composite">
+		<salesforce-composite:oauth-user-pass-connection
+      consumerKey="${consumerKey}"
+      consumerSecret="${consumerSecret}"
+      username="${username}"
+      password="${password}"
+      securityToken="${securityToken}"
+      tokenEndpoint="${tokenEndpoint}" />
+	</salesforce-composite:composite-config>
+	<flow name="salesforce-composite-create-sobject-trees">
+		<http:listener doc:name="Listener"
+      path="/createSObjectTree"
+      config-ref="HTTP_Listener_config"/>
+		<ee:transform doc:name="Transform HTTP input for Create SObject Tree">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload.records map ((record , indexOfRecord) -> {
+	"attributes": {
+		"type": record.attributes.objectType,
+		"referenceId": record.attributes.referenceId
+	},
+	"Name": record.Name,
+	"Phone": record.Phone,
+	"Website": record.Website,
+	"NumberOfEmployees": record.NumberOfEmployees as Number,
+	("ChildAccounts": {
+		"records": record.ChildAccounts.records map ((record01, indexOfRecord01) -> {
+			"attributes": {
+				"type": record01.attributes.objectType,
+				"referenceId": record01.attributes.referenceId
+			},
+			"Name": record01.Name,
+			"Phone": record01.Phone,
+			"Website": record01.Website,
+			"NumberOfEmployees": record01.NumberOfEmployees as Number
+		})
+	}),
+	"Contacts": {
+		"records": record.Contacts.records map ((record01, indexOfRecord01) -> {
+			"attributes": {
+				"type": record01.attributes.objectType,
+				"referenceId": record01.attributes.referenceId
+			},
+			"LastName": record01.LastName,
+			"Email": record01.Email,
+			"Title": record01.Title
+		})
+	}
+})
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce-composite:create-sobject-tree
+      doc:name="Create SObject tree"
+      config-ref="Salesforce_Composite_Salesforce_Composite"
+      type="Account"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+=== HTTP Input for the Studio Example
+
+An example of HTTP input for the previous Studio example is:
+
+[source,json,linenums]
+----
+{
+   "records":[
+      {
+         "ChildAccounts":{
+            "records":[
+               {
+                  "Phone":"4321098765",
+                  "Website":"www.salesforce.com",
+                  "attributes":{
+                     "objectType":"Account",
+                     "referenceId":"ref5"
+                  },
+                  "NumberOfEmployees":"10",
+                  "Name":"ChildAccount1"
+               }
+            ]
+         },
+         "Contacts":{
+            "records":[
+               {
+                  "Email":"sample@salesforce.com",
+                  "Title":"President",
+                  "attributes":{
+                     "objectType":"Contact",
+                     "referenceId":"ref6"
+                  },
+                  "LastName":"Jones"
+               }
+            ]
+         },
+         "Phone":"9876543210",
+         "Website":"www.salesforce.com",
+         "attributes":{
+            "objectType":"Account",
+            "referenceId":"ref4"
+         },
+         "NumberOfEmployees":"101",
+         "Name":"CreateSobjectTreeAccount2"
+      },
+      {
+         "Contacts":{
+            "records":[
+               {
+                  "Email":"sample@salesforce.com",
+                  "Title":"President",
+                  "attributes":{
+                     "objectType":"Contact",
+                     "referenceId":"ref2"
+                  },
+                  "LastName":"Smith"
+               },
+               {
+                  "Email":"sample@salesforce.com",
+                  "Title":"Vice President",
+                  "attributes":{
+                     "objectType":"Contact",
+                     "referenceId":"ref3"
+                  },
+                  "LastName":"Evans"
+               }
+            ]
+         },
+         "Phone":"1234567890",
+         "Website":"www.salesforce.com",
+         "attributes":{
+            "objectType":"Account",
+            "referenceId":"ref1"
+         },
+         "NumberOfEmployees":"100",
+         "Name":"CreateSobjectTreeAccount1"
+      }
+   ]
+}
+----
+
+== Pre-Query Example
+
+This example provides metadata for an object to be queried, generates two subrequests that contain this metadata, and then executes the subrequests. The following screenshots show the flow for the Pre-Query example:
+
+.The flow for this example includes an HTTP Listener component, Transform components, and multiple Salesfore Composite operations.
+image::salesforce-composite-prequery-flow.png[Pre-Query flow in Studio]
+
+=== Start Creating the Flow by Adding HTTP Listener
+
+`HTTP Listener` initiates the flow when it detects an event in the `executeFlow` path:
+
+. Create a new Mule project in Studio.
+. In the *Mule Palette* view, search for *HTTP* and select the *Listener* operation.
+. Drag the *Listener* operation onto the canvas.
+. In the Listener properties window, set the *Path* field to `/executeFlow`.
+
+=== Add the First Transform Message Component
+
+This `Transform Message` component sets a name for the object to be created and passes the name to the `Pre create` operation:
+
+. In the *Mule Palette* view, search for *Transform Message*.
+. Drag the *Transform Message* component onto the canvas, to the right of *Listener*.
+. Enter the name `MyNewAccount`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/json
+---
+{
+   Name: "MyNewAccount"
+}
+----
+
+=== Add the Pre Create Operation
+
+The `Pre create` operation provides metatdata for creating an object called `NewAccount`. It generates a subrequest for the `executeCompositeBatch` operation:
+
+. In the *Mule Palette* view, search for *Salesforce* and select the *Salesforce Composite Pre create* operation.
+. Drag the *Pre create* operation to the right of *Transform Message*.
+. Click the green plus icon (*+*) to the right of the *Connector configuration* field to access the Salesforce Composite global element configuration fields.
+. Complete the fields using variables, as follows:
++
+.Complete fields in the General section to create a reusable global element for Salesforce Composite Connector.
+image::salesforce-composite-global-config.png[Salesforce Composite Connector global element configuration]
++
+. In the Pre create properties window, enter `Account` in the *Type* field.
+. In the properties file `src/main/mule/mule-app.properties`, declare and enter values for the variables in the global element.
+
+=== Add the Second Transform Message Component
+
+This `Transform Message` component sets values for the `ID` and `Type` fields, and then passes these values to the `Pre query` operation:
+
+. Drag a second *Transform Message* component to the right of *Pre create*.
+. Enter the following name-value pairs:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/json
+---
+{
+"Id": payload.Id,
+"Fields" : ["Id", "Name"],
+"Type": "Account"
+}
+----
+
+=== Add the Pre Query Operation
+
+The `Pre query` operation provides metadata for an object to be queried. It generates a subrequest for the `Execute composite batch` operation.
+
+. Drag a Salesforce Composite *Pre query* operation to the right of the second *Transform Message*.
+. In the *Query* field, enter the following query:
++
+`Select Name from Account WHERE Name LIKE '%:name %'`
+
+=== Add the Third Transform Message Component
+
+This `Transform Message` operation passes the output of the `Pre query` operation to the `Execute composite batch` operation:
+
+. Drag a third *Transform Message* component to the right of *Pre query*.
+. Set the output to `payload`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/java
+---
+[
+payload
+]
+----
+
+=== Add the Execute Composite Batch Operation
+
+The  `Execute composite batch` operation executes the subrequests that the `Pre create` and `Pre query` operations created:
+
+Drag a Salesforce Composite *Execute composite batch* operation to the right of the third *Transform Message*.
+
+=== Add the Fourth Transform Message Component
+
+This `Transform Message` operation converts the output to JSON format:
+
+. Drag a fourth *Transform Message* component to the right of *Execute composite batch*.
+. Set the output to `application/json`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output application/json
+---
+payload
+----
+
+=== XML for the Pre-Query Example
+
+Paste this code into your XML editor to quickly load the flow for this example to your Mule app. If needed, change the values to reflect your environment.
+
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:salesforce-composite="http://www.mulesoft.org/schema/mule/salesforce-composite" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+   xmlns:http="http://www.mulesoft.org/schema/mule/http"
+   xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce-composite http://www.mulesoft.org/schema/mule/salesforce-composite/current/mule-salesforce-composite.xsd">
+   <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+      <http:listener-connection host="0.0.0.0" port="8081" />
+   </http:listener-config>
+   <salesforce-composite:composite-config name="Salesforce_Composite_Config" doc:name="Salesforce Composite Config" >
+      <salesforce-composite:oauth-user-pass-connection consumerKey="${consumerKey}" consumerSecret="${consumerSecret}" username="${username}" password="${password}" securityToken="${securityToken}" />
+   </salesforce-composite:composite-config>
+   <flow name="composite-prequery-exampleFlow" >
+      <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/executeFlow"/>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+   Name: "MyNewAccount"
+}]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+      <salesforce-composite:pre-create type="Account" doc:name="Pre create" config-ref="Salesforce_Composite_Config">
+      </salesforce-composite:pre-create>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[output application/java
+---
+{
+   "Id": payload.Id,
+   "Fields" : ["Id", "Name"],
+   "Type": "Account"
+}]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+      <salesforce-composite:pre-query doc:name="Pre query" config-ref="Salesforce_Composite_Config">
+         <salesforce-composite:query >Select Name from Account WHERE Name LIKE '%:name %'
+                    </salesforce-composite:query>
+         <salesforce-composite:parameters ><![CDATA[#[output applicaton/java
+---
+{
+   "name" : "MyNewAccount"
+}]]]></salesforce-composite:parameters>
+      </salesforce-composite:pre-query>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[
+   payload
+]]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+      <salesforce-composite:execute-composite-batch doc:name="Execute composite batch" config-ref="Salesforce_Composite_Config"/>
+      <ee:transform doc:name="Transform Message" >
+         <ee:message >
+            <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+         </ee:message>
+      </ee:transform>
+   </flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:connectors::introduction/intro-use-exchange.adoc[Use Exchange to Discover Connectors, Templates, and Examples]
+* https://www.mulesoft.com/exchange/com.mulesoft.connectors/mule-salesforce-composite-connector/[Salesforce Composite Connector on Exchange]
+* https://help.mulesoft.com[MuleSoft Help Center]
