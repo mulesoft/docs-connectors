@@ -1,111 +1,74 @@
-= Post a Form - Mule 4
+= Post a Form Example - Mule 4
 :page-aliases: connectors::http/http-post-form-task.adoc
 
-The following example shows how to post a form by sending HTTP requests. The example also illustrates how to send the resulting HTTP request, which contains form parameters, by using either an API client tool such as Postman or the `curl` command-line utility.
+The following Anypoint Connector for HTTP (HTTP Connector) example shows how to post a form by sending HTTP requests. The example also illustrates how to send the resulting HTTP request, which contains form parameters, by using the `curl` command-line utility.
+To accomplish this example, you must create the Mule app, configure an HTTP global element, run the app, and post the form using curl commands.
 
-== Create an App with HTTP Listener Connector in Studio
+The following screenshot shows the Anypoint Studio app flow for this example:
 
-. In Studio, create a Mule project.
-. To create a new flow, add an HTTP Listener Connector to the canvas and set *Path* to `submitform`.
-. Navigate to the *Global Elements* tab, and click *Create*.
-. In the *Choose Global Type* filter box, search for and select the HTTP Listener configuration and click *OK*.
-. Set *Host* to `localhost` and *Port* as the default value of `8081` and then click *OK*.
-. Return to the message flow and, after the HTTP Connector, add a Choice router.
-. On the first choice of the router, add a Set Payload element with the following value:
+.Post a Form flow
+image::http-example-post-form-flow.png[Post a Form flow]
+
+== Create the Mule Application
+
+To create the Mule flow:
+
+. In the *Mule Palette* view, select the HTTP *Listener* source and drag it on to the canvas. +
+The source initiates the flow by listening for incoming HTTP message attributes.
+. Set the *Path* field to `submitform`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the HTTP *Listener* in the app.
+. On the *General* tab, configure the following fields:
 +
-[source,text,linenums]
-----
-Sorry #[payload.'firstname'], you're too young to register.
-----
-
+* *Host*: `localhost`
+* *Port*: `8081`
 +
-Note that this expression refers to one of the form parameters included in the request: `firstname`. After the connector receives the parameter, it exists in the Mule Message payload as an item in a map
-. On the Choice router, configure the *When* condition for that path as follows:
-+
-[source,text,linenums]
-----
-#[server.dateTime.year-18 < payload.'yearborn']
-----
+[start=5]
+. Click *OK*.
+. Drag a *Choice* router component to the right of the HTTP *Listener* source. +
+The *Choice* router adds conditional processing to the flow.
+. Drag a *Set Payload* component into the *When* condition box of the *Choice* router.
+. Set the *Value* field to `Sorry #[payload.'firstname'], you're too young to register.` +
+Note that this expression refers to one of the form parameters included in the request: `firstname`. After the connector receives the parameter, it exists in the Mule Message payload as an item in a map.
+. On the *Choice* router, select the *When* condition.
+. Set the *Expression* field to `#[server.dateTime.year-18 < payload.'yearborn']` +
+This expression refers to one of the incoming form parameters, `yearborn`.
+. Drag another *Set Payload* component into the *Default* condition box of the *Choice* router.
+. Set the *Value* field to `Registration has been carried out successfully! Welcome #[payload.'firstname'] #[payload.'lastname']!`
+. Save your Mule app.
+. Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*.
+. In curl try the following command http://localhost:8081/submitform to post the form.
 
-+
-Once again, this expression refers to one of the incoming form parameters, `yearborn`.
-. Complete the flow by adding another Set Payload element in the *Default* path of the Choice router, with a payload value of:
-+
-
-[source,text,linenums]
-----
-Registration has been carried out successfully! Welcome #[payload.'firstname'] #[payload.'lastname']!
-----
-
-.Post Form Flow.
-image::http-example-post-form-flow.png[HTTP Post form flow]
-
-Once you create the flow, you can <<post-form,post a form by sending HTTP requests>>.
-
-== Create an App with HTTP Listener Connector in XML Editor
-
-. Create an `<http:listener>` global configuration and set *host* to `localhost` and *port* to `8081`.
-. Create a flow with an `<http:listener>` connector. Reference your connector to the global element you just created, set *path* to `submitform`.
-+
-
-[source,xml,linenums]
-----
-<http:listener-config name="HTTP_Listener_Configuration" host="localhost" port="8081" doc:name="HTTP Listener Configuration"/>
-
-    <flow name="RegisterUser">
-        <http:listener config-ref="HTTP_Listener_Configuration" path="submitform" doc:name="HTTP"/>
-
-    </flow>
-----
-
-. In the flow, after the HTTP Connector add a `choice` router with two alternative paths, in which the first path executes when the following MEL expression is true:
-+
+The post body contains the following form parameters: `firstname`, `lastname` and `yearborn`:
 
 [source,text,linenums]
 ----
-#[server.dateTime.year-18 &lt; payload.'yearborn']
+POST /submitform HTTP/1.1
+
+User-Agent: Mule/3.6
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 32
+
+firstname=Aaron&lastname=Aguilar+Acevedo&yearborn=1999
 ----
 
-+
-Note that `yearborn` is one of the form parameters that is expected from incoming requests.
-+
+When the HTTP Listener receives the request, it creates a Mule Message that contains a map type payload with the following key-value pairs:
 
-[source,xml,linenums]
-----
-<choice doc:name="Choice">
-            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
+`firstname: Aaron` +
+`lastname: Aguilar Acevedo` +
+`yearborn: 1999`
 
-            </when>
-            <otherwise>
+Note that in the case of the `lastname` parameter, while the value is encoded in the HTTP request (`Aguilar+Acevedo)`, the connector automatically decodes the value for you when placing it in the Mule Message.
 
-            </otherwise>
-        </choice>
-----
+On any of the remaining blocks on the flow, you can easily access the value of the elements in the Map payload by using MEL expressions to refer to their corresponding keys.
 
-. Add a `set-payload` element on each alternative path, one to return a rejection notice and the other to return a success message. +
-In both 'set-payload' elements, refer to the fields of the incoming form parameters to construct the message.
-+
+In the previous example, the value matching the `yearborn` key is obtained via the expression `#[payload.'yearborn']`. Depending on the value of this expression, one of two different paths is followed:
 
-[source,xml,linenums]
-----
-<choice doc:name="Choice">
-            <when expression="#[server.dateTime.year-18 &lt; payload.'yearborn']">
-                <set-payload value="Sorry #[payload.'firstname'], you're too young to register." doc:name="Too young"/>
-            </when>
-            <otherwise>
-                <set-payload value="Registration has been carried out successfully! Welcome #[payload.'firstname'] #[payload.'lastname']!" doc:name="Success"/>
-            </otherwise>
-        </choice>
-----
+* The first path sets the payload to a message that rejects the registration, referencing the value matching the `firstname` key through a similar MEL expression.
+* The second path accepts the registration and welcomes the user by name, referencing the `firstname` and `lastname` values.
 
-Once you create the flow, you can <<post-form,post a form by sending HTTP requests>>.
+== XML for Posting a Form App
 
-[[post-form]]
-== Post a Form by Sending HTTP Requests
-To post a form by sending HTTP requests, you can use an API client tool such as https://www.postman.com/product/api-client[Postman], or the http://curl.haxx.se/[curl] command line utility.  If you use Postman, make sure you send the form parameters with content-type `x-www-form-urlencoded`.
-
-The following XML example expects to receive a POST request from: http://localhost:8081/submitform
-
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
@@ -134,32 +97,7 @@ http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/cor
 </mule>
 ----
 
-// if you copy/paste the doc in the XML editor, change the left angle bracket to &lt;
+== See Also
 
-The post body contains the following form parameters: `firstname`, `lastname` and `yearborn`:
-
-[source,text,linenums]
-----
-POST /submitform HTTP/1.1
-
-User-Agent: Mule/3.6
-Content-Type: application/x-www-form-urlencoded
-Content-Length: 32
-
-firstname=Aaron&lastname=Aguilar+Acevedo&yearborn=1999
-----
-
-When the HTTP Listener connector receives the request, it creates a Mule Message that contains a map type payload with the following key-value pairs:
-
-`firstname: Aaron` +
-`lastname: Aguilar Acevedo` +
-`yearborn: 1999`
-
-Note that in the case of the `lastname` parameter, while the value is encoded in the HTTP request (`Aguilar+Acevedo)`, the connector automatically decodes the value for you when placing it in the Mule Message.
-
-On any of the remaining blocks on the flow, you can easily access the value of the elements in the Map payload by using MEL expressions to refer to their corresponding keys.
-
-In the previous example, the value matching the `yearborn` key is obtained via the expression `#[payload.'yearborn']`. Depending on the value of this expression, one of two different paths is followed:
-
-* The first path sets the payload to a message that rejects the registration, referencing the value matching the `firstname` key through a similar MEL expression.
-* The second path accepts the registration and welcomes the user by name, referencing the `firstname` and `lastname` values.
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
