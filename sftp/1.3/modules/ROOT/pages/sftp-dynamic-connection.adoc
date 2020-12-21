@@ -1,0 +1,98 @@
+== Dynamic SFTP Connections
+
+Many integrations require connecting to different servers depending on a certain condition.
+
+Examples of this include:
+
+* Connect to different invoice storage servers depending on the branch that emits an invoice.
+* Connect to different servers depending on an integration subject, such as in a multi-tenant use case.
+
+To accommodate these use cases, the `config` element supports expressions, which makes it possible for connection parameters to evaluate these conditions and connect to the correct server.
+
+=== Dynamic SFTP Connection Example
+
+The following example shows a dynamic multicast application that:
+
+. Defines a `config` for the connector in which the `host`, `username`, and `password` are expressions.
+. Describes a flow in which content is posted through HTTP.
+. Uses the File connector to read a CSV file that contains a random set of SFTP destinations with columns such as host, user, and port.
+. Uses a `<foreach>` component to iterate over each of the lines in the CSV file.
+. On each `<foreach>` iteration, resolves each expression in the connector `config` to a different value, establishing different connections to each of the servers.
+
+[source,xml,linenums]
+----
+<sftp:config name="FTP_Config" doc:name="FTP Config" >
+
+<sftp:sftp-connection host="#[payload.host]" username="#[payload.user]" password="#[payload.password]" />
+
+</sftp:config>
+
+<flow name="streaming-multitenantFlow" >
+<http:listener config-ref="HTTP_Listener_config" path="/multitenant"
+doc:name="Listener" />
+<set-variable variableName="content" value="#[payload]" doc:name="Variable" />
+<file:read config-ref="File_Config" path="recipients.csv" doc:name="Read"
+ outputMimeType="application/csv" />
+<ee:transform doc:name="Transform Message">
+<ee:message>
+
+<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+—
+payload map using (row = $) {
+   host: row.Host,
+   user: row.User,
+   password: row.Password
+}]]>
+
+  </ee:set-payload>
+  </ee:message>
+  </ee:transform>
+  <foreach doc:name="For Each" >
+    <sftp:write config-ref="SFTP_Config" doc:name="Write" path="demo.txt">
+    <sftp:content >#[content]</sftp:content>
+  </sftp:write>
+</foreach>
+<set-payload doc:name="Set Payload" value="Multicast OK"/>
+</flow>
+----
+
+* This sample application defines an SFTP config in which the host, username, and password are expressions.
+* It uses a flow in which a random content is posted.
+* It uses the file connector to load a recipients file, which is a CSV file containing a random set of SFTP destinations.
+* There’s a DataWeave transformation that splits a CSV file.
+* The application uses a foreach element to write the contents into each of the SFTP destinations.
+* On each foreach iteration, each of the expressions in the SFTP config resolves to a different value, establishing different connections to each of the servers.
+
+== Example: SFTP Write
+
+The next is example is identical to the previous one, except that it uses an SFTP Write operation.
+
+[source,xml,linenums]
+----
+<sftp:config name="ftp"> // <1>
+  <sftp:connection host="#[payload.host]" username="#[payload.user]" password="#[payload.password]" />
+</sftp:config>
+
+<flow name="ftpMultitenant" >
+  <http:listener config-ref="HTTP_Listener_config" path="/multitenant"/> // <2>
+  <set-variable variableName="content" value="#[payload]" />
+  <file:read path="recipients.csv" outputMimeType="application/csv" /> // <3>
+
+  <foreach> // <4>
+    <sftp:write path="demo.txt" config-ref="ftp"> // <5>
+      <sftp:content>#[vars.content]</sftp:content>
+    </sftp:write>
+  </foreach>
+
+  <set-payload value="Multicast OK"/>
+</flow>
+----
+
+Notes on Mule 4 behavior (for Mule 3 users):
+
+* The previous examples use the File connector to read a file in the middle of the flow. The information posted through the `<http:listener>` component is written to each SFTP site multiple times. Because the component makes use of the xref:mule-runtime::streaming-about.adoc[repeatable streams feature], you do not need to worry about consuming the stream multiple times.
+
+* The `<foreach>` component automatically goes through each line of the CSV file. In Mule 3, you first needed to transform the CSV file into a Java structure, but because Mule 4 is now Java agnostic, this works out-of-the-box.
+
+When reading or listing files, you might be interested in the file's metadata (for example, the file name, full path, size, timestamp, and so on). The connector uses the Mule Message Attributes to access this information.
