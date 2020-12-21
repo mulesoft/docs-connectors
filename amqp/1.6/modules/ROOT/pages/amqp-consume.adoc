@@ -21,6 +21,40 @@ This operation consumes the first available message in the queue identified by t
 After it is received, the message is immediately acknowledged by default. If you want to control the ACK of the message after some processing, then set `ackMode` to `MANUAL`.
 For more information about message ACK operations, see xref:amqp-ack.adoc[How to Handle Acknowledgment].
 
+== Default Config for Consume Operation
+
+The default AMQP Config element has not the suitable parameters for the Consume operation since it's optimized for the Listen operation (the most used one).
+
+In some environments, using the default Config with the Consume operation can present the following Error:
+
+[source,xml,linenums]
+----
+com.mule.extensions.amqp.internal.connection.provider.GenericConnectionProvider.initialise:221 @415c7a8a ERROR
+Consumer com.mule.extensions.amqp.internal.client.SingleMessageQueueingConsumer@741fd13b (amq.ctag-BsDMf9v86wa9v3e_mo1p8g) method handleDelivery for channel AMQChannel(amqp://xxxx@xxxx/xxxx,1) threw an exception for channel AMQChannel(amqp://xxxx@xxxx:5672/xxxx,1)
+com.rabbitmq.client.AlreadyClosedException: channel is already closed due to clean channel shutdown; protocol method: #method<channel.close>(reply-code=200, reply-text=OK, class-id=0, method-id=0)
+at com.rabbitmq.client.impl.AMQChannel.ensureIsOpen(AMQChannel.java:258)
+at com.rabbitmq.client.impl.AMQChannel.transmit(AMQChannel.java:427)
+at com.rabbitmq.client.impl.AMQChannel.transmit(AMQChannel.java:421)
+at com.rabbitmq.client.impl.recovery.RecoveryAwareChannelN.basicReject(RecoveryAwareChannelN.java:114)
+at com.rabbitmq.client.impl.recovery.AutorecoveringChannel.basicReject(AutorecoveringChannel.java:438)
+at com.mule.extensions.amqp.internal.connection.channel.MuleAmqpChannel.basicReject(MuleAmqpChannel.java:383)
+at com.mule.extensions.amqp.internal.client.SingleMessageQueueingConsumer.handleDelivery(SingleMessageQueueingConsumer.java:47)
+at com.rabbitmq.client.impl.ConsumerDispatcher$5.run(ConsumerDispatcher.java:149)
+at com.rabbitmq.client.impl.ConsumerWorkService$WorkPoolRunnable.run(ConsumerWorkService.java:104)
+at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:511)
+at java.util.concurrent.FutureTask.run(FutureTask.java:266)
+at org.mule.service.scheduler.internal.AbstractRunnableFutureDecorator.doRun(AbstractRunnableFutureDecorator.java:111)
+at org.mule.service.scheduler.internal.RunnableFutureDecorator.run(RunnableFutureDecorator.java:54)
+at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+at java.lang.Thread.run(Thread.java:748)
+----
+
+This is because usually the broker sends all the messages the queue has to the requester but the Consume operation only processes the first one and ditches the rest. To avoid this use one of the following parameters change (or both, if applicable by your use case):
+
+* Clean the property `maximumWait` (leave it empty)
+* Set the property `prefetchCount` of section `quality-of-service-config` in the AMQP Config to `1`
+
 == Wait for a Message
 
 By default, the maximum wait time is configured to 10 seconds. If no message is available during the specified wait time, an `AMQP:TIMEOUT` error is thrown. You can customize the wait time by configuring the `maximumWait` and `maximumWaitUnit` parameters.
