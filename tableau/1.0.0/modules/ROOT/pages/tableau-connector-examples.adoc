@@ -1,0 +1,178 @@
+= Tableau Connector Examples - Mule 4
+:page-aliases: connectors::tableau/tableau-connector-examples.adoc
+
+You can better understand how to use Tableau Connector if you build and run a demonstration project.
+
+== Prerequisites
+
+To build and run this demo project, you need:
+
+* Anypoint Studio with Mule 4.0 and later.
+* Tableau Connector v1.0.0 and later.
+
+=== Mule Flows Overview
+
+The example that follows contains the following `<flow>` elements:
+
+* `create-datasource-flow` +
+Creates a data source with specified structure which is uploaded on the Tableau sever. This datasource can be used later in other flow. +
+*[GET]* The HTTP endpoint listens to the following URL: `+http://localhost:8081/createDatasource+`
++
+* `add-data-to-datasource-flow` +
+Adds the desired data to the datasorce selected from the metadata keys. Firstly create the datasource by the *create-datasource-flow*,
+then hit the refresh metadata keys button in the *Add Data to DataSource operation* and select the *ProjectId* , *DataSourceId* and *TableName*. +
+*[GET]* The HTTP endpoint listens to the following URL: `+http://localhost:8081/addDataToDatasource+`
+
+Browse either to `+http://localhost:8081/createDatasource+` or `+http://localhost:8081/addDataToDatasource+` to test each of the flows.
+
+=== Test the Flows
+
+. Specify your Tableau credentials for OAuth2 Username Password Config in /src/main/resources/mule-artifact.properties:
++
+* `config.serverUrl`
+The base URL of your Tableau Server
+* `config.hyperApiLocation`
+The path to the Hyper API executable file
+* `config.personalAccessTokenName`
+The name of the personal access token
+* `config.personalAccessTokenSecret`
+The secret value of the personal access token
+* `config.contentUrl`
+The relative path of the Tableau site to sign in to
++
+. Run the project in Studio.
+. Type `http://localhost:8081/createDatasource` or `http://localhost:8081/addDataToDatasource` in your browser to access the particular flow.
+. Optionally configure *Connection Timeout* and *Read Timeout*.
+*Connection Timeout* is the timeout in making the initial connection with the server.
+*Read Timeout* is the timeout on waiting to read data from the server.
+
+=== Mule XML Flow
+
+[source,example,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tableau="http://www.mulesoft.org/schema/mule/tableau"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core
+http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core
+http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/tableau
+http://www.mulesoft.org/schema/mule/tableau/current/mule-tableau.xsd">
+
+	<configuration-properties file="mule-artifact.properties" />
+	
+	<http:listener-config
+        name="HTTP_Listener_config"
+        doc:name="HTTP Listener config" >
+		<http:listener-connection
+            host="0.0.0.0"
+            port="8081" />
+	</http:listener-config>
+	
+	<tableau:config name="Tableau_Demo_Config"
+	hyperdFileLocation="${config.hyperApiLocation}" doc:name="Tableau Demo Config" >
+		<tableau:personal-token-authentication-connection 
+            personalAccessTokenName="${config.personalAccessTokenName}" 
+            personalAccessTokenSecret="${config.personalAccessTokenSecret}" 
+            contentUrl="${config.contentUrl}"
+            serverUrl="${config.serverUrl}">
+		</tableau:personal-token-authentication-connection>
+	</tableau:config>
+
+	<flow name="create-datasource-flow"  >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/createDatasource"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[{ 
+    "name" : "FirstName",
+	"type": "TEXT"
+},
+{ 
+    "name" : "LastName",
+	"type": "TEXT"
+},
+{ 
+    "name" : "Age",
+	"type": "INT"
+},
+{ 
+    "name" : "PowerRanking",
+	"type": "DOUBLE"
+},
+{ 
+    "name" : "BirthDate",
+	"type": "DATE"
+},
+{ 
+    "name" : "WinTitle",
+	"type": "BOOL"
+}]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<tableau:create-or-replace-data-source doc:name="Create/replace data source" 
+                config-ref="Tableau_Demo_Config" 
+                dataSourceName="demoDatasource" 
+                tableName="demoTable"
+                dataSourceDescription="The demo datasource!"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+attributes]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" message="#[attributes]"/>
+	</flow>
+
+	<flow name="add-data-to-datasource-flow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/addDataToDatasource"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{ 
+    "FirstName": "Jim",
+    "LastName": "Morris",
+    "Age": 33,
+    "PowerRanking": 6.2,
+    "BirthDate": "1987-07-07",
+    "WinTitle": true
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<tableau:add-data-to-data-source doc:name="Add data to a data source"
+            config-ref="Tableau_Demo_Config"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" message="#[payload]"/>
+	</flow>
+</mule>
+----
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
