@@ -5,7 +5,7 @@ Anypoint Connector for Database (Database Connector) examples help you configure
 
 * xref:database-connector-connection.adoc[Configure a Database Connection] +
 Connect to both popular and generic database. Additionally, configure the connector to connect to a global data source, set a JDBC driver, configure connection pooling, and connection to an Oracle database with TNS.
-* * xref:database-connector-select.adoc[Query a Database] +
+* xref:database-connector-select.adoc[Query a Database] +
 Configure the *Select* operation to query data from a database.
 * xref:database-connector-query-single.adoc[Query a Single Record from a Database] +
 Configure the *Query single* operation in a Mule application that retrieves books information from a table in a MySQL database.
@@ -25,122 +25,6 @@ Configure the *Execute script* operation to execute a script as a single stateme
 Define custom data types to use when connected to a particular connection provider.
 * <<database-transactions,Execute Database Transactions>> +
 Execute database operations in the context of a transaction.
-
-[[query-database]]
-== Query a Database
-
-When you configure a database operation using Database Connector, there are several ways to add variable values to the SQL statement you execute in the database.
-
-=== Use Input Parameters to Protect Database Queries
-
-Use the `select` operation to retrieve information from the RDBMS. The primary goal of this operation is to supply a SQL query and use DataWeave to supply the parameters:
-
-[source,xml,linenums]
-----
-<flow name="selectParameterizedQuery">
-  <db:select config-ref="dbConfig">
-    <db:sql>SELECT * FROM PLANET WHERE name = :name</db:sql>
-    <db:input-parameters>
-      #[{'name' : payload}]
-    </db:input-parameters>
-  </db:select>
-</flow>
-----
-
-In this example, you supply input parameters as key-value pairs, which you create by embedding a DataWeave script. The keys are used with the colon character (`:`) to reference a parameter value by name. This is the recommended approach for using parameters in your query.
-
-The advantages of using input parameters to configure the `WHERE` clause in a `SELECT` statement are that it makes the query immune to SQL injection attacks and enables optimizations that are not possible otherwise, which improves the app’s overall performance.
-
-[NOTE]
-====
-*Since version 1.4.0 (escaping colons)*:
-If you need to use the colon character (`:`) in your SQL query, you can escape it
-by putting a backslash before it. This is useful when using PostgreSQL type
-casting, which requires two colons before the type you are casting to, for example:
-
-`<db:sql>SELECT price\:\:float8 FROM PRODUCT</db:sql>`
-====
-
-[NOTE]
-====
-*Since version 1.8.0 (SQL Casting for PostgreSQL and Snowflake)*:
-Database Connector now accepts SQL Casting PostgreSQL and Snowflake syntax's, through the double colon (::) expression without the need to escape each colon (this feature doesn't affect the escaping colons behaviour). For example:
-
-`<db:sql>SELECT MAX(modified_date)::DATE FROM sales</db:sql>`
-====
-
-For security reasons, do not directly write `<db:sql>SELECT * FROM PLANET WHERE name = #[payload] </db:sql>`.
-
-DataSense is available for the operation's input and output. The connector analyzes the query and automatically calculates the structure of the query's output by analyzing the projection section of the SQL statement. At the same time, by comparing the conditions in the `WHERE` clause to the table structure, it generates DataSense input to help you build the DataWeave script that generates the input parameters.
-
-=== Dynamic Queries
-
-Sometimes, you need to parameterize not only the `WHERE` clause, but also parts of the query itself. Examples of use cases for this are queries that need to access online versus historic tables that depend on a condition, or complex queries for which the project table columns need to vary.
-
-In the following example, you can see how a full expression is used to produce the query by building a string in which the table depends on a variable `$(vars.table)`. An important thing to notice is that although some of the query text is dynamic (`"SELECT * FROM $(vars.table)`), the `WHERE` clause is still using the best practice of defining the `WHERE` condition using input parameters, in this case, `WHERE name = :name`:
-
-[source,xml,linenums]
-----
-<set-variable variableName="table" value="PLANET"/>
-<db:select config-ref="dbConfig">
-    <db:sql>#["SELECT * FROM $(vars.table) WHERE name = :name"]</db:sql>
-    <db:input-parameters>
-        #[{'name' : payload}]
-    </db:input-parameters>
-</db:select>
-----
-
-Dynamic queries are necessary in the above example and cannot be treated like Input parameters; Input parameters can be applied only to parameters in a `WHERE` clause. To modify any other part of the query, you should use DataWeave’s interpolation operator.
-
-[NOTE]
-In Mule 3, the concept of select was split in parameterized and dynamic queries, and you couldn’t use both at the same time. You had to choose between having a dynamic query or having the advantages of using parameters (SQL Injection protection, PreparedStatement optimization, and so on). Furthermore, the syntax to do one or the other was different, so you had to learn two different ways of doing the same thing. But with Database Connector in Mule 4, you can now use both methods at the same time by using expressions in the query.
-
-
-=== Stream Large Results
-
-Use streaming with queries that return many records, such as in integration use cases. In Mule 4, streaming is transparent and always enabled.
-
-For example, if you submit a query that returns 10K rows, attempting to fetch all those rows at once results in both performance degradation, due to the big pull from the network, and the risk of running out of memory, since all the information must be loaded into RAM.
-
-With streaming, the connector fetches and processes only part of the query at one time, which reduces load on the network and memory.  This means that the connector does not fetch the 10K rows at once; instead, it fetches a smaller chunk, and once that chunk is consumed, it fetches the rest.
-
-You can also use the new repeatable streams mechanism, which means you can have DataWeave and other components process the same stream many times, even in parallel. For more information on repeatable streams, see Streaming in Mule 4.0.
-
-=== Limit Results
-
-Mule allows the connector to handle streaming gracefully. However, that does not mean that it's a good idea to move large chunks of data from the database to Mule. Even with streaming, a typical SQL query can return many rows, each one containing a lot of information.
-
-The `select` operation provides parameters (`fetchSize` and `maxRows`) to help with this:
-
-[source,xml,linenums]
-----
-<db:select fetchSize="200" maxRows="1000" config-ref="dbConfig">
-  <db:sql>select * from some_table</db:sql>
-</db:select>
-----
-
-This syntax instructs the connector to fetch no more than 1000 rows (the `maxRows` value), no more than 200 rows at a time (the `fetchSize` value), significantly reducing network and memory load. The `fetchSize` value is enforced differently by different JDBC driver providers and often defaults to `10`.
-
-The combination limits the total amount of information that is retrieved (the `maxRows` value) and guarantees that the data is returned from the database over the network in smaller chunks (the `fetchSize` value).
-
-
-=== Query Timeout
-
-Sometimes database queries take a long time to execute. The following factors often cause delays in query execution:
-
-* An inefficient query, such as one having improper indexing that iterates over many rows
-* A busy RDBMS or network
-* A lock contention
-
-Generally, it's recommended to set a timeout on the query. To manage timeouts, configure `queryTimeout` and `queryTimeoutUnit`. The following example shows how to set a timeout for the Select operation, but all operations support setting a timeout:
-
-[source,xml,linenums]
-----
-<db:select queryTimeout="0" queryTimeoutUnit="SECONDS" config-ref="dbConfig">
-   <db:sql>select * from some_table</db:sql>
-</db:select>
-----
-
 
 [[insert-update-delete]]
 == Insert, Update, and Delete Data
