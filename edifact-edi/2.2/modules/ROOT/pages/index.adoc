@@ -16,7 +16,7 @@ To use this connector, you must be familiar with:
 * Elements and global elements in a Mule flow
 * Creating a Mule app using Anypoint Studio (Studio)
 
-To use EDIFACT Connector, you must have:
+To use EDIFACT EDI Connector, you must have:
 
 * Purchased a MuleSoft license for Anypoint B2B
 
@@ -28,44 +28,47 @@ EDIFACT Connector supports files of up to 15 MB in size, and the memory requirem
 For example, a 1-MB file requires up to 40 MB of memory to process, so it's important to consider this memory requirement in conjunction with your Transactions Per Second (TPS)  needs for large X12 files.
 This is not an exact figure; the value varies according to the complexity of the mapping instructions.
 
-=== About the EDI Schema Language
+=== Understanding the EDI Schema Language
 
-The EDIFACT EDI Module uses a YAML format called ESL (for EDI Schema Language) to represent EDI schemas. Basic ESLs define the structure of EDI messages in terms of structures (messages, in EDIFACT terminology), groups, segments, composites, and elements.
+The EDIFACT EDI Connector uses a YAML format called EDI Schema Language (ESL) to represent EDI schemas. Basic ESLs define the structure of EDI messages in terms of
 
-You can customize the EDIFACT schema definitions to suit your data by defining an overlay schema. An overlay schema is a special form of ESL that allows you to modify a base schema, such as an EDIFACT D.98B ORDERS schema, with your specific conventions. You don't need an overlay schema if you're using the structure defined by the standard, but most EDI exchanges modify the base definitions in an implementation convention.
+* structures, known as messages, in EDIFACT terminology
 
-You can also define your own schemas, or copy and edit a base EDIFACT schema definition to suit your data.
+* groups, segments, composites, and elements
 
-See the xref:x12-edi-connector::x12-edi-schema-language-reference.adoc[EDI Schema Language Reference] for more information.
+You can customize the EDIFACT schema definitions to suit your data by defining an overlay schema. An overlay schema is a type of ESL that enables you to modify a base schema, such as an EDIFACT D.98B ORDERS schema, with your specific conventions. You don't need an overlay schema if you're using the structure defined by the standard, but most EDI exchanges modify the base definitions in an implementation convention.
 
-== About Schema Locations
+You can also define your own schemas from scratch, or copy and edit a base EDIFACT schema definition to suit your data as shown in the  xref:x12-edi-connector::x12-edi-schema-language-reference.adoc[EDI Schema Language Reference].
+
+== Finding Schema Locations
 
 To use the connector, you need to know the locations of the schemas
 in your project. If you're using out-of-the-box EDIFACT schemas and
 not customizing anything, the schema location follows the
-`/edifact/{version}/{message}.esl` pattern, so for the D.98B version of the ORDERS message, your schema location is `/edifact/d98b/ORDERS.esl`.
+`/edifact/{version}/{message}.esl` convention.
+For example, using the D.98B version of the ORDERS message, your schema location is `/edifact/d98b/ORDERS.esl`.
 
-If you're using one or more custom schemas, put these under
-`src/main/resources` and refer to the location relative to this directory.
+If you're using one or more custom schemas, place these in the
+`src/main/resources` directory and refer to the location relative to this directory.
 For example, if you've put your ORDERS schema (either overlay or full) in `src/main/resources/mypartner/ORDERS.esl`,
 your schema location is `/mypartner/ORDERS.esl`.
 
-== About the EDIFACT Message Structure
+== The Hierarchy of EDIFACT Connector Message Structure
 
-The connector enables the reading or writing of EDIFACT documents into or from the canonical EDI message structure. This structure is represented as a hierarchy of Java Maps and Lists that can be manipulated using DataWeave or code. Each transaction has its own structure as defined in the schemas.
+Use this connector to read or write EDIFACT documents into (or from) the canonical EDI message structure. This structure is a hierarchy of Java Maps and Lists. You use either DataWeave or code to manipulate them. Each transaction has its own structure as defined in the schemas.
 
-The message contains the following keys (some only apply to either the Read operation or Write operation, as indicated):
+The message contains the following keys, some of which apply to either the Read operation or Write operation, as indicated:
 
 [%header%autowidth.spread]
 |===
 |Key Name |Description
-|Delimiters (optional) |The delimiters for the message set use the last interchange processed by a read operation. Setting it for a write operation overrides the values in the module configuration. The characters in the string are interpreted based on position, in the following order:
+|Delimiters |An optional set of delimiters used in the message. If used in a read operation, the delimiters are based on the most recent interchange processed by a read operation. If used for a write operation, the delimiters override the values in the module configuration. The characters in the string of delimiters are interpreted based on their position in string, in the following order:
 data element separator, component element separator, repetition separator, segment terminator, release character.
-|Errors (read only) |A list of errors associated with the entire input, or with interchanges that contain no valid messages
-|FunctionalAcksGenerated (read only) |A list of `CONTRL` acknowledgment messages generated by the module during the read operation
-|FunctionalAcksToSend (write only) |A list of `CONTRL` acknowledgment messages sent by the module during the write operation
-|Interchange (write only) |Map of UNB interchange header segment values used as defaults when writing interchanges
-|Messages |A hierarchy of messages that are read by the module during a read operation, or are sent by the module during a write operation. The value of this top-level key is a map with standard versions as keys, as in the form `D96A`. For example, if you are using version `D96.A ORDERS` and `CUSRES` messages, these Messages contain a map with one key, `D96A`. The value of this key is another map, one with two keys, `ORDERS` and `CUSRES`. Each of these contains a list of individual ORDERS and CUSRES messages available for processing.
+|Errors (read only) |A list of errors that are associated either with the input as a whole or with interchanges that have no valid transaction sets.
+|FunctionalAcksGenerated (read only) |A list of `CONTRL` acknowledgments that are generated by the module during the read operation.
+|FunctionalAcksToSend (write only) |A list of `CONTRL` acknowledgments that are sent by the module during the write operation.
+|Interchange (write only) |Map of UNB interchange header segment values used as defaults during an interchange write operation.
+|Messages |A hierarchy of messages that are either read by the module during a read operation or sent by the module during a write operation. The value of this top-level key is a map with standard versions as keys, in the form `D96A`. For example, if you are using version `D96.A ORDERS` and `CUSRES` messages, the Messages contain a map with one key, `D96A`. The value of this key is another map, one with two keys, `ORDERS` and `CUSRES`. Each of these contains a list of individual ORDERS and CUSRES messages that are processed.
 |===
 
 Individual messages have their own maps, with the following keys:
@@ -73,22 +76,22 @@ Individual messages have their own maps, with the following keys:
 [%header%autowidth.spread]
 |===
 |Key |Description
-|Detail |Map of segments or loops from the detail section of the message. These values are maps for segments or loops that occur once. Lists of maps are for values that repeat.
+|Detail |Map of segments or loops from the detail section of the message. Values are maps for segments or loops that occur once. Lists of maps are for values that occur more than once.
 |Errors (read only) |A list of errors associated with the message.
-|Heading |Map of segments or loops from the heading section of the message. These values are maps for segments or loops that occur once. Lists of maps are for values that repeat.
-|Id |Message ID, which must match the key of the containing message list
-|Interchange |Map of UNB interchange header segment values. For message reading, this map is the actual data from the enclosing interchange. It is a single map linking all messages in the interchange. For message writing, these values are for creating the enclosing interchange.  For example, gathering messages with the same interchange values into a single interchange, regardless of whether the actual maps are the same. If no values are populated in this map, then the default is the value from the Interchange map at the message level.
-|MessageHeader |Map of UNH message header segment values. For a write operation, provides the actual header data for a read operation and allows overrides for configuration settings.
-|Name |Message name.
-|Summary |Map of segments or loops from the summary section of the message. Values are maps for segments or loops that occur once. The lists of maps is used for repeating values.
+|Heading |A map of segments or loops from the heading section of the message. Values are maps for segments or loops that occur once. Lists of maps exist for values that occur more than once.
+|Id |The Message ID must match the key of the containing message list.
+|Interchange |A map of UNB interchange header segment values. For a read message, the map is the actual data from the enclosing interchange. It is a single map linked from all messages in the interchange. For a write message, the map value creates the enclosing interchange. For example, gathering messages with the same interchange values into a single interchange, regardless of whether the actual maps are the same. If there are no values for this map, then the default is the value(s) taken from the Interchange map at the message level.
+|MessageHeader |Map of UNH message header segment values. This provides the actual header data for a Read operation, and enables you to provide overrides for for Write operation configuration settings.
+|Name |Message name
+|Summary |Map of segments or loops from the summary section of the message. Values are maps for segments or loops that occur once. Lists of maps are for values that occur more than once.
 |===
 
-Generated CONTRL functional acknowledgment messages differ from Received messages in their handling of interchange information.
+Generated CONTRL functional acknowledgment messages differ from Received messages in their handling of interchange information:
 
 [%header%autowidth.spread]
 |===
 |Key name |Description
-|Interchange |For functional acknowledgments generated by Receive processing, this map is a copy of the data for the containing interchange with Sender and Receiver identification components (UNB2.1/UNB2.2 and UNB2.1/UNB3.2). For writing a message, these values are for creating the enclosing interchange. For example, gathering messages with the same interchange values into a single interchange, regardless of whether the actual maps are the same. Values not populated in this map default to the values from the Interchange map at the message level.
+|Interchange |For functional acknowledgments generated by Receive processing, this map is a copy of the data for the containing interchange with Sender and Receiver identification components (UNB2.1/UNB2.2 and UNB2.1/UNB3.2). When writing a message, these values are used for creating the enclosing interchange. For example, gathering messages with the same interchange values into a single interchange, regardless of whether the actual maps are the same. If there are no values for this map, then the default is the value(s) taken from the Interchange map at the message level.
 |===
 
 == Next Step
