@@ -1,0 +1,243 @@
+= List Files Using the SFTP Connector - Mule 4
+:page-aliases: connectors::sftp/sftp-list.adoc
+
+Anypoint Connector for SFTP (SFTP Connector) List operation returns a list of messages, and each of these represents any file or folder found within the directory path.
+
+* The path you define in the Directory Path parameter can be absolute, or it can be relative to a working directory.
+* By default, the operation does not read or list files or folders within any subfolders of the directory path.
+* To list files or folders within any subfolders, set the Recursive parameter to `TRUE`.
+
+== Configure the List Operation in Studio
+
+To add and configure the List operation in Studio, follow these steps:
+
+. In the *Mule Palette* view, search for `sftp` and select the *List* operation.
+. Drag the *Read* operation onto the Studio canvas.
+. In the *General* tab of the operation configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to access the global element configuration fields.
+. Specify the connection information and click *OK*.
+. In the *General* tab, set the *Directory path* field to `~/dropFolder` to set the path of the file to list.
+
+The following screenshot shows the *List* operation configuration:
+
+.List operation configuration
+image::sftp-list-operation-1.png[List operation configuration in Studio]
+
+In the XML editor, the `<sftp:list>` configuration looks like this:
+[source,xml,linenums]
+----
+<sftp:list doc:name="List" config-ref="SFTP_Config" directoryPath="~/dropFolder"/>
+----
+
+The following XML example lists the folder contents of messages in the directory path without the subfolder contents. The For each and Choice components manage each directory in the list differently from the way they manage each file:
+
+[source,xml,linenums]
+----
+<flow name="list">
+  <sftp:list directoryPath="~/dropFolder" />
+  <foreach>
+    <choice>
+      <when expression="#[attributes.directory]">
+        <flow-ref name="processDirectory" />
+      </when>
+      <otherwise>
+        <logger message="Found file #[attributes.path] which content is #[payload]" />
+      </otherwise>
+    </choice>
+  </foreach>
+</flow>
+----
+
+== Poll a Directory
+
+Because Mule 4 doesn't have a polling message source, you can combine a Scheduler source with the SFTP List operation to poll a directory to look for new files to process. +
+
+[NOTE]
+For automatic polling, use the SFTP xref:sftp-on-new-file.adoc[On New or Updated File] operation that enables you to optionally set post-processing options to automatically move or delete files.
+
+In the following poll directory example, a flow lists the contents of a folder once per second. The flow then processes the files one by one, deleting each file after it is processed because there is a Delete operation in the For each component.
+
+The following screenshot shows the flow in Studio:
+
+.Pool a directory flow
+image::sftp-list-operation-2.png[Pool a directory flow in Studio]
+
+To create the flow follow these steps:
+
+. In Studio, drag the *Scheduler* component onto the Studio canvas.
+. Drag the SFTP *List* operation to the right of *Scheduler*.
+. In the *General* tab of the operation configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to access the global element configuration fields.
+. Specify the connection information and click *OK*.
+. In the *General* tab, set the *Directory path* field to `/config/dropFolder` to set the path of the file to list.
+. Drag a *For each* component to the right of the *List* operation.
+. Drag a *Flow Reference* component inside the *For each* component.
+. Set the *Flow name* field to `processFile` to specify the flow reference that process the files.
+. Drag an SFTP *Delete* operation to the right of the *Flow Reference* component.
+. Set the *Connector configuration* field to the previously configured connection in the *List* operation.
+. Set the *Path* field to `#[attributes.path]`.
+. Drag a *Transform Message* component below the first flow.
+. Select the new flow, and change the *Name* field to `processFile`.
+. Select the *Transform Message* component in the new flow, and in the *Output* view paste the following DataWeave expression:
++
+[source,dataWeave,linenums]
+----
+%dw 2.0
+						output application/json
+						---
+						characters: payload.characters.*name map (
+						            (item, index) -> {name: item}
+						         )
+----
++
+. Drag a *Logger* component to the right of *Transform Message*.
+. Set the *Message* field to `payload`.
+. Drag an Objet Store *Store* operation to the right of *Logger*.
+. Set the *Key* field to `test-file-' ++ random() as String ++ '.json'`, and *Value* to `payload`.
+. Save your Mule application.
+
+In the XML editor, the configuration looks like this:
+
+[source,xml,linenums]
+----
+?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os"
+    xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:ftps="http://www.mulesoft.org/schema/mule/ftps"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/ftps http://www.mulesoft.org/schema/mule/ftps/current/mule-ftps.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+
+	<sftp:config name="SFTP_Config" doc:name="SFTP Config" doc:id="41238701-97e6-4c85-a073-7fd2edf93416" >
+		<sftp:connection host="localhost" port="2222" username="bob" password="pass"/>
+	</sftp:config>
+
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="890b7561-32db-4d65-bb67-9fef05c6f6fe" />
+
+	<flow name="poll">
+	  <scheduler>
+	      <scheduling-strategy>
+	          <fixed-frequency frequency="1000"/>
+	      </scheduling-strategy>
+	  </scheduler>
+
+	  <sftp:list directoryPath="/config/dropFolder" config-ref="SFTP_Config"/>
+
+	  <foreach>
+	      <flow-ref name="processFile" />
+	      <sftp:delete path="#[attributes.path]" config-ref="SFTP_Config"/>
+	  </foreach>
+	</flow>
+
+	  <flow name="processFile" maxConcurrency="1">
+			<ee:transform doc:name="Transform Message" doc:id="9f39c6d4-9356-427f-b497-dd2a9099939c" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+						output application/json
+						---
+						characters: payload.characters.*name map (
+						            (item, index) -> {name: item}
+						         )]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+
+			<logger level="ERROR" message="#[payload]" />
+			<os:store doc:name="Store" objectStore="Object_store" key="#['test-file-' ++ random() as String ++ '.json']"/>
+	  </flow>
+
+</mule>
+
+----
+
+== Match Filter
+
+When listing files, use the File Matching Rules parameter that accepts files that match the specified criteria. This parameter defines the possible attributes to either accept or reject a file.
+These attributes are optional and ignored if you do not provide values for them. Use an `AND` operator to combine individual attributes.
+
+To configure the parameter in Studio, set the *File Matching Rules* parameter to `Edit inline` and complete the desired attributes:
+
+* *Timestamp since* +
+Files created before this date are rejected.
+* *Timestamp until* +
+Files created after this date are rejected.
+* *Not updated in the last* +
+Minimum time that should pass since a file was last updated to not be rejected. This attribute works in tandem with *Time unit*.
+* *Updated in the last* +
+Maximum time that should pass from when a file was last updated to not be rejected. This attribute works in tandem with *Time unit*.
+* *Time unit* +
+A *Not updated in the last* attributes. Defaults to `MILLISECONDS`.
+* *Filename pattern* +
+Similar to the current filename pattern filter but more powerful. Glob expressions (default) and regex are supported. You can select which one to use by setting a prefix: for example, `glob:*.{java, js}` or `regex:[0-9]test.csv`.
+* *Path pattern* +
+Same as *Filename pattern*  but applies over the entire file path rather than just a filename.
+* *Directories* +
+Match only if the file is a directory.
+* *Regular files* +
+Match only if the file is a regular file.
+* *Sym links*` +
+Match only if the file is a symbolic link.
+* *Min size* +
+Inclusive lower boundary for the file size expressed in bytes.
+* *Max size* +
+Inclusive upper boundary for the file size expressed in bytes.
+
+The following screenshot shows the *File Matching Rules* configuration in Studio:
+
+.File Matching Rules parameter configuration
+image::sftp-list-operation-3.png[File Matching Rules parameter configuration]
+
+In the XML editor, the configuration looks like this:
+[source,xml,linenums]
+----
+<sftp:matcher
+  timestampSince="2019-06-03T13:21:58+00:00"
+  timestampUntil="2019-06-03T13:21:58+00:00"
+  timeUnit="MICROSECONDS"
+  filenamePattern="a?*.{htm,html,pdf}"
+  pathPattern="a?*.{htm,html,pdf}"
+  directories="REQUIRE"
+  regularFiles="REQUIRE"
+  symLinks="REQUIRE"
+  maxSize="1024"/>
+----
+
+=== Top Level, Reusable Matcher
+
+You can use the file matcher as either a named top-level element that enables reuse or as an inner element that is proprietary to a particular component.
+
+The following example shows a top-level reusable matcher:
+
+[source,xml,linenums]
+----
+<sftp:matcher name="smallFileMatcher" maxSize="100" />
+      <flow name="smallFiles">
+      <sftp:list path="~/smallfiles" matcher="smallFileMatcher" />
+      ...
+</flow>
+----
+
+=== Inner, Nonreusable Matcher
+
+The following example shows an inner nonreusable matcher:
+
+[source,xml,linenums]
+----
+<flow name="smallFiles">
+      <sftp:list path="~/smallfiles" matcher="smallFileMatcher">
+            <sftp:matcher maxSize="100" />
+      </sftp:list>
+      ...
+</flow>
+----
+
+//== STREAMING INCLUDE in File, FTP, and SFTP Connector docs
+include::partial$common-streaming.adoc[]
+
+== See Also
+
+xref:sftp-examples.adoc[SFTP Connector Examples]
