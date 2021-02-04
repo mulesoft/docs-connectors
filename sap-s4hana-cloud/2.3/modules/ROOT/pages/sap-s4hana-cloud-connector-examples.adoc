@@ -1,0 +1,341 @@
+= SAP S/4HANA OData Connector 2.3 - Examples - Mule 4
+:page-aliases: connectors::sap/sap-s4hana-cloud-connector-examples.adoc
+
+In this example SAP S/4HANA OData Connector is used to create and get an entity, query for a value, update the entity, and then execute a function.
+
+NOTE: When using the *Update entity* operation, the entity key _must_ be specified as part of the payload.
+
+image::sap-hana-create.png[Operations Studio 7 Flow]
+image::sap-hana-get.png[Operations Studio 7 Flow]
+image::sap-hana-query.png[Operations Studio 7 Flow, scaledwidth="75%"]
+image::sap-hana-update.png[Operations Studio 7 Flow]
+image::sap-hana-execute.png[Operations Studio 7 Flow]
+
+== POM File for This Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <artifactId>sapdemo</artifactId>
+  <groupId>com.mulesoft.connectors.examples</groupId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>mule-application</packaging>
+
+  <name>mule-saphana-connector-entity-crud-demo</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <app.runtime>4.2.1</app.runtime>
+    <mule.maven.plugin.version>3.2.7</mule.maven.plugin.version>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.mule.tools.maven</groupId>
+        <artifactId>mule-maven-plugin</artifactId>
+        <version>${mule.maven.plugin.version}</version>
+        <extensions>true</extensions>
+        <configuration>
+          <classifier>mule-application</classifier>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.mule.connectors</groupId>
+      <artifactId>mule-http-connector</artifactId>
+      <version>1.3.1</version>
+      <classifier>mule-plugin</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.mule.connectors</groupId>
+      <artifactId>mule-sockets-connector</artifactId>
+      <version>1.1.2</version>
+      <classifier>mule-plugin</classifier>
+    </dependency>
+    <dependency>
+      <groupId>com.mulesoft.connector</groupId>
+      <artifactId>mule-sap-s4hana-cloud-connector</artifactId>
+      <version>2.2.0</version>
+      <classifier>mule-plugin</classifier>
+    </dependency>
+  </dependencies>
+
+  <repositories>
+    <repository>
+      <id>anypoint-exchange</id>
+      <name>Anypoint Exchange</name>
+      <url>https://maven.anypoint.mulesoft.com/api/v1/maven</url>
+      <layout>default</layout>
+    </repository>
+    <repository>
+        <id>mulesoft-releases</id>
+        <name>MuleSoft Releases Repository</name>
+        <url>https://repository.mulesoft.org/releases/</url>
+        <layout>default</layout>
+    </repository>
+    <repository>
+        <id>mulesoft-snapshots</id>
+        <name>MuleSoft Snapshots Repository</name>
+        <url>https://repository.mulesoft.org/snapshots/</url>
+        <layout>default</layout>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+        <id>mulesoft-releases</id>
+        <name>mulesoft release repository</name>
+        <layout>default</layout>
+        <url>https://repository.mulesoft.org/releases/</url>
+        <snapshots>
+          <enabled>false</enabled>
+        </snapshots>
+    </pluginRepository>
+  </pluginRepositories>
+</project>
+----
+
+== XML Code for This Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+ <mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:s4hana="http://www.mulesoft.org/schema/mule/s4hana"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/s4hana http://www.mulesoft.org/schema/mule/s4hana/current/mule-s4hana.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3440aea5-7401-47d6-8b58-ba23046e1cac" basePath="/" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<s4hana:config name="SAP_S_4HANA_Config" doc:name="SAP S 4HANA Config" doc:id="ef9c8c13-3002-4f50-b366-faa771393929" >
+		<s4hana:basic-authentication-connection username="${config.username}" password="${config.password}" baseUrl="${config.serviceBaseUrl}" serviceDirectory="sap/opu/odata/sap">
+		<s4hana:unlisted-services >
+          		<s4hana:unlisted-service value="API_BUSINESS_PARTNER" />
+          		<s4hana:unlisted-service value="API_FINANCIALPLANDATA_SRV" />
+          		<s4hana:unlisted-service value="MD_CUSTOMER_MASTER_SRV_01" />
+	        </s4hana:unlisted-services>
+	        <s4hana:default-query-params>
+          		<s4hana:default-query-param key="saml2" value="disabled" />
+	        </s4hana:default-query-params>
+        </s4hana:basic-authentication-connection>
+
+	</s4hana:config>
+	<configuration-properties doc:name="Configuration properties" doc:id="beca6c84-45d8-4a8c-95e7-322a9bbe2e5e" file="mule-artifact.properties" />
+	<flow name="htmlFormFlow" doc:id="0380e195-ebb4-4595-8b00-c5018002c714" >
+		<http:listener doc:name="Listener" doc:id="8e232545-4ec3-495e-ab9e-1122a9db9ca8" config-ref="HTTP_Listener_config" path="/"/>
+		<parse-template doc:name="Parse Template" doc:id="18304b99-add7-4692-a8d0-e70e519044bc" location="form.html"/>
+	</flow>
+	<flow name="createEntityFlow" doc:id="720fb3fc-b09a-46ed-9949-388aad43ff67" >
+		<http:listener doc:name="Listener" doc:id="84f90343-0ed6-45e0-9fa3-aa26cefb08cb" config-ref="HTTP_Listener_config" path="/create"/>
+		<ee:transform doc:name="Transform Message" doc:id="ff52de8a-3ffa-4fe8-b59f-2e215af75835" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"BusinessPartner": attributes.queryParams['business-partner-one'],
+	"BankIdentification": attributes.queryParams['bank-identification-one'],
+	"BankCountryKey": attributes.queryParams['bank-country-key-one'],
+	"BankName": attributes.queryParams['bank-name-one'],
+	"BankNumber": attributes.queryParams['bank-number-one'],
+	"SWIFTCode": attributes.queryParams['swift-code-one'],
+	"BankControlKey": attributes.queryParams['bank-control-key-one'],
+	"BankAccountHolderName": attributes.queryParams['bank-account-holder-name-one'],
+	"BankAccountName": attributes.queryParams['bank-account-name-one'],
+	"IBAN": attributes.queryParams['iban-one'],
+	"IBANValidityStartDate": attributes.queryParams['iban-validity-start-date-one'] as DateTime,
+	"BankAccount": attributes.queryParams['bank-account-one'],
+	"BankAccountReferenceText": attributes.queryParams['bank-account-reference-text-one'],
+	"CollectionAuthInd": attributes.queryParams['collection-auth-ind-one'] as Boolean,
+	"CityName": attributes.queryParams['city-name-one'],
+	"AuthorizationGroup": attributes.queryParams['authorization-group-one']
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<s4hana:create-entity doc:name="Create entity" doc:id="eba9b06d-4834-4577-a6c2-4190a54e18b6" config-ref="SAP_S_4HANA_Config" service="API_BUSINESS_PARTNER" entityType="A_BusinessPartnerBank">
+			<s4hana:entity ><![CDATA[#[%dw 2.0
+output application/java
+---
+payload]]]></s4hana:entity>
+		</s4hana:create-entity>
+		<ee:transform doc:name="Transform Message" doc:id="5a8c4a4b-5efb-49c1-912c-d77b31ecdfe1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="b7e16d01-1741-4f17-8942-a7800877b5d2" message="#[payload]"/>
+	</flow>
+	<flow name="updateEntityFlow" doc:id="295a4bc8-ba58-4b92-9d05-27e63108b691" >
+		<http:listener doc:name="Listener" doc:id="90e2fc87-3b32-4e28-8b32-387d5ab6a95c" config-ref="HTTP_Listener_config" path="/update"/>
+		<ee:transform doc:name="Transform Message" doc:id="7be1dff2-c6f1-4075-90c9-dfa58ad6dd64" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"BusinessPartner": attributes.queryParams['business-partner-three'],
+	"BankIdentification": attributes.queryParams['bank-identification-three'],
+	"BankCountryKey": attributes.queryParams['bank-country-key-three'],
+	"BankName": attributes.queryParams['bank-name-three'],
+	"BankNumber": attributes.queryParams['bank-number-three'],
+	"SWIFTCode": attributes.queryParams['swift-code-three'],
+	"BankControlKey": attributes.queryParams['bank-control-key-three'],
+	"BankAccountHolderName": attributes.queryParams['bank-account-holder-name-three'],
+	"BankAccountName": attributes.queryParams['bank-account-name-three'],
+	"IBAN": attributes.queryParams['iban-three'],
+	"IBANValidityStartDate": attributes.queryParams['iban-validity-start-date-three'] as DateTime,
+	"BankAccount": attributes.queryParams['bank-account-three'],
+	"BankAccountReferenceText": attributes.queryParams['bank-account-reference-text-three'],
+	"CollectionAuthInd": attributes.queryParams['collection-auth-ind-three'] as Boolean,
+	"CityName": attributes.queryParams['city-name-three'],
+	"AuthorizationGroup": attributes.queryParams['authorization-group-three']
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<s4hana:update-entity   doc:name="Update entity" doc:id="6d32c722-f614-43e0-9d06-b8867adc4b4d" config-ref="SAP_S_4HANA_Config" service="API_BUSINESS_PARTNER" entityType="A_BusinessPartnerBank">
+			<s4hana:entity ><![CDATA[#[output application/json
+---
+{
+	BankIdentification: payload.BankIdentification,
+	BusinessPartner: payload.BusinessPartner,
+	AuthorizationGroup: payload.AuthorizationGroup,
+	BankAccount: payload.BankAccount,
+	BankAccountHolderName: payload.BankAccountHolderName,
+	BankAccountName: payload.BankAccountName,
+	BankAccountReferenceText: payload.BankAccountReferenceText,
+	BankControlKey: payload.BankControlKey,
+	BankCountryKey: payload.BankCountryKey,
+	BankName: payload.BankName,
+	BankNumber: payload.BankNumber,
+	CityName: payload.CityName,
+	CollectionAuthInd: payload.CollectionAuthInd,
+	IBAN: payload.IBAN,
+	IBANValidityStartDate: payload.IBANValidityStartDate as DateTime,
+	SWIFTCode: payload.SWIFTCode,
+}]]]></s4hana:entity>
+		</s4hana:update-entity>
+		<ee:transform doc:name="Transform Message" doc:id="8ab21233-6396-4039-bc2e-8911f9c0b6a3" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="a5bea8a6-1905-4aa6-95a4-1fffb140b541" message="#[payload]"/>
+	</flow>
+	<flow name="getEntityFlow" doc:id="deffa7d4-da3d-45d8-8528-a579ffbdd021" >
+		<http:listener doc:name="Listener" doc:id="a8e27adc-a1ce-4247-8d64-6b5350b26fe5" config-ref="HTTP_Listener_config" path="/get"/>
+		<ee:transform doc:name="Transform Message" doc:id="0d8a8421-ec80-4827-9f5b-3db0515db421" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"BusinessPartner": attributes.queryParams['business-partner-two'],
+	"BankIdentification": attributes.queryParams['bank-identification-two']
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<s4hana:get-entity   doc:name="Get entity" doc:id="4244dc06-1185-4b3c-87e3-fc61f57637a1"  config-ref="SAP_S_4HANA_Config" select="*" service="API_BUSINESS_PARTNER" entityType="A_BusinessPartnerBank">
+			<s4hana:key ><![CDATA[#[output application/java
+---
+payload]]]></s4hana:key>
+		</s4hana:get-entity>
+		<ee:transform doc:name="Transform Message" doc:id="9f94b79f-31a4-4480-9e26-4105d72fd6b1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="0e744bf8-8dc6-4d7b-934f-595bf8ac2e12" message="#[payload]"/>
+	</flow>
+	<flow name="queryFlow" doc:id="2d7f7e4c-316d-4876-a39c-34d94b1af167" >
+		<http:listener doc:name="Listener" doc:id="9993a238-46f7-4317-9f92-4bd45951b16e" config-ref="HTTP_Listener_config" path="/query"/>
+		<s4hana:query  doc:name="Query" doc:id="1cf90519-7333-4a9b-8589-eaccf2b29852" filter="#[attributes.queryParams['filter-five']]" config-ref="SAP_S_4HANA_Config" select="*" service="API_BUSINESS_PARTNER" entityType="A_BusinessPartnerBank" orderBy="#[attributes.queryParams['order-by-five']]"/>
+		<ee:transform doc:name="Transform Message" doc:id="12b7cc68-7da2-4589-b7e5-3d060162cceb" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="6cc92c7b-32c7-49a0-afd2-1c325970653f" message="#[payload]"/>
+	</flow>
+	<flow name="executeFunctionFlow" doc:id="37321278-e90c-49c3-848b-838f5a1a23ae" >
+		<http:listener doc:name="Listener" doc:id="03436cd6-b1eb-4c2c-bad7-2837eea6b590" config-ref="HTTP_Listener_config" path="/execute"/>
+		<ee:transform doc:name="Transform Message" doc:id="c72e3dfb-2009-4cf1-9e90-a30d65fb022e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"BusinessPartner": attributes.queryParams['business-partner-six'],
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<s4hana:execute-function doc:name="Execute function" doc:id="3b9f1217-05b5-4c10-8138-0208bbe825dd" config-ref="SAP_S_4HANA_Config" function="GET_DATACLOUD_OPURL" service="MD_CUSTOMER_MASTER_SRV_01">
+		</s4hana:execute-function>
+		<ee:transform doc:name="Transform Message" doc:id="ff2e2bed-ff5b-4e26-b369-79de991a9b0d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="d4e8caa9-a10f-4b33-a778-54a61651e628" message="#[payload]"/>
+	</flow>
+	<flow name="deleteEntityFlow" doc:id="49c4f82b-c46e-4ffc-ae33-f88aabdeb719" >
+		<http:listener doc:name="Listener" doc:id="9997807c-aa61-4ff3-86d8-80671668eb3c" config-ref="HTTP_Listener_config" path="/delete"/>
+		<ee:transform doc:name="Transform Message" doc:id="8105e13a-067c-41a0-90ff-4f94e0210e60" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	"BusinessPartner": attributes.queryParams['business-partner-four'],
+	"BankIdentification": attributes.queryParams['bank-identification-four']
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<s4hana:delete-entity doc:name="Delete entity" doc:id="86048ebe-fde8-4dde-aa65-c1f322ba5519" config-ref="SAP_S_4HANA_Config" service="API_BUSINESS_PARTNER" entityType="A_BusinessPartnerBank">
+			<s4hana:key ><![CDATA[#[output application/java
+---
+{
+	BusinessPartner: payload.BusinessPartner,
+	BankIdentification: payload.BankIdentification
+}]]]></s4hana:key>
+		</s4hana:delete-entity>
+		<ee:transform doc:name="Transform Message" doc:id="d08e9a23-cff5-45cc-af5e-78bf9b278fa7" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="a2cf1ec8-0cbe-44e1-8612-a629b485dafa" message="#[payload]"/>
+	</flow>
+</mule>
+----
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
