@@ -1,0 +1,72 @@
+= Execute Bulk Operations Examples - Mule 4
+
+Anypoint Connector for Database (Database Connector) supports the Bulk Insert, Bulk Update, and Bulk Delete operations that enables you to manage data in bulk. This improves the performance compared to executing a single insert, update or delete operation at various times.
+
+These operations are similar to their single counterparts, except that instead of receiving input parameters as key-value pairs, the bulk operations expect them as a list of key-value pairs.
+
+Advantages of bulk operations:
+
+* Parse the query only once
+* Requires only one database connection since a single statement is executed
+* Minimize network overhead
+* RDBMS can execute the bulk operation
+
+It may happen that while some statements in the bulk operation can be successfully executed, some may result in an error (for example, if bulk insert fails to insert 1 out of 100 rows). When this occurs, a single exception is thrown describing what went wrong, and it will be up to the driver to either stop execution immediately and ignore all remaining operations, or continue to execute the remaining statements.
+In both cases, whenever an error occurs you can examine your application logs to see which caused the failure.
+
+== Configure the Bulk Insert Operation in Studio
+== Configure the Bulk Update Operation in Studio
+
+== Configure the Bulk Delete Operation in Studio
+
+For example:
+
+[source,xml,linenums]
+----
+<db:bulk-insert config-ref="dbConfig" >
+  <db:bulk-input-parameters>
+    #[[{'id': 2, 'name': 'George', 'lastName': 'Costanza'}, {'id': 3, 'name': 'Cosmo', 'lastName': 'Kramer'}]]
+  </db:bulk-input-parameters>
+  <db:sql>
+    insert into customers (id, name, lastName) values (:id, :name, :lastName)
+  </db:sql>
+</db:bulk-insert>
+----
+
+If you don't use bulk operations, when performing a `delete` operation, many rows could match the criteria and get deleted if only one criteria `(POSITION = X)` is provided.
+
+The same concept applies for update. If you use `UPDATE PRODUCTS set PRICE = PRICE * 0.9 where PRICE > :price`, you may want to apply a 10% discount on many products, but the `price` input parameter accepts only one value.
+
+If you want to apply different discount rates on products that have different prices, you can execute many operations.
+
+The following example is a payload that is a list of objects of the following structure `{ price : number, discountRate: number}`:
+
+[source,xml,linenums]
+----
+<foreach>
+  <db:update config-ref="dbConfig">
+    <db:input-parameters>
+     #[
+      {
+        'discountRate' : payload.discountRate,
+        'price' : payload.price,
+      }
+    ]
+    </db:input-parameters>
+    <db:sql>
+      UPDATE PRODUCTS set PRICE = PRICE * :discountRate where PRICE > :price
+    </db:sql>
+  </db:update>
+</foreach>
+----
+
+The previous operation accomplishes the task but is inefficient. For each element in the list, one query must be executed for each element of the operation:
+
+* The query is parsed.
+* Parameters are resolved.
+* A connection to the database is acquired (either by getting one from the pool or establishing a new one).
+* All the network overhead is paid.
+* The RDBMS processes the query and applies changes.
+* The connection is released.
+
+If an error arises while executing one of the operations (for example, if bulk insert fails to insert 1 out of 100 rows), a single exception is thrown.
