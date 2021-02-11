@@ -1,152 +1,43 @@
 = X12 EDI Connector 2.5 - Examples - Mule 4
 
-Use this example to view the use case for B2B/EDI integration leveraging Anypoint X12 Connector. This example:
+Use this example to view the use case for (B2B) EDI integration leveraging Anypoint X12 Connector. This example:
 
 * Transforms XML messages into Outbound EDI X12 850 purchase order transactions +
 +
 * Transforms Inbound EDI X12 850 purchase orders into JSON +
 +
-* Provides a Functional acknowledgement (997) generatation +
+* Generates a Functional acknowledgement (997) +
 
-
-The demo flow:
-
-////
-image::foo.jpg[Overview]
-////
-
-There is an HTTPS Listener used as the message source in order to receive Enterprise purchase order XML messages from back-end systems. DataWeave and X12 Writes are used to translate the XML message into an X12 v4010 850 Purchase order EDI message. The generated X12 message is published to an Anypoint MQ queue, and sent to Mythical Supplier via AS2.
+An HTTPS Listener is used as the message source to receive the Enterprise purchase order XML messages from a back-end system. DataWeave and X12 Writes are used to translate the XML message into an X12 v4010 850 Purchase order EDI message. A (997) Functional Acknowledgement is generated upon receipt of the purchase order message.
 
 == Prerequisites
 
-. Open the Example project in Anypoint Studio from Anypoint Exchange.
+. Open the Example project in Anypoint Studio from Anypoint Exchange. +
 . Install the latest version of Anypoint X12 connector.
-
 
 === Run and Test the Example
 
-. Run the application in Anypoint Studio
+. Run the application in Anypoint Studio.
 
-. Test the Outbound flow by using a REST Client, POST a JSON message to the URL:
+. Test the Outbound flow by using a REST Client to POST a JSON message to the URL:
 
 `http://localhost:8081/x12/send/enterprise-ob-purchaseorder`
 
-`Payload: src/main/resources/outbound/Enterprise-Outbound-PO.xml`
+Payload location: `src/main/resources/outbound/Enterprise-Outbound-PO.xml`
 
 The Mule app returns the generated EDI X12 850 transaction.
 
-. Test the Inbound flow using a REST Client, POST a JSON message to the URL:
+. Test the Inbound flow using a REST Client to POST a raw EDI X12 850 message message to the URL:
 
 `http://localhost:8081/x12/receive/4010-850`
 
-`Payload: src/main/resources/inbound/EDI-4010-850-NTO-to-Mythical.edi`
+Payload location: `src/main/resources/inbound/EDI-4010-850-NTO-to-Mythical.edi`
 
 The app returns the translated JSON purchase order message.
 
 A Functional Acknowledgement (997) is generated and printed in the log.
 
-. Send it via any standard protocol such as FTP, SFTP or AS2 back to the trading partner.
-
-
-
-
-
-
-== Global Configurations
-
-
-== Translating XML to EDI X12 850
-
-The Transform message component in the application translates the received XML enterprise purchase order payload into an EDI X12 850 message structure. For the target portion of the map the X12 Write component (schema definition 850.esl) enables DataSense to automatically populate the X12 structure. This provides an easy way to map the XML data into the X12 structure.
-
-The output of the DataWeave map is an X12 message in Java Object structure. The X12 Write component in the following step first performs the validation against X12 specifications, then the validation rules in the connector configuration, and produces the raw EDI message in X12 format.
-
-== X12 Control Numbers
-
-X12 Connector provides three ways of generating control numbers on the generated X12 payload. Refer to the one that best suits your needs.
-
-* X12 Connector: using control number keys to manage global control numbers
-
-Use this if your organization or your trading partner has a requirement to maintain unique interchange, group, or transaction set control numbers across different identifier combinations and document types.
-
-. Set the configuration “Use supplied values” to `False`.
-
-. Leverage the control number key configurations (at the configuration level, or operation level) to set a key that is unique for the partner.
-
-These values can be dynamically passed at the operation-level.
-
-For example: The values for the interchange and group control number keys can be `PartnerName-ISA`, `PartnerName-GS`, both used across different identifiers and transaction types for the same partner.
-
-* X12 Connector: automatically manage identifier combination control numbers
-
-The connector automatically maintains the sequencing of control numbers for the Sender/Receiver identifier combination, initializing the value to the number specified in the configuration.
-
-Use this if you want the connector to automatically maintain the sequencing based on the Sender/Receiver identifiers and there are no requirements for global control numbers at a partner level.
-
-This is the default behavior when no value is passed into the optional interchange / group / Transaction number key configurations.
-
-The Write configuration `Use supplied values` must be set to `False`.
-
-* Use your own control number
-
-To generate the control numbers and use them on the EDI payload:
-
-. Set the parameter `Use supplied values` to `True`.
-
-. Map the desired control number on the payload in the DataWeave map.
-
-== Deploying the Outbound Purchase Order Application
-
-Once you deploy the application to CloudHub or a standalone Mule runtime, the NTO Retailer is now ready to:
-
-* Receive outbound enterprise purchase order XML messages from back-end systems
-
-* Send EDI purchase orders to Mythical Supplier
-
-== Mythical Supplier: Inbound Purchase Order application
-
-The demo application, `example-b2b-mythical-inbound-purchase-order` shows how to implement the Inbound purchase order service at Mythical Supplier’s end. It:
-
-* Receives the raw X12 850 purchase order messages from an Anypoint MQ
-
-* Uses the X12 Read operation to validate received EDI 850 purchase order messages
-
-* Transforms to the Inbound Enterprise purchase order JSON format
-
-* Hands off to a process API for further processing into the ERP/Order Management system.
-
-In this example, the process API writes the translated JSON to Anypoint MQ.
-
-== X12 Read configuration
-
-Make the following changes:
-
-. Configure the path to the ESL ``/x12/004010/850.esl` in the Schema definition.
-
-. On the *Identity* tab configure the ISA/GS sender and receiver identifiers.
-
-. On the *Parser* tab configure the validation and parsing rules needed for validation.
-
-== EDI X12 850 to JSON transformation
-
-An example of the DataWeave component after the X12 read is used to transform the EDI data into the Enterprise Inbound purchase order JSON message format.
-
-
-The translated data is sent to the process API via an HTTP request component, and is subsequently published to Anypoint MQ.
-
-== Deploying the Inbound Purchase Order Application
-
-Once the application is deployed to CloudHub or a standalone Mule runtime, the Mythical supplier is now ready to receive EDI purchase orders and seamlessly integrate with the backend applications.
-
-
-
-
-////
-. Using a REST Client, POST the XML payload `src/main/resources/Enterprise-Outbound-PO.xml` to https://localhost:8443/b2b/enterprise-ob-po/ or https://app-name.cloudhub.io/b2b/enterprise-ob-po/ if deployed to CloudHub.
-
-You see the raw EDI X12 850 purchase order transaction returned as the response. It is also published to the Anypoint MQ queue `b2b-outbound-mythical-as2.q`, ready to be sent to the trading partner.
-////
-
+. Send the message via any standard protocol such as FTP, SFTP or AS2 back to the trading partner.
 
 == See Also
 
