@@ -1,0 +1,217 @@
+= Query a Single Record from a Database Example - Mule 4
+
+The Query Single operation enables you to execute an SQL query that returns a single record (row) from a database and access the result payload without any additional transformations. This operation does not stream any of the returned fields. When the query is executed, all the values of the returned row are read into memory and returned in the payload.
+
+You must be careful, however, because if your row is too large, you could run out of memory.
+Also, if you use connection pooling you do not have to worry about your application running out of connections, because this operation returns the connection to the pool immediately after the query is executed.
+
+You invoke the Query Single operation in the same way as you invoke the Select operation; however, you always get a single result using Query Single, regardless of the number of records returned by the actual SQL query.
+
+The following example shows how to configure the Anypoint Connector for Database (Database Connector) Query Single operation in a Mule application that retrieves books information from a table in a MySQL database. +
+
+To accomplish this example, you must: +
+
+* Run an SQL statement that creates a table called `BOOK` and inserts seven records of book information (title, author, bookshopName, isbn, price).
+* Configure the SQL database connection.
+* Create the Mule application.
+* Run the application and then test it by using with curl commands.
+
+The following screenshot shows the Anypoint Studio app flow for this example:
+
+.Query a Single Record from a Database flow
+image::database-query-single-flow.png[Query a Single Record from a Database flow]
+
+== Create the Table in the Database
+
+Before configuring the SQL database connection and creating the Mule app, run the following SQL statement to create a table called `BOOK` and insert seven book records. An incremental `id` is associated with each new book added into to table. For example, the first book added to the table has an `id` equal to `1`, the second book has an `id` equal to `2`, and so on.
+
+[source,sql,linenums]
+----
+USE SYS;
+
+CREATE TABLE BOOK(
+    id MEDIUMINT NOT NULL AUTO_INCREMENT,
+    title VARCHAR(100),
+    author VARCHAR(100),
+    bookshopName VARCHAR(100),
+    isbn VARCHAR(13),
+    price SMALLINT,
+    PRIMARY KEY (id)
+);
+
+INSERT INTO BOOK(title, author, bookshopName, isbn, price) VALUES('Good Omens', 'Terry Pratchett and Neil Gaiman', 'A.Z. Fell and Co.', '9780060853983', 50);
+INSERT INTO BOOK(title, author, bookshopName, isbn, price) VALUES('A Wizard of Earthsea', 'Ursula K. Le Guin', 'A.Z. Fell and Co.', '9780547773742', 20);
+INSERT INTO BOOK(title, author, bookshopName, isbn, price) VALUES('IT', 'Stephen King', 'A.Z. Fell and Co.', '9781508297123', 20);
+INSERT INTO BOOK(title, author, bookshopName, isbn, price) VALUES('The Nice and Accurate Prophecies of Agnes Nutter', 'Agnes Nutter', 'A.Z. Fell and Co.', '000000000000', 200);
+INSERT INTO BOOK(title, author, bookshopName, isbn, price) VALUES('Cujo', 'Stephen King', 'A.Z. Fell and Co.', '9781501192241', 20);
+INSERT INTO BOOK(title, author, bookshopName, isbn, price) VALUES('Nation', 'Terry Pratchett', 'A.Z. Fell and Co.', '9780552557795', 30);
+INSERT INTO BOOK(title, author, bookshopName, isbn, price) VALUES('The Ocean at the End of the Lane', 'Neil Gaiman', 'A.Z. Fell and Co.', '9780062459367', 30);
+----
+
+== Configure a MySQL Database Connection
+
+After you create the table, go to Anypoint Studio to configure the MySQL database connection:
+
+. Create a new Mule project in Studio.
+. Navigate to the *Global Elements* view.
+. Click *Create* to open the *Choose Global Type* view.
+. In the *Filter* field, type `http`, select *HTTP Listener config*, and click *OK*. +
+This configuration is for the HTTP *Listener* source that initiates the Mule application flow.
+. In the *HTTP Listener config* window, complete the following fields:
+
+* *Protocol* +
+`HTTP (Default)` +
+* *Host* +
+`All Interfaces [0.0.0.0] (default)` +
+* *Port* +
+`8081`
+
+[start=4]
+. Click *OK*.
+. In the *Global Elements* view, click *Create* to open the *Choose Global Type* view.
+. In the *Filter* field, type `database`, select *Database Config*, and click *OK*.
+. In the *Database Config* window, set the *Name* field to `dbConfig`.
+. In the *Connection* field, select *MySQL Connection*.
+. Click *Configure* to add the required MySQL JDBC driver and select one of: +
++
+* *Add recommended library* +
+Install the recommended library.
+* *Use local file* +
+Install the library using a local file.
+* *Add Maven dependency* +
+Install a Maven dependency to add to the project.
++
+[start=10]
+. In the *Connection* section, complete the following fields: +
++
+* *Host* +
+`localhost`
+* *Port* +
+`3306`
+* *User* +
+`root`
+* *Password* +
+`mysql`
+* *Database* +
+`sys`
++
+[start=11]
+. On the *Advanced* tab, set the *Pooling profile* field to *Edit inline*.
+. Set the *Max pool size* field to `5`.
+. Click *Test Connection* to confirm that Mule can connect to the database.
+. Click *OK*.
+
+The following screenshot shows the *HTTP Listener* global element configuration in Studio:
+
+.HTTP Listener configuration
+image::database-querysingle-example-1.png[HTTP Listener configuration]
+
+The following screenshots show the Database global element configuration in Studio:
+
+.Database Config General cofiguration
+image::database-querysingle-example-2.png[Database Config General configuration setting Host, Port, User, Password Database values parameters]
+
+== Create, Configure, Run and Test the Mule Application
+After you configure the MySQL database connection, create, configure, run, and test the Mule app:
+
+=== Create a Flow by Configuring the HTTP Listener and Set Variable Component
+
+To create the Mule flow:
+
+. In the *Mule Palette* view, select the HTTP *Listener* source and drag it onto the canvas. +
+The source initiates the flow by listening for incoming HTTP message attributes.
+. In the *Connector configuration* field, select the `HTTP_Listener_config` global configuration.
+. Set the *Path* field to `/select/book/{maxId}`. +
+The `maxId` value parameter indicates how many books records to retrieve from the database. You can increment this value regardless of the number of maximum connections you configured in your database connection pool.
+. In the *Mime Type* tab, set the *Mime Type* field to `application/json`.
+. In the *Advanced* tab, set the *Allowed methods* field to `GET`.
+. Drag a *Set Variable* component to the right of the *Listener* source. +
+This component creates a new variable to save the database results that will be obtained from the *Query single* operation.
+. Set the *Name* field to `bookCollection` and the *Value* field to `#[[]]`:
+
+.Set Variable configuration
+image::database-querysingle-example-3.png[Set Variable configuration]
+
+=== Configure the For Each Component, the Query Single Operation, and the Set Payload Component
+
+Continue creating the Mule application using a *For Each* component to iterate the number of books requested by *HTTP Listener*. Then retrieve the book information using the *Query single* operation, and save the results in a payload variable:
+
+. Drag a *For Each* component to the right of *Set Variable*. +
+. Set the *Collection* field to `#[1 to attributes.uriParams.maxId as Number]`. +
+This expression iterates the collection of books in the table, from the first book (`1`) to the number of books set in the `maxId` parameter, when performing the HTTP request `/select/book/{maxId}`.
++
+.For Each configuration
+image::database-querysingle-example-4.png[For Each configuration]
++
+[start=3]
+. Drag the *Query single* operation into the *For Each* component.
+. Set the *Connector configuration* field to `Database_Config` to connect to the MySQL database configuration.
+. Set the *SQL Query Text* field to `SELECT id, title, author FROM BOOK WHERE id = :id`. +
+This query selects the books information from the database.
+. Set the *Input Parameters* field to `![CDATA[#[{'id': payload }]]]`. +
+This expression maps the key parameter `id` (referenced in the previous *SQL Query Text* expression) to `payload` which is the result value of books information retrieved using the `SELECT` query.
++
+.Query single configuration
+image::database-querysingle-example-5.png[Query single configuration]
++
+[start=7]
+. Drag another *Set Variable* component to the right of the *Query single* operation.
+. Set the *Name* field to `bookCollection` and the *Value* field to `#[vars.bookCollection ++ [payload]]`. +
+The original variable `bookCollection` now saves the `payload` of the retrieved book information.
+. Drag a *Set Payload* component to the right of the *For Each* component.
+. Set the *Value* field to `#[vars.bookCollection]` to save the variable content as a new output payload:
+
+.Set Payload configuration
+image::database-querysingle-example-6.png[Set Payload configuration]
+
+=== Run and Test the Mule Application
+
+To run and test the Mule application:
+
+. Save the project in Studio.
+. Test the app by running `curl localhost:8081/select/book/7` at the command line. +
+This command selects the first seven books of the table, regardless of the maximum number of connections (`5`) configured in the pool.
+
+== XML for Querying a Single Record from a Database
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd"></mule>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="9501220e-fba8-440b-afdf-14b4ca010fe8" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="20db2231-3668-48d0-bb60-66f120fc99c8" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="mysql" database="sys">
+			<db:pooling-profile maxPoolSize="5"/>
+		</db:my-sql-connection>
+	</db:config>
+
+	<flow name="querysingleForeachFlow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/select/book/{maxId}" outputMimeType="application/json" allowedMethods="GET"/>
+		<set-variable variableName="bookCollection" value="#[[]]" />
+		<foreach collection="#[1 to attributes.uriParams.maxId as Number]">
+			<db:query-single doc:name="Query single" config-ref="Database_Config">
+				<db:sql>SELECT id, title, author FROM BOOK WHERE id = :id</db:sql>
+				<db:input-parameters><![CDATA[#[{'id': payload }]]]></db:input-parameters>
+			</db:query-single>
+			<set-variable variableName="bookCollection" value="#[vars.bookCollection ++ [payload]]" />
+		</foreach>
+		<set-payload value="#[output application/json --- { books : vars.bookCollection }]" />
+	</flow>
+----
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]

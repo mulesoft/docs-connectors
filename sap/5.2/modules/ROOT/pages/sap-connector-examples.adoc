@@ -1,0 +1,242 @@
+= SAP Connector 5.2 Examples - Mule 4
+
+== Establish an SAP Connection
+
+Create a Mule app that establishes a connection to SAP and receives a function using the SAP connector's *Function source* operation, which returns the export parameter to SAP.
+
+. In Anypoint Studio, create a new Mule project.
+. Click the Exchange icon *(X)* in the upper-left of the Studio task bar.
+. In Exchange, click *Login* and supply your Anypoint Platform username and password.
+. In Exchange, select *Connectors* as the type, and search for "SAP Connector".
+. Select the SAP Connector for Mule 4 tile, and click *Add to project*.
+. Drag the SAP *Function source* operation to the source area of the canvas at the start of a flow.
+. Create a new *SAP Inbound* global element configuration and specify the environment values.
+. Add a *Transform Message* component to the flow and specify the details based on the metadata:
++
+image::sap-function-return-response.png[]
++
+The flow now contains *Function source* in the canvas source area and the *Transform Message*, as shown in the following image:
++
+image::sap-flow-response.png[]
++
+The SAP Design Studio displays feedback about the received object and its response:
++
+image::sap-result-sap-gui.png[]
+
+== Send an IDoc to SAP
+
+In this example, you create a Mule app to send an IDoc to SAP:
+
+. In Anypoint Studio, create a new Mule project.
+. Drag the *HTTP Listener* operation to the canvas and use the default values.
+. Drag the *HTTP Request* operation to the canvas and set *Path* to `/sendIDoc`. +
+Use the same HTTP configuration as used for the *HTTP Listener* operation.
+. Create a new SAP outbound global element configuration and specify the environment values.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. If the connection is successful, save the configuration. +
+Otherwise, review and correct any invalid parameters, and test again.
+. Select the SAP Connector and add the *Send IDoc* operation next to the HTTP operation.
+. Configure the operation with the following values:
++
+[%header,cols="40s,60a"]
+|===
+|Parameter |Value
+|Display Name |Name to display for the Send IDoc operation
+|Connector configuration |`SAP_Outbound` for the global element you created
+|Key |MATMAS01
+|Content |`#[payload]`
+|===
++
+. Drag a *Transform Message* component before the SAP connector, and click the component to open its properties editor.
+. After metadata is retrieved, select the respective fields to populate for the employee.
++
+The XML for the transform script shows the DataWeave content for *Transform Message*:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+---
+read('<?xml version="1.0"?>
+<MATMAS01>
+    <IDOC BEGIN="1">
+        <EDI_DC40 SEGMENT="1">
+             <TABNAM>EDI_DC40</TABNAM>
+            <MANDT>800</MANDT>
+        </EDI_DC40>
+    </IDOC>
+</MATMAS01>
+',"application/xml")
+----
++
+. Add a *Logger* directly after the SAP endpoint. +
+When you run your app, *Logger* displays messages in the Anypoint Studio console that enable you to see the connector payload in the logs.
+. Click *File* > *Save* to save your app.
+. Click *Run* > *Run as* > *Mule Application* to run the app. +
+Anypoint Studio provides a web server you can use to test the app from a browser.
+. From a web browser, test the application by entering an employee's internal ID, first name, and last name in the form of the following query parameters:
++
+[source]
+----
+http://localhost:8081/sendIDoc
+----
++
+Mule runtime engine conducts the query and adds the employee record.
+
+=== Trigger Any Incoming IDoc Request
+
+This example acts like an RFC server and registers itself at an SAP gateway. It waits for any incoming IDoc requests from an external SAP system.
+
+. In Anypoint Studio, create a new Mule project.
+. Add the SAP connector to your project from Exchange.
+. Drag the SAP *Document source* operation to the start of a flow in the source area of the canvas.
+. Create a new *SAP Inbound* global element configuration and specify the environment values.
+. Add a *Logger* right after the *Document source*. +
+When you run your app, *Logger* displays messages in the Anypoint Studio console that enables you to see the connector payload in the logs.
+. In a new Mule flow, drag the *HTTP Listener* operation to the canvas and use the default values.
+. Drag the *HTTP Request* operation to the canvas and set *Path* to `/triggerIDoc`. +
+Use the same HTTP configuration as used in the *HTTP Listener* operation.
+. Add a *Transform Message* component to the flow. +
+The content of this message is the payload of the function triggers IDocs to be sent from SAP to the SAP IDoc source.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+---
+{
+	ZMMFM_TRIGGER_IDOC_MATMAS: {
+		"import": {
+	IV_MTYP: "MATMAS"
+,
+IV_OBJ: "23"
+,
+IV_SYS: "MULE11_LS"
+}
+,
+export: {
+	EV_RET: "0"
+},export: {
+	EV_OBJ: "0000000003526552"
+},export: null,changing: null,
+tables: {
+	T_MSG: null
+},
+	}
+}
+----
++
+. Drag the SAP *Synchronous remote function call* operation to the source area of the canvas. +
+This operation triggers the IDocs that are requested to be sent to the SAP IDoc source.
+. Enter the key value. +
+If the key value is correct, the payload of the function in *Transform Message* appears:
++
+image::sap-connector-remote-function-call-key.png[]
++
+. Click *File* > *Save* to save your app.
+. Click *Run* > *Run as* > *Mule Application* to run the app. +
+Anypoint Studio provides a web server you can use to test the app from a browser.
+. From a web browser, test the application by entering "http://localhost:8081/triggerIDoc".
+
+On the canvas the flows should look like this:
+
+image::sap-remote-function-call-flow.png[]
+
+Example response:
+
+[source,dataweave,linenums]
+----
+<MATMAS01>
+ 	<IDOC BEGIN="1">
+ 		<EDI_DC40 SEGMENT="1">
+ 			<TABNAM>EDI_DC40</TABNAM>
+ 			<MANDT>800</MANDT>
+ 			<DOCNUM>0000000003572826</DOCNUM>
+ 			<DOCREL>740</DOCREL>
+ 			<STATUS>30</STATUS>
+ 			<DIRECT>1</DIRECT>
+ 			<OUTMOD>2</OUTMOD>
+ 			<IDOCTYP>MATMAS01</IDOCTYP>
+ 			<MESTYP>MATMAS</MESTYP>
+ 			<SNDPOR>SAPIDE</SNDPOR>
+ 			<SNDPRT>LS</SNDPRT>
+ 			<SNDPRN>T90CLNT090</SNDPRN>
+ 			<RCVPOR>MULE11_TP</RCVPOR>
+ 			<RCVPRT>LS</RCVPRT>
+ 			<RCVPRN>MULE11_LS</RCVPRN>
+ 			<CREDAT>20191004</CREDAT>
+ 			<CRETIM>050305</CRETIM>
+ 			<SERIAL>20191004050305</SERIAL>
+ 		</EDI_DC40>
+
+ 		...
+
+    ```
+----
+
+=== XML to Send an IDoc to SAP
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+    xmlns:sap="http://www.mulesoft.org/schema/mule/sap"
+    xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+    http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/http
+    http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+    http://www.mulesoft.org/schema/mule/sap
+    http://www.mulesoft.org/schema/mule/sap/current/mule-sap.xsd
+    http://www.mulesoft.org/schema/mule/ee/core
+    http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+    <configuration-properties file="mule-artifact.properties"/>
+    <sap:outbound-config name="SAP_Outbound" doc:name="SAP Outbound" >
+        <sap:simple-connection-provider-connection
+        applicationServerHost="${sap.jcoAsHost}"
+        username="${sap.jcoUser}"
+        password="${sap.jcoPasswd}"
+        systemNumber="${sap.jcoSysnr}"
+        client="${sap.jcoClient}"
+        language="${sap.jcoLang}" />
+    </sap:outbound-config>
+    <http:listener-config name="HTTP_Listener_config"
+      doc:name="HTTP Listener config" >
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+    <flow name="demo-idoc-clientFlow" >
+        <http:listener config-ref="HTTP_Listener_config"
+        path="/idoc" doc:name="Listener" />
+        <ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+---
+read('<?xml version="1.0"?>
+<MATMAS01>
+    <IDOC BEGIN="1">
+        <EDI_DC40 SEGMENT="1">
+             <TABNAM>EDI_DC40</TABNAM>
+            <MANDT>800</MANDT>
+        </EDI_DC40>
+    </IDOC>
+</MATMAS01>
+',"application/xml")
+]]></ee:set-payload>
+    </ee:message>
+    </ee:transform>
+    <sap:send config-ref="SAP_Outbound" doc:name="Send IDoc"
+    key="MATMAS01"/>
+    <logger level="INFO" doc:name="Logger" message="#[payload]"/>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
