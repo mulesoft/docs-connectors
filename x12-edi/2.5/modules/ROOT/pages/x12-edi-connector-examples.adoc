@@ -1,138 +1,55 @@
 = X12 EDI Connector 2.5 - Examples - Mule 4
 
-The following examples show how to read, validate, and write EDI messages. In addition, you can send functional and interchange acknowlegments to your trading partners.
+Use this example to view the use case for Business-to-Business (B2B) EDI integration leveraging Anypoint X12 Connector. This example:
 
-== Read and Validate X12 EDI Messages
+* Transforms XML messages into outbound EDI X12 850 purchase order transactions +
 
-. To read an X12 message, search the palette for `X12 EDI:Configuration` and drag the X12 Read operation into a flow.
+An HTTPS Listener source receives the enterprise purchase order XML messages from a backend system. DataWeave and X12 Writes translate the XML message into an X12 v4010 850 purchase order EDI message.
 
-. From the properties view, select a connector configuration you created and select the Read operation. This operation reads any byte stream into the structure described by your X12 schemas.
+* Transforms Inbound EDI X12 850 purchase orders into JSON +
 
-X12 Connector validates the message when it reads it in. Message validation includes checking the syntax and content of envelope segments ISA, GS, GE, and IEA as well as the actual transaction sets in the message.
-Errors are logged, accumulated, and reported in either TA1 technical acknowledgment segments or 997 acknowledgment transaction sets. All accepted transaction sets that are either error-free or contain non-fatal errors are processed as part of the output message Map. Any input reading data errors throws an exception.
-Error data entered in the receive data map uses the X12Error class, a read-only JavaBean with the following properties:
+An HTTP Listener source receives the raw EDI X12 850 purchase order message.
+X12 Read and DataWeave components pare and translate the EDI data into the JSON format.
 
-[%header%autowidth.spread]
-|===
-|Property |Description
-|segment |The zero-based index within the input of the segment causing the error
-|segTag |The tag for the segment causing the error
-|fatal |Flag for a fatal error, meaning the associated transaction set, group, or interchange was rejected as a result of the error
-|errorType |Enumeration for the different types of errors defined by X12 standards: INTERCHANGE_NOTE, GROUP_SYNTAX, TRANSACTION_SYNTAX, SEGMENT_SYNTAX, or ELEMENT_SYNTAX
-|errorCode |Error code, as defined by the X12 standard for the indicated type of error
-|errorText |Text description of the error
-|errorLevel |Enumeration for the different levels of errors: ROOT_LEVEL, INTERCHANGE_LEVEL, GROUP_LEVEL, or TRANSACTION_LEVEL
-|interchangeId |Interchange identifier, if errorLevel INTERCHANGE_LEVEL or above
-|groupId |Group identifier, if errorLevel GROUP_LEVEL or TRANSACTION_LEVEL
-|transactionId |Interchange identifier, if errorLevel TRANSACTION_LEVEL
-|===
+* Generates a Functional Acknowledgment (997) +
 
-Error data is returned by the read operation as optional lists with the "Errors" key at every level of the data structure. At the transaction set level, this list contains non-fatal errors encountered during the parsing of that transaction set. At the interchange level, this list contains errors (both fatal and non-fatal) for transaction sets with fatal errors. At the root level of the read, this list contains both interchange errors and every other error reported at any nested level.
+== Prerequisites
 
-== Write X12 EDI Messages
+. Open the https://www.mulesoft.com/exchange/org.mule.examples/b2b-demo-x12-transform/[Transform XML to EDI X12 850 purchase orders and X12 850 to JSON] example in Anypoint Studio from https://www.mulesoft.com/exchange/org.mule.examples/[Anypoint Exchange Examples]. +
+. Install the latest version of Anypoint X12 Connector.
 
-. To write an outgoing message, search the palette for X12 EDI:Configuration and drag the X12 Write operation into a flow.
+== Run and Test the Outbound XML to EDI X12 850
 
-. Construct an outgoing X12 EDI message according to the structure as defined for input to the write operation.
+. Run the application in Anypoint Studio.
 
-If no errors in the write operation then the normal flow continues. Otherwise, an exception is thrown that includes an array of X12Error instances. This is the same as returned by the Read operation.
+. Test the outbound flow by using a REST Client to post a request (POST) to a JSON message to the URL:
 
-== Sending Functional Acknowledgments
+`http://localhost:8081/x12/send/enterprise-ob-purchaseorder`
 
-Sending generated functional acknowledgments (997 or 999 transaction sets) is the same as writing any other EDI message, except you set the transactions to the acknowledgments that were generated during the read operation.
+You see the payload location under the following directory:
 
-For example:
+`src/main/resources/outbound/Enterprise-Outbound-PO.xml`
 
-image::x12-edi-ack-flow.jpg[Ack Flow Diagram]
+The Mule app returns the generated EDI X12 850 transaction.
 
-[source,xml,linenums]
-----
-<x12-edi:read config-ref="X12_EDI__Configuration" doc:name="Read EDI Doc"/>
-  ...
-<dw:transform-message doc:name="Create Outgoing Acks Message">
-    <dw:set-payload><![CDATA[%dw 1.0
-%output application/java
----
-{
-	TransactionSets: {
-		v005010: {
-			'997' : payload.FunctionalAcksGenerated
-		}
-	}
-}]]></dw:set-payload>
-</dw:transform-message>
-<x12-edi:write config-ref="X12_EDI__Configuration" doc:name="Send Acks"/>
-----
+== Run and Test the Inbound EDI X12 850 to JSON
 
-The generated functional acknowledgments have interchange data set up for sending back to the sender of the original message, so you don't need to change anything in the transactions to do the send.
-
-If you use 999 acknowledgments, add any required CTX segments to the basic structure generated by X12 Connector. X12 Connector does not track implementation convention changes to the base transaction set structure.
-
-== Sending Interchange Acknowledgments
-
-To send interchange acknowledgments (TA1 segments), set the value of the InterchangeAcksToSend key in the message map to the list of TA1 segment maps to be sent.
-
-The generated TA1 segments have interchange data set up for sending back to the sender of the original message, so you don't need to change anything in the segment data to do the send.
-
-The generated functional acknowledgments have interchange data set up for sending back to the sender of the original message, so you don't need to change anything in the transactions to do the send.
-
-If you use 999 acknowledgments, add any required CTX segments yourself to the basic structure generated by X12 Connector. X12 Connector does not track implementation convention changes to the base transaction set structure.
-
-== XML for an X12 Studio Flow For Read, Transform, and Write for an 850 document.
-
-The following flow can be loaded in the XML for a project.
-
-image::x12-edi-mapping-flow.jpg[Mapping Flow Diagram]
-
-[source,xml,linenums]
-----
-<?xml version="1.0" encoding="UTF-8"?>
-
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-xmlns:x12="http://www.mulesoft.org/schema/mule/x12"
-xmlns:http="http://www.mulesoft.org/schema/mule/http"
-xmlns="http://www.mulesoft.org/schema/mule/core"
-xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
-http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/http
-http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/x12
-http://www.mulesoft.org/schema/mule/x12/current/mule-x12.xsd
-http://www.mulesoft.org/schema/mule/ee/core
-http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
-		<http:listener-connection host="localhost" port="8081" />
-	</http:listener-config>
-	<x12:config name="X12_EDI_Config" doc:name="X12 EDI Config">
-	    <x12:schemas>
-	        <x12:schema value="/x12/005010/850.esl"/>
-	    </x12:schemas>
-	</x12:config>
-	<flow name="x12mappingFlow">
-		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/x12"/>
-		<x12:read doc:name="Read" config-ref="X12_EDI_Config"/>
-		<ee:transform doc:name="Transform Message">
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/java
----
-{
-    TransactionSets: {
-        v005010: {
-            "850": payload.TransactionSets.v005010."850"
-        }
-    }
-}]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
-		<x12:write doc:name="Write" config-ref="X12_EDI_Config"/>
-	</flow>
-</mule>
-----
+. Test the inbound flow using a REST Client to post a request (POST) to a raw EDI X12 850 message to the URL:
++
+`http://localhost:8081/x12/receive/4010-850`
++
+You see the payload location under the following directory:
++
+`src/main/resources/inbound/EDI-4010-850-NTO-to-Mythical.edi`
++
+The app returns the translated JSON purchase order message.
++
+A Functional Acknowledgement (997) is generated and sent to the log. +
++
+. Send the message back to the trading partner via any standard protocol, such as FTP, SFTP, or AS2.
 
 == See Also
 
+* xref:partner-manager::message-flows.adoc[Partner Manager Message Flows]
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
 * https://help.mulesoft.com[MuleSoft Help Center]
