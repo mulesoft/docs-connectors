@@ -1,0 +1,257 @@
+= Web Service Addressing Example - Mule 4
+
+This example shows how to configure WS-Addressing and send a SOAP request.
+
+image::sap-s4hana-soap-wsa-flow.png[Mule flow for sending a SOAP request with WS-Addressing enabled]
+
+. The flow sends a SOAP request with WS-Addressing enabled to the SAP S/4HANA instance.
+Creating the flow involves creating a new Mule project and configuring the following components and operations:
+** *HTTP > Listener* component to initiate the flow
+** *Transform Message* component to convert the input data to a new output structure or format
+** *SAP S/4HANA > Invoke* operation to send a request to the specified service
+** *Logger* component to display the response in the Mule console
+
+This example uses configuration properties for some field values. You can either replace the variables with their values in the code, or you can provide the values for each variable in the `src/main/resources/mule-artifact.properties` file.
+
+== Prerequisites
+
+You must have:
+
+* Access to the SAP S/4HANA instance and Anypoint Platform
+
+== Send a SOAP request with WS-Addressing headers
+
+[[create-mule-project]]
+=== Create a Mule Project
+
+In Studio, create a new Mule project in which to add and configure the connector:
+
+. In Studio, select *File > New > Mule Project*.
+. Enter a name for your Mule project and click *Finish*.
+
+=== Add and Configure a Listener
+
+. In the *Mule Palette* view, search for *HTTP* and select the *Listener* operation:
++
+image:sap-s4hana-soap-select-listener.png[HTTP Listener is selected in the Mule Palette view]
++
+. Drag the *Listener* operation onto the canvas.
+. In the *Listener* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. Set the *Path* field to `/wsa`:
++
+image::sap-s4hana-soap-http-listener-props.png[General configuration fields for HTTP Listener]
+
+=== Add and Configure the Invoke Operation
+
+. In the *Mule Palette* view, search for *SAP S4 HANA* and select the *Invoke* operation
+. Drag the *Invoke* operation onto the canvas, to the right of the *Listener* component.
+. In the *Invoke* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Configure the global element for the *Invoke* operation:
+* *Name* +
+Name used to reference the configuration. This example uses `SAP_S4_HANA_Cloud_SOAP_Config`.
+* *Service base URL* +
+The base URL of SAP S/4HANA instance (endpoint) to be accessed from the connector.
+* *Username* +
+The account username with which to log into SAP S/4HANA.
+* *Password* +
+The account password with which to log into SAP S/4HANA.
++
+The following image shows example values for the *Invoke* operation's global element:
++
+image::sap-s4hana-soap-global-config.png[SAP S/4HANA SOAP Configuration window with example values for the Invoke operation]
++
+. Open the *Addressing* tab.
+
+. Here it is possible to set global WS-Addressing properties:
+
+* *Version* +
+WS-Addressing version.
+* *From* +
+Reference of the endpoint where the SOAP request originated from.
++
+The following image shows example values for *Addressing* fields.
++
+image::sap-s4hana-soap-global-config-addressing.png[Configure Web Service Addressing fields]
++
+. At the base of the Studio canvas, click *Configuration XML* to view the corresponding XML:
++
+[source,dataweave,linenums]
+----
+<s4hana-soap:config name="SAP_S4_HANA_Cloud_SOAP_Config">
+    <s4hana-soap:basic-authentication-connection baseUrl="${config.cloud.soap.baseUrl}"
+        username="${config.cloud.soap.username}" password="${config.cloud.soap.password}" />
+    <s4hana-soap:web-service-addressing wsaVersion="WSA200408" />
+</s4hana-soap:config>
+----
++
+. Return to the *Global elements* tab in the editor and open `SAP_S4_HANA_Cloud_SOAP_Config` configuration.
+. Click the *Test Connection...* button at the bottom of the window and verify it is successful.
+. After successful test connection, close the *Test connection*, and the *Global Element Properties* windows.
+. Open Message flow tab in the editor and open *Invoke* operation processor.
+. Configure the following fields in the properties window:
+* *Display Name* +
+Name to display in the UI for the connector operation
+* *Connector Configuration* +
+Global configuration you previously created for the *Invoke* operation named `SAP_S4_HANA_Cloud_SOAP_Config`
+* *Service name* +
+Name of the service. In this example we chose `CreditManagementAccountByIDQuery_In`
+* *Operation name* +
+The operation name of the service. In this example we chose `CreditManagementAccountByIDQuery_In`
+* *Message* +
+The content of a SOAP message.
+. Open the graphical view of message payload and set the SOAP message content. In this example we set the following payload:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+ns ns0 http://sap.com/xi/SAPGlobal/Global
+---
+{
+    ns0#CreditManagementAccountByIDQuery: {
+        MessageHeader: {
+            ID: "@" as String,
+            CreationDateTime: now()
+        },
+        Selection: {
+            DebtorPartyInternalID: "0011100050" as String,
+            CreditsegmentInternalID: 1 as String
+        },
+        LanguageCode: "ZZZ" as String
+    }
+}
+----
++
+. The following image shows the *General* properties of the *Invoke* operation:
++
+image::sap-s4hana-soap-invoke-general-props.png[Invoke operation general properties]
++
+. Open *Advanced* tab and change *Web Service Addressing* dropdown from `None` to `Edit inline`
+. Configure the following fields:
+* *To* +
+The address of the intended receiver of this message.
+* *Version* (optional) +
+WS-Addressing version. If not specified, the connector will use value from configuration.
+* *From* (optional) +
+Reference of the endpoint where the message originated from. If not specified, the connector will use value from configuration.
+* *Message ID* +
+An identifier that uniquely identifies this message in time and space. If not specified, the connector will use time-based UUID.
+* *Relates to* (optional) +
+A message ID that this message is related to.
++
+. The following image shows the *Web Service Addressing* properties of the *Invoke* operation:
++
+image::sap-s4hana-soap-invoke-addressing-props.png[Invoke operation advaced properties]
+
+=== Add and Configure a Transform Message Component
+
+Add the *Transform Message* component to the flow using which we transform the response to JSON:
+
+. In the *Mule Palette* view, search for *Transform Message*:
++
+image::sap-s4hana-soap-select-transform.png[Transform message core component is selected in the Mule Palette view]
++
+. Drag the *Transform Message* component onto the canvas, to the right of the *Invoke* operation.
+. In the *Transform Message* configuration, set output to json and replace the brackets in the *Output* section with a keyword *message*:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+message
+----
+
+=== Add and Configure a Logger Component
+
+Add and configure a *Logger* component to display the message response in the Mule console:
+
+. In the *Mule Palette* view, search for *Logger*.
+. Drag the *Logger* component onto the canvas, to the right of the *Transform Message* component.
+. Configure the following fields:
+* *Display Name* +
+Name for the Logger component
+* *Message* +
+String or DataWeave expression that specifies the Mule log message
+* *Level* +
+Configures the logging level. The default is `INFO`.
++
+The following image shows example values for the fields:
++
+image::sap-s4hana-soap-logger.png[logger]
+
+=== Run the application and verify
+. Run the application and wait until it successfully deploys.
+. Visit the following URL from the web browser: `http://localhost:8081/wsa`
+. Verify that the successful response was returned.
+. Locate *headers* property in the *payload* and verify that *Relates to* property has the same value as the one we set in the *Invoke* operation's *Message ID* field.
+
+== Example Mule Application XML Code
+
+Paste this code into your XML editor to load the flow for this example use case into your Mule application. If needed, change the values to reflect your environment.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:s4hana-soap="http://www.mulesoft.org/schema/mule/s4hana-soap"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/s4hana-soap http://www.mulesoft.org/schema/mule/s4hana-soap/current/mule-s4hana-soap.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<configuration-properties file="mule-artifact.properties"/>
+
+	<s4hana-soap:config name="SAP_S4_HANA_Cloud_SOAP_Config">
+        <s4hana-soap:basic-authentication-connection baseUrl="${config.cloud.soap.baseUrl}"
+        username="${config.cloud.soap.username}" password="${config.cloud.soap.password}" />
+		<s4hana-soap:web-service-addressing wsaVersion="WSA200408" />
+    </s4hana-soap:config>
+
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<flow name="web-service-addressing">
+		<http:listener config-ref="HTTP_Listener_config" path="/wsa" />
+		<s4hana-soap:invoke config-ref="SAP_S4_HANA_Cloud_SOAP_Config"
+                    service="https://mysap.s4hana.instance.com/sap/bc/srt/wsdl_ext/flv_10002S111AD1/srvc_url/sap/bc/srt/scs_ext/sap/creditmanagementaccountbyidqu1"
+                    operation="CreditManagementAccountByIDQuery_In">
+                <s4hana-soap:addressing wsaTo="https://mysap.s4hana.instance.com/sap/bc/srt/scs_ext/sap/creditmanagementaccountbyidqu1"
+                                        wsaMessageID="#[123456]" />
+                <s4hana-soap:message><![CDATA[#[%dw 2.0
+output application/xml
+ns ns0 http://sap.com/xi/SAPGlobal/Global
+---
+{
+	ns0#CreditManagementAccountByIDQuery: {
+		MessageHeader: {
+			ID: "@" as String,
+			CreationDateTime: now()
+		},
+		Selection: {
+			DebtorPartyInternalID: "0011100050" as String,
+			CreditsegmentInternalID: 1 as String
+		},
+		LanguageCode: "ZZZ" as String
+	}
+}]]]></s4hana-soap:message>
+            </s4hana-soap:invoke>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+message]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" message="#[payload]"/>
+	</flow>
+</mule>
+----
