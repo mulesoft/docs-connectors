@@ -1,0 +1,79 @@
+= Configure Database Transactions Example - Mule 4
+:page-aliases: connectors::db/db-connector-transactions-ref.adoc
+
+Anypoint Connector for Database (Database Connector) enables you to execute database operations in the context of a transaction. Each operation has a *Transactional action* field in which you specify the type of joining action that operations can take regarding the active transaction.
+
+The following examples illustrate how to configure the Transactional Action field in Studio, both for the Select operation and when grouping operations using the Try Scope component.
+
+== Configure the Transactional Action Field in Studio
+
+To configure the Transactional Action field for the Select operation, follow these steps:
+
+. In your Studio flow, select the *Select* operation.
+. In the connector configuration screen, click the *Advanced* tab.
+. Set the *Transactional action* field to any of the following options:
+
+* `ALWAYS_JOIN` +
+Expects a transaction to be in progress when a message is received. If there is no transaction, an error is raised.
+* `JOIN_IF_POSSIBLE` +
+Joins the current transaction if one is available. Otherwise, no transaction occurs.
+* `NOT_SUPPORTED` +
+Executes outside any existing transaction.
+
+The following screenshot shows the *Transactional action* configuration:
+
+.Transactional action configuration
+image::database-transactions-1.png[Transactional action configuration for the Select operation in Studio]
+
+In the XML editor, the `transactionalAction` configuration looks like this:
+[source,xml,linenums]
+----
+<db:select doc:name="Select" transactionalAction="ALWAYS_JOIN">
+			<db:sql ><![CDATA[SELECT * FROM PLANET WHERE name = :name]]></db:sql>
+</db:select>
+----
+
+== Configure the Transactional Action Field in the Try Scope to Group Operations
+
+Sometimes you need to execute several queries atomically in the context of the same transaction. If these queries are executed in the context of an already-existing transaction, the queries belong to the same transaction.
+
+The following example shows that during a bank account transfer, you use two Database Connector Update operations to subtract money from one account and add it to another, but if any of the two operations fails, roll back both. If there’s no active transaction, you can start one by grouping the operations using the Try Scope component:
+
+. In the *Mule Palette* view, search for `try` and select the *Try* component.
+. Drag the *Try* scope component onto the Studio canvas.
+. Drag an *Update* operation inside the *Try* scope component.
+. In the *General* tab of the operation configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to access the global element configuration fields.
+. Specify the database connection information and click *OK*.
+. Set the *SQL Query Text* field to the SQL query to execute, for example, `UPDATE ACCOUNT set BALANCE = BALANCE - :money where ID = :source`.
+. Set the *Input Parameters* field to `{‘money’ : payload.money, ‘source’: payload.source}`.
+. Drag another *Update* operation to the right of the first *Update* operation inside the *Try* component.
+. Set the *Connector configuration* field to the previously created database connection.
+. Set the *SQL Query Text* field to the SQL query to execute, for example, `UPDATE ACCOUNT set BALANCE = BALANCE + :money where ID = :target`.
+. Set the *Input Parameters* field to `{‘money’ : payload.money, ‘target’’: payload.target}`.
+. Select the *Try* scope component in your flow.
+. In the component configuration screen, set the *Transactional action* field to `ALWAYS_BEGIN`.
+
+The following screenshot shows the *Transactional action* configuration:
+
+.Transactional action configuration
+image::database-transactions-2.png[Transactional action configuration for the Try component in Studio]
+
+In the XML editor, the `transactionalAction` configuration looks like this:
+[source,xml,linenums]
+----
+<try transactionalAction="ALWAYS_BEGIN">
+ <db:update config-ref="db">
+   <db:sql>UPDATE ACCOUNT set BALANCE = BALANCE - :money where ID = :source</db:sql>
+   <db:input-parameters>#[{'money' : payload.money, 'source': payload.source}]</db:input-parameters>
+ </db:update>
+
+ <db:update config-ref="db">
+   <db:sql>UPDATE ACCOUNT set BALANCE = BALANCE + :money where ID = :target</db:sql>
+   <db:input-parameters>#[{'money' : payload.money, 'target'': payload.target}]</db:input-parameters>
+ </db:update>
+</try>
+----
+
+== See Also
+
+xref:database-connector-examples.adoc[Database Connector Examples]
