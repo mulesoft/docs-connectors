@@ -1,0 +1,71 @@
+= Validating Documents against an XSD Schema with the XML Module - Mule 4
+:page-aliases: connectors::xml/xml-schema-validation.adoc
+
+The `<xml-module:validate-schema>` operation validates that the input content is compliant with a given schema. This operation supports referencing many schemas (using comma as a separator) that include each other.
+
+This example shows how to work with XML that contains the script of the play Othello by William Shakespeare. The XML file looks something like this:
+
+[source,xml,linenums]
+----
+<flow name="process">
+    <xml-module:validate-schema schemas="schema1.xsd, schema2.xsd" />
+    <flow-ref name="processValidDocument" />
+</flow>
+----
+
+By default, this operation looks for the input document at the message payload level. However, you can supply your own input, for example:
+
+[source,xml,linenums]
+----
+<flow name="process">
+    <file:read path="document.xml" target="xmlDoc" />
+    <xml-module:validate-schema schemas="schema1.xsd, schema2.xsd">
+        <xml-module:content>#[vars.xmlDoc]</xml-module:content>
+    </xml:module:validate-schema>
+    <flow-ref name="processValidDocument" />
+</flow>
+----
+
+Note that you can use the `<xml-module:validate-schema>` component inside a `<validation:all>` element.
+
+== Handling the Validation Error
+
+If the validation is successful, nothing happens, and the flow continues to the next operation. If it fails, an `XML-MODULE:SCHEMA_NOT_HONOURED` error is raised.
+
+The `XML-MODULE:SCHEMA_NOT_HONOURED` error is a complex one. Because the validation can fail for any number of reasons, the error contains a list of Messages. Each message contains a `SchemaViolation` object, which has the following structure:
+
+.SchemaViolation Object
+[source,yaml,linenums]
+----
+{
+  lineNumber: Number,
+  columnNumber: Number,
+  description: String
+}
+----
+
+Consider the following example:
+
+[source,xml,linenums]
+----
+ <flow name="extractErrorsFromException">
+    <try>
+        <xml-module:validate-schema schemas="schema.xsd" /> // <1>
+        <error-handler>
+            <on-error-propagate type="XML-MODULE:SCHEMA_NOT_HONOURED"> // <2>
+                <foreach collection="#[error.errorMessage.payload]">
+                    <logger level="ERROR" message="#['At line: $(payload.lineNumber), column: $(payload.columnNumber) -> $(payload.description)']" /> // <3>
+                </foreach>
+            </on-error-propagate>
+        </error-handler>
+    </try>
+</flow>
+----
+
+```
+ERROR 2018-02-16 14:35:45,722 [[MuleRuntime].cpuIntensive.01: [SchemaValidationTestCase#extractErrorsUsingExpressions].extractErrorsFromException.CPU_INTENSIVE @411e886b] org.mule.runtime.core.internal.processor.LoggerMessageProcessor: At line: -1, column: -1 -> cvc-complex-type.2.4.a: Invalid content was found starting with element 'fail'. One of '{used}' is expected.
+```
+
+== See Also
+
+xref:index.adoc[XML Module]
