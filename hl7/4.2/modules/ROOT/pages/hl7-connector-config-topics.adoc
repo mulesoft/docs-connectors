@@ -1,0 +1,269 @@
+= HL7 EDI - Additional Configuration Information - Mule 4
+
+Use these options to:
+
+* Customize your schema Definitions
+
+* Define a mapping from the HL7 event and message types to message structures
+
+* Customize global elements
+
+== Copy and Edit Schema Definitions
+
+HL7 schema definitions are located in the `hl7-schemas-4.0.0.jar` file,
+embedded inside HL7 EDI Connector update site and can also
+be found in the standard MuleSoft enterprise Maven repositories
+(under group ID `com.mulesoft.connectors`). You can copy a message structure schema
+from this JAR file and edit it to match your specific needs.
+
+To make changes at the segment level, copy the message structure
+schema. To change segment definitions, copy the `basedefs.esl` schema of the same version, as that file contains the segment, composite, and element definitions.
+
+The xref:x12-edi-connector::x12-edi-schema-language-reference.adoc[EDI Schema Language Reference] provides an overview of the ESL schema structure used by all the EDI connectors, including HL7 EDI Connector.
+
+The following is an example HL7 message structure schema for the
+standard v2.5.1 ADT_A05 message structure:
+
+[source,yaml,linenums]
+----
+form: HL7
+version: '2.5.1'
+imports: [ '/hl7/v2_5_1/basedefs.esl' ]
+id: 'ADT_A05'
+name: 'ADT_A05'
+data:
+- { idRef: 'MSH', position: '01', usage: M }
+- { idRef: 'SFT', position: '02', usage: O, count: '>1' }
+- { idRef: 'EVN', position: '03', usage: M }
+- { idRef: 'PID', position: '04', usage: M }
+- { idRef: 'PD1', position: '05', usage: O }
+- { idRef: 'ROL', position: '06', usage: O, count: '>1' }
+- { idRef: 'NK1', position: '07', usage: O, count: '>1' }
+- { idRef: 'PV1', position: '08', usage: M }
+- { idRef: 'PV2', position: '09', usage: O }
+- { idRef: 'ROL', position: '10', usage: O, count: '>1' }
+- { idRef: 'DB1', position: '11', usage: O, count: '>1' }
+- { idRef: 'OBX', position: '12', usage: O, count: '>1' }
+- { idRef: 'AL1', position: '13', usage: O, count: '>1' }
+- { idRef: 'DG1', position: '14', usage: O, count: '>1' }
+- { idRef: 'DRG', position: '15', usage: O }
+- groupId: 'PROCEDURE'
+  count: '>1'
+  usage: O
+  items:
+  - { idRef: 'PR1', position: '17', usage: M }
+  - { idRef: 'ROL', position: '18', usage: O, count: '>1' }
+- { idRef: 'GT1', position: '20', usage: O, count: '>1' }
+- groupId: 'INSURANCE'
+  count: '>1'
+  usage: O
+  items:
+  - { idRef: 'IN1', position: '22', usage: M }
+  - { idRef: 'IN2', position: '23', usage: O }
+  - { idRef: 'IN3', position: '24', usage: O, count: '>1' }
+  - { idRef: 'ROL', position: '25', usage: O, count: '>1' }
+- { idRef: 'ACC', position: '27', usage: O }
+- { idRef: 'UB1', position: '28', usage: O }
+- { idRef: 'UB2', position: '29', usage: O }
+----
+
+This shows the list of segments comprising the `ADT_A05` message structure
+including the segment groups PROCEDURE and INSURANCE. Since this example is
+the standard definition (not the lax version), it includes mandatory
+segments (indicated with `usage: M`) as well as optional segments
+(indicated with `usage: O`). The full set of usage codes used for HL7 are:
+
+* `C` for Conditional (equivalent to Optional)
+* `M` for Mandatory
+* `O` for Optional
+* `U` for Unused (accepted without warning when reading, but not present
+in the data passed on from the read operation and ignored when writing.)
+
+The possible number of occurrences of a segment or group is defined by the
+count value. This defaults to a value of `1`.
+
+To delete segments from the message structure or change segment requirements from mandatory to optional (or vice versa), make the change in your copy of the schema and use the modified version in your application.
+
+You can add segments that are not present in the original message
+structure definition. First remove the position values from all existing segment and group definition lines in the schema, otherwise you need to renumber everything following an added segment.
+If you remove the explicit position numbers, segments and groups are assigned
+position numbers sequentially, and for most purposes these numbers are not
+seen by HL7 EDI Connector applications.
+
+If you want to add a standard HL7 segment to a message structure,
+reference it with an `idRef` line at the appropriate place, and HL7 obtains
+the definition from the `basedefs.esl` file referenced as an import.
+
+The following partial example shows `CON` segments added to an ADT_A05 message structure:
+
+[source,yaml,linenums]
+----
+form: HL7
+version: '2.5.1'
+imports: [ '/hl7/v2_5_1/basedefs.esl' ]
+id: 'ADT_A05'
+name: 'ADT_A05'
+data:
+- { idRef: 'MSH', usage: M }
+- { idRef: 'SFT', usage: O, count: '>1' }
+- { idRef: 'EVN', usage: M }
+- { idRef: 'PID', usage: M }
+- { idRef: 'PD1', usage: O }
+- { idRef: 'CON', usage: O, count: '>1' }
+- { idRef: 'NTE', usage: O }
+- { idRef: 'ROL', usage: O, count: '>1' }
+- { idRef: 'NK1', usage: O, count: '>1' }
+- { idRef: 'PV1', usage: M }
+- { idRef: 'PV2', usage: O }
+- { idRef: 'CON', usage: O, count: '>1' }
+- { idRef: 'ROL', usage: O, count: '>1' }
+...
+----
+
+If you want to define a non-standard segment for your message structure,
+add the segment definition to the schema. This is more complex than just
+modifying the segment structure, as you need to list all components
+in the segment. The easiest starting point for this is to find a similar
+standard HL7 segment and copy the definition used for that standard
+segment from the `basedefs.esl` file. You can then add the segments key
+following your message structure definition, followed by one or more
+segment definitions.
+
+=== Set Your Schema Locations
+
+You can configure schema locations in the Anypoint Studio XML view.
+
+. Switch to the XML view by clicking *Configuration XML*.
+
+. Modify your HL7 EDI configuration to include a list of all the schemas to include by adding an `+<http://edischema[edi:schema]>+` element for each document type:
++
+[source,xml,linenums]
+----
+<hl7-edi:config name="HL7_EDI__Configuration" identKeys="true" doc:name="HL7 EDI: Configuration">
+  <hl7-edi:schemas>
+    <hl7-edi:schema>hl7/v2_6/ADT_A01.esl</hl7-edi:schema>
+  </hl7-edi:schemas>
+</hl7-edi:config>
+----
++
+. After you create a global element for your HL7 EDI, configure the message structure, operations, and acknowledgments.
+
+== Event and Message to Message Structure Map
+
+If you configure the connector with multiple message structure schemas
+(whether in separate schema definitions files, as with the provided schemas,
+or in a single file) you need to define a mapping from the HL7 event
+and message types to message structures.
+
+HL7 defines the Message Type in the component values of `MSH-09`, a composite
+structure of type MSG. HL7 EDI Connector uses these component values to find the structure schema to use for processing a receive message, according to the following rules:
+
+* If the MSG-01 Message Code value is `ACK`, always use the predefined ACK schema.
+* If the MSG-03 Message Structure value is present (a value such
+as `ADT_A01`), use the schema structure with that ID.
+* If neither of these, then use a configured Event and Message to Message Structure Map to determine
+the message structure from the specified Trigger Event (`MSG-02`) and Message Code (`MSG-01`) values.
+
+The Event and Message to Message Structure Map is an optional configuration parameter.
+It must be a YAML file consisting of a map from each Event Type to a map for each
+supported Message Code to the actual Message Structure.
+
+Here's an example:
+
+[source,yaml,linenums]
+----
+A01: { XYZ: ADT_A01, ACK: ACK }
+A02: { XYZ: ADT_A02, ACK: ACK }
+A03: { XYZ: ADT_A03, ACK: ACK }
+A04: { XYZ: ADT_A01, ACK: ACK }
+A05: { XYZ: ADT_A05, ACK: ACK }
+A06: { XYZ: ADT_A06, ACK: ACK }
+A07: { XYZ: ADT_A06, ACK: ACK }
+A08: { XYZ: ADT_A01, ACK: ACK }
+----
+
+Each version of HL7 defines a different set of mappings from the event type and
+message code to the message structure. The default mappings are provided in the
+same JAR as the standard HL7 schema definitions, in files named `event-message.yaml`.
+You use the same type of paths for these mapping definitions as for the actual message structure schemas.
+
+=== General Tab
+
+Use the *General* tab to configure settings for reading and writing HL7 messages:
+
+* HL7 character encoding, always used for writing messages and used
+when reading messages unless a different encoding is specified by MSH-18 (Character Set).
+* Disable numeric prefixes for data keys - this option is true by
+default, which turns off numeric prefixes for segment data. The
+only reason to turn this option off is for compatibility with mappings
+defined for the HL7 EDI Connector 3.0.0.
+* Manually create or edit the list of schemas.
+
+=== Set Your HL7 Identification in the Visual Editor
+
+You can configure the Message Header (MSH) application and facility
+identification for you and your trading partner on the HL7 EDI connector configuration.
+
+The values you set are used when writing HL7 messages to supply the
+namespace ID, universal ID, and universal ID type, and are verified
+in receive messages. If you don't want to restrict incoming messages
+then leave these blank, and set the values for outgoing messages
+on the write operation or the actual outgoing message. Values set on
+the write operation override the connector configuration, and values
+set directly on the message override both the connector configuration
+and any values set on the write operation.
+
+In Studio, these values are set in these Global Element Properties.
+
+* Self identification parameters identify your side of the trading partner relationship.
++
+Self identification settings:
++
+[source,text,linenums]
+----
+Mule Application Namespace ID (MSH-03/HD-01 when sending, MSH-05/HD-01 when receiving)
+Mule Application Universal ID (MSH-03/HD-02 when sending, MSH-05/HD-02 when receiving)
+Mule Application Universal ID Type (MSH-03/HD-03 when sending, MSH-05/HD-03 when receiving)
+----
++
+* Partner identification parameters identify your trading partner.
++
+Partner identification settings:
++
+[source,text,linenums]
+----
+Partner Application Namespace ID (MSH-03/HD-01 when receiving, MSH-05/HD-01 when sending)
+Partner Application Universal ID (MSH-03/HD-02 when receiving, MSH-05/HD-02 when sending)
+Partner Application Universal ID Type (MSH-03/HD-03 when receiving, MSH-05/HD-03 when sending)
+----
+
+=== Parser Tab
+
+You can set the following options if needed:
+
+[%header%autowidth.spread]
+|===
+|XML Value |Studio Option
+|eventMessageMap="/hl7/v2_5_1/event-message.yaml" |Event and message to message structure map path (required if using multiple message structures, unless the MSH-09 and MSG-03 message structure values are always present in the received messages).
+|genericExtensionPattern="Z.." |Java regular pattern for generic extension segment names (to allow handling of extension segments as maps of field values).
+|invalidCharacterInValueFail="true" |Fail when an invalid character is in a value.
+|missingRequiredValueFail="true" |Fail when a required value is missing.
+|processingId="PRODUCTION" |Required processing ID (to specify a particular processing ID required on receive messages, such as `P` for Production).
+|segmentOutOfOrderFail="true" |Fail when a segment is out of order in a message.
+|unknownSegmentFail="true" |Fail when an unknown segment is in a message.
+|unusedSegmentPresentFail="true" |Fail when an unused segment is included in a message.
+|validateHL7Version="true" |Validate HL7 Message Version
+|valueLengthErrorFail="true" |Fail when a value length is outside an allowed range.
+|wrongSegmentsRepeatsFail="true" |Fail when there are too many repeats of a segment.
+|wrongValuesRepeatsFail="true" |Fail when there are too many repeats of a value.
+|===
+
+== Next Step
+
+After you complete configuring the connector, you can try
+the xref:hl7-connector-examples.adoc[Examples].
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
