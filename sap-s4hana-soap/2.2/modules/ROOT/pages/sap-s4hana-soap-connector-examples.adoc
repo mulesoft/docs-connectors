@@ -1,0 +1,417 @@
+= SAP S/4HANA SOAP 2.2 - Examples - Mule 4
+:page-aliases: connectors::sap/sap-s4hana-soap-connector-examples.adoc
+
+
+== Send an XML Request and Print the Response
+
+This example sends an XML request to SAP S/4HANA's SOAP API and prints the response:
+
+image::sap-s4hana-soap-demo-flow.png[]
+
+=== POM File for This Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.mycompany</groupId>
+	<artifactId>sap-hana-soap-demo</artifactId>
+    	<version>2.1.0</version>
+    	<packaging>mule-application</packaging>
+
+	<name>sap-hana-soap-demo</name>
+
+    <properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<app.runtime>4.2.0</app.runtime>
+		<mule.maven.plugin.version>3.2.7</mule.maven.plugin.version>
+	</properties>
+
+	<build>
+	   <plugins>
+	      <plugin>
+		 <groupId>org.mule.tools.maven</groupId>
+		 <artifactId>mule-maven-plugin</artifactId>
+		 <version>${mule.maven.plugin.version}</version>
+		 <extensions>true</extensions>
+	      </plugin>
+	   </plugins>
+	</build>
+
+	<dependencies>
+        <dependency>
+            <groupId>org.mule.connectors</groupId>
+            <artifactId>mule-http-connector</artifactId>
+            <version>1.5.3</version>
+            <classifier>mule-plugin</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.mule.connectors</groupId>
+            <artifactId>mule-sockets-connector</artifactId>
+            <version>1.1.5</version>
+            <classifier>mule-plugin</classifier>
+        </dependency>
+    	<dependency>
+            <groupId>com.mulesoft.connectors</groupId>
+            <artifactId>mule-sap-s4hana-soap-cloud-connector</artifactId>
+            <version>2.1.0</version>
+            <classifier>mule-plugin</classifier>
+        </dependency>
+	</dependencies>
+
+	<repositories>
+          <repository>
+            <id>anypoint-exchange</id>
+            <name>Anypoint Exchange</name>
+            <url>https://maven.anypoint.mulesoft.com/api/v1/maven</url>
+            <layout>default</layout>
+        </repository>
+        <repository>
+            <id>mulesoft-releases</id>
+            <name>MuleSoft Releases Repository</name>
+            <url>https://repository.mulesoft.org/releases/</url>
+            <layout>default</layout>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>mulesoft-releases</id>
+            <name>mulesoft release repository</name>
+            <layout>default</layout>
+            <url>https://repository.mulesoft.org/releases/</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
+</project>
+----
+
+=== XML Code for This Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:s4hana-soap="http://www.mulesoft.org/schema/mule/s4hana-soap"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+	http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+	http://www.mulesoft.org/schema/mule/http
+	http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+	http://www.mulesoft.org/schema/mule/s4hana-soap
+	http://www.mulesoft.org/schema/mule/s4hana-soap/current/mule-s4hana-soap.xsd
+	http://www.mulesoft.org/schema/mule/ee/core
+	http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<configuration-properties
+		doc:name="Configuration properties"
+		file="mule-artifact.properties" />
+
+	<s4hana-soap:config
+		name="SAP_S4_HANA_SOAP_Config"
+		doc:name="SAP S4 HANA SOAP Config" >
+		<s4hana-soap:basic-authentication-connection
+			baseUrl="${config.serviceBaseUrl}"
+			username="${config.username}"
+			password="${config.password}" />
+	</s4hana-soap:config>
+	<flow name="htmlPageFlow" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/"/>
+		<parse-template doc:name="Parse Template"  location="form.html"/>
+	</flow>
+	<flow name="queryFlow"  >
+		<http:listener doc:name="Listener"  config-ref="HTTP_Listener_config" path="/query"/>
+		<ee:transform doc:name="Transform Message"  >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+ns ns0 http://sap.com/xi/SAPGlobal/Global
+---
+{
+	ns0#CreditManagementAccountByIDQuery: {
+		MessageHeader: {
+			ID: "@" as String,
+			CreationDateTime: now()
+		},
+		Selection: {
+			DebtorPartyInternalID: attributes.queryParams['DebtorPartyInternalID'] as String,
+			CreditsegmentInternalID: attributes.queryParams['CreditsegmentInternalID'] as String
+		},
+		LanguageCode: "ZZZ" as String
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO"
+			doc:name="Logger"
+			message="Request #[payload]"/>
+		<s4hana-soap:invoke
+			doc:name="Invoke"
+			config-ref="SAP_S4_HANA_SOAP_Config"
+			service="https://mysap.s4hana.instance.com/sap/bc/srt/wsdl_ext/flv_10002S111AD1/srvc_url/sap/bc/srt/scs_ext/sap/creditmanagementaccountbyidqu1"
+			operation="CreditManagementAccountByIDQuery_In">
+		</s4hana-soap:invoke>
+		<logger level="INFO" doc:name="Logger"  message="Response #[payload]"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+== Send an XML Request and Receive the Replication Outbound Message
+
+In this example, an XML request is sent to SAP S/4HANA's SOAP API and then receives the replication outbound message, which is saved to the object store:
+
+image::sap-s4hana-soap-soource-demo-flow1.png[]
+
+This flow is used to get the outbound message from the object store:
+
+image::sap-s4hana-soap-soource-demo-flow2.png[]
+
+=== POM File for This Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.mulesoft.connectors.examples</groupId>
+    <artifactId>sap-hana-soap-demo</artifactId>
+    <version>2.1.0</version>
+    <packaging>mule-application</packaging>
+
+	<name>s4-hana-source-demo</name>
+
+    <properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+		<app.runtime>4.3.0</app.runtime>
+		<mule.maven.plugin.version>3.3.5</mule.maven.plugin.version>
+	</properties>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-clean-plugin</artifactId>
+				<version>3.0.0</version>
+			</plugin>
+			<plugin>
+				<groupId>org.mule.tools.maven</groupId>
+				<artifactId>mule-maven-plugin</artifactId>
+				<version>${mule.maven.plugin.version}</version>
+				<extensions>true</extensions>
+				<configuration>
+				<classifier>mule-application</classifier>
+                </configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<dependencies>
+        <dependency>
+            <groupId>org.mule.connectors</groupId>
+            <artifactId>mule-http-connector</artifactId>
+            <version>1.5.17</version>
+            <classifier>mule-plugin</classifier>
+        </dependency>
+        <dependency>
+            <groupId>com.mulesoft.connectors</groupId>
+            <artifactId>mule-sap-s4hana-soap-cloud-connector</artifactId>
+            <version>2.1.0</version>
+            <classifier>mule-plugin</classifier>
+        </dependency>
+		<dependency>
+            <groupId>org.mule.connectors</groupId>
+            <artifactId>mule-objectstore-connector</artifactId>
+            <version>1.1.5</version>
+            <classifier>mule-plugin</classifier>
+        </dependency>
+    </dependencies>
+
+	<repositories>
+          <repository>
+            <id>anypoint-exchange-v2</id>
+            <name>Anypoint Exchange</name>
+            <url>https://maven.anypoint.mulesoft.com/api/v2/maven</url>
+            <layout>default</layout>
+        </repository>
+        <repository>
+            <id>mulesoft-releases</id>
+            <name>MuleSoft Releases Repository</name>
+            <url>https://repository.mulesoft.org/releases/</url>
+            <layout>default</layout>
+        </repository>
+    </repositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>mulesoft-releases</id>
+            <name>mulesoft release repository</name>
+            <layout>default</layout>
+            <url>https://repository.mulesoft.org/releases/</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
+
+</project>
+----
+
+=== XML Code for This Example
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc"
+	xmlns:s4hana="http://www.mulesoft.org/schema/mule/s4hana" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:s4hana-soap="http://www.mulesoft.org/schema/mule/s4hana-soap" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/s4hana-soap http://www.mulesoft.org/schema/mule/s4hana-soap/current/mule-s4hana-soap.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/s4hana http://www.mulesoft.org/schema/mule/s4hana/current/mule-s4hana.xsd">
+	<http:listener-config name="HTTPS_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8082" protocol="HTTPS"/>
+	</http:listener-config>
+
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<s4hana-soap:listener-config name="SAP_S4_HANA_SOAP_Listener_config" doc:name="SAP S4 HANA SOAP Listener config" httpListenerConfig="HTTPS_Listener_config" />
+
+	<s4hana-soap:config name="SAP_S4_HANA_SOAP_Config" doc:name="SAP S4 HANA SOAP Config" >
+		<s4hana-soap:basic-authentication-connection baseUrl="${config.serviceBaseUrl}" username="${config.username}" password="${config.password}" />
+	</s4hana-soap:config>
+
+	<os:object-store name="Product" doc:name="Object store" entryTtl="30" />
+
+	<flow name="html-page-flow" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/"/>
+		<parse-template doc:name="Parse Template" location="form.html"/>
+	</flow>
+	<flow name="product-message-type-flow">
+		<s4hana-soap:outbound-message-listener doc:name="Outbound Message Listener" config-ref="SAP_S4_HANA_SOAP_Listener_config" messageType="ProductMDMBulkReplicateRequestMessage" path="/productmdmbulkreplicaterequest" />
+		<logger level="INFO" doc:name="Logger" message='#["Outbound message received in the Product flow"]'/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/xml
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<os:store doc:name="Store" key="#[payload.ProductMDMBulkReplicateRequestMessage.ProductMDMReplicateRequestMessage.Product.ProductInternalID]" objectStore="Product"/>
+		<logger level="INFO" doc:name="Logger" message="#[payload]" />
+	</flow>
+
+	<flow name="get-outbound-message-flow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/get"/>
+		<os:retrieve doc:name="Retrieve" key="#[attributes.queryParams.productId]" objectStore="Product">
+			<os:default-value ><![CDATA[There is no such productId]]></os:default-value>
+		</os:retrieve>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" message="#[payload]"/>
+	</flow>
+
+	<flow name="create-product-flow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/create"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+ns ns0 http://sap.com/xi/SAPGlobal20/Global
+---
+{
+	ns0#ProductMDMBulkReplicateRequestMessage: {
+		MessageHeader: {
+			ID: "FA163E6728911EDAA5BFCEE21420A568",
+			UUID: "fa163e67-2891-1eda-a5bf-cee21420a568",
+			CreationDateTime: "20200528121755",
+			SenderBusinessSystemID: "SOBASIC",
+			RecipientBusinessSystemID: "0M2JP31"
+		},
+		ProductMDMReplicateRequestMessage: {
+			MessageHeader: {
+				ID: "FA163E6728911EDAA5BFCEE21420A568",
+				UUID: "fa163e67-2891-1eda-a5bf-cee21420a568",
+				CreationDateTime: "20200528121755",
+				SenderBusinessSystemID: "SOBASIC",
+				RecipientBusinessSystemID: "0M2JP31"
+			},
+			Product @(plantListCompleteTransmissionIndicator: true , salesSpecificationListCompleteTransmissionIndicator: true , valuationAreaListCompleteTransmissionIndicator: true , descriptionListCompleteTransmissionIndicator: true , globalTradeItemNumberListCompleteTransmissionIndicator: true , quantityConversionListCompleteTransmissionIndicator: true , quantityCharacteristicListCompleteTransmissionIndicator: true , changeOrdinalNumberValue: "00000000000000000001" , reconciliationPeriodCounterValue: "1"): {
+				ProductInternalID: attributes.queryParams.productId,
+				UnformattedProductInternalID: "TEST444",
+				ReceiverProductInternalID: attributes.queryParams.productId,
+				UnformattedReceiverProductInternalID: "TEST444",
+				ProductTypeCode: "MAT",
+				IndustrySectorCode: "M",
+				BaseMeasureUnitCode: "BG",
+				BasicViewMaintainedIndicator: true,
+				Description @(actionCode: "04"): {
+					Description @(languageCode: "en"): "Material test 444"
+				},
+				QuantityConversion @(actionCode: "04"): {
+					Quantity @(unitCode: "BG"): "1.0",
+					CorrespondingQuantity @(unitCode: "BG"): "1.0"
+				},
+				StorageSpecification: {
+					MinimumRemaininigShelfLifeCode: 0
+				}
+			}
+		}
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<s4hana-soap:invoke doc:name="Invoke" config-ref="SAP_S4_HANA_SOAP_Config" service="https://my303109-api.s4hana.ondemand.com/sap/bc/srt/wsdl_ext/flv_10002S111AD1/srvc_url/sap/bc/srt/scs_ext/sap/productmdmbulkreplicaterequest" operation="ProductMDMBulkReplicateRequest_In" customQueryParams='#["MessageId" : uuid()]'/>
+		<logger level="INFO" doc:name="Logger" message='#["Product successfully created"]'/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload.body]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+
+----
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
