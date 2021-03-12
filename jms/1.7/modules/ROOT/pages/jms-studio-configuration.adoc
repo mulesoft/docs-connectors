@@ -153,7 +153,7 @@ These properties can be overridden at operation level when required. In the foll
 . Set the *Time to live* field to `10000` to override the default global configuration previously set.
 
 .JMS Connector Publish Configuration Override
-image::jms-publish-configuration-1.png[In the Publish Configuration section, set the Time to Live field to override the default global configuration previously set .]
+image::jms-publish-configuration-1.png[In the Publish Configuration section, set the Time to Live field to override the default global configuration previously set.]
 
 In the XML editor, the `<jms:publish>` and `timeToLive` parameters configuration looks like this:
 
@@ -171,11 +171,23 @@ To configure the connection in the global element, define the connection by eith
 
 JMS Connector supports ActiveMQ 5 by using the *ActiveMQ Connection*. With this connection, you can use both `JMS_1_1 (Default)` or `JMS_1_0_2b` specifications, and configure all the general connection parameters for JMS, as well as the custom parameters only present in ActiveMQ.
 
-Once you declare the ActiveMQ connection, you need to set up the *Connection Factory* with your custom configuration. Every parameter in the connection comes with a default value, meaning that you are required to configure only the parameters relevant for your use case. Also, the ActiveMQ connection exposes parameters that are exclusive of the ActiveMQ implementation, like **Initial redelivery delay*.
+Once you declare the ActiveMQ connection, set up the *Connection Factory* with your custom configuration. Every parameter in the connection comes with a default value, meaning that you are required to configure only the parameters relevant for your use case. Also, the ActiveMQ connection exposes parameters that are exclusive of the ActiveMQ implementation, like **Initial redelivery delay*.
 
 In the following example you configure an *ActiveMQ Connection*:
 
-. In Studio
+. In Studio, navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box type `jms`, and select *JMS Config*.
+. Click *OK*.
+. In the *Connection* field select *ActiveMQ Connection*.
+. In the *Factory configuration* field select *Edit Inline*.
+. Set the *Broker url* field to address of the broker to connect, for example `tcp://localhost:61616`.
+. Click *OK*.
+
+JMS Connector ActiveMQ Configuration
+image::jms-activemq-configuration.png[ActiveMQ Connection Configuration.]
+
+In the XML editor, the `<jms:active-mq-connection>` and `<jms:factory-configuration>` configuration looks like this:
 
 [source,xml,linenums]
 ----
@@ -188,7 +200,134 @@ In the following example you configure an *ActiveMQ Connection*:
 
 === Configure a Generic Connection
 
+Use the *Generic Connection* to configure a connection to any broker implementation. JMS Connector provides a JNDI (Java Naming and Directory Interface) based connection factory builder that enables you to configure the connection using JNDI in the context of the application.
+
+In the following example, you configure a *Generic Connection* to Artemis to use the `JMS_2_0` specification:
+
+. In Studio, navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box type `jms`, and select *JMS Config*.
+. Click *OK*.
+. In the *Connection* field select *Generic Connection*.
+. In the *Specification* field select *JMS_2_0*.
+. In the *Connection factory* field select *Edit inline*.
+. Set the *Connection factory jndi name* field to `ConnectionFactory`.
+. In the *Lookup destination* field select any of the following options:
++
+* *NEVER* +
+ No lookup is done and the destinations are created using the existing JMS session.
+* *TRY_ALWAYS* +
+Tries to find the destination using JNDI, and in case it doesn't exist, create the destination using the current JMS session.
+* *ALWAYS* +
+If a queue or topic cannot be found via JNDI, fails with a `JMS:DESTINATION_NOT_FOUND` error.
++
+[start=10]
+. Select the *Name resolver builder* field.
+. Set the *Jdni initial context factory* field to `org.apache.activemq.artemis.ActiveMQInitialContextFactory`.
+. Set the *Jdni provider url* field to `tcp://localhost:61616?broker.persistent=false&amp;broker.useJmx=false`.
+. Set the *Provider properties* to *Edit inline*.
+. Click the plus sign (*+*) to add a new provider property.
+. In the *Provider property* window, set the *Key* field to `queue.jndi-queue-in` and the *Value* field to `in.queue`.
+. Click *Finish*.
+. Repeat step 14.
+. Set the *Key* field to `topic.jndi-topic-in` and the *Value* field to `in.topic`.
+. Click *OK*.
+
+JMS Connector Generic Configuration
+image::jms-generic-configuration.png[Generic Connection Configuration.]
+
+In the XML editor, the `<jms:generic-connection>` and `<jms:jndi-connection-factory>` configuration looks like this:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+    <jms:generic-connection specification="JMS_2_0">
+        <jms:connection-factory>
+            <jms:jndi-connection-factory connectionFactoryJndiName="ConnectionFactory" lookupDestination="ALWAYS">
+                <jms:name-resolver-builder
+                        jndiInitialContextFactory="org.apache.activemq.artemis.ActiveMQInitialContextFactory"
+                        jndiProviderUrl="tcp://localhost:61616?broker.persistent=false&amp;broker.useJmx=false">
+                    <jms:provider-properties>
+                        <jms:provider-property key="queue.jndi-queue-in" value="in.queue"/>
+                        <jms:provider-property key="topic.jndi-topic-in" value="in.topic"/>
+                    </jms:provider-properties>
+                </jms:name-resolver-builder>
+            </jms:jndi-connection-factory>
+        </jms:connection-factory>
+    </jms:generic-connection>
+</jms:config>
+----
+
 === Set Up the Connection Libraries
+
+When you are configuring any connection type, you must always configure a library containing the JMS client implementation since JMS Connector is not bound to any particular implementation.
+
+==== ActiveMQ External Libraries
+
+For an ActiveMQ connection, there are three possible libraries that need to be configured depending on your connection settings:
+
+* ActiveMQ JMS Client Library:
+
+The `activemq-client` of your choice that provides a valid `org.apache.activemq.ActiveMQConnectionFactory` implementation.
+
+WARNING: This dependency is always required.
+
+For example, you can use:
+
+[source,xml,linenums]
+----
+<dependency>
+     <groupId>org.apache.activemq</groupId>
+     <artifactId>activemq-client</artifactId>
+     <version>5.14.4</version>
+ </dependency>
+----
+
+* ActiveMQ Broker Library:
+
+The `activemq-broker` is only required when using an in-memory broker based on the VM transport (which is the one configured by default). This dependency should provide a valid `org.apache.activemq.broker.Broker` implementation.
+
+For example, you can use:
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.apache.activemq</groupId>
+    <artifactId>activemq-broker</artifactId>
+    <version>5.14.4</version>
+</dependency>
+----
+
+* ActiveMQ KahaDB Library:
+
+The `activemq-kahadb-store` is only required when using an persistent in-memory broker based on the VM transport (such as, `+vm://localhost?broker.persistent=true+`).  This dependency provides a valid `org.apache.activemq.store.kahadb.KahaDBPersistenceAdapter` implementation.
+
+For example, you can use:
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.apache.activemq</groupId>
+    <artifactId>activemq-kahadb-store</artifactId>
+    <version>5.14.4</version>
+</dependency>
+----
+
+=== Generic External Libraries
+
+When using a `jms:generic-connection`, provide all the libraries that your ConnectionFactory and configuration of choice required. This will always depend on what are the implementations you choose, so be careful of adding all the dependencies to the application.
+
+A common use case for this would be using the JMS 2.0 spec, thus you need a generic connection with a different client library, like Apache Artemis:
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.apache.activemq</groupId>
+    <artifactId>artemis-jms-client-all</artifactId>
+    <version>2.17.0</version>
+</dependency>
+----
+
 
 === Set the JMS Specification
 
