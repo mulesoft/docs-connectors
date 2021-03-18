@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:microsoftTeams="http://www.mulesoft.org/schema/mule/microsoftTeams"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/microsoftTeams http://www.mulesoft.org/schema/mule/microsoftTeams/current/mule-microsoftTeams.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<configuration-properties file="mule-app.properties"/>
+	<microsoftTeams:client-credentials-config name="OAuth_Client_Credentials_Config" doc:name="Microsoft Teams Client Credentials Config">
+		<microsoftTeams:oauth-client-credentials-connection >
+			<microsoftTeams:oauth-client-credentials clientId="${config.oauth.client.credentials.clientId}" clientSecret="${config.oauth.client.credentials.clientSecret}" tokenUrl="${config.oauth.client.credentials.tokenUrl}" scopes="https://graph.microsoft.com/.default" />
+		</microsoftTeams:oauth-client-credentials-connection>
+	</microsoftTeams:client-credentials-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:listener-config name="auth" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8083" />
+	</http:listener-config>
+	<microsoftTeams:authorization-code-config name="OAuth_Authorization_Code_Config" doc:name="Microsoft Teams Authorization Code Config" >
+		<microsoftTeams:oauth-authorization-code-connection >
+			<microsoftTeams:oauth-authorization-code consumerKey="${config.oauth.authorization.code.consumerKey}" consumerSecret="${config.oauth.authorization.code.consumerSecret}" authorizationUrl="${config.oauth.authorization.code.authorizationUrl}" accessTokenUrl="${config.oauth.authorization.code.accessTokenUrl}" scopes="https://graph.microsoft.com/.default" />
+			<microsoftTeams:oauth-callback-config listenerConfig="auth" callbackPath="/callback" authorizePath="/authorize" externalCallbackUrl="http://localhost:8083/callback" />
+		</microsoftTeams:oauth-authorization-code-connection>
+	</microsoftTeams:authorization-code-config>
+	<flow name="1.CREATE-TEAM" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/createTeam"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+	description: message.attributes.queryParams.description,
+	displayName: message.attributes.queryParams.displayName,
+	"members":[
+      {
+        "@odata.type":"#microsoft.graph.aadUserConversationMember",
+        "user@odata.bind":"https://graph.microsoft.com/v1.0/users('" ++ message.attributes.queryParams.user as String ++ "')",
+         "roles":[
+            "owner"
+         ]
+      }
+   ]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<microsoftTeams:create-team doc:name="Create team" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="2.GET-CREATED-TEAM">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/getTeam" />
+		<microsoftTeams:get-team doc:name="Get team" teamId="#[message.attributes.queryParams.team]" select="#[message.attributes.queryParams.select]" config-ref="OAuth_Client_Credentials_Config">
+			<microsoftTeams:advanced-query-params >
+			</microsoftTeams:advanced-query-params>
+		</microsoftTeams:get-team>
+		<ee:transform doc:name="Transform Message">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="3.LIST-TEAM-MEMBERS-FROM-THE-NEW-TEAM">
+		<http:listener doc:name="Listener" path="/listTeamMembers" config-ref="HTTP_Listener_config"/>
+		<microsoftTeams:list-team-members doc:name="List team members" teamId="#[message.attributes.queryParams.team]" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="4.LIST-EXISTING-CHANNELS-FROM-THE-NEW-TEAM">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/listChannels"/>
+		<microsoftTeams:list-channels doc:name="List channels" doc:id="26db13de-57a8-42d2-ba41-a2f49d756cc4" teamId="#[message.attributes.queryParams.team]" config-ref="OAuth_Client_Credentials_Config">
+			<microsoftTeams:advanced-query-params >
+			</microsoftTeams:advanced-query-params>
+		</microsoftTeams:list-channels>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+message]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="5.NEW-HIRE-TEAM-ONBOARDING">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/newHireFlow"/>
+		<set-variable value="#[message.attributes.queryParams.channelOwner]" doc:name="Set Variable" variableName="channelOwner"/>
+		<set-variable value="#[message.attributes.queryParams.channelName]" doc:name="Set Variable" variableName="name"/>
+		<set-variable value="#[message.attributes.queryParams.userToOnboard]" doc:name="Set Variable" variableName="userToOnboard"/>
+		<set-variable value="#[message.attributes.queryParams.team]" doc:name="Set Variable" variableName="team"/>
+		<microsoftTeams:add-team-member doc:name="Add team member" teamId="#[vars.team]" userId="#[vars.userToOnboard]" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	description: "This channel will be used to onboard new hire " ++ vars.name as String,
+	displayName: "Welcome " ++ vars.name as String ++ uuid()[0 to 5],
+	membershipType: "private",
+	"members":
+     [
+        {
+           "@odata.type":"#microsoft.graph.aadUserConversationMember",
+           "user@odata.bind":"https://graph.microsoft.com/v1.0/users('" ++ vars.channelOwner as String ++ "')",
+           "roles":["owner"]
+        }
+     ]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<microsoftTeams:create-channel doc:name="Create channel" teamId="#[vars.team]" config-ref="OAuth_Client_Credentials_Config"/>
+		<set-variable value="#[payload.id]" doc:name="Set Variable" variableName="channel"/>
+		<microsoftTeams:add-channel-member doc:name="Add channel member" channelId="#[vars.channel]" teamId="#[vars.team]" userId="#[vars.userToOnboard]" owner="true" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	body: {
+		content: "Welcome to the team " ++ vars.name as String
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<microsoftTeams:create-message doc:name="Create message" config-ref="OAuth_Authorization_Code_Config" teamId="#[vars.team]" channelId="#[vars.channel]"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="6.DELETE-CHANNEL-FROM-TEAM">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/deleteChannel" />
+		<microsoftTeams:delete-channel doc:name="Delete channel" teamId="#[message.attributes.queryParams.team]" channelId="#[message.attributes.queryParams.channel]" config-ref="OAuth_Client_Credentials_Config"/>
+	</flow>
+	<flow name="7.REMOVE-TEAM-MEMBER">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/removeTeamMember" />
+		<microsoftTeams:remove-team-member doc:name="Remove team member" teamId="#[message.attributes.queryParams.team]" membershipId="#[message.attributes.queryParams.member]" config-ref="OAuth_Client_Credentials_Config"/>
+	</flow>
+</mule>
