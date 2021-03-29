@@ -1,6 +1,6 @@
 = Microsoft Teams Connector 1.0 Examples
 
-These examples for Anypoint Connector for Microsoft Teams (Microsoft Teams Connector), show you how to:
+The following example for shows you how to use Microsoft Teams Connector to perform these actions:
 
 * <<create-new-team,Create a new team>>
 * <<get-team,Retrieve the team>>
@@ -10,17 +10,17 @@ These examples for Anypoint Connector for Microsoft Teams (Microsoft Teams Conne
 * <<delete-channel,Delete a channel>> from the team
 * <<remove-team-member,Remove a team member>> from the team
 
-
 == Prerequisites
 
-To run these examples, you must have:
+To run this example, you must have:
 
 * A working instance of Microsoft Teams
 * Credentials to access the Microsoft Teams instance
 * Microsoft Teams Connector 1.0 or later
-* Two users in the Microsoft Teams instance: 
-** One of the users will be the owner of a team
-** Save the users' IDs to use in the examples
+* Two users in the Microsoft Teams instance:
+** One user is the team owner.
+** The other user is a team member.
+** Save the users' IDs to use in the examples.
 * Anypoint Studio 7.x
 
 This example uses variables for some field values. You can either:
@@ -39,33 +39,129 @@ If you don't know how to use a properties file, see xref:mule-runtime::mule-app-
 [[create-new-team]]
 == Create a New Team
 
-Create a new team in the Microsoft Teams instance:
+The following screenshot shows the Anypoint Studio app flow for this creating a new team:
 
+//// * This flow
+// +
+// image::ms-teams-create-new-team.png[Flow for creating a new team]
+// +
 
+Creating this flow involves creating a new Mule project and configuring a Listener component, Transform Message component, Create Team operation, a second Transform Message component, and a Logger component.
 
 Provide the required 'displayName', 'description' and 'user' input parameters as HTTP query parameters.
 
-[GET] The HTTP endpoint listens to the following URL: `http://localhost:8081/createTeam?displayName={teamDisplayName}&description={teamDescription}&user={teamOwnerUser}`
+The HTTP endpoint listens to the following URL: `http://localhost:8081/createTeam?displayName={teamDisplayName}&description={teamDescription}&user={teamOwnerUser}`
 
-.Create a flow like this one to create a new team
-image::ms-teams-create-new-team.png[Microsoft Teams create team flow in Studio]
+To create the flow:
 
-[[get-team]]
-== Retrieve the Team
+. Create a new Mule project in Studio.
+. In the Mule Palette view, search for *HTTP* and select the *Listener* operation:
+. Drag the *Listener* operation onto the canvas.
+. In the *Listener* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. Set the *Path* field to `/createTeam`:
+// +
+// image::amazon-sqs-http-props.png[http-properties]
 
-Create a flow to retrieve the new team you created:
+=== Add a Transform Message Component to ..
+
+This Transform Message component creates the structure of the Team object and xx
+
+. In the Mule Palette view, search for *Transform Message*:
+. Drag the *Transform Message* component onto the canvas, to the right of the *Listener* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this XML:
++
+[source,dataweave,linenums]
+----
+{
+	"template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+	description: message.attributes.queryParams.description,
+	displayName: message.attributes.queryParams.displayName,
+	"members":[
+      {
+        "@odata.type":"#microsoft.graph.aadUserConversationMember",
+        "user@odata.bind":"https://graph.microsoft.com/v1.0/users('" ++ message.attributes.queryParams.user as String ++ "')",
+         "roles":[
+            "owner"
+         ]
+      }
+}
+----
++
+The following screenshot shows the XML as it appears in the *Output* section of Studio:
+//+
+//image::amazon-sqs-transform-message.png[transform-message]
+
+=== Add the Create Team Operation
+
+. In the *Mule Palette* view, search for *teams* and select the Microsoft Teams *Create team* operation:
++
+image::ms-create-teams.png[create-teams
++
+. Drag the *Create team message* operation onto the canvas, to the right of the *Transform Message* component.
+. In the *Create team* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Configure the global element as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Name | `OAuth_Client_Credentials_Config`
+|Client id | `${config.oauth.client.credentials.clientId}`
+|Client secret | `${config.oauth.client.credentials.clientSecret}`
+|Token url | `${config.oauth.client.credentials.tokenUrl}`
+|Scopes | `${config.oauth.client.credentials.tokenUrl}`
+|Listener config | `auth`
+|Callback path | `/callback`
+| Authorize Path | `/authorize`
+| External callback url: `http://localhosdt:8083:callback`
+
+|===
+//
+//For example:
+//+
+// image::amazon-sqs-studio-global-config-new.png[send-global-config]
++
+. Select the *Configuration XML* tab to view the corresponding XML:
++
+[source,xml,linenums]
+----
+
+
+----
+. Configure the following fields in the properties window:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |`Create team`
+|Connector Configuration |Global configuration you just created
+|Message |`payload`
+|===
++
+//For example:
+//+
+//image::amazon-sqs-send-message.png[send-message]
+
+=== Add the Second Transform Message Component
+
+The second *Transform Message* component
+
+=== Add the Logger
+
+== Create the Other Flows
+
+Create a second flow like this one to retrieve the new team you created:
+
+image::ms-teams-get-new-team.png[Microsoft Teams Retrieve the Team Flow]
 
 Provide the required 'team' input parameter as http query parameter.
 
 [GET] The HTTP endpoint listens to the following URL: `http://localhost:8081/getTeam?team={createdTeamId}`
 
-.Create a flow like this one to retrieve the newly created team
-image::ms-teams-get-new-team.png[Microsoft Teams Get team flow in Studio]
-
 [[list-team-members]]
 == List Team Members in the New Team
 
-This flow retrieves the member you used when you created the new team: 
+Create a third flow to retrieve member you used when you created the new team:
 
 Provide the required 'team' input parameter as http query parameter.
 
@@ -77,13 +173,13 @@ image::ms-teams-list-team-members.png[Microsoft Teams List team members flow in 
 [[list-team-channels]]
 == List Team Channels
 
-This flow retrieves a list of channels from the team: 
+This flow retrieves a list of channels from the team:
 
 Provide the required 'team' input parameter as an HTTP query parameter.
 
 [GET] The HTTP endpoint listens to the following URL: `http://localhost:8081/listChannels?team={createdTeamId}`
 
-Since you haven't created any channels yet, this returns only the default channel. 
+Since you haven't created any channels yet, this returns only the default channel.
 
 .Create a flow like this one to retrieve channels from the team
 image::ms-teams-list-team-channels.png[Microsoft Teams list channels flow in Studio]
@@ -96,15 +192,15 @@ This flow shows the onboarding of a new hire. It adds a new member to the existi
 Provide the required `channelName`, `team`, and `user` input parameters as HTTP query parameters.
 
 [GET] The HTTP endpoint listens to the following URL: `http://localhost:8081/newHireFlow?channelName={channelName}&team={createdTeamId}&userToOnboard={userToBeOnboarded}&channelOwner={channelOwner}`
-	
-The response should be in a JSON format and contain the welcome message: 
+
+The response should be in a JSON format and contain the welcome message:
 
 `"content": "Welcome to the team {channelName}"`
 
 The channel owner should be a differnt user than the `userToOnboard` user.
-	
+
 Repeat step 3. It should return 2 members.
-	
+
 Repeat step 4. It should return 2 channels.
 
 .Create a flow like this one to add a new team member and new channel and post a welcome message in the channel
@@ -116,7 +212,7 @@ image::ms-teams-new-hire-onboarding.png[Microsoft Teams new hire onboarding flow
 This flow can be used for cleanup purposes and has no return type.
 
 [GET] The HTTP endpoint listens to the following URL: `http://localhost:8081/deleteChannel?team={teamId}&channel={channelId}`
-    
+
 Repeat step 4. It should return 1 channel (the default one).
 
 [[remove-team-member]]
@@ -125,7 +221,7 @@ Repeat step 4. It should return 1 channel (the default one).
 This flow can be used for cleanup purposes and has no return type.
 
 [GET] The HTTP endpoint listens to the following URL: `http://localhost:8081/removeTeamMembers?team={teamId}&member={membershipId}`
-    
+
 Repeat step 3. It should return one member (the owner).
 
 
@@ -136,8 +232,8 @@ Repeat step 3. It should return one member (the owner).
 * for the 'OAuth_Client_Credentials_Config' use the 'Test connection' option to validate the credentials are ok.
 3. Run the project in Studio.
 4. Perform the 'OAuth Dance' for the 'OAuth_Authorization_Code_Config'; when prompted for permissions, allow them.
-	
-	
+
+
 == XML for the Examples
 
 Paste this XML code into the *Configuration XML* tab in your project to experiment with the flows described in the previous sections.
