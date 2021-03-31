@@ -1,10 +1,9 @@
-= SharePoint Connector 3.1 Reference - Mule 4
+= SharePoint Connector 3.2 Reference
+:page-aliases: connectors::sharepoint/sharepoint-connector-reference.adoc
 
 Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[Select]
 
 Anypoint Connector for SharePoint enables you to connect to a Microsoft SharePoint application.
-
-Release Notes: xref:release-notes::connector/sharepoint-connector-release-notes-mule-4.adoc[Microsoft SharePoint Connector Release Notes]
 
 == Configurations
 ---
@@ -17,7 +16,8 @@ Release Notes: xref:release-notes::connector/sharepoint-connector-release-notes-
 |===
 | Name | Type | Description | Default Value | Required
 |Name | String | The name for this configuration. Connectors reference the configuration with this name. | | x
-| Connection a| * <<sharepoint-online_okta, Okta>>
+| Connection a| * <<sharepoint-online_oauth-authorization-code, OAuth v2.0 Authorization Code>>
+* <<sharepoint-online_okta, Okta>>
 * <<sharepoint-online_online, Online>>
 * <<sharepoint-online_security-token, Security Token>>
  | The connection types to provide to this configuration. | | x
@@ -33,6 +33,36 @@ Release Notes: xref:release-notes::connector/sharepoint-connector-release-notes-
 |===
 
 ==== Connection Types
+[[sharepoint-online_oauth-authorization-code]]
+===== OAuth v2.0 Authorization Code
+
+
+====== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|======================
+| Name | Type | Description | Default Value | Required
+| Site Url a| String |  URL for the target SharePoint instance. |  | x
+| Disable SSL certificate validation a| Boolean |  Disables the CN (Common Name) check so that the server won't throw an exception if the HTTPS certificate is not signed by a trusted partner. |  false |
+| Host a| String |  Hostname for the proxy server. |  |
+| Port a| Number |  Port number for the proxy server. |  |
+| Username a| String |  Username to use for authenticating against the proxy server. |  |
+| Password a| String |  Password to use for authenticating against the proxy server. |  |
+| NTLM Domain a| String |  Domain to use for authenticating against the proxy server. |  |
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+| Consumer Key a| String |  OAuth consumerKey registered with the service provider. |  | x
+| Consumer Secret a| String |  OAuth consumerSecret registered with the service provider. |  | x
+| Authorization Url a| String |  Authorization endpoint URL of the service provider. |  https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize |
+| Access Token Url a| String |  Access token endpoint URL of the service provider. |  https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token |
+| Scopes a| String |  OAuth scopes requested during the dance. If not provided, it will default to those in the annotation. |  |
+| Resource Owner Id a| String |  The resource owner ID that each component uses if it is not referenced. |  |
+| Before a| String |  Name of the flow that is executed immediately before starting the OAuth dance. |  |
+| After a| String |  Name of the flow that is executed immediately after an access token is received. |  |
+| Listener Config a| String |  Reference to a <http:listener-config /> used to create the listener that receives the access token callback endpoint. |  | x
+| Callback Path a| String |  Path of the access token callback endpoint.|  | x
+| Authorize Path a| String |  Path of the local HTTP endpoint that triggers the OAuth dance.|  | x
+| External Callback Url a| String |  If the callback endpoint is behind a proxy or accessed through a non direct URL, use this parameter to specify the OAuth provider that the URL should use to access the callback. |  |
+| Object Store a| String |  A reference to the object store to use to store each resource owner ID's data. If a value is not specified, Mule automatically provisions the default object store. |  |
+|======================
 [[sharepoint-online_okta]]
 ===== Okta
 
@@ -235,6 +265,7 @@ NOTE: Disabling the CN check is not recommended for production environments.  | 
 * <<fileDelete>>
 * <<fileDeny>>
 * <<fileGetContent>>
+* <<fileMove>>
 * <<filePublish>>
 * <<fileQuery>>
 * <<fileRecycle>>
@@ -414,17 +445,17 @@ Attach a file to an item from a SharePoint list.
 `<sharepoint:file-add>`
 
 
-Add a file
+Adds a file.
 
 
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| File Content Stream a| Binary |  |  |
-| Overwrite a| Boolean |  |  false |
+| Configuration | String | Name of the configuration to use. | | x
+| File Server Relative Url a| String | Where to add the new file. |  | x
+| File Content Stream a| Binary | The content that this new file should contain. |  |
+| Overwrite a| Boolean | True if this operation should overwrite the destination file if it already exists, false otherwise. |  false |
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
@@ -452,13 +483,16 @@ Add a file
 `<sharepoint:file-approve>`
 
 
+Approves the file submitted for content approval with the specified comment. Only documents in lists that are enabled for content approval can be approved.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| Comment a| String |  |  |
+| File Server Relative Url a| String | The path of the file to be approved |  | x
+| Comment a| String | Additional comment for this approve operation |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -479,18 +513,21 @@ Add a file
 `<sharepoint:file-check-in>`
 
 
+Executes a check in operation on a file in SharePoint that has been previously checked out.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
+| File Server Relative Url a| String | The path of the file to be checked in |  | x
 | Check In Type a| Enumeration, one of:
 
 ** MINOR_CHECK_IN
 ** MAJOR_CHECK_IN
-** OVERWRITE_CHECK_IN |  |  | x
-| Comment a| String |  |  | x
+** OVERWRITE_CHECK_IN | Type of check in to execute |  | x
+| Comment a| String | Additional comment for this check in |  | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -511,12 +548,15 @@ Add a file
 `<sharepoint:file-check-out>`
 
 
+Executes a checkout request on file in SharePoint.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  | | x
+| File Server Relative Url a| String | The path of the file to be checked out | | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -537,14 +577,17 @@ Add a file
 `<sharepoint:file-copy-to>`
 
 
+Copies a file from fileServerRelativeUrl to newFileServerRelativeUrl.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
+| File Server Relative Url a| String | The path of the file to be copied |  | x
 | New File Server Relative Url a| String |  |  | x
-| Overwrite a| Boolean |  |  false |
+| Overwrite a| Boolean | True if this operation should overwrite the destination file if it already exists, false otherwise. |  false |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -573,7 +616,7 @@ Deletes a file.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
+| File Server Relative Url a| String | The path of the file to be deleted |  | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -594,13 +637,16 @@ Deletes a file.
 `<sharepoint:file-deny>`
 
 
+Denies approval for a file that was submitted for content approval. Only documents in lists that are enabled for content approval can be denied.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| Comment a| String |  |  |
+| File Server Relative Url a| String | The path of the file to be denied |  | x
+| Comment a| String | Additional comment for this deny operation |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -620,13 +666,17 @@ Deletes a file.
 === File Get Content
 `<sharepoint:file-get-content>`
 
+
+Retrieves content of a file in SharePoint.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| Target Variable a| String |  The name of a variable that stores the operation's output |  |
+| Configuration | String | Name of the configuration to use. | | x
+| File Server Relative Url a| String | Target file that contains the content to retrieve from SharePoint. |  | x
+| Target Variable a| String |  The name of a variable that stores the operation's output. |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
@@ -648,9 +698,46 @@ Deletes a file.
 * SHAREPOINT:CONNECTIVITY
 
 
+[[fileMove]]
+=== File Move
+`<sharepoint:file-move>`
+
+Executes an HTTP POST against the Sharepoint API to move a file. The `fileServerRelativeUrl` parameter must point to an existing file in SharePoint. The `newFileServerRelativeUrl` parameter must be the path for where to move the file. If the provided path is to a directory, an error will be thrown since it should be a new file path. The new file can have the same name as the old file or it can have a new name.
+
+To use this operation as a rename operation, specify the same path in both parameters and use a different file name in the `newFileServerRelativeUrl` parameter.
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|======================
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use | | x
+| File Server Relative Url a| String |  Path to the source file |  | x
+| New File Server Relative Url a| String |  Path to the destination file |  | x
+| Flag a| Number a|
+* 8 - Completes the move operation even if supporting files are separated from the file.
+* 0 - No move operation specified.
+* 1 - Overwrites a file with the same name if it exists. | 1 |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
+|======================
+
+
+==== Associated Configurations
+* <<sharepoint-online>>
+* <<sharepoint-onpremise>>
+
+==== Throws
+* SHAREPOINT:RETRY_EXHAUSTED
+* SHAREPOINT:UNKNOWN
+* SHAREPOINT:CONNECTIVITY
+
+
 [[filePublish]]
 === File Publish
 `<sharepoint:file-publish>`
+
+
+Submits the file for content approval with the specified comment.
 
 
 ==== Parameters
@@ -658,8 +745,8 @@ Deletes a file.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| Comment a| String |  |  |
+| File Server Relative Url a| String | The path of the file to be published |  | x
+| Comment a| String | Additional comment for this publish operation |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -680,14 +767,17 @@ Deletes a file.
 `<sharepoint:file-query>`
 
 
+Executes a request on SharePoint to find the files that match the specified query.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use | | x
-| Query a| String |  |  | x
-| Starting Folder Path a| String |  |  / |
-| Recursive a| Boolean |  |  false |
+| Configuration | String | Name of the configuration to use. | | x
+| Query a| String | The query to execute. |  | x
+| Starting Folder Path a| String | The starting folder for the query. |  / |
+| Recursive a| Boolean | True if the query should be executed on sub-folders, false otherwise. |  false |
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
@@ -715,12 +805,15 @@ Deletes a file.
 `<sharepoint:file-recycle>`
 
 
+Moves the file to the Recycle Bin and returns the identifier of the new Recycle Bin item.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
+| Configuration | String | Name of the configuration to use. | | x
+| File Server Relative Url a| String | The path of the file to be recycled. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
@@ -748,12 +841,15 @@ Deletes a file.
 `<sharepoint:file-undo-check-out>`
 
 
+If a file is checked out, this operation can revert the checkout state.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
+| File Server Relative Url a| String | The path of the file to revert |  | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -774,13 +870,16 @@ Deletes a file.
 `<sharepoint:file-unpublish>`
 
 
+Removes the file from content approval or unpublishes a major version.
+
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| Comment a| String |  |  |
+| File Server Relative Url a| String | Path of the file to unpublish |  | x
+| Comment a| String | Additional comment for this unpublish operation |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -801,7 +900,7 @@ Deletes a file.
 `<sharepoint:file-update-metadata>`
 
 
-FIXME: Add comments.
+Update metadata for a target item in SharePoint.
 
 
 ==== Parameters
@@ -809,8 +908,8 @@ FIXME: Add comments.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| Update Properties a| Object |  |  #[payload] |
+| File Server Relative Url a| String | Target item in SharePoint to update its metadata |  | x
+| Update Properties a| Object | New metadata |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -897,7 +996,7 @@ Deletes a folder from a Document list
 `<sharepoint:folder-query>`
 
 
-Retrieves all folders that matches the specified criteria
+Retrieves all folders that match the specified criteria.
 
 
 ==== Parameters
@@ -942,9 +1041,9 @@ Gets the metadata of a determined file.
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use | | x
-| File Server Relative Url a| String |  |  | x
-| Target Variable a| String |  The name of a variable that stores the operation's output |  |
+| Configuration | String | Name of the configuration to use. | | x
+| File Server Relative Url a| String | The path of the item that is retrieved for its metadata. |  | x
+| Target Variable a| String |  The name of a variable that stores the operation's output. |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
@@ -971,7 +1070,7 @@ Gets the metadata of a determined file.
 `<sharepoint:list-create>`
 
 
-Creates a new SharePointList
+Creates a new SharePointList.
 
 
 ==== Parameters
@@ -1007,7 +1106,7 @@ Creates a new SharePointList
 `<sharepoint:list-delete>`
 
 
-Deletes a SharePoint list
+Deletes a SharePoint list.
 
 
 ==== Parameters
@@ -1036,7 +1135,7 @@ Deletes a SharePoint list
 `<sharepoint:list-get>`
 
 
-Retrieves a SharePoint list
+Retrieves a SharePoint list.
 
 
 ==== Parameters
@@ -1072,7 +1171,7 @@ Retrieves a SharePoint list
 `<sharepoint:list-get-all>`
 
 
-Retrieves all SharePoint lists
+Retrieves all SharePoint lists.
 
 
 ==== Parameters
@@ -1107,7 +1206,7 @@ Retrieves all SharePoint lists
 `<sharepoint:list-item-create>`
 
 
-Creates a new Item in an existing SharePoint list
+Creates a new Item in an existing SharePoint list.
 
 
 ==== Parameters
@@ -1144,7 +1243,7 @@ Creates a new Item in an existing SharePoint list
 `<sharepoint:list-item-delete>`
 
 
-Deletes an Item from a SharePoint list
+Deletes an Item from a SharePoint list.
 
 
 ==== Parameters
@@ -1153,7 +1252,7 @@ Deletes an Item from a SharePoint list
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
 | List Id a| String |  ID of the list in which to delete the Item |  | x
-| Item Id a| String |  ID of the item to delete |  |
+| Item Id a| String |  ID of the item to delete |  | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -1174,7 +1273,7 @@ Deletes an Item from a SharePoint list
 `<sharepoint:list-item-query>`
 
 
-Executes a query against a SharePoint list and returns list items that match the specified criteria
+Executes a query against a SharePoint list and returns list items that match the specified criteria.
 
 
 ==== Parameters
@@ -1213,7 +1312,7 @@ Executes a query against a SharePoint list and returns list items that match the
 `<sharepoint:list-item-update>`
 
 
-Updates an Item from a SharePoint list
+Updates an Item from a SharePoint list.
 
 
 ==== Parameters
@@ -1244,7 +1343,7 @@ Updates an Item from a SharePoint list
 `<sharepoint:list-update>`
 
 
-Updates the specified properties of a SharePoint lists
+Updates the specified properties of a SharePoint list.
 
 
 ==== Parameters
@@ -1346,6 +1445,25 @@ Executes an HTTP GET against the SharePoint API. (Executes a POST if the body is
 * SHAREPOINT:RETRY_EXHAUSTED
 * SHAREPOINT:UNKNOWN
 * SHAREPOINT:CONNECTIVITY
+
+
+[[unauthorize]]
+=== Unauthorize
+`<sharepoint:unauthorize>`
+
+Deletes all the access token information of a given resource owner ID so that it is impossible to execute any operation for that user without doing the authorization dance again.
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Resource Owner Id a| String |  ID of the resource owner of which access should be invalidated |  |
+|===
+
+
+==== Associated Configurations
+* <<sharepoint-online>>
 
 == Types
 [[Reconnection]]
