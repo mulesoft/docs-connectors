@@ -33,8 +33,37 @@ To enable Wire Logging:
 
 now you can read the HTTP messages in the mule's logger.
 
-// TODO: Example of http message in the logger.
+[source,plain-text]
+POST /essentials/delta HTTP/1.1
+soapaction:
+Host: ilt.mulesoft-training.com
+User-Agent: AHC/1.0
+Connection: keep-alive
+Accept: */*
+Content-Type: text/xml; charset=UTF-8
+Transfer-Encoding: chunked
 
+b1
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><ns0:listAllFlights xmlns:ns0="http://soap.training.mulesoft.com/"/></soap:Body></soap:Envelope>
+
+DEBUG 2021-04-06 15:04:23,058 [[wsc-base].wsc-dispatcher.11 SelectorRunner] [processor: ; event: ] org.mule.service.http.impl.service.HttpMessageLogger.wsc-dispatcher: REQUESTER
+0
+
+
+DEBUG 2021-04-06 15:04:23,319 [[wsc-base].wsc-dispatcher.11 SelectorRunner] [processor: ; event: ] org.mule.service.http.impl.service.HttpMessageLogger.wsc-dispatcher: REQUESTER
+HTTP/1.1 200
+Date: Tue, 06 Apr 2021 18:04:23 GMT
+Content-Type: text/xml; charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+MULE_ENCODING: UTF-8
+Strict-Transport-Security: max-age=31536000; includeSubdomains;
+X-Content-Type-Options: 1
+X-Frame-Options: SAMEORIGIN
+X-XSS-Protection: 1; mode=block
+
+bfe
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><ns2:listAllFlightsResponse xmlns:ns2="http://soap.training.mulesoft.com/">...
 
 
 [common-errors]]
@@ -61,15 +90,35 @@ W3C Recommendation]
 
 
 Since 1.6.4, WSC allows the user to configure multipart requests, but it automatically handles multipart responses regardless of multipart settings in wsc configuration.
-// TODO: Multipart config picture
+
+[source,xml,linenums]
+<wsc:config name="Web_Service_Consumer_Config" doc:name="Web Service Consumer Config">
+    <wsc:connection wsdlLocation="http://ilt.mulesoft-training.com/essentials/delta?wsdl" service="TicketServiceService" port="TicketServicePort" address="http://ilt.mulesoft-training.com/essentials/delta" mtomEnabled="true">
+        <wsc:web-service-security actor="http://schemas.xmlsoap.org/soap/actor/next" />
+    </wsc:connection>
+</wsc:config>
 
 Depending on server side multipart setting, it may decide to send some binary data as a base64-encoded text field or as a referenced binary part in the MIME message.
 
 If the former is the case, users must access this field as part of the message, base64 decoding is not needed, wsc will do it by itself.
-// TODO: Example without mtom
+But if the case is the second, the user must access this field as an attachment.
 
-But if the case is the second, user must access this field as an attachment.
-// TODO: Example with mtom
+In the following example, an image that was sent as an attachment by the ws server is accessed and transformed into json
+In this case, Base64 encoding is required.
+
+// TODO: This must be in the same text block
+
+[source,text-plane,linenums]
+import * from dw::core::Strings
+import dw::core::Binaries
+output application/json
+ns nam http://mynamespace.com
+---
+{
+...
+"image": Binaries::toBase64(payload.attachments[0]),
+...
+}
 
 [[design-time-wsdl-parsing]]
 === Design time WSDL issues.
@@ -89,18 +138,21 @@ Sometimes you need to add custom HTTP settings to access an HTTP server in an HT
 
 [[common-throws]]
 == Understand Common Throws
-//Include the list of throws messages and a simple description of what they mean.
 
-* <Throw message/error>
+* WSC:SOAP_FAULT
 
-  <Description of the thrown message>.
+  Error matching the soap response whith the format provided by the wsdl.
+  Every cxf SoapFault error is wrpped in a WSC:SOAP_FAULT.
 
-* <Throw message/error>
+* WSC:BAD_REQUST
 
-  <Description of the thrown message>.
-.
-.
-.
+  Operation does not exist in WSDL.
+  The request body is not a valid XML.
+
+* WSC:INVALID_WSDL
+
+  Bad formated WSDL.
+
 
 == See Also
 * https://help.mulesoft.com[MuleSoft Help Center]
