@@ -1,0 +1,166 @@
+= Troubleshoot Web Service Consumer Connector - Mule 4
+
+To troubleshoot Anypoint Connector for Web Service Consumer (Web Service Consumer Connector), become familiar with the information about enabling wire logging, troubleshooting access attachments, troubleshooting design-time WSDL issues, and interpreting commonly thrown messages.
+
+== Enable Wire Logging
+
+To begin troubleshooting Web Service Consumer Connector, look at the transport request and response on the Web Service Consumer.
+If you are using the underlying HTTP transport, you can enable wire logging to see the exact HTTP message, the transmission headers, and the response status.
+
+To enable wire logging:
+
+. Access Anypoint Studio and navigate to the *Package Explorer* view.
+. Open your application's project name.
+. Open the `src/main/resources` path folder.
+. Open the `log4j2.xml` file inside the folder.
+. If the following line is already in the `log4j2.xml` file, uncomment it to enable it; otherwise, add it:
++
+[source,xml,linenums]
+----
+<AsyncLogger name="org.mule.service.http.impl.service.HttpMessageLogger" level="DEBUG" />
+----
++
+. Save your changes.
+. Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*.
+. Navigate to the *Console* view to read the HTTP messages in the logger:
++
+
+[source,plain-text]
+----
+POST /essentials/delta HTTP/1.1
+soapaction:
+Host: ilt.mulesoft-training.com
+User-Agent: AHC/1.0
+Connection: keep-alive
+Accept: */*
+Content-Type: text/xml; charset=UTF-8
+Transfer-Encoding: chunked
+
+b1
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><ns0:listAllFlights xmlns:ns0="http://soap.training.mulesoft.com/"/></soap:Body></soap:Envelope>
+
+DEBUG 2021-04-06 15:04:23,058 [[wsc-base].wsc-dispatcher.11 SelectorRunner] [processor: ; event: ] org.mule.service.http.impl.service.HttpMessageLogger.wsc-dispatcher: REQUESTER
+0
+
+
+DEBUG 2021-04-06 15:04:23,319 [[wsc-base].wsc-dispatcher.11 SelectorRunner] [processor: ; event: ] org.mule.service.http.impl.service.HttpMessageLogger.wsc-dispatcher: REQUESTER
+HTTP/1.1 200
+Date: Tue, 06 Apr 2021 18:04:23 GMT
+Content-Type: text/xml; charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+MULE_ENCODING: UTF-8
+Strict-Transport-Security: max-age=31536000; includeSubdomains;
+X-Content-Type-Options: 1
+X-Frame-Options: SAMEORIGIN
+X-XSS-Protection: 1; mode=block
+
+bfe
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><ns2:listAllFlightsResponse xmlns:ns2="http://soap.training.mulesoft.com/">...
+----
+
+== Troubleshoot Access Attachments
+
+Some servers respond to requests by sending MTOM (Message Transmission Optimization Mechanism) messages. These messages separate their data into parts, which enables different types of content data to coexist in the same HTTP message.
+
+MTOM is in charge of sending binary data in a separate part and referencing that part from the corresponding field within the SOAP envelope.
+Web Service Consumer users interact with these messages (multipart) only with the MTOM configuration.
+
+Refer to the following documentation for further information about MTOM:
+
+* https://www.ietf.org/rfc/rfc2387.txt[RFC2387 - The MIME Multipart/Related Content-type]
+* https://www.w3.org/TR/2005/REC-xop10-20050125/[XML-binary Optimized Packaging (XOP) W3C Recommendation]
+* https://www.w3.org/TR/soap12-mtom/[SOAP Message Transmission Optimization Mechanism (MTOM) W3C Recommendation]
+
+
+Beginning with version 1.6.4, Web Service Consumer Connector enables you to configure MTOM for request messages that also automatically manage MTOM responses, regardless of the MTOM setting in the Web Service Consumer global configuration. Incoming messages with MTOM are treated as MTOM-enabled, regardless of whether MTOM is configured in the Web Service Consumer global configuration.
+
+The following example shows the Web Service Consumer Connector global configuration with MTOM enabled:
+
+.Web Service Consumer Connector Global Element
+image::wsc-troubleshoot-3.png[Web Service Consumer global element configuration with MTOM field set to TRUE]
+
+In the XML editor, the `<wsc:config>` and `mtomEnabled` configurations look like this:
+
+[source,xml,linenums]
+----
+<wsc:config name="Web_Service_Consumer_Config" doc:name="Web Service Consumer Config">
+    <wsc:connection wsdlLocation="http://ilt.mulesoft-training.com/essentials/delta?wsdl" service="TicketServiceService" port="TicketServicePort" address="http://ilt.mulesoft-training.com/essentials/delta" mtomEnabled="true">
+        <wsc:web-service-security actor="http://schemas.xmlsoap.org/soap/actor/next" />
+    </wsc:connection>
+</wsc:config>
+----
+
+Depending on the server side multipart setting, the server might send some binary data as a Base64-encoded text field or as a referenced binary part in the MIME message.
+
+To troubleshoot how to access the binary data:
+
+* If the server sends the binary data as Base64-encoded text field, you must access this field as part of the message. +
+Base64 decoding is automatically performed by Web Service Consumer.
+* If the server sends the binary data as a referenced binary part, you must access this field as an attachment.
++
+The following example shows an image sent as an attachment with MTOM by a web service server. You use DataWeave to access and transform the image into JSON. In this case, Base64 encoding is required:
++
+[source,DataWeave,linenums]
+----
+import * from dw::core::Strings
+import dw::core::Binaries
+output application/json
+ns nam http://mynamespace.com
+---
+{
+...
+"image": Binaries::toBase64(payload.attachments[0]),
+...
+}
+----
+
+== Troubleshoot Design Time WSDL Issues
+
+Errors related to incorrect WSDL recognition, acquisition, or parsing sometimes lead to the following issues:
+
+* DataSense does not correctly expose the message metadata defined in the WSDL.
+* In the Web Service Consumer Connector configuration screen, the *Operations* field does not show any web service operation names for the connector to invoke:
++
+.Web Service Consumer Connector Operations field
+image::wsc-troubleshoot-1.png[Web Service Consumer Connector Operations field shows empty]
+
+* In the Web Service Consumer Connector global element configuration, the *Port* and *Address* fields are not automatically filled when a WSDL location is provided.
++
+.Web Service Consumer Connector Global Element
+image::wsc-troubleshoot-2.png[In the Web Service Consumer Connector global element window, the port and address fields are not filled when a WSDL location is selected]
+
+To resolve these issues:
+
+* Check the integrity of your WSDL by using your preferred online or desktop viewer applications. +
+Because every parsing error during the configuration is not shown during design-time, implementing an external application helps detect them.
+
+* If you do not add the WSDL as a resource in the application's *src/main/resources* folder in Studio, check for a correct connection to the server hosting the WSDL. +
+Sometimes you need to add custom HTTP settings, such as OAuth settings or user/password settings, to access an HTTP server in an HTTP security layer. See xref:web-service-consumer-configure.adoc[Setting a Custom HTTP Transport Configuration.]
+
+
+[[common-throws]]
+== Understand Common Throws
+
+Here is a list of common throw messages and how to interpret them.
+
+* WSC:SOAP_FAULT
+
+  Error matching the SOAP response with the format provided by the WSDL.
+
+  Every CXF SOAP fault error is wrapped in a `WSC:SOAP_FAULT`.
+
+* WSC:BAD_REQUST
+
+  The Web Service Consumer Connector operation does not exist in the WSDL.
+
+  The request body is not a valid XML.
+
+* WSC:INVALID_WSDL
+
+  The WSDL is poorly formatted.
+
+
+== See Also
+* https://help.mulesoft.com[MuleSoft Help Center]
+* xref:Web Service Consumer-reference.adoc[Web Service Consumer Connector Reference]
