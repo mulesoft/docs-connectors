@@ -1,0 +1,78 @@
+= Define Object Stores Examples - Mule 4
+:page-aliases: connectors::object-store/object-store-to-define-a-new-os.adoc
+
+You can define an Object Store globally in the app so it can be referenced by name and shared between multiple components, or you can create an Object Store that only for a particular component.
+
+All Object Store operations can reference a global Object Store. For example, suppose you want to have an audit flow that verifies whether certain users are currently authorized. You might do something like this to reference the Object Store that you have defined:
+
+`<os:contains id="#[userId]" objectStore="tokensStore" />`
+
+[[global_os]]
+== Define a Global Object Store
+
+You should use a global Object Store if any of these conditions is true:
+
+* You need to share state across components: Because the Object Store can be referenced by name, more than one component can use it. Suppose you have a two instances of the Salesforce connector that are configured in slightly different ways. You can use both instances with the same tokens, avoiding the need to authenticate again.
+* You need to share state across Cluster Nodes: When you are using Mule in cluster mode, you might want to have information that is available to every node in the cluster. Global Object Stores are ideal for that.
+* You need to use information in your app's logic: The Object Store connector is not only capable of defining that store, it can also manipulate it.
+
+Global Object Stores are defined as top-level elements with a name by which other components can reference them. For example, assume that you want to create a store for access tokens:
+
+[source,xml,linenums]
+----
+<os:object-store name="tokensStore"
+   entryTtl="1"
+   entryTtlUnit="HOURS"
+   maxEntries="100"
+   persistent="true"
+   expirationInterval="30"
+   expirationIntervalUnit="MINUTES" />
+----
+
+IMPORTANT: The above values apply only to an in memory object store and not to the Mule 4 cloud xref:object-store::index.adoc[Object Store v2]. In Object Store v2, unlimited keys are allowed.
+
+The example defines an Object Store named `tokensStore` that has these features:
+
+* Persistence (`persistent="true"`): Values are stored in disk and can survive a system restart. Setting `persistent` to `false` will result in a transient store that only stores information in memory.
+* Expiration: An expiration thread runs every 30 minutes and discards the elements that exceed their time to live (TTL) or their `maxEntries` limit.
+* TTL of 1 hour: Because access tokens are highly sensitive, you might not want to retain them for more than an hour. Every entry older than that is automatically deleted.
+* Size limit: If the store grows to more than 100 entries, the exceeding items will be discarded when the expiration thread runs.
+
+Note that the example above is simply meant for explanatory purposes and does not necessarily provide a recommended configuration for an Object Store that stores access tokens.
+
+The next example configures Salesforce connector authentication through OAuth, then stores the token in the Object Store created in the previous example (`tokensStore`):
+
+[source,xml,linenums]
+----
+<sfdc:config-with-oauth name="salesforce-oauth"
+  consumerKey="${salesforce.consumerKey}"
+  consumerSecret="${salesforce.consumerSecret}">
+    <sfdc:oauth-callback-config domain="localhost" localPort="8082"
+      remotePort="8082" path="callback" connector-ref="HTTP_HTTPS" />
+    <sfdc:oauth-store-config objectStore="tokensStore" />
+</sfdc:config-with-oauth>
+----
+
+[[private_os]]
+== Define a Private Object Store
+
+* For cases where shared state is a security risk, you should use a private Object Store.
+* For cases where you do not want anyone to manipulate the store from the connector level. For example, you want to avoid the chance that someone changes the configuration of a Clear operation so that it deletes all your authorization data.
+
+You can define a private Object Store that is not defined as a global element and does not have a referable name, for example:
+
+[source,xml,linenums]
+----
+<idempotent-message-validator idExpression="#[payload]"
+  valueExpression="#[payload]">
+    <os:private-object-store
+                entryTtl="20"
+                entryTtlUnit="MILLISECONDS"
+                maxEntries="20"
+                persistent="false"
+                expirationInterval="20"
+                expirationIntervalUnit="MILLISECONDS"/>
+</idempotent-message-validator>
+----
+
+The example provides the idempotent message validator with a custom store that  only it can access.
