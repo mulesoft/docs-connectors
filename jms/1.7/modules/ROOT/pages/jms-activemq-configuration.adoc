@@ -1,45 +1,238 @@
-= Configuring an ActiveMQ Connection
+= Configure an ActiveMQ Connection
 :keywords: jms, connector, jms_1.0.2b, jms_1.1, jms_2.0, activemq
 :page-aliases: connectors::jms/jms-activemq-configuration.adoc
 
 Anypoint Connector for JMS (JMS Connector) includes an ActiveMQ connection configuration, which provides support for ActiveMQ 5. Using this connection, you can set JMS 1.1 (default), JMS 1.0.2b, or JMS 2.0 specifications, and you can configure not only all of the general connection parameters for JMS but also the custom parameters that are present only in ActiveMQ.
 
-== Connecting to ActiveMQ
+== Configure an ActiveMQ Connection
 
-After you declare `active-mq-connection`, all you need to do is set up the
-connection factory with your custom configuration. Every parameter in the connection
-comes with a default value, meaning that you are required to configure only the
-parameters relevant for your use case. The ActiveMQ connection also exposes
-parameters that are exclusive to ActiveMQ implementation, like `initialRedeliveryDelay`.
+After you declare the ActiveMQ connection, customize *Connection Factory* to your desired configuration. Every parameter in the connection comes with a default value, meaning that you are required to configure only the parameters relevant for your use case. Also, the ActiveMQ connection exposes parameters that are exclusive to the ActiveMQ implementation, like *Initial redelivery delay*.
 
-The following example shows a simple configuration of an ActiveMQ connection:
+In the following example, you configure an *ActiveMQ Connection*:
+
+. In Studio, navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box type `jms` and select *JMS Config*.
+. Click *OK*.
+. In the *Connection* field select *ActiveMQ Connection*.
+. In the *Factory configuration* field, select *Edit Inline*.
+. Set the *Broker url* field value to the address of the broker to connect to, for example, `tcp://localhost:61616`.
+. Click *OK*.
+
+.JMS Connector ActiveMQ Configuration
+image::jms-activemq-configuration.png[ActiveMQ Connection Configuration.]
+
+In the XML editor, the `<jms:active-mq-connection>` and `<jms:factory-configuration>` configuration looks like this:
+
+[source,xml,linenums]
+----
+ <jms:config name="JMS_Config">
+  <jms:active-mq-connection >
+   <jms:factory-configuration brokerUrl="tcp://localhost:61616" />
+  </jms:active-mq-connection>
+ </jms:config>
+----
+
+== Configure the Required Libraries
+
+When you configure any connection type, you must always configure a library containing the JMS client implementation, because JMS Connector is not bound to any particular implementation. Configure ActiveMQ external libraries in the global elements view of Studio or manually add the library dependency in your `pom.xml` file.
+
+* *ActiveMQ KahaDB* +
+The `activemq-kahadb-store` dependency is required only when using an persistent in-memory broker based on the VM transport (such as `+vm://localhost?broker.persistent=true+`). This dependency provides a valid `org.apache.activemq.store.kahadb.KahaDBPersistenceAdapter` implementation. This dependency is also required for persistent message delivery.
++
+In your `pom.xml` file in Studio, adding the dependency looks like this:
++
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.apache.activemq</groupId>
+    <artifactId>activemq-kahadb-store</artifactId>
+    <version>5.14.4</version>
+</dependency>
+----
+
+* *ActiveMQ Broker* +
+The `activemq-broker` dependency is required only when using an in-memory broker based on the VM transport (which is the one configured by default). This dependency provides a valid `org.apache.activemq.broker.Broker` implementation.
++
+In your `pom.xml` file in Studio, adding the dependency looks like this:
++
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.apache.activemq</groupId>
+    <artifactId>activemq-broker</artifactId>
+    <version>5.14.4</version>
+</dependency>
+----
+
+* *ActiveMQ Client* +
+The `activemq-client` dependency is always required to use ActiveMQ connections. Choose one that provides a valid `org.apache.activemq.ActiveMQConnectionFactory` implementation.
+
+In your `pom.xml` file in Studio, adding the dependency looks like this:
++
+[source,xml,linenums]
+----
+<dependency>
+     <groupId>org.apache.activemq</groupId>
+     <artifactId>activemq-client</artifactId>
+     <version>5.14.4</version>
+ </dependency>
+----
+
+To configure these libraries in the Global Element view, follow these steps:
+
+. In Studio, navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box, type `jms` and select *JMS Config*.
+. Click *OK*.
+. In the *Connection* field, select *ActiveMQ Connection*.
+. In the *Required Libraries* section that shows the *ActiveMQ KahaDB*, *ActiveMQ Broker* and *ActiveMQ Client* libraries, click the *Configure...* button to install the dependency.
+. Select any of the following install options:
+
+* *Add recommended library* Installs the recommended library.
+* *Use local file* Browse to a local file for the required engine library and install it.
+* *Add Maven dependency* Browse to the dependency and install it.
+
+.JMS Connector Libraries configuration
+image::jms-activemq-libaries.png[Click the Configure button to install the dependencies]
+
+
+== Configure the In-Memory Broker
+
+By default, Anypoint Connector for ActiveMQ (ActiveMQ Connector) uses an in-memory broker, which makes it
+easy to start building an application without configuring a connection against an external broker.
+The in-memory broker is required to configure both the *ActiveMQ KahaDB* and *ActiveMQ Broker* libraries. The default URL is:
+
+`vm://localhost?broker.persistent=false&broker.useJmx=false`
+
+To configure the in-memory broker in Studio, follow these steps:
+
+. In Studio, open the *JMS Config* global element window.
+. In the *Connection Factory* section, set the *Factory configuration* field to *Edit inline*.
+. Set the *Broker url* field to the address of the broker to connect, for example, `vm://localhost?broker.persistent=false&broker.useJmx=false` .
+. Click *OK*.
+
+.JMS Connector In-Memory Broker Configuration
+image::jms-activemq-broker.png[Set the Broker url field to the address of the broker to connect]
+
+In the XML editor, the `brokerUrl` configuration looks like this:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config" doc:name="JMS Config">
+		<jms:active-mq-connection >
+			<jms:factory-configuration brokerUrl="vm://localhost?broker.persistent=false&amp;broker.useJmx=false"/>
+		</jms:active-mq-connection>
+	</jms:config>
+----
+
+== Configure the Message Redelivery
+
+When a message cannot be processed correctly, it's not acknowledged. The message is then redelivered and probably again not processed correctly, which causes the cycle to execute indefinitely.
+
+To prevent a message that can't be properly managed from endlessly redelivering, configure the *Max redelivery* field to set a maximum number of times that a message can be delivered to the application.  +
+By default, JMS Connector uses a maximum redelivery of `0`, which means that messages won't be redelivered, and doesn't matter if the message is recovered or rolled back from a transaction. If the message has persistent delivery set, ActiveMQ sends the message to a `DLQ.QUEUE` (dead letter queue).
+
+ActiveMQ enables you also to have a client-side redelivery configuration:
+
+* The *Initial redelivery delay* field enables you to configure in milliseconds how much time to wait for the message to be redelivered the first time. +
+* The *Redelivery delay* field enables you to configure in milliseconds how much time to wait until the message is subsequently redelivered after the first redelivery.
+
+To configure these fields in Studio, follow these steps:
+
+. In Studio, open the *JMS Config* global element window.
+. In the *Connection Factory* section, set the *Factory configuration* field to *Edit inline*.
+. Set the *Initial redelivery delay* field to `1000`.
+. Set the *Redelivery delay* field to `100`.
+. Set the *Max redelivery* field to `10`.
+. Click *OK*.
+
+.JMS Connector Redelivery configuration
+image::jms-activemq-redelivery.png[Set the Max redelivery field to 10]
+
+In the XML editor, the `maxRedelivery`,`redeliveryDelay` and `initialRedeliveryDelay` configurations look like this:
 
 [source,xml,linenums]
 ----
 <jms:config name="JMS_Config">
- <jms:active-mq-connection >
-  <jms:factory-configuration brokerUrl="tcp://localhost:61616" />
- </jms:active-mq-connection>
+  <jms:active-mq-connection>
+    <jms:factory-configuration maxRedelivery="10"
+      redeliveryDelay="100"
+      initialRedeliveryDelay="1000"/>
+  </jms:active-mq-connection>
 </jms:config>
 ----
 
-[[in-memory-broker]]
-== In-Memory Broker
+== Configure the Trusted Packages
 
-By default, Anypoint Connector for ActiveMQ (ActiveMQ Connector) uses an in-memory broker, which makes it
-easy to start building an application without configuring a connection
-against an external broker.
+ActiveMQ versions 5.12.2, 5.13.0, and later restricts the classes that can be serialized and deserialized to prevent the execution of a malicious payload that can exploit the host system.
 
-Default URL: `vm://localhost?broker.persistent=false&broker.useJmx=false`
+For ActiveMQ, JMS Connector enables only the JDK and JRE provided classes by default, so if you
+need to exchange object messages, you must add the packages your applications use by activating the *Trusted packages* field. +
+Even though you can also enable the *Trust all packages* field to allow the serialization of more classes by allowing any object to be serialized and deserialized, this is not as secure as leaving it disabled in most cases. Keep this parameter disabled to improve the security and help prevent malicious attacks.
 
-The in-memory broker is required to configure both the <<activemq-client-lib,ActiveMQ Client>>
-and <<activemq-broker-lib,ActiveMQ Broker>> libraries.
+In the following example, you configure the connection to enable only users who are compliant with the `com.mulesoft.someapp` and `com.mulesoft.someapp.model` packages to consume and produce ObjectMessages:
 
-== SSL Connections
+. In Studio, open the *JMS Config* global element window.
+. In the *Connection Factory* section, set the *Factory configuration* field to *Edit inline*.
+. Select the *Trusted packages* field.
+. Click the plus sign to add a new package.
+. In the *Trusted package* window, set the *Value* field to `com.mulesoft.someapp`.
+. Click *Finish*.
+. Repeat Step 4.
+. In the *Trusted package* window, set the *Value* field to `com.mulesoft.someapp.model`.
+. Click *Finish*.
+. Select the *Trust all packages* field.
+. Click *OK*.
 
-This information applies to JMS Connector version 1.3.0 and later.
+.JMS Connector Trusted Packages configuration
+image::jms-activemq-packages.png[Select the Trusted packages and Trust all packages field]
 
-You can configure ActiveMQ connections with SSL configurations to enable the connector to establish secure and encrypted connections against the ActiveMQ broker:
+In the XML editor, the `<jms:trusted-packages>` and `trustAllPackages` configurations look like this:
+
+[source,xml,linenums]
+----
+<jms:config name="JMS_Config">
+  <jms:active-mq-connection>
+    <jms:factory-configuration trustAllPackages="true">
+      <jms:trusted-packages >
+        <jms:trusted-package value="com.mulesoft.someapp" />
+        <jms:trusted-package value="com.mulesoft.someapp.model" />
+      </jms:trusted-packages>
+    </jms:factory-configuration>
+  </jms:active-mq-connection>
+</jms:config>
+----
+
+== Configure SSL Connections
+
+JMS Connector version 1.3.0 and later enables you to configure ActiveMQ connections with SSL configurations to establish secure and encrypted connections against the ActiveMQ broker:
+
+. In Studio, navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box type `jms` and select *JMS Config*.
+. Click *OK*.
+. In the *Connection* field select *ActiveMQ Connection*.
+. Navigate to the *TLS/SSL* tab.
+. In the *TLS Configuration* field, select *Edit Inline*
+. In the *Trust Store Configuration* section, set the following fields:
++
+* *Path*: `client.ts` +
+* *Password*: `password` +
+[start=9]
+. In the *Key Store Configuration* section, set the following fields:
++
+* *Path*: `client.ks` +
+* *Alias*: `client` +
+* *Key Password*: `password` +
+* *Password*: `password` +
+[start-10]
+. Click *OK*.
+
+.JMS Connector SSK Configuration
+image::jms-activemq-ssl.png[SSL Configuration.]
+
+In the XML editor, the `<jms:active-mq-connection>`, `<tls:trust-store>`, and `<tls:key-store>` configuration looks like this:
 
 [source,xml,linenums]
 ----
@@ -59,10 +252,7 @@ You can configure ActiveMQ connections with SSL configurations to enable the con
 </jms:config>
 ----
 
-image::jms-ssl.png[JMS ActiveMQ SSL Configuration]
-
-The connector can also reference global TLS context configurations, so you can
-reuse and share the same TLS context between connectors as shown in the following example with Anypoint Connector for HTTP (HTTP Connector):
+JMS Connector can also reference global TLS context configurations to reuse and share the same TLS context between connectors as shown in the following example with Anypoint Connector for HTTP (HTTP Connector):
 
 [source,xml,linenums]
 ----
@@ -87,135 +277,6 @@ reuse and share the same TLS context between connectors as shown in the followin
   keyPassword="password"
   alias="client" />
 </tls:context>
-----
-
-== Delivery Handling
-
-[[poison-messages]]
-=== Avoiding Poison Messages
-
-When a message cannot be processed correctly, it's not acknowledged. The message
-is then redelivered and probably again not processed correctly, which can cause the cycle to execute indefinitely.
-
-To prevent a message that can't be properly handled from endlessly redelivering ("poison messages"), you can configure the `maxRedelivery` parameter to set a maximum number of times that a message can be delivered to the application.
-
-.In this example a message is redelivered a maximum of 10 times:
-[source,xml,linenums]
-----
-<jms:config name="JMS_Config">
-  <jms:active-mq-connection>
-    <jms:factory-configuration maxRedelivery="10"/>
-  </jms:active-mq-connection>
-</jms:config>
-----
-
-By default, JMS Connector uses a `maxRedelivery` of `0`, which means that messages
-won't be redelivered, and it doesn't matter if the message is recovered or rolled back
-from a transaction.
-
-If the message has persistent delivery set, ActiveMQ sends the message to `DLQ.QUEUE` (dead letter queue).
-
-=== Advanced Redelivery
-
-ActiveMQ enables users to have a client-side redelivery configuration. You can also configure the <<poison-messages,maximum times that a message is redelivered>> and how fast the connector is required to redeliver the message.
-
-`initialRedeliveryDelay`: In milliseconds, how much time to wait for the message to be redelivered the first time.
-`redeliveryDelay`: In milliseconds, how much time to wait until the message is subsequently redelivered after the first redelivery.
-
-[source,xml,linenums]
-----
-<jms:config name="JMS_Config">
-  <jms:active-mq-connection>
-    <jms:factory-configuration
-      redeliveryDelay="100"
-      initialRedeliveryDelay="1000"/>
-  </jms:active-mq-connection>
-</jms:config>
-----
-
-== Object Serialization
-
-ActiveMQ 5.12.2, 5.13.0, and later restricts the classes that can be serialized and deserialized to prevent the execution of a malicious payload that can exploit the host system.
-
-=== Trusted Packages
-
-For ActiveMQ, JMS Connector allows only the JDK and JRE provided classes by default, so if you
-need to exchange object messages, you must add the packages your applications are using:
-
-[source,xml,linenums]
-----
-<jms:config name="JMS_Config">
-  <jms:active-mq-connection>
-    <jms:factory-configuration >
-      <jms:trusted-packages >
-        <jms:trusted-package value="com.mulesoft.someapp" />
-        <jms:trusted-package value="com.mulesoft.someapp.model" />
-      </jms:trusted-packages>
-    </jms:factory-configuration>
-  </jms:active-mq-connection>
-</jms:config>
-----
-
-image::jms-trusted-packages.png[JMS ActiveMQ Trusted Packages]
-
-In the previous example, JMS Connector allows only users who are compliant with the `com.mulesoft.someapp` and `com.mulesoft.someapp.model` packages to consume and produce ObjectMessages.
-
-=== Trust All Packages
-
-Even though you can enable the *Trust All Packages* parameter to allow the serialization of more classes by allowing any object to be serialized and deserialized, this is not as secure as leaving it disabled in most cases. Keep this parameter disabled (`false`) to improve security and help prevent malicious attacks.
-
-[source,xml,linenums]
-----
-<jms:config name="JMS_Config">
-  <jms:active-mq-connection>
-    <jms:factory-configuration trustAllPackages="true"/>
-  </jms:active-mq-connection>
-</jms:config>
-----
-
-== Configuring Required Libraries
-
-image::jms-libs.gif[Configuring Required JMS Libraries]
-
-[[activemq-client-lib]]
-=== ActiveMQ Client
-
-The ActiveMQ client library is the only library that is required to use ActiveMQ connections. The ActiveMQ client library is also needed to connect to a broker.
-
-[source,xml,linenums]
-----
-<dependency>
- <groupId>org.apache.activemq</groupId>
- <artifactId>activemq-client</artifactId>
- <version>5.15.4</version>
-</dependency>
-----
-
-[[activemq-broker-lib]]
-=== ActiveMQ Broker
-
-The ActiveMQ broker can create an <<in-memory-broker,In Memory Broker>>:
-
-[source,xml,linenums]
-----
-<dependency>
- <groupId>org.apache.activemq</groupId>
- <artifactId>activemq-broker</artifactId>
- <version>5.15.4</version>
-</dependency>
-----
-
-=== ActiveMQ KahaDB
-
-The ActiveMQ KahaDB is required when using an <<in-memory-broker,In Memory Broker>> and is also required for persistent message delivery.
-
-[source,xml,linenums]
-----
-<dependency>
- <groupId>org.apache.activemq</groupId>
- <artifactId>activemq-kahadb-store</artifactId>
- <version>5.15.4</version>
-</dependency>
 ----
 
 == See Also
