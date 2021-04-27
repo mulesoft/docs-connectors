@@ -1,0 +1,218 @@
+= Amazon Redshift Connector 1.0 Example - Mule 4
+
+The following example shows how to use Anypoint Connector for Amazon Redshift to load data from Amazon S3 to Redshift.
+
+== Prerequisites
+
+* Java 8 or 11
+* Anypoint Studio 7.x
+* Mule Runtime 4.3.0 and later
+* DataWeave
+* Access to Amazon S3 and Redshift
+* Amazon S3 and Redshift Credentials
+
+== Steps to Prepare a Mule Project
+
+=== Create Mule Project
+
+. Create a new project in AnypointStudio and name it `redshift-demo`.
+. Open `redshift-demo.xml` file in `src/main/mule` folder and follow the instructions in xref:amazon-redshift-connector-studio.adoc#add-connector-to-project[Add the Connector to Your Project]
+on how to add Amazon Redshift Connector to the project, and do the same for Amazon S3 Connector and Mule File Connector.
+
+=== XML Code for This Example
+Override the content of `redshift-demo.xml` file the following XML snippet.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	  xmlns:s3="http://www.mulesoft.org/schema/mule/s3"
+	  xmlns:redshift="http://www.mulesoft.org/schema/mule/redshift"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/redshift http://www.mulesoft.org/schema/mule/redshift/current/mule-redshift.xsd
+http://www.mulesoft.org/schema/mule/s3 http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" basePath="/">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<redshift:config name="Amazon_Redshift_Connector_Config" doc:name="Amazon Redshift Connector Config">
+		<redshift:basic-connection
+				clusterId="${redshift.cluster_id}"
+				database="${redshift.database}"
+				user="${redshift.user}"
+				password="${redshift.password}"
+				region="${redshift.region}"
+				port="${redshift.port}"
+		/>
+	</redshift:config>
+
+	<s3:config name="Amazon_S3_Configuration" doc:name="Amazon S3 Configuration">
+		<s3:basic-connection accessKey="${s3.access_key}" secretKey="${s3.secret_key}" region="${s3.region}"/>
+	</s3:config>
+
+	<file:config name="File_Config" doc:name="File Config">
+		<file:connection workingDir="${mule.home}/apps/${app.name}/" />
+	</file:config>
+
+	<configuration-properties doc:name="Configuration properties" file="mule-artifact.properties" />
+
+	<flow name="Create-Redshift-Table-S3-Bucket-S3-Object-Flow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/init"/>
+		<set-variable value="username-bucket" doc:name="Bucket Name" variableName="bucket" />
+		<redshift:execute-ddl doc:name="Execute DDL" config-ref="Amazon_Redshift_Connector_Config">
+			<redshift:sql ><![CDATA[CREATE TABLE username (Username VARCHAR(50), Identifier INTEGER, First_Name VARCHAR(50), Last_Name VARCHAR(50));]]></redshift:sql>
+		</redshift:execute-ddl>
+		<s3:create-bucket doc:name="Create bucket" config-ref="Amazon_S3_Configuration" bucketName="#[vars.bucket]"/>
+		<file:read doc:name="Read" config-ref="File_Config" path="username.csv"/>
+		<s3:create-object doc:name="Create object" config-ref="Amazon_S3_Configuration" bucketName="#[vars.bucket]" key="username.csv" contentType="text/csv"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	success: true,
+	redshiftTable: "username",
+	s3bucket: vars.bucket,
+	s3object: "username.csv"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+
+	<flow name="Execute-Copy-Command-Flow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/execute"/>
+		<set-variable value="#['s3://username-bucket/username.csv']" doc:name="Bucket Name" variableName="bucketNameEndpoint"/>
+		<set-variable value="${copy.access_key}" doc:name="Access Key" variableName="access_key"/>
+		<set-variable value="${copy.secret_key}" doc:name="Secret Key" variableName="secret_key"/>
+		<redshift:execute-script doc:name="Execute script" config-ref="Amazon_Redshift_Connector_Config">
+			<redshift:sql ><![CDATA[#["copy username from " ++ "'" ++ vars.bucketNameEndpoint ++ "'" ++ " access_key_id " ++ "'" ++ vars.access_key ++ "'" ++ " secret_access_key " ++ "'" ++ vars.secret_key ++ "'" ++ " delimiter ';' IGNOREHEADER 1 IGNOREBLANKLINES"]]]></redshift:sql>
+		</redshift:execute-script>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"success": true
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+
+	<flow name="Delete-Redshift-Table-S3-Bucket-Flow">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/deleteAll"/>
+		<set-variable value="username-bucket" doc:name="Set Variable" variableName="bucketDelete"/>
+		<redshift:execute-ddl doc:name="Execute DDL" config-ref="Amazon_Redshift_Connector_Config">
+			<redshift:sql ><![CDATA[DROP TABLE username;]]></redshift:sql>
+		</redshift:execute-ddl>
+		<s3:delete-bucket doc:name="Delete bucket" config-ref="Amazon_S3_Configuration" force="true" bucketName='#[vars.bucketDelete]'/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"success": true
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+
+</mule>
+----
+
+=== Configure credentials
+
+Create a file `mule-artifact.properties` in `src/main/resources/` folder. Add the following properties into it and assign them with correct values.
+```
+s3.access_key=
+s3.secret_key=
+s3.region=
+
+redshift.cluster_id=
+redshift.region=
+redshift.port=
+redshift.database=
+redshift.user=
+redshift.password=
+
+copy.access_key=
+copy.secret_key=
+```
+* S3 credentials are essential in order to create/delete bucket and to create an object.
+* Redshift credentials are essential to establish a connection to the database.
+* Demo is using COPY command to load a table in parallel from data file on Amazon S3. In order to use this COPY command
+you need to authenticate using IAM user credentials with correct policies attached to it (Amazon S3 Read only policy is recommended),
+hence **copy.access_key** and **copy.secret_key** .
+* Alternatively it is possible to use IAM Role instead of Access and Secret key pair. But make sure the role has correct
+policies attached to it (Amazon S3 Read only policy is recommended).
+** To create an IAM role to permit your Redshift cluster to communicate with Amazon S3 service on your behalf, take the following steps
+described in this [tutorial](https://docs.aws.amazon.com/redshift/latest/mgmt/authorizing-redshift-service.html).
+
+S3 and Redshift configurations can be seen in the images below:
+
+image::s3-configuration.png[Demo S3 Configuration]
+
+image::redshift-configuration.png[Demo Redshift Configuration]
+
+=== Prepare data file
+
+Next we need to prepare data file which will be uploaded to S3 and then will be used as data set in COPY command for Redshift table.
+Create a file `username.csv` in `src/main/resources/` folder and populate it with the following data:
+
+[source,csv,linenums]
+----
+Username; Identifier;First name;Last name
+booker12;9012;Rachel;Booker
+grey07;2070;Laura;Grey
+johnson81;4081;Craig;Johnson
+jenkins46;9346;Mary;Jenkins
+smith79;5079;Jamie;Smith
+
+----
+
+Now the project should be all set and prepared for deployment.
+
+== Flows in This Example
+
+The following screenshots show the Anypoint Studio app flows for this example:
+
+* This flow creates the Redshift Table, S3 bucket and S3 Object.
++
+image::create-flow.png[Create-Redshift-Table-S3-Bucket-S3-Object-Flow]
++
+* This flow executes COPY command which leverages the Amazon Redshift massively parallel processing (MPP) architecture to load data in parallel from file in an Amazon S3 bucket.
++
+image::execute-flow.png[Execute-Copy-Command-Flow]
++
+* This flow deletes Redshift Table and S3 Bucket.
++
+image:delete-flow.png[Delete-Redshift-Table-S3-Bucket-Flow]
+
+== Run the Example
+
+. Deploy the mule project
+. Open `localhost:8081/init` in the web-browser and wait until it returns a response containing **success:true** with created table, bucket and an object.
+. Verify that new S3 bucket `username-bucket` was created in your S3 instance.
+. Verify that new Redshift table `username` was created in your Redshift instance.
+. Open `localhost:8081/execute` in the web-browser and wait until it returns a response containing **success:true**
+. Verify that the `username` table contains data from `username.csv` file you added to the mule project in the previous steps.
+. Open `localhost:8081/delete` in the web-browser and wait until it returns a response containing **success:true**
+. Verify that both `username` Redshift table and `username-bucket` S3 bucket were deleted.
+
+=== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
