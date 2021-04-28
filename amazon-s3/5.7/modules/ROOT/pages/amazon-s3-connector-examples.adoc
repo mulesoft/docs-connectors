@@ -1,0 +1,151 @@
+= Amazon S3 Connector 5.7 Examples
+:page-aliases: connectors::amazon/amazon-s3-connector-examples.adoc
+
+The following are common use cases for the Amazon S3 connector:
+
+* Store an image from a URL on Amazon S3, and then retrieve and display the image.
+* Create an image link in Amazon S3 and update the status in Twitter along with the image link (not shown in this document).
+
+[[store-and-retrieve]]
+== Use Case: Store and Retrieve an Image from a URL to Amazon S3
+
+Store an image from a URL in Amazon S3, and retrieve and display the image.
+For this example to work in Anypoint Studio, you must provide Amazon Web Services credentials. You can either replace the variables with their values in the code, or you can provide the values for each variable in the `src/main/resources/mule-artifact.properties` file.
+
+image::amazon-s3-02.png[Studio 7 Visual Studio Icon Flow]
+
+. Create a new Mule project in Studio.
+. Drag an *HTTP Listener into the canvas, and select it to open the properties editor.
+. Add a new HTTP Listener Config global element:
+.. In General Settings, click the *+* button:
+.. Configure the following HTTP parameters, retain the default values for the other fields, and click *OK*.
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Name |HTTP_Listener_Configuration
+|Host |127.0.0.1
+|Port |8081
+|===
++
+.. Reference the HTTP Listener Configuration global element. In the General tab, specify the `/` Path.
+. Drag an Amazon S3 connector into the flow, and double-click the connector to open its properties editor.
+. If you don't have an existing Amazon S3 connector global element to choose, click the plus sign next to *Extension Configuration*.
+. Configure the global element properties, and then click *OK*.
+. Configure the connector parameters:
++
+image::amazon-s3-03.png[Connector Properties - General tab]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name for the connector instance, such as Create bucket.
+|Extension Configuration |Select a global configuration for the connector.
+|Bucket Name |`${config.bucket}`
+|Region |Select the region, for example US_STANDARD (default).
+|Canned ACL |PRIVATE (default) access control list. A canned ACL is a predefined grant.
+|===
++
+. Add an HTTP Connector to request the MuleSoft logo from MuleSoft.
++
+image::amazon-s3-04.png[HTTP Connector - General Tab]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name for the connector instance. In this example, the
+HTTP connector is named Get MuleSoft logo.
+|Configuration |Click the green plus symbol and create a new configuration with the *Host* as `developer.mulesoft.com`, *Protocol* as HTTPS, and *Port* as 80.
+|URL or Path |Set to `/sites/all/themes/muletheme/images/mulesoft_dev_logo_v2.svg`.
+|Body |`#[payload]`
+|Target Value |`#[payload]`
+|===
++
+. Drag another Amazon S3 connector to create the requested MuleSoft logo in the selected Amazon S3 Bucket.
++
+image::amazon-s3-05.png[S3 Connector Properties General Tab]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name of your choice. In this example, the S3
+connector is named `Create logo object in S3 bucket`.
+|Extension Configuration |Select the global configuration that you created.
+|Bucket Name |`${config.bucket}`
+|Key |muledevlogo
+|Content |`#[payload]`
+|Canned ACL |PRIVATE (default)
+|Storage Class |STANDARD (default)
+|===
++
+. Add another Amazon S3 connector to get the newly created MuleSoft logo image object from the bucket:
++
+image::amazon-s3-06.png[S3 Connector Get Image General Tab]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Enter a name for the connector instance. In this example the S3 connector is called `Get Image`.
+|Extension Configuration |Select the global configuration you create.
+|Bucket Name |`${config.bucket}`
+|Key |muledevlogo
+|===
++
+. Add another Amazon S3 connector to delete the bucket. Because the delete bucket operation’s return type is void, the payload contains the object returned by the `get image` operation.
++
+image::amazon-s3-07.png[S3 Connector Delete Bucket General Tab]
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Bucket Name |`${config.bucket}`
+|Force |True
+|===
+
+== Use Case: XML Code
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:s3="http://www.mulesoft.org/schema/mule/s3"
+xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns="http://www.mulesoft.org/schema/mule/core"
+xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/s3
+http://www.mulesoft.org/schema/mule/s3/current/mule-s3.xsd">
+  <configuration-properties file="mule-artifact.properties"/>
+  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="DOC_ID">
+    <http:listener-connection host="127.0.0.1" port="8081"/>
+  </http:listener-config>
+  <s3:config name="Amazon_S3_Configuration" doc:name="Amazon S3 Configuration" doc:id="DOC_ID">
+    <s3:basic-connection accessKey="${config.accessKey}" secretKey="${config.secretKey"/>
+  </s3:config>
+  <http:request-config name="HTTPS_Request_Configuration" doc:name="HTTP Request configuration" doc:id="DOC_ID">
+    <http:request-connection protocol="HTTPS" host="www.mulesoft.com"/>
+  </http:request-config>
+  <flow name="s3docuFlow" doc:id="DOC_ID">
+    <http:listener config-ref="HTTP_Listener_config" path="/" doc:name="Listener" doc:id="DOC_ID"/>
+    <s3:create-bucket config-ref="Amazon_S3_Configuration" bucketName="${config.bucket}"
+    doc:name="Create bucket" doc:id="DOC_ID"/>
+    <http:request method="GET" path="/sites/default/files/new-application_network_diagram-01.svg"
+    doc:name="Request" doc:id="DOC_ID" config-ref="HTTPS_Request_Configuration"/>
+    <s3:create-object config-ref="Amazon_S3_Configuration" bucketName="${config.bucket}" key="muledevelogo"
+    doc:name="Create object" doc:id="DOC_ID"/>
+    <s3:get-object config-ref="Amazon_S3_Configuration" bucketName="${config.bucket}" key="muledevelogo"
+    doc:name="Get object" doc:id="DOC_ID"/>
+    <s3:delete-bucket config-ref="Amazon_S3_Configuration" bucketName="${config.bucket}"
+    doc:name="Delete bucket" doc:id="DOC_ID" force="true"/>
+  </flow>
+</mule>
+----
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
+* http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#using-the-default-credential-provider-chain[Amazon Default Provider Credential Chain]
+* http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html[Amazon Access Control List (ACL) overview]
