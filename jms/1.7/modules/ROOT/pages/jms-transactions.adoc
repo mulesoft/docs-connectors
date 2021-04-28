@@ -1,38 +1,62 @@
-= Handling Transactions in JMS
+= Manage Transactions in JMS Connector
 :keywords: jms, connector, transactions, transactional
 :page-aliases: connectors::jms/jms-transactions.adoc
 
+Transactional actions in JMS enable you to execute a series of operations to perform only when the transaction occurs. Use this feature when you want to:
 
+* Publish a message as part of a transaction +
+When you use the *Publish* operation, the application sends the message to the destination after the transaction occurs. If for some reason the transaction fails and a rollback occurs, the message is not sent.
 
-Transactional connections in JMS allow you to execute a series of operations that are actually performed only when the transaction is committed. This has two main scenarios:
+* Consume a message as part of a transaction +
+When you use either the *On New Message* source or the *Consume* operation, the message is acknowledged only after the transaction occurs. If the transaction rolls back, the message returns to the destination for redelivery.
 
-* Publishing a Message as part of a transaction: When performing a `publish`, the Message will be effectively sent to the destination once the transaction is *committed*. If for some reason the transaction fails and a *rollback* occurs, then the Message will never be sent.
+Anypoint Connector for JMS (JMS Connector) provides support for executing the operations by configuring the *Transactional action* field.
 
-* Consuming a Message as part of a transaction: In case of consuming a Message, either with the `listener` or `consume`, the Message will be acknowledged *only after the transacion is committed*, and instead it will be returned to the destination for redelivery if the transaction is *rolledback*.
+== Configure Transactions for Sources
 
+If you want the *On New Message* source to use a transactional action when sending the messages, configure the *Transactional action* field to `ALWAYS_BEGIN`. With this configuration, each new message is processed in a transaction that propagates to all the components in the flow and occurs after the flow execution completes successfully. The transaction rolls back if the flow execution returns an error.
 
-The JMS Connector provides support for executing its operations in a transactional way OOTB using Mule's `transactionalAction` configuration.
+By default, other components in the flow do not join the transaction created by the *On New Message* source. To execute other operations using the source transaction, configure in those components the *Transactional action* field either with `ALWAYS_JOIN` or `JOIN_IF_POSSIBLE`.
 
-In order to execute an operation as part of the transaction, we have the following two options.
+In the following example, you configure the transactional action for new messages:
 
-== Processing New Messages With Transactional Session
+. In Studio, select the *On New Message* source from your flow.
+. Set the *Destination* field to `${originQueue}`.
+. In the *Advanced* tab, set the *Transactional action* field to `ALWAYS_BEGIN`.
 
-If you want a JMS Listener to use a transactional session when dispatching the messages, you should set the `transactionalAction` to 'ALWAYS_BEGIN':
+.JMS Connector Transactional action configuration
+image::jms-transaction-1.png[In the Advanced tab, set the Transactional action field to ALWAYS_BEGIN]
+
+In the XML editor, the `<jms:listener>` and `transactionalAction` configurations look like this:
 
 [source,xml,linenums]
 ----
 <jms:listener config-ref="JMS_Config" destination="${originQueue}" transactionalAction="ALWAYS_BEGIN"/>
 ----
 
-With this configuration, each new message will be processed in a transaction that is propagate to all the flow's components and is committed once the flow execution is completed successfully. The transaction will be rolledback if the flow execution is completed with an error.
+== Configure Transactions for Operations
 
-By default, *other components* in the flow *will not join the transaction* created by the listener. In order to execute other operations using the listener’s transaction, you must declare them either with 'ALWAYS_JOIN', or 'JOIN_IF_POSSIBLE'.
+To execute an operation like *Publish* or *Consume* as part of a transaction, configure the *Transactional action* field to `ALWAYS_JOIN` or `JOIN_IF_POSSIBLE`.
 
-== Execute Operations As Part Of A Transaction
+In the following example, you configure the *Publish* and *Consume* operations that join a transaction initiated by the *On New Message* source:
 
-To execute an operation like `publish` or `consume` as part of a transaction, we have to set the `transactionalAction` to 'ALWAYS_JOIN', or 'JOIN_IF_POSSIBLE':
+. In the *Mule Palette* view, select *JMS > On New Message*.
+. Drag *On New Message* onto the Studio canvas.
+. In the *On New Message* configuration screen, set the *Destination* field to `${originQueue}`.
+. In the *Advanced* tab, set the *Transactional action* field to `ALWAYS_BEGIN`.
+. Drag a *Publish* operation to the right of the *On New Message* source.
+. Set the the *Destination* field to `#[attributes.properties.userProperties.redirectDestination]`.
+. In the *Advanced* tab, set the *Transactional action* field to `JOIN_IF_POSSIBLE`.
+. Drag a *Consume* operation to the right of the *Publish* operation.
+. Set the the *Destination* field to `#[attributes.properties.userProperties.callbackDestination]`.
+. In the *Advanced* tab, set the *Transactional action* field to `JOIN_IF_POSSIBLE`.
 
-This operations can join a transaction initiated by the listener:
+
+.JMS Connector Transactional action configuration for Consume operation
+image::jms-transaction-2.png[In the Advanced tab, set the Transactional action field JOIN_IF_POSSIBLE]
+
+In the XML editor, the `transactionalAction` configuration looks like this:
+
 [source,xml,linenums]
 ----
 
@@ -43,7 +67,24 @@ This operations can join a transaction initiated by the listener:
 </flow>
 ----
 
-Or they can join an scoped transaction:
+In the following example, you configure a scoped transaction, using a Try scope component, the JMS *Publish* and *Publish consume* operations, and the Validation module *Is true* operation:
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *Listener* onto the Studio canvas.
+. In the *Listener* configuration screen, set the *Path* field to `/orders`.
+. Drag a *Try* scope component to the right of the *Listener* source.
+. Set the *Transactional action* field to `ALWAYS_BEGIN`.
+. Drag a JMS *Publish* operation into the *Try* scope component.
+. Set the the *Destination* field to `${billingService}` and the *Transactional action* field to `ALWAYS_JOIN`.
+. Drag a JMS *Publish* operation to the right of the first *Publish* operation.
+. Set the the *Destination* field to `${shipmentService}` and the *Transactional action* field to `ALWAYS_JOIN`.
+. Drag a *Publish consume* operation to the right of the second *Publish* operation.
+. Set the the *Destination* field to `${invoicesVerificationService}`.
+. Drag a Validation module *Is true* operation to the right of the *Publish consume* operation.
+. Select *Expression* for the *Expression* menu and set the value to `#[payload]`.
+
+In the XML editor, the `transactionalAction` configuration look like this:
+
 [source,xml,linenums]
 ----
 <flow name="nonTxPublishMustNotJoinCurrentTx">
@@ -56,3 +97,8 @@ Or they can join an scoped transaction:
     </try>
 </flow>
 ----
+
+== See Also
+
+* xref:jms-examples.adoc[JMS Connector Examples]
+* xref:jms-connector-reference.adoc[JMS Connector Reference]
