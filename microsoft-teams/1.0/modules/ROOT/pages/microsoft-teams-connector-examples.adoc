@@ -1,0 +1,428 @@
+= Microsoft Teams Connector 1.0 Examples - Mule 4
+
+These examples show you how to use Microsoft Teams Connector to perform the following actions:
+
+* <<create-new-team,Create a new team>>
+* <<retrieve-team,Retrieve team properties and relationships>>
+* <<retrieve-membership,Retrieve a list of team members>>
+* <<retrieve-channel-list,Retrieve a list of team channels>>
+* <<onboard-new-hire,Onboard a new hire to the team>>
+* <<delete-channel,Delete a team channel>>
+* <<remove-team-member,Remove a team member>>
+
+== Prerequisites
+
+To run these examples, you must have:
+
+* A working instance of Microsoft Teams
+* Credentials to access the Microsoft Teams instance
+* Microsoft Teams Connector 1.0 or later
+* Two users in the Microsoft Teams instance: one team owner and one user
+* Anypoint Studio 7.x
+
+== Configure OAuth Authorization
+
+Because this connector uses OAuth to secure connections, you must specify OAuth field values, such as client credentials, keys, and OAuth-related URLs. To do this:
+
+* Create a configuration file for the OAuth connection
+* Configure the OAuth-related global elements
+* Configure a global element for the properties file
+
+=== Create a Configuration File for the OAuth Connection
+
+Create a configuration file for the OAuth connection that includes properties for the `Authorization Code` and `Client Credentials` grant types:
+
+. Create a file named `mule-app.properties` in the `/src/main/resources/` folder.
+. In the `mule-app.properties` file, create a set of properties for the `Authorization Code` grant type, similar to the ones that follow, replacing the bracketed text (including the brackets) with the correct values for your OAuth configuration:
++
+----
+config.oauth.authorization.code.consumerKey=<consumerKey>
+config.oauth.authorization.code.consumerSecret=<consumerSecret>
+config.oauth.authorization.code.authorizationUrl=<authorizationCode>
+config.oauth.authorization.code.accessTokenUrl=<accessTokenUrl>
+----
++
+. In the `mule-app.properties` file, create a set of properties for the `Client Credentials` grant type, similar to the one that follows, replacing the bracketed text (including the brackets) with the correct values for your OAuth configuration:
++
+----
+config.oauth.client.credentials.clientId=<clientId>
+config.oauth.client.credentials.clientSecret=<clientSecret>
+config.oauth.client.credentials.tokenUrl=<tokenUrl>
+----
+
+For more information about creating a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+=== Configure the OAuth Global Elements
+
+Configure global elements for the `OAuth_Authorization_Code_Config` and `OAuth_Client_Credentials_Config` files:
+
+. Create a new Mule project.
+. In the *Mule Palette* view, click *Search in Exchange* and enter `microsoft teams`.
+. Add *Microsoft Teams Connector* to the *Selected modules* section and click *Finish*.
+. Click the *Global Elements* tab and click *Create*.
+. Select *Connector Configuration > Microsoft Teams Authorization Code Config* and click *OK*.
+. Enter the following values:
++
+[%header%autowidth.spread]
+|===
+| Field | Value
+| Name | `OAuth_Authorization_Code_Config`
+| Consumer key | `${config.oauth.authorization.code.consumerKey}`
+| Consumer secret | `${config.oauth.authorization.code.consumerSecret}`
+| Authorization url | `${config.oauth.authorization.code.authorizationUrl}`
+| Access token url |`${config.oauth.authorization.code.accessTokenUrl}`
+| Scopes | Leave the default: `+https://graph.microsoft.com/.default+`
+| Listener config | `auth`
+| Callback path | `/callback`
+| Authorize path | `authorizePath`
+| External callback url | `+http://localhost:8083/callback+`
+|===
+. Click *OK*.
+. Click the *Global Elements* tab and click *Create*.
+. Select *Connector Configuration > Microsoft Teams Client Credentials Config* and click *OK*.
+. Enter the following values:
++
+[%header%autowidth.spread]
+|===
+| Field | Value
+| Name | `Microsoft_Teams_Client_Credentials_Config`
+| Client id |  `${config.oauth.client.credentials.clientId}`
+| Client secret | `${config.oauth.client.credentials.clientSecret}`
+| Token url | `${config.oauth.client.credentials.tokenUrl}`
+| Scopes | Leave the default: `+https://graph.microsoft.com/.default+`
+|===
+. Click *OK*.
+
+=== Configure a Global Element for the Properties File
+
+Configure a global element for the `mule-app.properties` file so that Mule knows where to find it:
+
+. Click the *Global Elements* tab and click *Create*.
+. In the *Choose Global Type* dialog, select *Configuration properties* and click *OK*.
+. In the *File* field, enter `mule.app.properties`.
+. Click *OK*.
+
+[[create-new-team]]
+== Create a New Team
+
+The following screenshot shows the Studio app flow for creating a new team:
+
+.Use a flow like this one to create a new team.
+image::ms-teams-create-team.png[Create a new team flow]
+
+Creating a new team involves configuring an HTTP *Listener* component, a *Transform Message* component, a *Create Team* operation, and a second *Transform Message* component.
+
+To create the flow:
+
+. Create a new Mule project in Studio.
+. In the Mule Palette view, search for *HTTP* and select the *Listener* operation.
+. Drag the *Listener* operation onto the canvas.
+. In the *Listener* configuration, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. In the HTTP properties window, set the *Path* field to `/createTeam`.
+
+=== Add the First Transform Message Component
+
+The first *Transform Message* component creates a template for the input used to create the team:
+
+. In the Mule Palette view, search for *transform message*.
+. Drag the *Transform Message* component onto the canvas, to the right of the *Listener* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this XML:
++
+[source,dataweave,linenums]
+----
+{
+	"template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+	description: message.attributes.queryParams.description,
+	displayName: message.attributes.queryParams.displayName,
+	"members":[
+      {
+        "@odata.type":"#microsoft.graph.aadUserConversationMember",
+        "user@odata.bind":"https://graph.microsoft.com/v1.0/users('" ++ message.attributes.queryParams.user as String ++ "')",
+         "roles":[
+            "owner"
+         ]
+      }
+}
+----
+
+=== Add the Create Team Operation
+
+The *Create team* operation creates a new team based on user input:
+
+. Drag the *Create team* operation onto the canvas, to the right of the *Transform Message* component.
+. In the Create team configuration, click the  *Connector configuration* dropdown and select *Microsoft-Teams-Client-Config*.
+. Select *Microsoft_Teams_Client_Credentials_Config* as the global element type and click *OK*.
+. Configure the following fields in the Create team properties window:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |`Create team`
+|Connector Configuration |`OAuth_Client_Credentials_Config`
+|Message |`payload`
+|===
+
+=== Add the Second Transform Message Component
+
+This *Transform Message* component converts the output of the *Create team* operation to JSON format.
+
+. In the Mule *Palette* view, search for `transform message`:
+. Drag the *Transform Message* component onto the canvas, to the right of the *Listener* component.
+. Click the *Transform Message* component and set the output to `application/json`:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+----
+
+[[retrieve-team]]
+== Retrieve the Team Properties and Relationships
+
+Create a second flow to retrieve the properties and relationships for the new team. Use the *Get Team* operation in this flow:
+
+.Use a flow like this one to retrieve the new team's properties and relationships.
+image::ms-teams-get-team.png[Retrieve the team Flow]
+
+[[retrieve-members]]
+== Retrieve the Team Members
+
+Create a third flow to retrieve information about the members of the new team. Use the *List team members* operation in this flow:
+
+.Use a flow like this one to retrieve information about team members.
+image::ms-teams-get-members.png[Retrieve the team members flow]
+
+[[retrieve-channel-list]]
+== Retrieve the Team Channels
+
+Create a fourth flow to retrieve information about the channels used by the team. Use the *List channels* operation in this flow:
+
+.Use a flow like this one to retrieve the channels used by the new team.
+image::ms-teams-list-channels.png[Retrieve the team channels flow]
+
+[[onboard-new-hire]]
+== Onboard a New Hire to the Team
+
+Create a fifth flow to onboard a new hire to the team.
+Use the following operations in this flow:
+
+* *Add team member* to add a new member to the team
+* *Create channel* to create a new channel
+* *Add channel member* to add the new member to the newly created channel
+* *Create message* to create the welcome message
+
+.Use a flow like this one to onboard a new user.
+image::ms-teams-onboarding.png[Onboarding a new hire flow]
+
+[[delete-channel]]
+== Delete a Team Channel
+
+Create a sixth flow to delete a channel. Use the *Delete channel* operation in this flow.
+
+.Use a flow like this one to delete a channel.
+image::ms-teams-delete-channel.png[Delete a channel]
+
+[[remove-team-member]]
+== Remove a Team Member
+
+Create a seventh flow to remove a member from a team. Use the *Remove team member* operation in this flow.
+
+.Use a flow like this one to remove a team member.
+image::ms-teams-remove-member.png[Remove a team member]
+
+== Run the App
+
+To run the app:
+
+. Right-click the project in Package Explorer and select *Run As > Mule Application*.
+. After the app deploys, open a web browser.
+. Enter the following URL to start the OAuth dance: `+http://localhost:8081/authorize+`.
+. In the login screen, enter the login information used to access Microsoft Teams and click *Login*.
+. Click *Allow*.
+. Initiate a flow by entering the associated URL, as shown in the following table. If the URL has query parameters, ensure that you include the parameter values:
++
+[%header%autowidth.spread]
+|===
+| Flow | URL | Notes
+| Create a new team| `+http://localhost:8081/createTeam?displayName={teamDisplayName}&description={teamDescription}&user={teamOwnerUser}+` |
+| Retrieve the team properties and relationships | `+http://localhost:8081/getTeam?team={createdTeamId}+` |
+| Retrieve the team channels | `+http://localhost:8081/listChannels+` | Returns only the default channel because this example does not create channels.
+| Onboard a new hire to the team| `+http://localhost:8081/newHireFlow?channelName={channelName}&team={createdTeamId}&userToOnboard={userToBeOnboarded}&channelOwner={channelOwner}+` a|
+
+For the `userToOnboard` query parameter, specify a user who is not the channel owner. The JSON response contains the following welcome message:
+
+`"content": "Welcome to the team {channelName}"`
+| Delete a team channel | `+http://localhost:8081/deleteChannel?team={teamId}&channel={channelId}+` |
+| Remove a team member | `+http://localhost:8081/removeTeamMembers?team={teamId}&member={membershipId}+` |
+|===
+
+== XML for the Examples
+
+Paste this XML code into the *Configuration XML* tab in your project to experiment with the flows described in the previous sections. When you paste this code, click *Yes* on the *Regenerate 'doc:id' Values* dialog.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:microsoftTeams="http://www.mulesoft.org/schema/mule/microsoftTeams"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/microsoftTeams http://www.mulesoft.org/schema/mule/microsoftTeams/current/mule-microsoftTeams.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<configuration-properties file="mule-app.properties"/>
+	<microsoftTeams:client-credentials-config name="OAuth_Client_Credentials_Config" doc:name="Microsoft Teams Client Credentials Config">
+		<microsoftTeams:oauth-client-credentials-connection >
+			<microsoftTeams:oauth-client-credentials clientId="${config.oauth.client.credentials.clientId}" clientSecret="${config.oauth.client.credentials.clientSecret}" tokenUrl="${config.oauth.client.credentials.tokenUrl}" scopes="https://graph.microsoft.com/.default" />
+		</microsoftTeams:oauth-client-credentials-connection>
+	</microsoftTeams:client-credentials-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:listener-config name="auth" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8083" />
+	</http:listener-config>
+	<microsoftTeams:authorization-code-config name="OAuth_Authorization_Code_Config" doc:name="Microsoft Teams Authorization Code Config" >
+		<microsoftTeams:oauth-authorization-code-connection >
+			<microsoftTeams:oauth-authorization-code consumerKey="${config.oauth.authorization.code.consumerKey}" consumerSecret="${config.oauth.authorization.code.consumerSecret}" authorizationUrl="${config.oauth.authorization.code.authorizationUrl}" accessTokenUrl="${config.oauth.authorization.code.accessTokenUrl}" scopes="https://graph.microsoft.com/.default" />
+			<microsoftTeams:oauth-callback-config listenerConfig="auth" callbackPath="/callback" authorizePath="/authorize" externalCallbackUrl="http://localhost:8083/callback" />
+		</microsoftTeams:oauth-authorization-code-connection>
+	</microsoftTeams:authorization-code-config>
+	<flow name="1.CREATE-TEAM" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/createTeam"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
+	description: message.attributes.queryParams.description,
+	displayName: message.attributes.queryParams.displayName,
+	"members":[
+      {
+        "@odata.type":"#microsoft.graph.aadUserConversationMember",
+        "user@odata.bind":"https://graph.microsoft.com/v1.0/users('" ++ message.attributes.queryParams.user as String ++ "')",
+         "roles":[
+            "owner"
+         ]
+      }
+   ]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<microsoftTeams:create-team doc:name="Create team" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="2.GET-CREATED-TEAM">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/getTeam" />
+		<microsoftTeams:get-team doc:name="Get team" teamId="#[message.attributes.queryParams.team]" select="#[message.attributes.queryParams.select]" config-ref="OAuth_Client_Credentials_Config">
+			<microsoftTeams:advanced-query-params >
+			</microsoftTeams:advanced-query-params>
+		</microsoftTeams:get-team>
+		<ee:transform doc:name="Transform Message">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="3.LIST-TEAM-MEMBERS-FROM-THE-NEW-TEAM">
+		<http:listener doc:name="Listener" path="/listTeamMembers" config-ref="HTTP_Listener_config"/>
+		<microsoftTeams:list-team-members doc:name="List team members" teamId="#[message.attributes.queryParams.team]" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="4.LIST-EXISTING-CHANNELS-FROM-THE-NEW-TEAM">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/listChannels"/>
+		<microsoftTeams:list-channels doc:name="List channels" doc:id="e260eb05-4be8-4da9-9cfa-e220ecb4a49a" teamId="#[message.attributes.queryParams.team]" config-ref="OAuth_Client_Credentials_Config">
+			<microsoftTeams:advanced-query-params >
+			</microsoftTeams:advanced-query-params>
+		</microsoftTeams:list-channels>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+message]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="5.NEW-HIRE-TEAM-ONBOARDING">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/newHireFlow"/>
+		<set-variable value="#[message.attributes.queryParams.channelOwner]" doc:name="Set Variable" variableName="channelOwner"/>
+		<set-variable value="#[message.attributes.queryParams.channelName]" doc:name="Set Variable" variableName="name"/>
+		<set-variable value="#[message.attributes.queryParams.userToOnboard]" doc:name="Set Variable" variableName="userToOnboard"/>
+		<set-variable value="#[message.attributes.queryParams.team]" doc:name="Set Variable" variableName="team"/>
+		<microsoftTeams:add-team-member doc:name="Add team member" teamId="#[vars.team]" userId="#[vars.userToOnboard]" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	description: "This channel will be used to onboard new hire " ++ vars.name as String,
+	displayName: "Welcome " ++ vars.name as String ++ uuid()[0 to 5],
+	membershipType: "private",
+	"members":
+     [
+        {
+           "@odata.type":"#microsoft.graph.aadUserConversationMember",
+           "user@odata.bind":"https://graph.microsoft.com/v1.0/users('" ++ vars.channelOwner as String ++ "')",
+           "roles":["owner"]
+        }
+     ]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<microsoftTeams:create-channel doc:name="Create channel" teamId="#[vars.team]" config-ref="OAuth_Client_Credentials_Config"/>
+		<set-variable value="#[payload.id]" doc:name="Set Variable" variableName="channel"/>
+		<microsoftTeams:add-channel-member doc:name="Add channel member" channelId="#[vars.channel]" teamId="#[vars.team]" userId="#[vars.userToOnboard]" owner="true" config-ref="OAuth_Client_Credentials_Config"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	body: {
+		content: "Welcome to the team " ++ vars.name as String
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<microsoftTeams:create-message doc:name="Create message" config-ref="OAuth_Authorization_Code_Config" teamId="#[vars.team]" channelId="#[vars.channel]"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="6.DELETE-CHANNEL-FROM-TEAM">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/deleteChannel" />
+		<microsoftTeams:delete-channel doc:name="Delete channel" teamId="#[message.attributes.queryParams.team]" channelId="#[message.attributes.queryParams.channel]" config-ref="OAuth_Client_Credentials_Config"/>
+	</flow>
+	<flow name="7.REMOVE-TEAM-MEMBER">
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/removeTeamMember" />
+		<microsoftTeams:remove-team-member doc:name="Remove team member" teamId="#[message.attributes.queryParams.team]" membershipId="#[message.attributes.queryParams.member]" config-ref="OAuth_Client_Credentials_Config"/>
+	</flow>
+</mule>
+----
