@@ -1,49 +1,74 @@
-= Publish Messages and Listen for Replies
+= Publish Messages and Consume Replies Using the JMS Connector Examples
 :page-aliases: connectors::jms/jms-publish-consume.adoc
 
-Request and reply is a very common pattern between applications, thus the JMS
-connector provides the `publish-consume` operation specifically for that.
-The `publish-consume` operation lets you publish a message to any destination,
-and then wait for a reply on a different destination.
+Anypoint Connector for JMS (JMS Connector) *Publish consume* operation enables you to publish a message to any specified destination, and then consume the message reply on a different specified destination. Request and reply is a very common pattern between applications.
 
-When using this operation, the JMSReplyTo header of the outgoing message
-contains the ID of the destination on which your application waits for a
-response. This destination may be a well-known destination, or it may be a
-temporary destination created on the fly with the purpose of receiving
-a single response message.
+When using this operation, the `JMSReplyTo` header of the outgoing message contains the ID of the destination on which your application waits to consume a response. The destination might be a well-known destination or a temporary destination created with the purpose of receiving a single response message.
 
-Finally, the result of the operation is the message received as a response,
-with the same structure as if a `consume` operation was invoked.
+The result of the operation is the message received as a response,
+with the same structure as invoking the *Consume* operation.
 
-== Wait For a Reply On a Temporary Queue
+== Receive a Reply on a Temporary Queue
 
-Using a temporary queue to wait for a response is very simple, just configure
-the message being sent and the operation automatically waits for a response
-in a temporary queue:
+To set a temporary queue, you configure the message being sent, and the operation automatically waits for a response.
+
+In the following example, you configure the *Publish consume* operation to publish a message with the following characteristics:
+
+* Current `payload` as its body
+* `JMSReplyTo` header configured to a temporary destination
+* *Destination* field set to `targetDestination`
+
+Then, the operation automatically tries to consume the response from the temporary
+queue until a message is consumed or the *Maximum wait* is reached, in which case
+it fails with a `JMS:TIMEOUT` error.
+
+To configure the operation follow these steps:
+
+. In your Studio flow, select the *Publish consume* operation.
+. In the connector configuration screen, set the *Destination* field to `targetDestination`.
+. Scroll down to the *Consume Configuration* section and set the *Maximum wait* field to `20`.
+. Set the *Maximum wait unit* to `SECONDS`.
+
+.Temporary Queue configuration
+image::jms-publishconsume-config-1.png[In the Publish consume configuration screen, set the Destination field to the name of the Destination where the message is sent]
+
+In the XML editor, the `destination` and `<jms:consume-configuration>` configuration looks like this:
 
 [source,xml,linenums]
 ----
 <jms:publish-consume
 doc:name="Publish consume"
-doc:id="facb4f6a-5796-4d62-9052-64258dfd8639"
 config-ref="config"
 destination="targetDestination">
 	<jms:consume-configuration maximumWait="20" maximumWaitUnit="SECONDS" />
 </jms:publish-consume>
 ----
 
-In this example, the operation publishes a message with the current
-`payload` as its body and the `JMSReplyTo header` configured to a temporary
-destination, to the `targetDestination`.
-Then, it automatically tries to consume the response from that temporary
-queue until a message is consumed or the `maximumWait` is reached, in which case
-it fails with a `JMS:TIMEOUT` error).
+== Receive a Reply On a Known Queue
 
-== Receive the Reply On a Known Queue
+To set a known queue for replies, configure the *Reply To* field on the outgoing message.
 
-In many cases you don't want to reply to queues to be created on a per-request basis, but
-instead a well-known queue is used for replies. For this cases, all you have to
-do is to configure the `reply-to` parameter on the outgoing message:
+In the following example, you configure the *Publish consume* operation to publish a message to the `targetDestination` with the following characteristics:
+
+* Current `payload` as its body
+* `JMSReplyTo` header configured to the known queue
+* *Reply To* field set to `replyToDestination`
+
+Then, the operation automatically tries to consume the response from the known `replyToDestination` queue until a message is consumed or the *Maximum wait* is reached, in which case it fails with a `JMS:TIMEOUT` error.
+
+To configure the operation follow these steps:
+
+. In your Studio flow, select the *Publish consume* operation.
+. In the connector configuration screen, set the *Destination* field to `targetDestination`.
+. In the *Message* section, set the *Reply To* field to *Edit inline*.
+. Set the *Destination Name* field to `replyToDestination`.
+. Scroll down to the *Consume Configuration* section and set the *Maximum wait* field to `20`.
+. Set the *Maximum wait unit* to `SECONDS`.
+
+.Known Queue configuration
+image::jms-publishconsume-config-2.png[In the Publish consume configuration screen, set the Reply To field to The JMSReplyTo header information of the Destination where the message is replied to]
+
+In the XML editor, the `destination` and `<jms:reply-to>` configuration looks like this:
 
 [source,xml,linenums]
 ----
@@ -51,32 +76,51 @@ do is to configure the `reply-to` parameter on the outgoing message:
     <jms:message>
         <jms:reply-to destination="replyToDestination"/>
     </jms:message>
+			<jms:consume-configuration maximumWait="20" maximumWaitUnit="SECONDS" />
 </jms:publish-consume>
 ----
 
-Now the operation publishes a message to the `targetDestination` with the
-current `payload` as its body and the `JMSReplyTo` header configured with
-the `replyToDestination`.
-Then, it automatically tries to consume the response from the
-`replyToDestination` queue until a message is consumed or the `maximumWait` is
-reached, in which case it fails with a `JMS:TIMEOUT` error.
 
-== Request Reply Patterns
 
-As of JMS Connector 1.6.0:
+== Configure Request and Reply Patterns
 
-In JMS, there exists two well know Request-Reply patterns for how request and reply messages
-are correlated. This ensures that an incoming message is the proper reply
-of an outgoing message.
+JMS uses two well-known request and reply patterns that help you understand how request and reply messages are correlated. In the *Request-Reply Pattern* field of the operation, you can configure the *CORRELATION_ID (Default)* and *MESSAGE_ID* patterns. Both ensure that an incoming message is the correct reply to an outgoing message.
+You can also configure the field to *NONE*, causing the consumer to try to consume from the reply queue without using any selector to correlate messages. This option is useful when working with temporal queues that ensure that the queue has only one message.
 
-=== Correlation ID Pattern
+=== Configure the Correlation ID Pattern
 
-This pattern is the default one in the *Publish Consume* operation, the usage of
-this pattern implies that the operation after publishing a message to the
-destination queue, consumes a message using a selector that expects a message
-with the same Correlation ID to be used to publish the request message.
+The *CORRELATION_ID (Default)* pattern implies that the operation, after publishing a message to the destination queue, consumes a message using a selector that expects a message with the same correlation ID that was used to publish the request message. The message correlation ID is a value used to link one message with another.
 
-.Client and Listener JMS Correlation ID pattern implementation
+In the first flow of the following example, you configure the *Publish consume* operation to publish a message to the `targetDestination` with the following characteristics:
+
+* Current `payload` as its body
+* `JMSReplyTo` header configured to the known queue
+* *Reply To* field set to `replyToDestination`
+* *Request-Reply Pattern* field set to *CORRELATION_ID (Default)* +
+
+Then, in the second flow, an *On New Message* source reads the published message and responds using the same correlation ID pattern. A *Logger* component, logs the message response. +
+Back in the first flow, the *Publish consume* operation consumes the response received and then another *Logger* component, and logs the final message.
+
+To configure the operation follow these steps:
+
+. In your Studio flow, select the *Publish consume* operation.
+. In the connector configuration screen, set the *Destination* field to `targetDestination`.
+. Set the *Request-Reply Pattern* to *CORRELATION_ID (Default)*.
+. In the *Message* section, set the *Reply To* field to *Edit inline*.
+. Set the *Destination Name* field to `replyToDestination`.
+. Drag a *Logger* component to right of the Publish consume.
+. Set the *Message* field to `Received message from 'replyToDestination' with Correlation ID: #[attributes.headers.correlationId]`.
+. Drag a JMS *On New Message* source below the first flow.
+. Set the *Destination* field to `targetDestination`.
+. Scroll down to the *Response* section and set the *Request-Reply Pattern* to *CORRELATION_ID (Default)*.
+. Drag another *Logger* component to right of *On New Message*.
+. Set the *Message* field to `About to reply to 'targetDestination' with Correlation ID: #[attributes.headers.correlationId]`.
+
+.Correlation ID pattern implementation
+image::jms-publishconsume-correlation-example.png[Set the Request-Reply Pattern to CORRELATION_ID (Default)]
+
+In the XML editor, the `requestReplyPattern` configuration looks like this:
+
 [source,xml,linenums]
 ----
 <flow name="publish-consume-correlation-id">
@@ -96,15 +140,38 @@ with the same Correlation ID to be used to publish the request message.
 </flow>
 ----
 
-=== Message ID Pattern
+=== Configure the Message ID Pattern
 
-Different from the Correlation ID Pattern is the Message ID pattern that implies
-that an operation after publishing a message to the destination queue, will
-consume a message using a selector that expects a message with a Correlation ID
-of the same value as the Message ID of the request message.
+The *MESSAGE_ID* pattern implies that the operation, after publishing a message to the destination queue, consumes a message using a selector that expects a message with a message ID of the same value as the message ID of the request message. The message ID is a value that uniquely identifies each message sent by a provider.
 
+In the first flow of the following example, you configure the *Publish consume* operation to publish a message to the `targetDestination` with the following characteristics:
 
-.Client and Listener JMS Message ID pattern implementation
+* Current `payload` as its body
+* `JMSReplyTo` header configured to the known queue
+* *Reply To* field set to `replyToDestination`
+* *Request-Reply Pattern* field set to *MESSAGE_ID*
+
+Then, in the second flow, an *On New Message* source reads the published message and responds using the same message ID pattern. A *Logger* component, logs the message response. +
+Back in the first flow, the *Publish consume* operation consumes the response received and then another *Logger* component and logs the final message.
+
+To configure the operation follow these steps:
+
+. In your Studio flow, select the *Publish consume* operation.
+. In the connector configuration screen, set the *Destination* field to `targetDestination`.
+. Set the *Request-Reply Pattern* to *MESSAGE_ID*.
+. In the *Message* section, set the *Reply To* field to *Edit inline*.
+. Set the *Destination Name* field to `replyToDestination`.
+. Drag a *Logger* component to right of *Publish consume*.
+. Set the *Message* field to `Received message from 'replyToDestination' with Message ID: #[attributes.headers.correlationId]`.
+. Drag a JMS *On New Message* source below the first flow.
+. Set the *Destination* field to `targetDestination`.
+. Scroll down to the *Response* section and set the *Request-Reply Pattern* to *MESSAGE_ID*.
+. Drag another *Logger* component to right of *On New Message*.
+. Set the *Message* field to `About to reply to 'targetDestination' with Message ID: #[attributes.headers.messageId]`.
+
+.Message ID pattern implementation
+image::jms-publishconsume-message-example.png[Set the Request-Reply Pattern to MESSAGE_ID]
+
 [source,xml,linenums]
 ----
 <flow name="publish-consume-message-id">
@@ -115,26 +182,18 @@ of the same value as the Message ID of the request message.
       <jms:reply-to destination="replyToDestination" />
     </jms:message>
   </jms:publish-consume>
-  <logger message="Received message from 'replyToDestination' with Correlation ID: #[attributes.headers.correlationId]"/>
+  <logger message="Received message from 'replyToDestination' with Message ID: #[attributes.headers.messageId]"/>
 </flow>
 
 <flow name="jms-listener-message-id" >
   <jms:listener config-ref="config" destination="targetDestination">
     <jms:response requestReplyPattern="MESSAGE_ID" />
   </jms:listener>
-  <logger level="INFO" message="About to reply to 'targetDestination' with Correlation ID: #[attributes.headers.messageId]"/>
+  <logger level="INFO" message="About to reply to 'targetDestination' with Message ID: #[attributes.headers.messageId]"/>
 </flow>
 ----
 
-=== None
-
-Also the operation can be configured to not use any of above patterns, and the
-consumer will try to consume from the reply queue without using any selector
-to correlate messages.
-
-This option is useful when working with temporal queues that ensure that
-the queue will have only one message.
-
 == See Also
 
-* xref:jms-publish.adoc[To Publish Messages]
+* xref:jms-publish.adoc[Publish Messages]
+* xref:jms-examples.adoc[JMS Connector Examples]
