@@ -1,22 +1,45 @@
-= To Publish Messages
+= Publish Messages Using the JMS Connector
 :keywords: jms, connector, publish
 :page-aliases: connectors::jms/jms-publish.adoc
 
+The Anypoint Connector for JMS (JMS Connector) *Publish* operation enables you to create a new JMS message and send it to the specified destination, whether it is a queue or a topic. Using the operation, you can configure not only the content of the message, but also any necessary headers.
 
-This operation allows you to create a new JMS Message and send it to the specified destination, be it a Queue or a Topic. With it, you can configure not only the content of the message, but also all the headers that may be need.
+== Publish a Message to a Queue
 
-== Sending a Message to a Queue
+The *Publish* operation publishes whatever is in the message payload to the specified queue. In the following example, you configure the operation to publish a message to a queue specified in the *Destination* field:
 
-When used in its default form, the connector will publish whatever is in the message payload:
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `invoiceQueue`.
+
+.Publish operation configuration to a queue
+image::jms-publish-config-1.png[In the Publish configuration screen, set the Destination field to the name of the Destination where the message is sent]
+
+In the XML editor, the `<jms:publish>` and `destination` configurations look like this:
 
 [source,xml,linenums]
 ----
 <jms:publish destination="invoiceQueue" config-ref="JMS_config"/>
 ----
 
-But what happens if the payload is not in the correct format, and you actually need to make a transformation? You could place a DataWeave transformation before the `publish` operation, but that would cause the message payload to change and impact the operation placed after the `publish` operation.
+If you must transform the payload because it is not in the correct format, you could place a DataWeave transformation before the *Publish* operation, but that would cause the message payload to change and impact the operation placed after the transformation. +
+To avoid this impact, place the DataWeave transformation inside the *Publish* operation. The transformation generates the content to publish without affecting the message in transit. In the following example, you configure the transformation inside the operation:
 
-To avoid this undesired impact, you can now place the transformation inside the `publish` operation:
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `invoiceQueue`.
+. In the *Body* field, set the following DataWeave transformation:
+
+[source,DataWeave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload.payments
+----
+
+.Publish operation configuration with DataWeave Transformation
+image::jms-publish-config-2.png[In the Publish configuration screen, place the DataWeave transformation inside the Body field]
+
+In the XML editor, the `<jms:body>` configuration looks like this:
 
 [source,xml,linenums]
 ----
@@ -31,14 +54,18 @@ To avoid this undesired impact, you can now place the transformation inside the 
 </jms:publish>
 ----
 
-Now, the transformation can be used for generating the content that will be published, without producing a side effect on the message in transit.
+== Publish a Message to a Topic
 
-== Publishing a Message to a Topic
+The *Publish* operation can also publish a message to a specified topic destination. Because all the configurations of the operation and the message are identical, you just need only to configure the *Destination type* field to *TOPIC*.
 
-The `publish` operation can be used also to publish a Message to a given Topic destination.
-All the configurations of the operation and the Message are identical, but the `destinationType` parameter has to be declared as a `TOPIC` destination:
+In the following example, you configure the operation to publish a message to a topic destination:
 
-For the same example seen before, if instead of sendin a message to the Queue we want to publish it to a Topic, we`ll do:
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example,
+.Publish operation configuration to a topic destination
+image::jms-publish-config-3.png[In the Publish configuration screen, set the Destination type field to TOPIC]
+
+In the XML editor, the `<jms:publish>` and `destinationType` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -53,23 +80,42 @@ For the same example seen before, if instead of sendin a message to the Queue we
 </jms:publish>
 ----
 
+== Customize Message Delivery
 
-== Customizing Message Delivery
+Each JMS message has a set of headers that enables you to communicate metadata such as the time to live or message priority.
 
-Each JMS Message has a set of headers that enables you to communicate metadata like the time to live, or the priority of the Message. This kind of metadata regarding the Message being published can be configured from the `publish` operation parameters.
+=== Configure a Priority Queue
 
-=== Implementing a Priority Queue
+To configure a priority queue, set the *Priority* field to a value different from the default:
 
-In order to implement a priority queue, we need to assign a priority different than the default to some messages. We can do so using the `priority` parameter in the operation:
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `priorityQueue`.
+. In the *Publish Configuration* section, set the *Priority* field to `attributes.queryParams.priority`.
+
+.Publish operation Priority configuration
+image::jms-publish-config-4.png[In the Publish configuration screen, set a value in the Priority field]
+
+In the XML editor, the `<jms:publish>` and `priority` configurations look like this:
 
 [source,xml,linenums]
 ----
 <jms:publish priority="#[attributes.queryParams.priority]" destination="priorityQueue" config-ref="JMS_config"/>
 ----
 
-=== How to Control Message Time To Live
+=== Configure a Time To Live
 
-Every JMS Message being published is sent with a timeToLive header that declares for how long the Message should be available for someone to consume it before it evicts. The `timeToLive` and `timeToLiveUnit` parameters in the `publish` operation allow you to configure the value of that JMS header for each Message published:
+Every JMS message published is sent with a time-to-live header that declares how long the message is available for consumption it before it expires. In the operation, configure the *Time to live* and *Time to live unit* fields:
+
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for exampl,e `vars.destination`.
+. In the *Publish Configuration* section, set the *Time to live* field to `vars.timeToLive`.
+. Set the *Time to live unit* field to *SECONDS*.
+
+.Publish operation Time to live configuration
+image::jms-publish-config-5.png[In the Publish configuration screen, set a value for the Time to live field, and set the Time to live unit to SECONDS]
+
+In the XML editor, the `timeToLive` and `timeToLiveUnit` configurations looks like this:
+
 
 [source,xml,linenums]
 ----
@@ -77,7 +123,17 @@ Every JMS Message being published is sent with a timeToLive header that declares
               destination="#[vars.destination]" config-ref="JMS_config"/>
 ----
 
-If you are using JMS 2.0, you can also control the `deliveryDelay` of the Message, which is how long to wait before making the Message available to consumers:
+If you are using the JMS 2.0 specification, you can also control the message delivery delay, which is how long to wait before making the message available to consumers. In the operation, configure the *Delivery delay* and *Delivery delay unit* fields:
+
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `vars.destination`.
+. Set the *Delivery delay* field to `${msgInitialDelay}`.
+. Set the *Delivery delay unit* field to *MILLISECONDS*.
+
+.Publish operation Delivery Delay configuration
+image::jms-publish-config-6.png[In the Publish configuration screen, set a value for the Delivery Delay field, and set the Delivery Delay Unit field to MILLISECONDS]
+
+In the XML editor, the `deliveryDelay` and `deliveryDelayUnit` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -86,11 +142,22 @@ If you are using JMS 2.0, you can also control the `deliveryDelay` of the Messag
 ----
 
 
-== Declaring a Reply Destination
+== Configure a Reply Destination
 
-For the cases where you need an asynchronous reply to the Message being sent, the JMS `publish` operation allows us to declare any `reply-to` destination. This destination will be communicated as a JMS Header to the consumer of the Message, and is the destination were we should expect a reply to be sent.
+When you require an asynchronous reply to the sent message, the *Publish* operation enables you to declare any reply-to destination in the *Reply to* field. The reply destination is communicated as a JMS header to the consumer of the message.
 
-To declare the `reply-to` destination, we add it to the Message definition:
+In the following example, you configure the reply-to destination:
+
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `vars.destination`.
+. Set the *Reply to* field to *Edit inline*.
+. Set the *Destination name* field to `${completionEventsDestination}`.
+. Set the *Destination type* field to *TOPIC*.
+
+.Publish operation Reply To configuration
+image::jms-publish-config-7.png[In the Publish configuration screen, set the Reply To to Edit inline, set a name for the Destination name field, and set the Destination type field to TOPIC]
+
+In the XML editor, the `<jms:reply-to>`, `destination` and `destinationType` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -101,12 +168,30 @@ To declare the `reply-to` destination, we add it to the Message definition:
 </jms:publish>
 ----
 
-== Propagating The Correlation ID
+== Configure the Correlation ID
 
-The `publish` operation allows you to configure what is the `correlationId` for the outgoing Message.
+The *Publish* operation enables you to configure a correlation ID for the outgoing message in the *Correlation ID* field.
 
-First you need to configure wheter or not you want to send the `correlationId` when publishing the Message using the `sendCorrelationId` parameter. This parameter can be set to `ALWAYS` (always send the header), `NEVER` (never send the header) or `AUTO` (the default, use the application configuration).
-Then, you can either use the `correlationId` of the Event that is sending the Message, or you can configure your own custom `correlationId` in the message builder:
+First you must configure whether you want to send the correlation ID when publishing the message. If so, configure the *Send correlation id* field to any of the following options:
+
+* *ALWAYS* +
+Always sends the header
+ * *NEVER* +
+Never sends the header
+ * *AUTO* +
+The default value, which uses the application configuration
+
+Then you can either use the correlation ID of the event that is sending the message, or you can configure your own custom correlation ID in the message builder:
+
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `attributes.headers.replyTo.destination`.
+. Set the *Send correlation id* field to *ALWAYS*.
+. Set the *Correlation ID* field to `attributes.headers.correlationId`.
+
+.Publish operation Correlation ID configuration
+image::jms-publish-config-8.png[In the Publish configuration screen, set the Send correlation ID field to ALWAYS, and set the correlation ID field to your custom value]
+
+In the XML editor, the `endCorrelationId` and `correlationId` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -115,14 +200,33 @@ Then, you can either use the `correlationId` of the Event that is sending the Me
 </jms:publish>
 ----
 
-== Configuring Message Properties
+== Configure Message Properties
 
-Every JMS Message can have a set of properties, which can be used in many different ways, like to provide compatibility with other messaging systems or create custom message selectors.
-Some of these properties are well-known JMS standards, but others depende on the implementation or custom user configurations. The `publish` operation allows you to configure all this properties directly in the Message.
+Use properties in your JMS message to do things like establishing compatibility with other messaging systems or creating custom message selectors
+Some of these properties are well-known JMS standards, but others depend on the implementation or custom user configurations. The *Publish* operation enables you to configure all these properties directly in the message.
 
-=== Setting User Properties
+=== Configure User Properties
 
-Whenever you need to set a property for an outgoing Message, all you have to do is use the `properties` element in the Message and do an inline declaration of a Map using DataWeave:
+Whenever you must set a property for an outgoing message, configure the *Properties* field in the message and perform an inline declaration of a map using DataWeave:
+
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `${bridgeDestination}`.
+. Set the *Destination type* field to *TOPIC*.
+. Set the *Body* field to `"bridged_" ++ payload`.
+. Set the *Properties* field to the following DataWeave code:
+
+[source,DataWeave,linenums]
+----
+{
+    AUTH_TYPE: 'jwt',
+    AUTH_TOKEN: attributes.queryParams.token
+}
+----
+
+.Publish operation Properties configuration
+image::jms-publish-config-9.png[In the Publish configuration screen, set the Body and Properties field]
+
+In the XML editor, the `<jms:body>` and `<jms:properties>` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -137,9 +241,22 @@ Whenever you need to set a property for an outgoing Message, all you have to do 
 </jms:publish>
 ----
 
-=== Setting JMSX Properties
+=== Configure JMSX Properties
 
-The JMSX properties are a set of well-known properties defined in the JMS spec, containing metadata regarding the Message. In order to configure this properties, you can declare them inline as part of the Message element:
+The JMS spec includes JMSX properties, a set well-known properties that contain metadata about the message. In the following example, you configure these properties in the *JMSX Properties* field of the message:
+
+. In your Studio flow, select the *Publish* operation.
+. Set the *Destination* field to the queue name, for example, `${bridgeDestination}`.
+. Set the *Destination type* field to *TOPIC*.
+. Set the *Body* field to `"bridged_" ++ payload`.
+. Set the *JMSX Properties* field to *Edit inline*.
+. Set the *Jmsx group id* field to `vars.currentGroup`.
+. Set the *Jmsx user id* field to `${username}`.
+
+.Publish operation JMSX Properties configuration
+image::jms-publish-config-10.png[In the Publish configuration screen, set the JMSX Properties field to Edit Inline and set the Jmsx group id and Jmsx user id fields]
+
+In the XML editor, the `<jms:jmsx-properties>`, `jmsxGroupID` and `jmsxUserID` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -153,4 +270,4 @@ The JMSX properties are a set of well-known properties defined in the JMS spec, 
 
 == See Also
 
-xref:jms-publish-consume.adoc[To Listen For A Reply]
+xref:jms-publish-consume.adoc[Publish Messages and Consume Replies]

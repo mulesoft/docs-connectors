@@ -1,30 +1,79 @@
-= Handling Message Acknowledgement
+= Configure Message Acknowledgement with the JMS Connector
 :keywords: jms, connector, consume, message, ack
 :page-aliases: connectors::jms/jms-ack.adoc
 
+Anypoint Connector for JMS (JMS Connector) provides different message acknowledgement modes to configure for the *Ack*, *Consume*, *On New Message*, and *Recovery session* operations:
+
+* Automatic acknowledgement on success
+* Immediate acknowledgement
+* Manual acknowledgement
+
+The following examples illustrate how to configure each message acknowledgement mode.
+
+== Configure Automatic Acknowledgement on Success Mode
+
+Configure the automatic acknowledgement on success mode in the *On New Message* source by setting the *Acknowledge Mode* field to either one of these modes:
+
+* *AUTO* +
+Automatically acknowledges (ACK) the received message only if the flow execution completes successfully; otherwise, the message is not acknowledged and is redelivered.
+
+* *DUPS_OK* +
+Like *AUTO* mode, automatically acknowledges (ACK) the received message only if the flow execution completes successfully, but leads to duplicate messages if the message is redelivered before the ACK is performed.
+
+In the following example, you configure the *AUTO* acknowledgement mode:
+
+. In Studio, select the *On New Message* source from your flow.
+. In the *On New Message* configuration screen, in *Destination*, specify the name of the destination from which to consume the message, for example, `#[vars.destination]`.
+. From the *Acknowledge Mode* menu, select *AUTO*.
+
+.JMS Connector Auto Acknowledgement Mode configuration
+image::jms-ack-auto.png[In the On New Message source screen, set the Acknowledge Mode field to AUTO]
+
+In the XML editor, the `<jms:listener>` and `ackMode` configurations look like this:
+
+[source,xml,linenums]
+----
+<jms:listener  config-ref="JMS_Config" destination="#[vars.destination]" ackMode="AUTO"/>
+----
+
+== Configure Immediate Acknowledgement Mode
+
+Configure the immediate acknowledgement mode in the *On New Message* source by using the *Acknowledge Mode* field, or in the *Consume* operation by using the *Ack mode* field. Set the fields to *IMMEDIATE*. This mode automatically acknowledges (ACK) the message after it is consumed and before to any application processing of the message. +
+The result of automatically acknowledging the message is that the message won't be redelivered if any error occurs during message processing, requiring application logic like a "dead letter" queue to manage errors without losing messages.
+
+In the following example, you configure the *IMMEDIATE* acknowledgement mode for the *Consume* operation:
+
+. In Studio, select the *Consume* operation from your flow.
+. In the *Consume* configuration screen, in *Destination*, specify the name of the destination from which to consume the message, for example, `#[vars.destination]`.
+. From the *Ack mode* menu, select *IMMEDIATE*.
+
+.JMS Connector Immediate Acknowledgement Mode configuration
+image::jms-ack-immediate.png[In the Consume operation screen, set the Ack Mode field to IMMEDIATE]
+
+In the XML editor, the `<jms:consume>` and `ackMode` configurations look like this:
 
 
-There are different acknowledgement configurations provided by the JMS Connector.
+== Configure Manual Acknowledgement Mode
 
-== Automatic Acknowledgement On Success
+Configure the manual acknowledgement mode in the *On New Message* source by using the *Acknowledge Mode* field, or in the *Consume* operation by using the *Ack mode* field. Set these fields to *MANUAL*. This mode delegates all responsibility for performing message acknowledgement (ACK) to the application logic.
 
-The `AUTO` `ackMode` can be used in the `jms:listener` component, causing the automatic ACK of the received Message *if and only if the flow execution completes successfully*.
-In case that an error occurs during the flow execution that causes it to terminate prematurely, then the Message will not be ACKed and redelivery will occur.
+Every message received by either the *On New Message* or *Consume* operations includes an acknowledgement ID in the Mule message attributes, that identifies the message uniquely for a given connection.  +
+The acknowledgement ID that identifies the message is then passed to the *Ack* operation in the *Ack id* field.
 
-Another `ackMode` similar to `AUTO` is `DUPS_OK`. With `DUPS_OK` the Message is acknowledged automatically upon success of the flow execution but in a lazy fashion which may lead to duplicates since the Message may be redelivered before the ACK is performed.
+In the following example, you configure the *MANUAL* acknowledgement mode for the *Consume* operation:
 
-== Immediate Acknowledgement
+. In Studio, select the *Consume* operation from your flow.
+. In the *Consume* configuration screen, in *Destination*, specify the name of the destination from which to consume the message, for example, `openTickets`.
+. From the *Ack mode* menu, select *MANUAL*.
+. Drag a *Logger* component to the right of the *Consume* operation.
+. Set the *Message* field to `#[payload]`.
+. Drag an *Ack* operation to the right of the *Logger* component.
+. Set the *Ack id* field to the acknowledgement ID of the message session to recover, for example, `#[attributes.ackId]`.
 
-Setting the `ackMode` to `IMMEDIATE` either in `jms:listener` or `jms:consume` operations will cause the Message to be automatically ACKed once it is consumed, and prior to any processing of the Message by the application.
-Having the Message automatically acknowledged once it is received means that the Message won`t be redelivered if any error occurs during the processing of the Message, so application logic like a dead letter queue has to be created to handle errors without losing Messages.
+.JMS Connector Ack operation configuration
+image::jms-ack-operation.png[In the Ack operation screen, set the Ack id field to the acknowledgement ID of the message session to recover]
 
-== Manual Acknowledgement
-
-As you may expect, the `MANUAL` `ackMode` delegates all the responsibility of performing the ACK on the Message to the application logic.
-
-With this configuration, every Message received by either the `listener` or `consume` operations will have an `ackId` available in the MuleMessage `attributes` which identifies this Message uniquely for a given connection.
-
-The `ackId` that identifies the Message will then be passed on to the `jms:ack` operation:
+In the XML editor, the `<jms:consume>`, `ackMode`, and `ackId` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -39,10 +88,29 @@ The `ackId` that identifies the Message will then be passed on to the `jms:ack` 
 ----
 
 
-=== Manual Session Recovery
+=== Configure Manual Session Recovery
 
-When using the `MANUAL` `ackMode`, all Messages that are received but not acknowledged won`t be redelivered by the broker.
-In case of an error that occurs during the Message processing that prevents it from being ACKed, the user is responsible for manually recovering all the Messages in the Session that have to be redelivered using the `recover-session` operation:
+With manual acknowledgement mode, all messages received but not acknowledged are not redelivered by the broker.
+If there is an error during the message processing, you must manually recover all the messages in the session that have to be redelivered by using the *Recover session* operation. The connection used to recover the session has to be the the same as the connection for receiving the message.
+
+In the following example, you configure the *MANUAL* acknowledgement mode and how to recover the session:
+
+. In Studio, select the *Consume* operation from your flow.
+. In the *Consume* configuration screen, in *Destination*, specify the name of the destination from which to consume the message, for example, `${destination}`.
+. Set the *Ack mode* field to *MANUAL*.
+. Drag a *Logger* component to the right of the *Consume* operation.
+. Set the *Message* field to `#[payload]`.
+. Drag an *Ack* operation to the right of the *Logger* component.
+. Set the *Ack id* field to the acknowledgement ID of the message session to recover, for example, `#[vars.consumedMessage.attributes.ackId]`.
+. In your flow, expand the *Error handling* section by clicking the small arrow.
+. Drag an *On Error Propagate* component in the *Error handling* section.
+. Drag a *Recover session* operation inside the *On Error Propagate* component.
+. Set the *Ack id* field to `#[vars.consumedMessage.attributes.ackId]`.
+
+.JMS Connector Recover session operation configuration
+image::jms-ack-recover.png[In the Recover session operation screen, set the Ack id field to the acknowledgement ID of the message session to recover]
+
+In the XML editor, the `<jms:consume>`, `ackMode`, and `ackId` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -64,10 +132,7 @@ In case of an error that occurs during the Message processing that prevents it f
 </flow>
 ----
 
-Same as before, the Connection used for recovering the session has to be the the same as the one used for receiving the Message.
-
-
 == See Also
 
-* xref:jms-topic-subscription.adoc[Using Topic Subscriptions]
-* xref:jms-listener.adoc[How To Listen For New Messages]
+* xref:jms-topic-subscription.adoc[Configure Topic Subscriptions]
+* xref:jms-listener.adoc[Listen for New Messages]
