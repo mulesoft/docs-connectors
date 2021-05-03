@@ -1,47 +1,71 @@
-= JMS Tuning For Performance
+= Tune JMS Connector for Performance
 :keywords: jms, connector, consume, message, source, listener
 :page-aliases: connectors::jms/jms-performance.adoc
 
+Performance is sometimes negatively impacted by message . The following recommendations can help you get the most of Anypoint Connector for JMS (JMS Connector) for your Mule applications.
+
+== Connections Caching Reuse
+
+Because connections are expensive to create, reuse them as much as you can. By default, JMS Connector uses a caching strategy that reuses as many consumers and producers as possible. To avoid performance degradation, do not disable connection caching.
 
 
-Performance can be a big factor when processing loads of messages, which means that you probably want to check the following configurations to make sure you get the most out of the JMS Connector.
+== Increased Concurrent Messages Processing
 
-== Don't Disable Connections Reuse
+To improve the performance of your application, increase the number of consumers that receive messages from the same destination. JMS Connector enables you to increase the number of consumers by configuring the *Number of consumers* field in the *On New Message* source. By default, this source enables four consumers to receive messages concurrently on the same destination, but you can increase this number to the one that best fits your needs.
 
-Connections are expensive to create, so it's important to reuse them as much as possible.
+In the following example, you increase the number of consumers receiving messages concurrently:
 
-*By default, the JMS Connector uses an aggressive* `caching-strategy` that reuses as much Consumers and Producers as possible. It is recommended to keep this configuration untouched, since any modification could reduce the performance of your application.
+. In Studio, select the *On New Message* source from your flow.
+. In the *On New Message* source configuration screen, set the *Number of consumers* field to `20`.
 
-WARNING: Disabling connections caching will reduce the performance of your application.
+.JMS Connector Number of consumers Configuration
+image::jms-performance-1.png[In the On New Message configuration screen, set the Number of consumers field to 20]
 
-
-== Increasing Concurrent Messages Processing
-
-A good way of improving the performance of your application is to increase the number of concurrent consumers that receive messages from the same destination. This can be done easily in the JMS Connector by configuring the `numberOfConsumers` parameter.
-
-Out of the box, the `listener` will use *four consumers* concurrently on the same destination, but you can increase this number to the one that fits better your needs:
+In the XML editor, the `numberOfConsumers` configuration looks like this:
 
 [source,xml,linenums]
 ----
 <jms:listener config-ref="config" destination="#[vars.destination]" numberOfConsumers="20"/>
 ----
 
-TIP: Increasing the `numberOfConsumers` is the easiest way to improve the throughput of your listeners.
+== Cluster Configuration Optimization
 
-== Optimize Your Configuration For Clusters
+For applications running in clusters, consider the primary node and how the connector behaves. When the app runs in a cluster, the *On New Message* source default behavior receives messages only in the primary node, no matter what kind of destination the app consumes.
 
-For applications running in clusters, you have to keep in mind the concept of *primary node* and how the connector will behave. When running in a cluster, the JMS `listener` *default behavior will be to receive messages only in the _primary node_*, no matter what kind of destination you are consuming from.
+When consuming messages from a queue, the default connector behavior is to receive messages in all the cluster's nodes, not just the primary node. JMS Connector enables you to configure the *Primary node only* field in the *On New Message* source. When the connector consumes from a queue in a cluster, do not select the *Primary node only* field, which defaults to `false`.
 
-In case of consuming messages from a *Queue*, you'll want to *change this configuration to receive messages in all the nodes* of the cluster, not just the primary. This can be done with the `primaryNodeOnly` parameter:
+In the following example, you configure the connector to receive messages in all the nodes:
+
+. In Studio, select the *On New Message* source from your flow.
+. In the *Advanced* tab, leave unselected the *Primary node only* field.
+
+.JMS Connector Primary Node only Configuration
+image::jms-performance-2.png[In the Advanced tab of the On New Message source, do not select the Primary node only field]
+
+In the XML editor, the `primaryNodeOnly` configuration looks like this:
 
 [source,xml,linenums]
 ----
 <jms:listener config-ref="config" destination="${inputQueue}" primaryNodeOnly="false"/>
 ----
 
-Consuming messages from a *Topic* is a bit different, since the default behavior of *receiving messages only in the primary node is the most common use case*, given that it avoids processing the same message multiple times across the cluster.
+When consuming messages from a topic, the default connector behavior is to receive messages only in the primary node, which avoids processing the same message multiple times across the cluster. +
 
-If you are using the JMS 2.0 *shared subscriptions* mechanism, then you'll want to *change the cluster configuration to consume from all the nodes*, again setting `primaryNodeOnly` to `false`:
+When consuming messages from a topic in a cluster, the configuration of *Primary node only* unselected causes the cluster to process the same message more than once, unless you also configure shared subscriptions. +
+If you are using the JMS 2.0 shared subscriptions mechanism, then change the cluster configuration to consume from all the nodes, again setting the *Primary node only* field to `false`.
+
+In the following example, you configure the connector using 2.0 spec shared-subscriptions mechanism:
+
+. In Studio, select the *On New Message* source from your flow.
+. In the *On New Message* source configuration screen, select *Topic consumer*.
+. Select the *Shared* option.
+. Set the *Subscription name* to `clusteredEventListener`.
+. In the *Advanced* tab, leave unselected the *Primary node only* field.
+
+.JMS Connector Primary Node only Configuration
+image::jms-performance-3.png[In the Advanced tab of the On New Message source, do not select the Primary node only field]
+
+In the XML editor, the `jms:topic-consumer`, `shared`, and `primaryNodeOnly` configurations look like this:
 
 [source,xml,linenums]
 ----
@@ -52,11 +76,7 @@ If you are using the JMS 2.0 *shared subscriptions* mechanism, then you'll want 
  </jms:listener>
 ----
 
-TIP: When listening from a *Queue* in a cluster, change the `primaryNodeOnly` configuration to `false`.
-
-WARNING: When listening from a *Topic* in a cluster, not using the `primaryNodeOnly` configuration will cause the cluster to process the same message more than once, unless shared-subscriptions is used.
-
 == See Also
 
-* xref:jms-consume.adoc[To Consume Messages]
-* xref:jms-topic-subscription.adoc[Using Topic Subscriptions]
+* xref:jms-consume.adoc[Consume Messages]
+* xref:jms-topic-subscription.adoc[Configure Topic Subscriptions]
