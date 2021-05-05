@@ -1,18 +1,20 @@
 = Validate Documents against an XSD Schema with the XML Module - Mule 4
 :page-aliases: connectors::xml/xml-schema-validation.adoc
 
-The XML module *Validate schema* operation validates that the input content is compliant with a given schema. This operation supports referencing many schemas using comma as a separator that include each other schema.
-By default, this operation looks for the input document at the message payload level. However, you can supply your own input.
-Note that you can use the `<xml-module:validate-schema>` component inside a `<validation:all>` element.
+The XML module *Validate schema* operation validates that the input content is compliant with a given XSD schema. The operation supports referencing many schemas using comma as a separator that includes each other schema.
+By default, this operation looks for the input document at the message payload level, but you can supply your own input as well.
+Note that you can use the *Validate schema* operation inside the Validation module *All* scope.
 
-In the following example, you configure the *Validate schema* operation to work with XML that contains the script of the play Othello by William Shakespeare.
+== Configure the Validation Schema Operation in Studio
+
+In the following example, you validate XML schemas that contains the script of the play Othello by William Shakespeare:
 
 . In Studio, drag the *Validate schema* operation to your flow.
-. In the *Schemas* field, add your schemas and separate them with a comma, for example, `schema1.xsd, schema2.xsd`.
+. In the *Schemas* field, add your schemas files and separate them with a comma, for example, `schema1.xsd, schema2.xsd`.
 . Drag a *Flow Reference* component to the right of the *Validate schema* operation.
 . Set the *Flow name* to `processValidDocument`.
 
-.XML Module Validation schema configuration
+.XML Module Validate schema configuration
 image::xml-validate-schema-1.png[In the Schemas field add the schema name files]
 
 In the XML editor, the `<xml-module:validate-schema>` configuration looks like this:
@@ -32,12 +34,12 @@ In the following example, you configure the *Validate schema* operation where yo
 . In the *Advanced* tab, set the *Target Variable* field to `xmlDoc`.
 . Drag the XML module *Validate schema* operation to the right of the *Read* operation.
 . In the *Schemas* field, add your schemas and separate them with a comma, for example, `schema1.xsd, schema2.xsd`.
-. Set the *Content* field to `#[vars.xmlDoc]`.
+. Set the *Content* field to the XML content to validate, for example, `#[vars.xmlDoc]`.
 . Drag a *Flow Reference* component to the right of the *Validate schema* operation.
 . Set the *Flow name* to `processValidDocument`.
 
-.XML Module Valida schema configuration
-image::xml-validate-schema-2.png[In the Schemas field add the schema name files]
+.XML Module Validate schema configuration
+image::xml-validate-schema-2.png[In the Content field add XML content file to validate]
 
 In the XML editor, the `<xml-module:validate-schema>` and `<xml-module:content>` configurations look like this:
 
@@ -53,14 +55,11 @@ In the XML editor, the `<xml-module:validate-schema>` and `<xml-module:content>`
 ----
 
 
+== Manage the Validation Error
 
-== Handling the Validation Error
-
-If the validation is successful, nothing happens, and the flow continues to the next operation. If it fails, an `XML-MODULE:SCHEMA_NOT_HONOURED` error is raised.
-
-The `XML-MODULE:SCHEMA_NOT_HONOURED` error is a complex one. Because the validation can fail for any number of reasons, the error contains a list of Messages. Each message contains a `SchemaViolation` object, which has the following structure:
-
-.SchemaViolation Object
+If the validation is successful, the flow continues to the next operation. However, if the validation fails, an `XML-MODULE:SCHEMA_NOT_HONOURED` error is raised. +
+Because the validation can fail for any number of reasons, the error description contains a list of messages. Each message contains a `SchemaViolation` object, that has the following structure:
++
 [source,yaml,linenums]
 ----
 {
@@ -70,17 +69,40 @@ The `XML-MODULE:SCHEMA_NOT_HONOURED` error is a complex one. Because the validat
 }
 ----
 
-Consider the following example:
+In the following example, you configure the *Validate schema* operation and the `XML-MODULE:SCHEMA_NOT_HONOURED` error in the Error Handler component:
+
+. In Studio, drag the *Try* scope component to your flow.
+. Drag the XML module *Validate schema* operation into the *Try* scope component.
+. In the *Schemas* field, add your schema, for example, `schema.xsd`.
+. In your flow, click the *Error handling* arrow to expand the error handling section.
+. Drag the *On Error Propagate* component into the *Error handling* section.
+. Set the *Type* field to the Mule error handled by this on-error strategy, for example, `XML-MODULE:SCHEMA_NOT_HONOURED`.
+. Deselect *Enable Notifications* and *Log Exception* fields.
+. Drag a *For Each* scope component into the *On Error Propagate* component to iterate over each `errorMessage.payload`.
+. Set the *Collection* field to the expression that splits the payload into individual pieces, for example, `#[error.errorMessage.payload]`.
+. Drag a *Logger* component into the *For Each* scope component to log the XML module error.
+. Set the *Message* field to the expression that contains the `SchemaViolation` objects that describe the message, for example, `#['At line: $(payload.lineNumber), column: $(payload.columnNumber) -> $(payload.description)']`.
+. Save your changes.
+. Click the project name in *Package Explorer* and then click *Run > Run As > Mule Application*.
+. Navigate to the Console view to read the logger message:
++
+```
+ERROR 2018-02-16 14:35:45,722 [[MuleRuntime].cpuIntensive.01: [SchemaValidationTestCase#extractErrorsUsingExpressions].extractErrorsFromException.CPU_INTENSIVE @411e886b] org.mule.runtime.core.internal.processor.LoggerMessageProcessor: At line: -1, column: -1 -> cvc-complex-type.2.4.a: Invalid content was found starting with element 'fail'. One of '{used}' is expected.
+```
+.XML Module Manage validation error flow
+image::xml-validate-schema-3.png[The XML Module Manage validation error flow]
+
+In the XML editor, the `<on-error-propagate type="XML-MODULE:SCHEMA_NOT_HONOURED">` configuration looks like this:
 
 [source,xml,linenums]
 ----
  <flow name="extractErrorsFromException">
     <try>
-        <xml-module:validate-schema schemas="schema.xsd" /> // <1>
+        <xml-module:validate-schema schemas="schema.xsd" />
         <error-handler>
-            <on-error-propagate type="XML-MODULE:SCHEMA_NOT_HONOURED"> // <2>
+            <on-error-propagate type="XML-MODULE:SCHEMA_NOT_HONOURED">
                 <foreach collection="#[error.errorMessage.payload]">
-                    <logger level="ERROR" message="#['At line: $(payload.lineNumber), column: $(payload.columnNumber) -> $(payload.description)']" /> // <3>
+                    <logger level="ERROR" message="#['At line: $(payload.lineNumber), column: $(payload.columnNumber) -> $(payload.description)']" />
                 </foreach>
             </on-error-propagate>
         </error-handler>
@@ -88,16 +110,36 @@ Consider the following example:
 </flow>
 ----
 
+
+== Troubleshoot Validation Against a Schema Issues
+
+When using the XML module to validate against a schema that has references to other local schema files, the validation can fail with the error:
+
 ```
-ERROR 2018-02-16 14:35:45,722 [[MuleRuntime].cpuIntensive.01: [SchemaValidationTestCase#extractErrorsUsingExpressions].extractErrorsFromException.CPU_INTENSIVE @411e886b] org.mule.runtime.core.internal.processor.LoggerMessageProcessor: At line: -1, column: -1 -> cvc-complex-type.2.4.a: Invalid content was found starting with element 'fail'. One of '{used}' is expected.
+The supplied schemas were not valid. schema_reference: Failed to read schema document NMVS_Composite_Types.xsd, because file access is not allowed due to restriction set by the accessExternalSchema property
 ```
 
-== Validate Against a Schema
+This error occurs because the access was restricted in the XML module global element configuration by setting the *Expand entities* field to the default value of *NEVER*. This value prevents XXE (XML External Entity) and DoS (Denial of Service) attacks.
 
-When using the XML Module to validate against a schema that has references to other local schema files, validation can fail because the access was restricted by the `expandEntities` as it was using the default value of NEVER. The error message is: The supplied schemas were not valid. schema_reference: Failed to read schema document `NMVS_Composite_Types.xsd`, because `file` access is not allowed due to restriction set by the accessExternalSchema property.
+To resolve this issue set the *Expand entities* field to *INTERNAL*:
 
-You can eliminate this issue by adding `expandEntities="INTERNAL"` to the `xml-module:config` element.
+. In Studio, open your project and access your Mule app flow.
+. Navigate to the *Global Element* tab.
+. Select the *XML Config* configuration, and click *Edit*.
+. In the *Global Element Properties* window, set *Expand entities* field to *INTERNAL*.
+. Click *OK*.
+
+.XML Module Global Configuration element
+image::xml-validate-schema-4.png[XML Module global configuration Expand entities field]
+
+In the XML editor, the `<expandEntities>` configuration looks like this:
+
+[source,xml,linenums]
+----
+	<xml-module:config name="XML_Config" expandEntities="INTERNAL"/>
+----
 
 == See Also
 
-xref:index.adoc[XML Module]
+* xref:xml-module-examples.adoc[XML Module Examples]
+* xref:index.adoc[XML Module]
