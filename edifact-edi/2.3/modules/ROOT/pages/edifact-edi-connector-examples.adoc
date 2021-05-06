@@ -1,0 +1,124 @@
+= EDIFACT EDI Connector 2.3 - Examples - Mule 4
+
+The following examples show how to read, validate, and write EDI messages. In addition, you can send functional and interchange acknowlegments to your trading partners.
+
+== XML for EDIFACT Studio
+Paste this code into the Studio XML editor to quickly load the flow for this
+example into your Mule app.
+
+////
+image::edifact-edi-mapping-flow.jpg[Mapping Flow Diagram]
+////
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+xmlns:edifact="http://www.mulesoft.org/schema/mule/edifact"
+xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns="http://www.mulesoft.org/schema/mule/core"
+xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/edifact
+http://www.mulesoft.org/schema/mule/edifact/current/mule-edifact.xsd
+http://www.mulesoft.org/schema/mule/ee/core
+http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-connection host="localhost" port="8081" />
+  </http:listener-config>
+  <edifact:config name="EDIFACT_EDI_Config" doc:name="EDIFACT EDI Config"
+    interchangeIdSelf="mule"
+    interchangeIdQualifierSelf="ZZZ"
+    interchangeIdPartner="partner"
+    interchangeIdQualifierPartner="ZZZ">
+    <edifact:schemas>
+      <edifact:schema value="/edifact/d96a/ORDERS.esl"/>
+      <edifact:schema value="/edifact/d99b/CUSRES.esl"/>
+    </edifact:schemas>
+  </edifact:config>
+  <flow name="edifactmappingFlow">
+     <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/map" />
+     <edifact:read doc:name="Read" config-ref="EDIFACT_EDI_Config"/>
+     <ee:transform doc:name="Transform Message">
+       <ee:message >
+         <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+    Messages: {
+        D96A: {
+            ORDERS: payload.Messages.D96A.ORDERS
+        }
+    }
+}]]></ee:set-payload>
+       </ee:message>
+     </ee:transform>
+     <edifact:write doc:name="Write" config-ref="EDIFACT_EDI_Config"/>
+  </flow>
+</mule>
+----
+
+== Read and Validate EDIFACT EDI Messages
+
+. To read an EDIFACT message, search the palette for EDIFACT EDI, and drag the EDIFACT **Read** operation into a flow.
+
+. Go to the properties view, select the connector configuration you created and select the **Read** operation.
+
+This reads any byte stream into the structure described by your EDIFACT schemas.
+
+The EDIFACT module validates the message when it reads it. Message validation includes checking the syntax and content of the envelope segments UNB and UNZ as well as the actual messages within the message. Normally errors are both logged, accumulated, and reported in CONTRL acknowledgment messages and all accepted messages (whether error free or with non-fatal errors) are passed on for processing as part of the output message Map. Exceptions are thrown Errors when reading the input data.
+
+Error data entered in the receive data map uses the `EdifactError` class. This is a read-only JavaBean with these properties:
+
+[%header%autowidth.spread]
+|===
+|Property |Description
+|segment |The zero-based index within the input of the segment causing the error
+|fatal |Flag for a fatal error. This means the associated message, group, or interchange is rejected as a result of the error.
+|errorCode |EDIFACT syntax error code
+|errorText |Text description of the error
+|===
+
+Error data is returned by the Read operation as optional lists with the `Errors` key at both the root level of the data structure and at the message level. For the message level, the list contains non-fatal errors encountered during the message parsing. For the root level, the list contains both interchange errors and fatal message errors.
+
+== Write EDIFACT EDI Messages
+
+* To write an outgoing message, search the palette for EDIFACT EDI and drag the EDIFACT **Write** operation into a flow.
+
+* Construct an outgoing EDIFACT EDI message according to the structure as defined for input to the write operation.
+
+If no fatal errors are found in the Write operation, the normal flow continues. Otherwise, an exception is thrown that describes the error.
+
+== Send Functional Acknowledgments
+
+Sending generated functional acknowledgments (CONTRL messages) is the same as writing any other type of EDI message except that transactions are set to the acknowledgments that were generated during the Read operation.
+
+For example:
+////
+image::edifact-edi-ack-flow.jpg[Ack Flow Diagram]
+////
+[source,xml,linenums]
+----
+<edifact-edi:read config-ref="EDIFACT_EDI__Configuration" doc:name="Read EDI Doc"/>
+  ...
+<dw:transform-message doc:name="Create Outgoing Acks Message">
+    <dw:set-payload><![CDATA[%dw 1.0
+%output application/java
+---
+{
+	FunctionalAcksToSend: payload.FunctionalAcksGenerated
+}]]></dw:set-payload>
+</dw:transform-message>
+<edifact-edi:write config-ref="EDIFACT_EDI__Configuration" doc:name="Send Acks"/>
+----
+
+The generated functional acknowledgments have interchange data set up for sending back to the sender of the original message, so it's not required to change anything in the transactions to perform the send.
+
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
