@@ -1,12 +1,12 @@
-= Salesforce Connector 10.10 Additional Configuration - Mule 4
+= Salesforce Connector 10.10 Additional Configuration Information - Mule 4
 :page-aliases: connectors::salesforce/salesforce-connector-config-topics.adoc
 
-Configure these Anypoint Connector for Salesforce (Salesforce Connector) operations to:
+Configure Anypoint Connector for Salesforce (Salesforce Connector) to:
 
 * Load data in batches
 * Specify a Lead ID for a Lead Convert Request operation
-* Use the Replay topic and Replay channel listener operations
-* Configure a redelivery policy
+* Update field values to `null`
+* Generate an OAuth 2.0 keystore file
 
 [[batchdata]]
 == Load Data in Batches
@@ -46,26 +46,51 @@ output application/java
 </ee:transform>
 ----
 
+== Update Field Values to Null
 
-=== Message Redelivery for Input Sources
+To set field values to `null`, use an *Update* or *Upsert* request operation and insert the names of the fields you want to nullify in the *Transform Message* component's *fieldsToNull* field:
 
-You can configure a redelivery policy for input sources by setting the number of redelivery attempts to try after an initial failure. You can specify an object store for this policy. If you don't specify an object store, Mule creates a non-persistent object store.
+.Specify the field names you want to nullify in the *Transform Message* component *fieldsToNull* field.
+image::salesforce-connector-10-set-fields-to-null.png[Set a field to null]
 
-The number of transactions used to interact with the object store varies based on the number of retries configured for the redelivery policy.
+[[generate-keystore]]
+== Generate a Keystore File
 
-For more information about configuring a redelivery policy, see xref:mule-runtime::redelivery-policy.adoc[Redelivery Policy].
+Salesforce Connector uses the Bouncy Castle cryptographic library to load the certificate from the keystore and sign the payload for the authentication requests.
 
-=== OAuth 2.0 Connection Type
+The library has a https://nvd.nist.gov/vuln/detail/CVE-2018-5382[vulnerability (CVE-2018-5382)] that relates to the BKS-V1 keystore file type. By default, Salesforce Connector uses JKS or PKCS12 keystores. Avoid using BKS-V1 keystore files, as documented in the https://www.kb.cert.org/vuls/id/306792[Bouncy Castle proposed solution].
 
-When configuring an OAuth 2.0 connection, you can specify an object store that stores each resource owner's ID data. If you don't specify an object store, Mule automatically provisions the default object store.
+To generate a JKS keystore file:
 
-The app interacts with the object store automatically when a new resource owner is authenticated, the access token is refreshed, or the access token is invalidated.
-
-== Clear Fields by Updating Field Value to Null
-
-In Salesforce Connector 10.x, to clear a field, you must use an *Update* or *Upsert* request operation and set the name of the fields you want to nullify in the *fieldsToNull* field, for example:
-
-image::salesforce-connector-10-set-fields-to-null.png[Set a field to null ]
+. Go to your Mule workspace and open the command prompt (for Windows) or Terminal (for Mac).
+. Enter this command:
++
+[source]
+----
+keytool -genkeypair -alias salesforce-cert -keyalg RSA -keystore salesforce-cert.jks
+----
++
+. Enter the following information:
++
+** Password for the keystore
+** Your first name and last name
+** Your organization unit
+** Your city and state, and the two-letter code for your country
++
+The system generates a Java keystore file (JKS format) that contains a private or public key pair in your workspace.
++
+. Provide the file path for the keystore in your connector configuration.
++
+Enter this command:
++
+[source]
+----
+keytool -exportcert -alias salesforce-cert -file salesforce-cert.crt -keystore salesforce-cert.jks
+----
++
+The system exports the public key from the keystore into the workspace. This is the public key to enter in your Salesforce instance.
++
+. Verify that you have both the keystore (`salesforce-cert.jks`) and the public key (`salesforce-cert.crt`) files in your workspace.
 
 == See Also
 
