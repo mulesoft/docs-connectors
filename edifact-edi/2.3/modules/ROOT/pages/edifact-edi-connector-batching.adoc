@@ -1,48 +1,50 @@
 = EDIFACT EDI Connector 2.3 - Batch Outbound EDIFACT Messages - Mule 4
 
-For B2B and EDI messages that are not time-sensitive, such as invoices and payment remittances, it is best practice to batch messages into a single interchange to send to trading partners instead of transmitting individual transactions as separate interchanges or files.
+For B2B and EDI messages that are not time-sensitive, such as invoices and payment remittances, batch messages instead of transmitting transactions to your trading partners individually.
 
 == Batching Stages
 
-You can use the EDIFACT EDI Connector’s Batch operation to merge individual EDIFACT messages created and accumulated over time into a single interchange to send to your trading partners.
+Use the Anypoint EDIFACT EDI Connector Batch Write operation to merge individual EDIFACT messages into a single transmission to send to your trading partners.
 
 Implementing a batch involves two stages:
 
-* Stage One - Accumulate the transactions
-* Stage Two - Release the batch
+. Accumulate the transactions.
+. Release the batch.
 
-=== Stage One - Accumulate the Transactions
+=== Accumulate the Transactions
 
 To accumulate transactions for a batch:
 
-* Transform the payloads into EDIFACT messages using DataWeave and EDIFACT as you receive application messages (such as a JSON invoice) from the backend systems.
-* Create EDIFACT payloads using temporary control number keys in the EDIFACT Write operation. +
-This enables sending the accumulated EDIFACT as a batch at a later time. The batch is created with control numbers that are not used in the final batch sent to the trading partner. For example,
+. Transform the payloads into EDIFACT messages using DataWeave and EDIFACT as you receive application messages (such as a JSON invoice) from the backend systems.
+. Create EDIFACT payloads using temporary control number keys in the EDIFACT Write operation. +
+This enables sending the accumulated EDIFACT as a batch later. The batch is created using control numbers that are not used in the final batch sent to the trading partner, for example, +
+
 `<edifact:write doc:name="Write individual D97A ORDERS" doc:id="3d51215a-125d-461b-9791-0a939e5ebc45" config-ref="EDIFACT_Write_ORDERS" interchangeControlNumberKey="NTO-MYTHICAL-UNB-TMP"/>`.
-* Store the intermediate EDIFACT message payloads in your choice of storage, such as a database table.
+
+. Store the intermediate EDIFACT message payloads in your choice of storage, such as a database table:
 
 image::edifact-edi-connector-batch-flow-1.jpg[Accumulate the transactions]
 
 For example, this implementation of a Mule flow:
 
 * Receives JSON payloads from the backend systems.
-* Transforms to `EDIFACT D97A ORDERS` message.
+* Transforms to an `EDIFACT D97A ORDERS` message.
 * Generates the intermediate EDIFACT message payload using the EDIFACT Write operation.
 * Stores the EDIFACT payload in a database table.
 
-=== Stage Two - Release the Batch
+=== Release the Batch
 
-Trading partners have varying criteria for how they want transactions batched. The criteria are met by meeting one or a combination of the following conditions and are implemented outside of the EDIFACT EDI Connector operations:
+Trading partners have varying criteria for how they want transactions batched:
 
 * Release the batch at a specific time interval or a specific time of the day.
-* Release the batch when a specific number of transactions are accumulated.
+* Release the batch when a specific number of transactions is accumulated.
 * Release the batch when the total size of the accumulated transactions is near a threshold.
 
 To release the batch:
 
-* Implement the logic or module to monitor the transactions accumulated in the temporary storage and determine when a particular batch is released.
+. Implement the logic or module to monitor the transactions accumulated in the temporary storage and determine when a particular batch is released.
 
-* Retrieve the accumulated intermediate EDIFACT messages from the temporary storage based on the batch criteria, append the transactions together, and then send the appended payload to the EDIFACT Batch operation. +
+. Retrieve the accumulated intermediate EDIFACT messages from the temporary storage based on the batch criteria, append the transactions together, and then send the appended payload to the EDIFACT Batch operation. +
 You can choose to use the control number key on the Batch operation, or leave the control number key fields empty at the time of Batch operation execution - allowing the EDIFACT EDI Connector to generate the control number sequence automatically based on the sender and receiver identifier combination. For example,
 `<edifact:batch doc:name="Batch" doc:id="3ce80437-63e2-404c-b875-531708b7bfdb" config-ref="EDIFACT_Batch" interchangeControlNumberKey="NTO-MYTHICAL-UNB-TMP"> <edifact:batch-content ><![CDATA[#[vars.mergedInput]]]></edifact:batch-content> </edifact:batch>`.
 * Ensure that the input payload sent to the Batch operation contains EDI transactions with data elements in the UNB envelope segments, such as `Sender ID`, `Receiver ID`, and `Version number`. +
