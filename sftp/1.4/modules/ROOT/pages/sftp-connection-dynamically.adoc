@@ -1,0 +1,153 @@
+= Connect to SFTP Servers Dynamically Example - Mule 4
+
+Many integrations require connecting to different servers based on a specific condition, such as:
+
+* Connecting to different invoice storage servers depending on the branch that emits an invoice
+* Connecting to different servers depending on an integration subject, such as in a multitenant use case
+
+To accommodate these use cases, the Anypoint Connector for SFTP (SFTP Connector) global configuration element supports parameter expressions that evaluate these conditions and connect to the correct server.
+
+The following example shows how to configure SFTP Connector to connect dynamically to multiple servers:
+
+. An HTTP *Listener* source initiates the flow by reading random content posted via HTTP.
+. The File Connector *Read* operation loads a recipients CSV file that contains a random set of SFTP destinations, with columns such as `host`, `user`, and `port`.
+. A DataWeave transformation maps the content and splits the CSV file.
+. A *For Each* component and an SFTP *Write* operation write the contents into each of the SFTP destinations.
++
+On each *For Each* iteration, the expressions set in the SFTP global configuration element resolve to a different value and establish different connections to each of the servers.
+
+To test this example, create the Mule application, and run and test the application with curl commands:
+
+.Connect to SFTP Servers Dynamically flow
+image::sftp-connection-dynamically.png[Connect to SFTP Servers Dynamically]
+
+== Create the Mule Application
+
+To create the Mule flow:
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *HTTP Listener* to the Studio canvas.
+. On the *HTTP Listener* configuration screen, optionally change the value of the *Display Name* field.
+. Set the *Path* field to `/multitenant`
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP Listener in the app.
+. On the *General* tab, set the following fields:
++
+* *Host*: `All Interfaces [0.0.0.0] (default)`
+* *Port*: `8081`
++
+. Click *OK*.
+. Drag a *Set Variable* component to the right of the *HTTP Listener* source.
+. Set the *Name* field to `content` and the *Value* field to `#[payload]`.
+. Drag the File Connector *Read* operation to the right of the *Set Variable* component.
+. Set the *File Path* field to `recipients.csv`. +
+This reads a CSV file that contains a random set of SFTP destinations with columns such as `host`, `user`, and `port`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of File Connector in the app.
+. Accept the default settings and click *OK*.
+. On the *MIME Type* tab of the *Read* operation, for the *MIME Type* field, select `application/csv`.
+
+=== Configure Additional Components and Operations
+
+Continue creating your Mule application by adding additional components and operations:
+
+. In Studio, drag a *Transform Message* component to the right of the *Read* operation.
+. In the *Output* section of the component, add the following DataWeave code to map the columns of the CSV file:
++
+.DataWeave script:
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+payload map using (row = $) {
+   host: row.Host,
+   user: row.User,
+   password: row.Password}
+----
++
+. Drag a *For Each* component to the right of the *Transform Message* component.
+. Drag an SFTP *Write* operation into the *For Each* component. +
+On each For Each iteration, the *Write* operation writes the contents into each of the SFTP destinations.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of SFTP Write operation in the app, and set the following fields:
++
+* *Host*: `#[payload.host]`
+* *Username*: `#[payload.username]`
+* *Password*: `#[payload.password]`
++
+[start=6]
+. Click *OK*.
+. On the configuration screen, set the *Path* field to `demo.txt`.
+. Set the *Content* field to `payload`.
+. Drag a *Set Payload* component to the right of the *For Each* component.
+. Set the *Value* field to `Multicast Ok`.
+
+== Run and Test your Mule Application
+
+After creating your Mule application, run and test it:
+
+. In Studio, save your Mule app.
+. Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*.
+. Open a browser and type `+http://0.0.0.0:8081/multitenant+`. +
+
+Note about Mule 4 behavior for Mule 3 users:
+
+* The information posted through the HTTP Listener source is written to each SFTP site multiple times.
++
+Because the listener makes use of the xref:mule-runtime::streaming-about.adoc[repeatable streams feature], you do not need to worry about consuming the stream multiple times.
+
+* The For Each component automatically goes through each line of the CSV file.
++
+In Mule 3, you first needed to transform the CSV file into a Java structure, but because Mule 4 is now Java agnostic, this works out-of-the-box.
+
+When reading or listing files, you might be interested in the file's metadata (for example, the file name, full path, size, timestamp). The connector uses the Mule message attributes to access this information.
+
+
+== XML for Connecting to SFTP Servers Dynamically
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd">
+	<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config"  />
+	<sftp:config name="SFTP_Config" doc:name="SFTP Config"  >
+		<sftp:connection host="#[payload.host]" username="#[payload.user]" password="#[payload.password]" />
+	</sftp:config>
+	<flow name="SFTPexample" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/multitenant"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" variableName="content"/>
+		<file:read doc:name="Read" config-ref="File_Config" path="recipients.csv" outputMimeType="application/csv"/>
+		<ee:transform doc:name="Transform Message" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map using (row = $) {
+   host: row.Host,
+   user: row.User,
+   password: row.Password}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<foreach doc:name="For Each" >
+			<sftp:write doc:name="Write" config-ref="SFTP_Config" path="demo.txt">
+			</sftp:write>
+		</foreach>
+		<set-payload value="Multicast OK" doc:name="Set Payload" />
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:sftp-examples.adoc[SFTP Connector Examples]
+* https://help.mulesoft.com[MuleSoft Help Center]
