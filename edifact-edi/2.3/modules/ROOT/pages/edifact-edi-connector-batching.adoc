@@ -17,10 +17,7 @@ To accumulate transactions for a batch:
 
 . Transform the payloads into EDIFACT messages using DataWeave and EDIFACT as you receive application messages (such as a JSON invoice) from the backend systems.
 . Create EDIFACT payloads using temporary control number keys in the EDIFACT Write operation. +
-This enables sending the accumulated EDIFACT as a batch later. The batch is created using control numbers that are not used in the final batch sent to the trading partner, for example, +
-
-`<edifact:write doc:name="Write individual D97A ORDERS" doc:id="3d51215a-125d-461b-9791-0a939e5ebc45" config-ref="EDIFACT_Write_ORDERS" interchangeControlNumberKey="NTO-MYTHICAL-UNB-TMP"/>`.
-
+This enables sending the accumulated EDIFACT as a batch later. The batch is created using control numbers that are not used in the final batch sent to the trading partner, for example, `<edifact:write doc:name="Write individual D97A ORDERS" doc:id="3d51215a-125d-461b-9791-0a939e5ebc45" config-ref="EDIFACT_Write_ORDERS" interchangeControlNumberKey="NTO-MYTHICAL-UNB-TMP"/>`.
 . Store the intermediate EDIFACT message payloads in your choice of storage, such as a database table:
 
 image::edifact-edi-connector-batch-flow-1.jpg[Accumulate the transactions]
@@ -44,19 +41,20 @@ To release the batch:
 
 . Implement the logic or module to monitor the transactions accumulated in the temporary storage and determine when a particular batch is released.
 
-. Retrieve the accumulated intermediate EDIFACT messages from the temporary storage based on the batch criteria, append the transactions together, and then send the appended payload to the EDIFACT Batch operation. +
-You can choose to use the control number key on the Batch operation, or leave the control number key fields empty at the time of Batch operation execution - allowing the EDIFACT EDI Connector to generate the control number sequence automatically based on the sender and receiver identifier combination. For example,
+. Retrieve the accumulated intermediate EDIFACT messages from the temporary storage based on the batch criteria, group the transactions together, and then send the appended payload to the EDIFACT Batch Write operation. +
+You can either use the control number key on the Batch Write operation or leave the control number key fields empty at the time of Batch Write operation execution, allowing the EDIFACT EDI Connector to generate the control number sequence automatically based on the sender and receiver identifier combination:
 `<edifact:batch doc:name="Batch" doc:id="3ce80437-63e2-404c-b875-531708b7bfdb" config-ref="EDIFACT_Batch" interchangeControlNumberKey="NTO-MYTHICAL-UNB-TMP"> <edifact:batch-content ><![CDATA[#[vars.mergedInput]]]></edifact:batch-content> </edifact:batch>`.
-* Ensure that the input payload sent to the Batch operation contains EDI transactions with data elements in the UNB envelope segments, such as `Sender ID`, `Receiver ID`, and `Version number`. +
-If the input payload contains EDI transactions with non-matching data elements in the envelope segments, the Batch operation throws an exception.
+. Ensure that the input payload sent to the Batch Write operation contains EDI transactions with data elements in the UNB envelope segments, such as `Sender ID`, `Receiver ID`, and `Version number`. +
 
 image::edifact-edi-connector-batch-flow-2.jpg[Release the batch]
 
 For example, this implementation of a Mule flow:
 
-* Receives an HTTP request to release accumulated EDIFACT messages transactions for a specific partner. The request is triggered once the batch release criteria are met.
+* Receives an HTTP request to release accumulated EDIFACT messages transactions for a specific partner. The request is triggered after the batch release criteria are met.
 * Retrieves the intermediate EDIFACT messages from the database table.
-* Applies a transformation to append the individual EDIFACT messages together.
-* Sends the appended payload through EDIFACT Batch operation to merge the messages into a single interchange.
+* Applies a transformation to group the individual EDIFACT messages together.
+* Sends the appended payload through the EDIFACT Batch Write operation to merge the messages into a single transaction.
 * Prints the generated control numbers, which reconcile the inbound functional acknowledgments received from the partners.
-* Delivers the batched EDIFACT interchange to the trading partner’s SFTP site.
+* Delivers the batched EDIFACT transaction to the trading partner’s SFTP site.
+
+If the input payload contains EDI transactions with non-matching data elements in the envelope segments, the Batch operation throws an exception.
