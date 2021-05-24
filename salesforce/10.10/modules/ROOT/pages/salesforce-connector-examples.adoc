@@ -4,6 +4,7 @@
 [[accandtrans]]
 == Accept and Transform Data
 
+
 The Mule flow sets up:
 
 * HTTP Listener: Accepts data from HTTP requests.
@@ -16,15 +17,89 @@ The Mule flow sets up:
 * Transform Message: Transforms a data structure and format to produce the output that the File Connector endpoint expects.
 * File Connector: Records data in a file, such as a CSV and saves it to a user-defined directory or location.
 
-=== Studio Flows
+This example contains the following flows:
 
-* Set up HTTP Listener, Transform, and Create Account:
+* Create a new account:
 +
-image::salesforce-outbound.png[]
+.Flow for creating a new account
+image::salesforce-outbound.png[Flow for creating a new Salesforce account]
+* Query the result stream and write the query result to a file
 +
-* Schedule a trigger, query the result steam, transform the message, and write to a file:
-+
+. Flow for querying the new account and writing the result to a file
 image::salesforce-inbound.png[]
+
+This example uses variables for some field values. You can either:
+
+* Replace the variables with their values in the code
+* Provide the values for each variable in a properties file and then refer to that file from the connector configuration
+
+If you don’t know how to use a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configure Property Placeholders].
+
+=== Configure HTTP Listener
+
+Configure HTTP Listener to initiate a Mule flow when a call is made to the `/account` path on localhost port 8081:
+
+. Create a new Mule project in Studio.
+. In Studio, click *HTTP* and drag the *Listener* operation to the canvas.
+. Change the display name of the *Listener* operation to `/account`.
+. On the Listener properties window, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. On the Listener properties window, set the *Path* field value to `/account`.
+
+=== Add the First Transform Message Component
+
+Add the first *Transform Message* component to input field values in Java format to the Salesforce Connector *Create* operation:
+
+. From the *Mule Palette* view, drag a *Transform Message* component to the right of *Listener*.
+. Click the *Transform Message* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+[{
+
+  Name: payload.Name,
+  AccountNumber: payload.AccountNumber,
+  BillingCity: payload.BillingCity
+}]
+----
+
+=== Add the Create Operation
+
+Add the *Create* operation to create a new Salesforce account:
+
+. From the *Mule Palette* view, select *Salesforce* and drag the *Create* operation to the right of *Transform Message*.
+. Configure the global element as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Username |${salesforce.username}
+|Password | ${salesforce.password}
+|Security | ${salesforce.securityToken}
+|Authorization URL | http://login.salesforce.com/services/Soap/u/5.1.0
+
+=== Add the Second Transform Message Component
+
+Add the second *Transform Message* component to transform the field values JSON format, which the Anypoint Connector for File (File Connector) endpoint expects.
+
+. From the *Mule Palette* view, drag a *Transform Message* component to the right of *Listener*.
+. Click the *Transform Message* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
++
+%dw 2.0
+output application/json
+---
+payload map {
+  id:$.id,
+  errors:$.errors,
+  success:$.success
+}
+---
+
 
 === XML Flows
 
@@ -309,7 +384,8 @@ The following XML example shows how to upsert these objects:
 <mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-  http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
   http://www.mulesoft.org/schema/mule/ee/core
   http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
   http://www.mulesoft.org/schema/mule/salesforce
