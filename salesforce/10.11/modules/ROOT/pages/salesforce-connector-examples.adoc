@@ -1,9 +1,10 @@
-= Salesforce Connector 10.11 Examples - Mule 4
-:page-aliases: connectors::salesforce/salesforce-connector-examples.adoc
+= Salesforce Connector 10.10 Examples - Mule 4
 
 [[accandtrans]]
 == Accept and Transform Data
 
+
+////
 The Mule flow sets up:
 
 * HTTP Listener: Accepts data from HTTP requests.
@@ -15,18 +16,100 @@ The Mule flow sets up:
 ** Connects with Salesforce, and returns an `InputStream` with the query results.
 * Transform Message: Transforms a data structure and format to produce the output that the File Connector endpoint expects.
 * File Connector: Records data in a file, such as a CSV and saves it to a user-defined directory or location.
+////
 
-=== Studio Flows
 
-* Set up HTTP Listener, Transform, and Create Account:
-+
-image::salesforce-outbound.png[]
-+
-* Schedule a trigger, query the result steam, transform the message, and write to a file:
-+
-image::salesforce-inbound.png[]
+This example uses variables for some field values. You can either:
 
-=== XML Flows
+* Replace the variables with their values in the code
+* Provide the values for each variable in a properties file and then refer to that file from the connector configuration
+
+If you don’t know how to use a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configure Property Placeholders].
+
+=== Configure a Template for the HTML Input Form
+
+This flow configures an HTML template to use for providing HTML input to create the new table:
+
+.This flow uses the *Parse Template* component to create an HTML input form.
+image::salesforce-parse-template.png[Flow for creating an HTML input form]
+
+=== Create a New Salesforce Account
+
+This flow creates a new Salesforce account based on information in the HTML input form:
+
+.This flow uses the *Create* operation to create an HTML input form.
+image::salesforce-create-.png[Flow for creating an HTML input form]
+
+==== Configure HTTP Listener
+
+Configure HTTP Listener to initiate a Mule flow when a call is made to the `/account` path on localhost port 8081:
+
+. Create a new Mule project in Studio.
+. In Studio, click *HTTP* and drag the *Listener* operation to the canvas.
+. Change the display name of the *Listener* operation to `/account`.
+. On the Listener properties window, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. On the Listener properties window, set the *Path* field value to `/account`.
+
+==== Add the First Transform Message Component
+
+Add the first *Transform Message* component to convert the field values to Java format so the values can be used as input to the *Create* operation:
+
+. From the *Mule Palette* view, drag a *Transform Message* component to the right of *Listener*.
+. Click the *Transform Message* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+[{
+
+  Name: payload.Name,
+  AccountNumber: payload.AccountNumber,
+  BillingCity: payload.BillingCity
+}]
+----
+
+==== Add the Create Operation
+
+Add the *Create* operation to create a new Salesforce account using the field values passed by the *Transform Message* component:
+
+. From the *Mule Palette* view, select *Salesforce* and drag the *Create* operation to the right of *Transform Message*.
+. Configure the global element as follows:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Username |${salesforce.username}
+|Password | ${salesforce.password}
+|Security | ${salesforce.securityToken}
+|Authorization URL | http://login.salesforce.com/services/Soap/u/5.1.0
+|===
+
+==== Add the Second Transform Message Component
+
+Add the second *Transform Message* component to transform the field values to JSON format so the values can be used with the *File* component:
+
+. From the *Mule Palette* view, drag a *Transform Message* component to the right of *Listener*.
+. Click the *Transform Message* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
++
+%dw 2.0
+output application/json
+---
+payload map {
+  id:$.id,
+  errors:$.errors,
+  success:$.success
+}
+---
+
+
+=== XML Flow
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
 
 [source,xml,linenums]
 ----
@@ -39,7 +122,10 @@ image::salesforce-inbound.png[]
   xmlns="http://www.mulesoft.org/schema/mule/core"
   xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+  xsi:schemaLocation="
+  http://www.mulesoft.org/schema/mule/ee/core
+  http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/core
   http://www.mulesoft.org/schema/mule/core/current/mule.xsd
   http://www.mulesoft.org/schema/mule/http
   http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
@@ -198,7 +284,7 @@ output application/java
       </ee:message>
     </ee:transform>
     <salesforce:upsert config-ref="Salesforce_Sfdc_config"
-    externalIdFieldName="Id" type="Account" doc:name="Upsert" />
+    externalIdFieldName="ID" type="Account" doc:name="Upsert" objectType="Account" readTimeoutUnit="HOURS"/>
     <ee:transform doc:name="Transform Message" >
       <ee:message >
         <ee:set-payload ><![CDATA[%dw 2.0
@@ -304,9 +390,12 @@ The following XML example shows how to upsert these objects:
 <mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+  http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/ee/core
+  http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/salesforce
+  http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="88f6a4cd-e00a-46c6-b0a0-aaf99fb2dd74" >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
