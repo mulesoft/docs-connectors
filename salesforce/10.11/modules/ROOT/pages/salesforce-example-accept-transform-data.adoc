@@ -1,28 +1,10 @@
-=Accept and Transform Data
+= Accept and Transform Data
 
-This example shows how to configure Salesforce Connector to create a new Salesforce account:
+This example shows how to configure Salesforce Connector to create a new Salesforce account and query new accounts, and to use File Connector to write the new account data to a file:
 
 * The first flow configures a template for the HTML input form used to provide data for the new account.
 * The second flow creates a new Salesforce account based on information in the HTML input form.
-
-This example uses variables for some field values. You can either:
-
-* Replace the variables with their values in the code
-* Provide the values for each variable in a properties file and then refer to that file from the connector configuration
-
-If you don’t know how to use a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configure Property Placeholders].
-
-////
-* HTTP Listener: Accepts data from HTTP requests.
-* Transform Message: Transforms data structure and format to produce the output that Salesforce Connector expects.
-* Salesforce Connector:
-+
-** (Outbound) Connects with Salesforce and performs an operation to push data to Salesforce.
-** Triggers a flow according to the configuration.
-** Connects with Salesforce, and returns an `InputStream` with the query results.
-* Transform Message: Transforms a data structure and format to produce the output that the File Connector endpoint expects.
-* File Connector: Records data in a file, such as a CSV and saves it to a user-defined directory or location.
-////
+* The third flow queries new accounts by name and writes their data to a CSV file.
 
 == Configure a Template for the HTML Input Form
 
@@ -56,16 +38,16 @@ This flow creates a new Salesforce account based on the data in the HTTP input f
 .Use the *create* operation to create a new account.
 image::salesforce-create-account.png[Flow for creating anew account]
 
-== Configure HTTP Listener
+=== Configure HTTP Listener
 
 Configure *HTTP > Listener* to initiate a Mule flow when a call is made to the `/account` path on localhost port 8081:
 
 . Create a new Mule project in Studio.
 . In Studio, click *HTTP* and drag the *Listener* operation to the canvas.
-. Change the display name of the *Listener* operation to `/account`.
+. On the Listener properties window, change the display name of the *Listener* operation to `/account`.
+. In the *Connector configuration* field, select the HTTP > Listener configuration you created earlier `HTTP_Listener_config`.
 
-
-== Add the First Transform Message Component
+=== Add the First Transform Message Component
 
 Add the first *Transform Message* component to convert the values from the HTTP input form to Java format so they can be used as input to the *Create* operation:
 
@@ -86,7 +68,7 @@ output application/java
 }]
 ----
 
-== Add the Create Operation
+=== Add the Create Operation
 
 Add the *Create* operation to create a new Salesforce account using the field values passed by the *Transform Message* component:
 
@@ -102,7 +84,7 @@ Add the *Create* operation to create a new Salesforce account using the field va
 |Authorization URL | http://login.salesforce.com/services/Soap/u/5.1.0
 |===
 
-== Add the Second Transform Message Component
+=== Add the Second Transform Message Component
 
 Add the second *Transform Message* component to transform the field values to JSON format so the values can be used with the *File* component:
 
@@ -110,6 +92,8 @@ Add the second *Transform Message* component to transform the field values to JS
 . Click the *Transform Message* component.
 . In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
 +
+[source,dataweave,linenums]
+----
 %dw 2.0
 output application/json
 ---
@@ -118,7 +102,56 @@ payload map {
   errors:$.errors,
   success:$.success
 }
+----
+
+== Query New Accounts
+
+This flow queries new Salesforce accounts by name and writes the matching account's data to a Java file:
+
+.Use the *Query* operation to query new accounts.
+image::salesforce-query-account.png[Flow for querying new accounts]
+
+=== Configure the On New Object Source
+
+Configure the *On New Object* source to initiate a Mule flow when a new account is created on the `/account` path on localhost port 8081:
+
+. From the *Mule Palette* view, click *Salesforce* and drag the *On New Object* source to the canvas.
+. In the *Connector configuration* field on the *On New Object* properties window, select the`Salesforce_Sfdc_config` configuration, which you created earlier.
+
+=== Add the Query Operation
+
+Add the *Query* operation to find a new account by name.
+
+. From the *Mule Palette* view, click *Salesforce* and drag the *Query* operation to the right of *On New Object*.
+. In the Connector configuration field on the *Query* properties window, select `Salesforce_Sfdc_config`.
+. In the *Salesforce query* field, enter the following text:
++
+SELECT AccountNumber,BillingAddress,Id,Name FROM Account WHERE Name = ':name'
+
+=== Add a Transform Message Component
+
+Add a transform message component to transform the field values to JSON format so the values can be used with the *File* component:
+
+. From the *Mule Palette* view, drag a *Transform Message* component to the right of *Listener*.
+. Click the *Transform Message* component.
+. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
 ---
+payload map {
+    AccountNumber:$.AccountNumber,
+    BillingAddress:$.BillingAddress,
+    Id:$.Id,
+    Name:$.Name
+}
+----
+
+=== Add the File Component
+
+Add the *File* component to write the new account data to a CSV file.
 
 == XML Flow
 
