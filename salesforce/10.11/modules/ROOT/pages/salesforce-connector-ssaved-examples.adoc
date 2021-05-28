@@ -1,21 +1,45 @@
-= Accept and Transform Data
+= Salesforce Connector 10.10 Examples - Mule 4
 
-This example shows how to configure Salesforce Connector to create a new Salesforce account and query new accounts, and to use File Connector to write the new account data to a file:
+=======
+////
+The Mule flow sets up:
 
-* The first flow configures a template for the HTML input form used to provide data for the new account.
-* The second flow creates a new Salesforce account based on information in the HTML input form.
-* The third flow queries new accounts by name and writes new account data to a CSV file.
+* HTTP Listener: Accepts data from HTTP requests.
+* Transform Message: Transforms data structure and format to produce the output that Salesforce Connector expects.
+* Salesforce Connector:
++
+** (Outbound) Connects with Salesforce and performs an operation to push data to Salesforce.
+** Triggers a flow according to the configuration.
+** Connects with Salesforce, and returns an `InputStream` with the query results.
+* Transform Message: Transforms a data structure and format to produce the output that the File Connector endpoint expects.
+* File Connector: Records data in a file, such as a CSV and saves it to a user-defined directory or location.
+////
 
-== Configure a Template for the HTML Input Form
 
-This flow configures an HTML template that provides the data used to create a new account:
+This example uses variables for some field values. You can either:
 
-.Use the *Parse Template* operation to create an HTML input form.
+* Replace the variables with their values in the code
+* Provide the values for each variable in a properties file and then refer to that file from the connector configuration
+
+If you don’t know how to use a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configure Property Placeholders].
+
+=== Configure a Template for the HTML Input Form
+
+This flow configures an HTML template to use for providing HTML input to create the new table:
+
+.This flow uses the *Parse Template* component to create an HTML input form.
 image::salesforce-parse-template.png[Flow for creating an HTML input form]
 
-=== Configure HTTP Listener
+=== Create a New Salesforce Account
 
-Configure *HTTP > Listener* to initiate a Mule flow when a call is made to the `/account` path on localhost port 8081:
+This flow creates a new Salesforce account based on information in the HTML input form:
+
+.This flow uses the *Create* operation to create an HTML input form.
+image::salesforce-create-.png[Flow for creating an HTML input form]
+
+==== Configure HTTP Listener
+
+Configure HTTP Listener to initiate a Mule flow when a call is made to the `/account` path on localhost port 8081:
 
 . Create a new Mule project in Studio.
 . In Studio, click *HTTP* and drag the *Listener* operation to the canvas.
@@ -24,32 +48,9 @@ Configure *HTTP > Listener* to initiate a Mule flow when a call is made to the `
 . Accept the defaults.
 . On the Listener properties window, set the *Path* field value to `/account`.
 
-=== Add a Parse Template Component
+==== Add the First Transform Message Component
 
-Add a *Parse Template* component to create a template for an HTML form (`form.html`), which is located in the main resources folder. The example uses this form to convey information for creating a new account.
-
-. From the *Mule Palette* view, search for `parse` and drag *Core > Parse Template* to the right of *Listener*.
-. In the *Location* field, enter `form.html`.
-
-== Create a New Account
-
-This flow creates a new Salesforce account based on the data in the HTTP input form:
-
-.Use the *create* operation to create a new account.
-image::salesforce-create-account.png[Flow for creating anew account]
-
-=== Configure HTTP Listener
-
-Configure *HTTP > Listener* to initiate a Mule flow when a call is made to the `/account` path on localhost port 8081:
-
-. Create a new Mule project in Studio.
-. In Studio, click *HTTP* and drag the *Listener* operation to the canvas.
-. On the Listener properties window, change the display name of the *Listener* operation to `/account`.
-. In the *Connector configuration* field, select the HTTP > Listener configuration you created earlier `HTTP_Listener_config`.
-
-=== Add the First Transform Message Component
-
-Add the first *Transform Message* component to convert the values from the HTTP input form to Java format so they can be used as input to the *Create* operation:
+Add the first *Transform Message* component to convert the field values to Java format so the values can be used as input to the *Create* operation:
 
 . From the *Mule Palette* view, drag a *Transform Message* component to the right of *Listener*.
 . Click the *Transform Message* component.
@@ -68,7 +69,7 @@ output application/java
 }]
 ----
 
-=== Add the Create Operation
+==== Add the Create Operation
 
 Add the *Create* operation to create a new Salesforce account using the field values passed by the *Transform Message* component:
 
@@ -84,7 +85,7 @@ Add the *Create* operation to create a new Salesforce account using the field va
 |Authorization URL | http://login.salesforce.com/services/Soap/u/5.1.0
 |===
 
-=== Add the Second Transform Message Component
+==== Add the Second Transform Message Component
 
 Add the second *Transform Message* component to transform the field values to JSON format so the values can be used with the *File* component:
 
@@ -92,8 +93,6 @@ Add the second *Transform Message* component to transform the field values to JS
 . Click the *Transform Message* component.
 . In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
 +
-[source,dataweave,linenums]
-----
 %dw 2.0
 output application/json
 ---
@@ -102,58 +101,9 @@ payload map {
   errors:$.errors,
   success:$.success
 }
-----
-
-== Query New Accounts
-
-This flow queries new Salesforce accounts by name and writes the matching accounts data to a Java file:
-
-.Use the *Query* operation to query new accounts.
-image::salesforce-query-account.png[Flow for querying new accounts]
-
-=== Configure the On New Object Source
-
-Configure the *On New Object* source to initiate a Mule flow when a new account is created on the `/account` path on localhost port 8081:
-
-. From the *Mule Palette* view, click *Salesforce* and drag the *On New Object* source to the canvas.
-. In the *Connector configuration* field on the *On New Object* properties window, select the`Salesforce_Sfdc_config` configuration, which you created earlier.
-
-=== Add the Query Operation
-
-Add the *Query* operation to find a new account by name.
-
-. From the *Mule Palette* view, click *Salesforce* and drag the *Query* operation to the right of *On New Object*.
-. In the Connector configuration field on the *Query* properties window, select `Salesforce_Sfdc_config`.
-. In the *Salesforce query* field, enter the following text:
-+
-SELECT AccountNumber,BillingAddress,Id,Name FROM Account WHERE Name = ':name'
-
-=== Add a Transform Message Component
-
-Add a transform message component to transform the field values to JSON format so the values can be used with the *File* component:
-
-. From the *Mule Palette* view, drag a *Transform Message* component to the right of *Listener*.
-. Click the *Transform Message* component.
-. In the *Transform Message* configuration, overlay the brackets in the *Output* section with this DataWeave code:
-+
-[source,dataweave,linenums]
-----
-%dw 2.0
-output application/json
 ---
-payload map {
-    AccountNumber:$.AccountNumber,
-    BillingAddress:$.BillingAddress,
-    Id:$.Id,
-    Name:$.Name
-}
-----
 
-=== Add the File Component
-
-Add the *File* component to write the new account data to a CSV file.
-
-== XML Flow
+=== XML Flow
 
 Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
 
@@ -391,3 +341,139 @@ output application/json
   </flow>
 </mule>
 ----
+
+[[parentchild]]
+== Create or Update an Object with Parent-Child Relationships
+
+A Salesforce object can have standard or custom relationships between objects. The relationships between objects are usually one-to-many (parent-child) relationships, but can be any link between two objects residing in Salesforce.
+
+This example shows how to create the object relationship structure in Salesforce needed to perform an upsert using Salesforce Connector. The example uses two custom Salesforce object types that have a parent-child relationship:
+
+ * Plane__c, the parent object that must exist in Salesforce
+ * Component__c, the object to upsert using Salsforce Connector
+
+The relationship between the two custom objects is represented by a `Plane__r` field whose value is an object with two fields:
+
+* A field named `type`, which has the referenced object type name as its value.
++
+In this example, the value of `type` is `Plane_c`.
++
+* A field that identifies the instance of the parent object to reference.
++
+In this example, the `Name` field references the `Cobra` instance of `Plane__c`.
+
+When you upsert `Component__c`, the POJO sent as input to Salesforce Connector looks like this:
+
+[source,linenums]
+ ----
+ [{
+ 	// Component__c's fields ...
+ 	Plane__r: {
+ 		"type": "Plane__c",
+ 		"Name": "Cobra"
+ 	}
+ }]
+----
+
+The following XML shows how to upsert the `Component_c` object using Salesforce Connector:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+  http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/ee/core
+  http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/salesforce
+  http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="88f6a4cd-e00a-46c6-b0a0-aaf99fb2dd74" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="5605405f-3c7b-40d9-bc64-af06ebdfc8dd" >
+		<salesforce:basic-connection username="user" password="pass" securityToken="token" />
+	</salesforce:sfdc-config>
+	<flow name="Copy_of_idp-policy-benefitsFlow" doc:id="e26d68af-d4fb-45f3-9eaa-1f320ffba2b2" >
+		<http:listener doc:name="Listener" doc:id="e8014cfd-3af7-43ca-99ef-cd231cda02fd" config-ref="HTTP_Listener_config" path="/" />
+		<ee:transform doc:name="Transform Message" doc:id="a0353598-6084-4053-88ab-b2b67ecd4531" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	Name: "NewPlaneComponent",
+	Plane__r: {
+		"type": "Plane__c",
+		"Name": "Cobra"
+	}
+}]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert objectType="Component__c" doc:name="Upsert" doc:id="3bbdcfd6-09a4-43cf-bc75-19fb24ed33b1" config-ref="Salesforce_Config" externalIdFieldName="Id"/>
+		<ee:transform doc:name="Transform Message" doc:id="ed6dcb06-ef6a-4332-a715-e2f27498801b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+>>>>>>> Stashed changes
+== Invoke APEX Rest Method
+
+The Invoke APEX Rest operation enables users to invoke a method from an Apex class that is exposed as a REST service. The following example shows a payload for this operation:
+
+[source,example,linenums]
+----
+<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[output application/java
+---
+{
+	body: {
+		URLParameters: {
+			Parameter1: "parameter1Value",
+			Parameter2: "parameter2Value"
+		},
+		account: {
+			Name: "Example",
+			AccountNumber: "55"
+		}
+	},
+	headers: {
+		header1:"header1Value"
+	},
+	cookies: {
+		cookie1:"cookie1Value"
+	},
+	queryParameters: {
+		queryParam1Name:"queryParam1Value",
+		queryParam2Name:"queryParam2Value"
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+----
+
+In this example:
+
+* The `body` element contains `URLParameters`, which is a map containing the parameters that replace the wildcards in the path of the REST resource described in the Apex class.
++
+For example, if the REST resource is set to `@RestResource(urlMapping='/myResource/\*/mySubResource/*')`, the value of `Parameter1` replaces the first `\*`, and the value of `Parameter2` replaces the second `*`.
+* Key names must start with `Parameter`, followed by a number that shows the position of the `*` to be replaced.
++
+* After the `URLParameters` block, provide the content of the `body` value to send to the REST resource, as shown in the example `account` block.
+* The `headers` and `cookies` fields describe the headers and cookies to pass along with the HTTP request to the desired service.
+* The `queryParameters` field describes the query parameters to use, and the keys and values in this map that the specified Apex Class must accept.
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
