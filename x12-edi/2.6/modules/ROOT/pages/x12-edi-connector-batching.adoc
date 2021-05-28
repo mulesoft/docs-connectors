@@ -1,12 +1,12 @@
 = X12 EDI Connector 2.3 - Batch Outbound X12 Messages - Mule 4
 
-For EDI messages that are not time-sensitive, such as invoice and payment remittances, you can use the Batch Write operation to merge multiple individual messages into a single interchange to send to your trading partners.
+For EDI messages that are not time-sensitive, such as invoice and payment remittances, use the Batch Write operation to merge multiple individual messages into a single interchange to send to your trading partners.
 
 == Batching Stages
 
-Use the Anypoint X12 EDI Connector Batch Write operation to merge individual X12 messages into a single transmission to send to your trading partners.
+Use the Anypoint Connector for X12 EDI (X12 EDI Connector) Batch Write operation to merge individual X12 messages into a single transmission to send to your trading partners.
 
-Implementing a batch involves two stages:
+You implement a batch involves two stages:
 
 . Accumulate the transactions.
 . Release the batch.
@@ -17,6 +17,7 @@ To accumulate transactions for a batch:
 
 . Transform the payloads into X12 messages using DataWeave and X12 as you receive application messages (such as a JSON invoice) from the backend systems.
 . Create X12 payloads using temporary control number keys in the X12 Write operation. +
++ +
 This enables sending the accumulated X12 as a batch later. The batch is created using control numbers that are not used in the final batch sent to the trading partner, for example, `<x12:write doc:name="Create a single X12 810 Invoice Txn" doc:id="767e1321-044d-4ed4-95ba-6ddc78efb0b4" config-ref="X12_EDI_Write_810" interchangeNumberKey="MYTHICAL-NTOETAIL-ISA-TMP" groupNumberKey="MYTHICAL-NTOETAIL-GS-TMP"/>`.
 . Store the intermediate X12 message payloads in your choice of storage, such as a database table:
 
@@ -34,17 +35,19 @@ For example, this implementation of a Mule flow:
 Trading partners have varying criteria for how they want transactions batched:
 
 * Release the batch at a specific time interval or a specific time of the day.
-* Release the batch when a specific number of transactions is accumulated.
-* Release the batch when the total size of the accumulated transactions is near a threshold.
+* Release the batch when a specific number of transactions are accumulated.
+* Release the batch when the total size of the accumulated transactions is near a specified threshold.
 
 To release the batch:
 
 . Implement the logic or module to monitor the transactions accumulated in the temporary storage and determine when a particular batch is released.
 
 . Retrieve the accumulated intermediate X12 messages from the temporary storage based on the batch criteria, group the transactions together, and then send the appended payload to the X12 Batch Write operation. +
++ + 
 You can either use the control number key on the Batch Write operation or leave the control number key fields empty at the time of Batch Write operation execution, allowing the X12 EDI Connector to generate the control number sequence automatically based on the sender and receiver identifier combination:
++
 `<x12:batch doc:name="Batch" doc:id="6f105235-1406-45bb-b41e-f3b28cdf2eb5" config-ref="X12_EDI_Batch" batchInterchangeNumberKey="MYTHICAL-NTOETAIL-ISA" batchGroupNumberKey="MYTHICAL-NTOETAIL-GS"> <x12:batch-content ><![CDATA[#[vars.batchInput]]]></x12:batch-content></x12:batch>`.
-. Ensure that the input payload sent to the Batch Write operation contains EDI transactions with data elements in the UNB envelope segments, such as `Sender ID`, `Receiver ID`, and `Version number`. +
+. Ensure that the input payload sent to the Batch Write operation contains EDI transactions with data elements in the UNB envelope segments, such as `Sender ID`, `Receiver ID`, and `Version number`: +
 
 image::X12-edi-connector-batch-flow-2.jpg[Release the batch]
 
@@ -52,7 +55,7 @@ For example, this implementation of a Mule flow:
 
 * Receives an HTTP request to release accumulated X12 messages transactions for a specific partner. The request is triggered after the batch release criteria are met.
 * Retrieves the intermediate X12 messages from the database table.
-* Applies a transformation to group the individual X12 messages together.
+* Applies a transformation to group the individual X12 messages.
 * Sends the appended payload through the X12 Batch Write operation to merge the messages into a single transaction.
 * Prints the generated control numbers, which reconcile the inbound functional acknowledgments received from the partners.
 * Delivers the batched X12 transaction to the trading partner’s SFTP site.
