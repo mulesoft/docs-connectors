@@ -1,9 +1,9 @@
-= Delete Accounts - Mule 4
+= Delete Accounts
 
-Use a flow like this one to use Salesforce Connectorto delete Salesforce accounts:
+Use a flow like this one to use Salesforce Connector to find duplicate accounts:
 
-.Use the *Delete* operation to Delete accounts.
-image::salesforce-delete-account.png[Flow for deleting Accounts]
+.Use the *Find duplicates* operation to find duplicate accounts.
+image::salesforce-find-duplicates.png[Flow for deleting Accounts]
 
 Paste this XML code into the Configuration XML tab in your project to quickly load the flow for this example. When you paste this code, click *Yes* on the Regenerate 'doc:id' Values dialog.
 
@@ -40,32 +40,43 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
     password="${salesforce.password}"
     securityToken="${salesforce.securityToken}" />
   </salesforce:sfdc-config>
-
-  <flow name="delete-account" >
-		<http:listener doc:name="Listener" doc:id="f2b3cb62-30d5-4719-b535-db738e6215a1" config-ref="HTTP_Listener_config" path="/Delete"/>
-		<ee:transform doc:name="Transform Message" >
+  <flow name="find_duplicates_for_account_flow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/findDuplicates" doc:name="Listener" />
+    <ee:transform doc:name="Transform Message" >
       <ee:message >
         <ee:set-payload ><![CDATA[%dw 2.0
 output application/java
 ---
-[payload.Id]]]></ee:set-payload>
+[
+  payload
+]]]></ee:set-payload>
       </ee:message>
     </ee:transform>
-    <salesforce:delete doc:name="Delete" doc:id="02d99dc8-93f2-4a8f-b460-43247a8a658f" config-ref="Salesforce_Sfdc_config"/>
-		<ee:transform doc:name="Transform Message" >
+    <salesforce:find-duplicates config-ref="Salesforce_Sfdc_config"
+     type="Account"
+    doc:name="Find duplicates" />
+    <ee:transform doc:name="Transform Message" >
       <ee:message >
         <ee:set-payload ><![CDATA[%dw 2.0
 output application/json
 ---
-payload map {
-  id:$.id,
-  errors:$.errors,
-  success:$.success
+{
+  success: payload.success,
+  duplicateResults: {
+    (payload.duplicateResults map {
+      matchRecords: $.matchResults
+    }
+    )
+  },
+  duplicateRuleEntityType: payload.duplicateRuleEntityType,
+  duplicateRule: payload.duplicateRule,
+  allowSave: payload.allowSave,
+  errorMessage: payload.errorMessage
 }]]></ee:set-payload>
       </ee:message>
     </ee:transform>
   </flow>
-
 </mule>
 
 == See Also
