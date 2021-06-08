@@ -1,0 +1,135 @@
+= Troubleshoot Database Connector - Mule 4
+
+To troubleshoot Anypoint Connector for Database (Database Connector), become familiar with the information about enabling verbose logging, troubleshooting pooling profile connections, troubleshooting Snowflake JDBC driver, and interpreting commonly thrown messages.
+
+Database Connector follows the standards and guidelines detailed by the JDBC library (working with Java SE JDK 1.8).
+
+== Enable Verbose Logging
+
+To get a better understanding of why an application's interaction with the database is failing, temporarily enable verbose logging for Database Connector. +
+Choose one of two options to enable verbose logging: manually change the `log4j2.xml` file or via Anypoint Runtime Manager if you are using CloudHub APIs. +
+Remember to always disable the enhanced verbosity after troubleshooting because it affects your Mule application performance.
+
+To enable verbose logging in the configuration file:
+
+. Access Anypoint Studio and navigate to the *Package Explorer* view.
+. Open your application's project name.
+. Open the `src/main/resources` path folder.
+. Open the `log4j2.xml` file inside the folder.
+. Add an `<AsyncLogger>` tag inside the `<Loggers>` tag:
++
+[source,xml,linenums]
+----
+			<Loggers>
+				...
+				<AsyncLogger name="org.mule.extension.db" level="DEBUG"/>
+				...
+			</Loggers>
+----
+[start=6]
+. Save your application changes.
+. Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*.
+
+To enable verbose logging in Anypoint Runtime Manager:
+
+. Access Anypoint Runtime Manager.
+. Navigate to the API configuration.
+. In the *Logging* subtab, add the `org.mule.extension.db` package at DEBUG level.
+. Apply the changes.
+
+== Troubleshoot Pooling Profiles Connections Making the Flow Hang
+Using a pooling profile that provides fewer connections than the flow requires can make the entire flow hang.
+
+To resolve this issue:
+
+One solution is to increase the size of the pool. When that's not possible, use Anypoint Connector for Virtual Machine (VM Connector) to shorten the life of the connection to match the life of a VM message. This way, every call to the *Stored procedure* operation is executed, its result is consumed, and the connection associated with the operation is closed and returned to the pool.
+
+The following example shows how to use pooling profiles with the *Stored procedure* operation and VM Connector. In this example, When the `foreach` element reaches the eleventh iteration, the *Stored procedure* operation doesn't hang, because the pool is able to provide a connection:
+
+[source,xml,linenums]
+----
+	<db:config name="Database_Config">
+		<db:generic-connection url="someUrl" user="someUser" password="somePassword" driverClassName="someDriver">
+			<db:pooling-profile maxPoolSize="10">
+			</db:pooling-profile>
+		</db:generic-connection>
+	</db:config>
+
+	<vm:config name="VM_Config">
+		<vm:queues >
+			<vm:queue queueName="testQueue" />
+		</vm:queues>
+	</vm:config>
+
+	<flow name="processingFlow">
+		<foreach collection="#[1 to 11]">
+			<logger level="INFO" message="#['Starting Iteration ' ++ payload as String]" />
+			<vm:publish config-ref="VM_Config" queueName="testQueue"/>
+			<logger level="INFO" message="#['Finishing Iteration ' ++ payload as String]"/>
+		</foreach>
+	</flow>
+
+	<flow name="coolFlow">
+		<vm:listener config-ref="VM_Config" queueName="testQueue" numberOfConsumers="1"/>
+		<db:stored-procedure config-ref="Database_Config">
+				<db:sql><![CDATA[{call testProc2()}]]></db:sql>
+			</db:stored-procedure>
+		<logger level="INFO" message="#[output application/json --- payload.resultSet1]" />
+	</flow>
+----
+
+
+== Troubleshoot Snowflake JDBC Driver That Throws an Exception for a Stored Procedure
+
+Some drivers have their own specifications when calling stored procedures. Running the application when you set the callable statement with curly brackets (`{` and `}`), for example, `{call doubleMyInt(:myInt)}`, causes the Snowflake JDBC driver to throw the following exception:
+
+`net.snowflake.client.jdbc.SnowflakeSQLException: Unsupported feature 'call'`
+
+
+To resolve this issue:
+
+For Snowflake JDBC driver, set the callable statement without the curly brackets `{` and `}`, for example:
+
+`call doubleMyInt(:myInt)`
+
+
+== Understand Common Throws
+
+Here is a list of common throws messages and how to interpret them.
+
+* DB:BAD_SQL_SYNTAX
+
+ The provided SQL query contains invalid syntax.
+
+* DB:CANNOT_LOAD_DRIVER
+
+ Database Connector cannot load the JDBC driver.
+
+* DB:CANNOT_REACH
+
+ Database Connector cannot establish a connection with the RDBMS.
+
+* DB:CONNECTIVITY
+
+ Any of several possible connectivity issues, including poorly configured connections, lack of a database response while waiting for results or fetching rows, loss of database connection, and so on.
+
+* DB:INVALID_DATABASE
+
+ The connection to the RDBMS is established but the database doesn't exist.
+
+* DB:INVALID_CREDENTIALS
+
+ The database rejects the provided credentials.
+
+* DB:QUERY_EXECUTION
+
+ The query execution failed.
+
+* DB:RETRY_EXHAUSTED
+
+ All reconnection attempts failed.
+
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
