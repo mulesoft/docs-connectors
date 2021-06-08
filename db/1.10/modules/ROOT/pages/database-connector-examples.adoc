@@ -1,0 +1,105 @@
+= Database Connector Examples - Mule 4
+:page-aliases: connectors::db/db-connector-bulk-ops-ref.adoc, connectors::db/database-connector-examples.adoc
+
+Anypoint Connector for Database (Database Connector) examples help you configure database connections, query a database, execute stored procedures, execute DDL statements, execute scripts, execute database transactions, use bulk operations, and configure custom data types:
+
+* xref:database-connector-connection.adoc[Configure a Database Connection] +
+Connect to both popular and generic database. Additionally, configure the connector to connect to a global data source, set a JDBC driver, configure connection pooling, and connection to an Oracle database with TNS.
+* xref:database-connector-select.adoc[Query a Database] +
+Configure the *Select* operation to query data from a database.
+* xref:database-connector-query-single.adoc[Query a Single Record from a Database] +
+Configure the *Query single* operation in a Mule application that retrieves books information from a table in a MySQL database.
+* xref:database-insert-update-delete.adoc[Insert, Update, and Delete Data] +
+Configure the *Insert*, *Update* and *Delete* operations to manage data.
+* xref:database-stored-procedure.adoc[Execute Stored Procedures] +
+Configure the *Stored Procedure* operation to combine `input`, `output`, and `input-output` parameters. Additionally, configure dates on stored procedures.
+* xref:database-connector-udt-stored-procedure.adoc[Call an Oracle Stored Procedure That Uses UDTs] +
+Configure the *Stored procedure* operation to call an Oracle database stored procedure that uses UDTs for its input and output parameters. Additionally, use `createStruct` and `createArray` DataWeave functions to map application data to your custom types.
+* xref:database-connector-execute-ddl.adoc[Execute DDL Statements] +
+Configure the *Execute DDL* operation to execute DDL statements that create or modify data within tables or other data structures.
+* <<execute-bulk-operations,Execute Bulk Operations>> +
+Configure the *Bulk insert*, *Bulk update*, and *Bulk delete* operations for use  when each input parameter can take only one value.
+* xref:database-execute-script.adoc[Execute Scripts] +
+Configure the *Execute cript* operation to execute a script as a single statement.
+* xref:database-configure-data-types.adoc[Configure Database Data Types] +
+Configure custom data types to use when connected to a particular connection provider.
+* xref:database-connector-transactions.adoc[Configure Database Transactions] +
+Execute database operations in the context of a transaction.
+
+[[execute-bulk-operations]]
+== Execute Bulk Operations
+
+The `insert`, `update`, and `delete` operations can be used for the cases in which each input parameter can take only one value. Alternatively, bulk operations allow you to run a single query using a set of parameters values.
+
+You can avoid unnecessary steps by doing a bulk operation so that:
+
+* The query is parsed only once.
+* Only one database connection is required since a single statement is executed.
+* Network overhead is minimized.
+* RDBMS can execute the bulk operation atomically.
+
+For these use cases, the connector offers three operations: `<db:bulk-insert>`, `<db:bulk-update>` and `<db:bulk-delete>`.
+
+These operations are similar to their single counterparts, except that instead of receiving input parameters as key-value pairs, the operations expect them as a list of key-value pairs.
+
+For example:
+
+[source,xml,linenums]
+----
+<db:bulk-insert config-ref="dbConfig" >
+  <db:bulk-input-parameters>
+    #[[{'id': 2, 'name': 'George', 'lastName': 'Costanza'}, {'id': 3, 'name': 'Cosmo', 'lastName': 'Kramer'}]]
+  </db:bulk-input-parameters>
+  <db:sql>
+    insert into customers (id, name, lastName) values (:id, :name, :lastName)
+  </db:sql>
+</db:bulk-insert>
+----
+
+If you don't use bulk operations, when performing a `delete` operation, many rows could match the criteria and get deleted if only one criteria `(POSITION = X)` is provided.
+The same concept applies for update. If you use `UPDATE PRODUCTS set PRICE = PRICE * 0.9 where PRICE > :price`, you may want to apply a 10% discount on many products, but the `price` input parameter accepts only one value.
+
+If you want to apply different discount rates on products that have different prices, you can execute many operations.
+
+The following example is a payload that is a list of objects of the following structure `{ price : number, discountRate: number}`:
+
+[source,xml,linenums]
+----
+<foreach>
+  <db:update config-ref="dbConfig">
+    <db:input-parameters>
+     #[
+      {
+        'discountRate' : payload.discountRate,
+        'price' : payload.price,
+      }
+    ]
+    </db:input-parameters>
+    <db:sql>
+      UPDATE PRODUCTS set PRICE = PRICE * :discountRate where PRICE > :price
+    </db:sql>
+  </db:update>
+</foreach>
+----
+
+The previous operation accomplishes the task but is inefficient. For each element in the list, one query must be executed for each element of the operation:
+
+* The query is parsed.
+* Parameters are resolved.
+* A connection to the database is acquired (either by getting one from the pool or establishing a new one).
+* All the network overhead is paid.
+* The RDBMS processes the query and applies changes.
+* The connection is released.
+
+If an error arises while executing one of the operations (for example, if bulk insert fails to insert 1 out of 100 rows), a single exception is thrown.
+
+It may happen that while some statements in the bulk operation can be successfully executed, some may result in an error. When this occurs, it will be up to the driver to either:
+
+.. Stop execution immediately and ignore all remaining operations, or
+.. Continue to execute the remaining statements.
+
+In both cases, whenever an error occurs you can examine your application logs to see which caused the failure. When this occurs a single exception is thrown describing what went wrong.
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
