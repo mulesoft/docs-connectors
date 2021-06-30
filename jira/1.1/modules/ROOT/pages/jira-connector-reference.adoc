@@ -112,12 +112,13 @@ Anypoint Connector for Jira (Jira Connector) enables you to interface with the J
 ** HOURS
 ** DAYS |  A time unit which qualifies the connection Idle Timeout |  SECONDS |
 | Proxy Config a| <<Proxy>> |  Reusable configuration element for outbound connections through a proxy |  |
-| Stream Response a| Boolean |  Whether or not to stream received responses. |  false |
+| Stream Response a| Boolean |  Whether or not received responses should be streamed |  false |
 | Response Buffer Size a| Number |  The space in bytes for the buffer where the HTTP response will be stored. |  -1 |
-| Base Uri a| String |  Parameter base URI. Each instance or tenant gets its own base URI. |  |
-| Audience a| String |  Base URL of the Atlassian API. |  | *x*
-| Prompt a| String |  Set to consent so that the screen prompting the user to grant access displays. |  | *x*
+| Base Uri a| String |  Parameter base URI, each instance/tenant gets its own |  https://api.atlassian.com/ex/jira |
+| Audience a| String |  Base url of the Atlassian API |  api.atlassian.com |
+| Prompt a| String |  Set to consent so that the screen prompting the user to grant access will display. |  consent |
 | State a| String |  Set this to a value that is associated with the user you are directing to the authorization URL, for example, a hash of the user's session ID.  |  |
+| Domain URL a| String |  Instance of JIRA to retrieve the cloud ID. In order to make a request, the domain URL must be specified only when the base URI is the default. |  |
 | Protocol a| Enumeration, one of:
 
 ** HTTP
@@ -128,11 +129,13 @@ Anypoint Connector for Jira (Jira Connector) enables you to interface with the J
 | Consumer Secret a| String |  OAuth consumer secret as registered with the service provider. |  | *x*
 | Authorization Url a| String |  Service provider's authorization endpoint URL. |  https://auth.atlassian.com/authorize |
 | Access Token Url a| String |  The service provider's accessToken endpoint URL |  https://auth.atlassian.com/oauth/token |
-| Scopes a| String |  The OAuth scopes to request during the OAuth dance. If not provided, this value defaults to the OAuth scopes in the annotation. a|  * read:jira-user
+| Scopes a| String |  OAuth scopes to request during the dance. If not provided, it will default to those in the annotation. |
+
+* read:jira-user
 * read:jira-work
 * write:jira-work
 * manage:jira-project
-* manage:jira-configuration |
+* manage:jira-configuration offline_access |
 | Resource Owner Id a| String |  The resource owner ID each component should use if the resource owner ID is not otherwise referenced.  |  |
 | Before a| String |  Name of a flow to execute immediately before starting the OAuth dance. |  |
 | After a| String |  Name of a flow to execute immediately after an access token is received. |  |
@@ -22797,7 +22800,7 @@ This operation makes an HTTP GET request to the /rest/api/3/screenscheme endpoin
 
 
 [[GetRestApi3Search]]
-== Search For Issues Using JQL
+== (Deprecated) Search For Issues Using JQL
 `<jira:get-rest-api3-search>`
 
 
@@ -22912,6 +22915,179 @@ This parameter can be specified multiple times. For example, `fields=field1,fiel
 * JIRA:NOT_ACCEPTABLE
 * JIRA:NOT_FOUND
 * JIRA:RETRY_EXHAUSTED
+* JIRA:SERVER_ERROR
+* JIRA:SERVICE_UNAVAILABLE
+* JIRA:TIMEOUT
+* JIRA:TOO_MANY_REQUESTS
+* JIRA:UNAUTHORIZED
+* JIRA:UNSUPPORTED_MEDIA_TYPE
+
+[[GetRestApi3SearchPaginated]]
+== Search For Issues Using JQL (Paginated)
+`<jira:get-rest-api3-search-paginated>`
+
+
+Searches for issues using JQL[https://confluence.atlassian.com/x/egORLQ]. If the JQL query expression is too large to encode as a query parameter, use the POST version of this resource. This operation can be accessed anonymously.
+This operation makes an HTTP GET request to the `/rest/api/3/search` endpoint.
+
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| jql a| String |  The JQL[https://confluence.atlassian.com/x/egORLQ] that defines the search.
+
+* If no JQL expression is provided, all issues are returned.
+
+* `username` and `userkey` cannot be used as search terms due to privacy reasons. Use `accountId` instead.
+
+* If a user hides their email address in their user profile, partial matches of the email address will not find the user. An exact match is required. |  |
+| Start At a| Number |  Index of the first item to return in a page of results (page offset). |  0 |
+| Max Results a| Number | Maximum number of items to return per page. To manage page size, Jira may return fewer items per page when a large number of fields are requested. Return a large number of fields per page by requesting `id` or `key`. |  50 |
+| Validate Query a| Enumeration, one of:
+
+** STRICT
+** WARN
+** NONE
+** TRUE
+** FALSE |  Determines how to validate the JQL query and treat the validation results. If the JQL is not correctly formed, a 400 response code is returned regardless of the `validateQuery` value.
+
+The supported values are:
+
+* `strict`
+
+Returns a 400 response code and a list of all errors and warnings.
+
+* `warn`
+
+Returns all errors as warnings.
+
+* `none`
+
+No validation is performed.
+
+* `true`
+
+*Deprecated* A legacy synonym for `strict`.
+
+* `false`
+
+*Deprecated* A legacy synonym for `warn`. |  STRICT |
+| fields a| Array of String |  List of fields to return for each issue. Use it to retrieve a subset of fields. This parameter accepts a comma-separated list. All navigable fields are returned by default. This differs from GET issue where the default is all fields.
+
+Expand options include:
+
+* `*all`
+
+Returns all fields.
+
+* `*navigable`
+
+Returns navigable fields.
+
+* Any issue field, prefixed with a minus to exclude.
+
+Examples:
+
+* `summary,comment`
+
+Returns only the summary and comments fields.
+
+* `-description`
+
+Returns all navigable (default) fields except description.
+
+* `*all,-comment`
+
+Returns all fields except comments. This parameter may be specified multiple times. For example, `fields=field1,field2&amp;fields=field3`.
+
+ |  |
+| expand a| String |  Use this parameter to include additional information about issues in the response. This parameter accepts a comma-separated list.
+
+Expand options include:
+
+* `renderedFields`
+
+Returns field values rendered in HTML format.
+
+* `names`
+
+Returns the display name of each field.
+
+* `schema`
+
+Returns the schema describing a field type.
+
+* `transitions`
+
+Returns all possible transitions for the issue.
+
+* `operations`
+
+Returns all possible operations for the issue.
+
+* `editmeta`
+
+Returns information about how each field can be edited.
+
+* `changelog`
+
+Returns a list of recent updates to an issue, sorted by date, starting from the most recent.
+
+* `versionedRepresentations`
+
+Returns `versionedRepresentations`, which is a JSON array that contains each version of a field's value, with the highest numbered item representing the most recent version. |  |
+| properties a| Array of String |  List of issue property keys for issue properties to include in the results. This parameter accepts a comma-separated list. Multiple properties can also be provided using an ampersand-separated list. For example, `properties=prop1,prop2&amp;properties=prop3`. A maximum of five issue property keys can be specified. |  |
+| Fields By Keys a| Boolean |  Reference fields by their key (rather than ID). | false |
+| Output Mime Type a| String |  Mime type of the payload that the operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Streaming Strategy a| * <<RepeatableInMemoryIterable>>
+* <<RepeatableFileStoreIterable>>
+* non-repeatable-iterable | Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Custom Query Parameters a| Object |  |  #[null] |
+| Custom Headers a| Object |  |  |
+| Response Timeout a| Number |  How long Mule waits for a response to complete before the response times out. |  |
+| Response Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Response Timeout* field. |  |
+| Streaming Type a| Enumeration, one of:
+
+** AUTO
+** ALWAYS
+** NEVER |  Defines if the request should be sent using streaming. Setting the value to AUTO will automatically define the best strategy based on the request content. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+| *Type* a| Array of Any
+|===
+
+=== For Configurations
+
+* <<Config>>
+
+=== Throws
+
+* JIRA:BAD_REQUEST
+* JIRA:CLIENT_ERROR
+* JIRA:CONNECTIVITY
+* JIRA:INTERNAL_SERVER_ERROR
+* JIRA:NOT_ACCEPTABLE
+* JIRA:NOT_FOUND
 * JIRA:SERVER_ERROR
 * JIRA:SERVICE_UNAVAILABLE
 * JIRA:TIMEOUT
@@ -32819,6 +32995,89 @@ This operation makes an HTTP PUT request to the /rest/atlassian-connect/1/addons
 * JIRA:UNAUTHORIZED
 * JIRA:UNSUPPORTED_MEDIA_TYPE
 
+== Sources
+
+[[OnNewIssueTrigger]]
+== On New Issue Trigger
+`<jira:on-new-issue-trigger>`
+
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Start Date a| String | Date of when the issue was created. The format of the date is yyyy-mm-dd. |  | x
+| Project Id or Key a| String | Project ID or project key (case sensitive). |  |
+| Status a| String | Status of issue. |  |
+| Priority a| String | Issue priority. |  |
+| Issue Type a| String | Issue type. |  |
+| Config Ref a| ConfigurationProvider | Name of the configuration to use to execute this component. |  |
+| Primary Node Only a| Boolean |  Whether this source should only be executed on the primary node when running in a cluster. |  |
+| Scheduling Strategy a| scheduling-strategy |  Configures the scheduler that triggers the polling. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> | Defines a policy for processing the redelivery of the same message. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+| *Type* a| Any
+| *Attributes Type* a| <<HttpResponseAttributes>>
+|===
+
+=== For Configurations
+
+* <<Config>>
+
+
+
+[[OnUpdatedIssueTrigger]]
+== On Updated Issue Trigger
+`<jira:on-updated-issue-trigger>`
+
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Start Date a| String | Date of when the issue was updated. The format of date is yyyy-mm-dd. |  | x
+| Project Id or Key a| String | Project ID or project key (case sensitive). |  |
+| Status a| String | Status of issue. |  |
+| Priority a| String | Issue priority |  |
+| Issue Type a| String | Issue type. |  |
+| Config Ref a| ConfigurationProvider | Name of the configuration to use to execute this component. |  |
+| Primary Node Only a| Boolean |  Whether this source should only be executed on the primary node when running in a cluster. |  |
+| Scheduling Strategy a| scheduling-strategy |  Configures the scheduler that triggers the polling. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream | Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+| *Type* a| Any
+| *Attributes Type* a| <<HttpResponseAttributes>>
+|===
+
+=== For Configurations
+
+* <<Config>>
+
+
 
 
 == Types
@@ -33019,6 +33278,32 @@ This operation makes an HTTP PUT request to the /rest/atlassian-connect/1/addons
 ** KB
 ** MB
 ** GB | The unit in which maxInMemorySize is expressed |  |
+|======================
+
+[[RedeliveryPolicy]]
+=== Redelivery Policy
+
+Configures the redelivery policy for executing requests that generate errors. You can add a redelivery policy to any source in a flow.
+
+[cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
+|======================
+| Field | Type | Description | Default Value | Required
+| Max Redelivery Count a| Number | Maximum number of times that a delivered request can be processed unsuccessfully before returning a REDELIVERY_EXHAUSTED error. |  |
+| Message Digest Algorithm a| String | Secure hashing algorithm to use if the *Use Secure Hash* field is `true`. If the payload of the message is a Java object, Mule ignores this value and returns the value that the payload’s `hashCode()` returned. |  |
+| Message Identifier a| <<RedeliveryPolicyMessageIdentifier>> | Configures the non-repeatable streaming strategy by which Mule disables repeatable streams. Use this strategy if your use case requires reading the content only once. |  |
+| Object Store a| ObjectStore | Configures the object store that stores the redelivery counter for each message. |  |
+|======================
+
+[[RedeliveryPolicyMessageIdentifier]]
+=== Redelivery Policy Message Identifier
+
+Configures how to identify a relivered message and how to find out when the message was redelivered.
+
+[cols=".^20%,.^25%,.^30%,.^15%,.^10%", options="header"]
+|======================
+| Field | Type | Description | Default Value | Required
+| Use Secure Hash a| Boolean | If `true`, Mule uses a secure hash algorithm to identify a redelivered message. |  |
+| Id Expression a| String | One or more expressions that determine when a message was redelivered. You can set this property only if the *Use Secure Hash* field is `false`. |  |
 |======================
 
 [[RepeatableInMemoryIterable]]
