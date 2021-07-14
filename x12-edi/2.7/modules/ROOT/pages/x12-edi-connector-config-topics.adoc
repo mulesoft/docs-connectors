@@ -1,0 +1,166 @@
+= X12 EDI Connector 2.7 Schema and Trading Partner Configuration - Mule 4
+
+Use these additional XML configuration options to:
+
+* Set your schema location if you are using custom schemas
+
+* Define your trading partner relationship by setting SELF or PARTNER identification
+
+You can set the types of error conditions that reject receive transaction sets and any writer message separator operations.
+These general parameters control both Send and Receive document handling.
+
+== Set Your Schema Locations
+
+If you're using one or more custom schemas, locate these under
+a directory in `src/main/app` and refer to the location relative to this directory.
+For example, if an `850` schema (either overlay or full) is under `src/main/app/mypartner/850.esl`,
+the schema location is `/mypartner/850.esl`.
+
+You can configure schema locations in the Anypoint Studio XML view. The schema files are loaded when the connector is initialized, so runtime expressions such as flow variables are not supported.
+
+To configure schemas in Anypoint Studio:
+
+. Switch to the XML view by clicking Configuration XML
+. Modify your X12 EDI configuration to include a list of all the schemas for use by adding an `+<x12:schema>+` element for each document type:
+
+[source,xml,linenums]
+----
+<x12-edi:config name="X12_EDI__Configuration" identKeys="true" doc:name="X12 EDI: Configuration">
+  <x12-edi:schemas>
+    <x12:schema value="/x12/005010/850.esl"/>
+  </x12-edi:schemas>
+</x12-edi:config>
+----
+
+If you don't include any schemas in the configuration, X12 EDI Connector attempts to load the standard X12 schema definitions provided with the connector. However, in this case you won't see any metadata to define the structure of the data passed in and out of the connector.
+
+If the schema definition configuration includes a `997` or `999` Functional Acknowledgment schema, then that schema is used to generate Functional Acknowledgments.
+
+NOTE: To use the Functional Acknowledgment schema type (`997` or `999`), that schema must match the `generate999Acks` Parser parameter (`false` for `997`, `true` for `999`).
+
+[%header%autowidth.spread]
+|===
+|XML Value (default) |Studio Option
+|formValidation="X12"/"HIPAA_SNIP1"/"HIPAA_SNIP2" |The schema form and validation level can be either X12 or HIPAA. The default is X12.
+|schemas=list of values |List of schema paths the connector can use. These paths can be either a file system or `classpath`.
+|characterEncoding="PLATFORM"/"ASCII"/"ISO8859_1"/"IBM1047"/"UTF8" |The character encoding used for both send and receive messages. The default `PLATFORM` is the Mule default encoding.
+|stringCharacterSet="BASIC"/"EXTENDED"/"UNRESTRICTED" |Use a substitution character for invalid characters, or reject them as errors if set to `none` or enabled for receive messages in the parser options.  The default is `EXTENDED` for string data.
+|stringSubstitutionChar="?" |Substitution character used to replace invalid characters in string values. The default is `none`.
+|versionIdentifierSuffix="XYZ" |Version identifier code suffix for the group (GS). Setting this value affects both Send and Receive message handling. On the Receive side, the GS08 version code must contain X12 schema version (for example, `004010`, `005010`, and so on) followed by this suffix. Not setting this value means the Receive-only just verifies that the GS version identifier code starts with the configured schema version. On the Send side, the combination of X12 schema version and this suffix comprises the GS08 value.
+|===
+
+== Self Identification Parameters
+
+Use these parameters to identify your side of the trading partner relationship.
+
+[%header%autowidth.spread]
+|===
+|XML Value (default) |Studio Option
+|interchangeIdQualifierSelf="ZZ" |The ID qualifier for Mule in Exchange (known as the _ISA segment_). Use this value in combination with the `Interchange ID` value. Both values must be either specified or not specified.
+|interchangeIdSelf="MULE" |The ID qualifier for Mule runtime engine in Exchange (known as the ISA segment). Use this value in combination with the `Interchange ID` value. Both values must be either specified or not specified.
+|groupIdSelf="MULEAPP" |Application code for Mule runtime engine in a group (GS segment).
+|===
+
+== Partner Identification Parameters
+
+These identify your partner.
+
+[%header%autowidth.spread]
+|===
+|XML Value (default) |Studio Option
+|interchangeIdQualifierSelf="ZZ" |The ID qualifier for a partner in Exchange (known as the _ISA segment_). Use this value in combination with the `Interchange ID` value. Both values must be either specified or not specified.
+|interchangeIdSelf="PARTNER" |The ID qualifier for a partner in Exchange (known as the _ISA segment_). Use this value in combination with the `Interchange ID` value. Both values must be either specified or not specified.
+|groupIdSelf="PARTNERAPP" |Application Code for a partner in a group (GS segment)
+|===
+
+== Parser Parameters for Error Conditions
+
+These control the parser operation and the types of error conditions that reject Receive transaction sets.
+
+[%header%autowidth.spread]
+|===
+|XML Value (default) |Studio Option
+|enforceLengthLimits="true" |Enforce the minimum and maximum lengths for receive values.
+|truncateExceedingMaxLength="false" |Truncate to the maximum lengths for received values.
+|enforceCharacterSet="true" |Enforce the allowed character set.
+|enforceValueRepeats="true" |Enforce the repetition count limits for receive values.
+|allowUnknownSegments="false" |Allow unknown segments in a transaction set.
+|enforceSegmentOrder="true" |Enforce the segment order in a transaction set.
+|allowUnusedSegments="false" |Allow segments marked as `Unused` in a transaction set.
+|enforceSegmentRepeats="true" |Enforce segment repetition count limits in a transaction set.
+|requireUniqueInterchanges="true" |Require unique ISA Interchange Control Numbers (such as ISA13). The default behavior records the interchange numbers previously processed and rejects duplicate interchange numbers from the same partner. It is derived from the interchange Sender and Receiver identification. Setting to `false` enables received interchange processing to continue and relies on the application flow to track the numbers and handle them appropriately.
+|requireUniqueGroups="false" |Enforce globally unique Group Control Numbers (GS06) for received functional groups. By default, group numbers need to be unique within an interchange. Setting to `true` requires group numbers to be unique across all interchanges received from the same partner and application. This is derived from the interchange sender and receiver identification combined with the functional group sender and receiver application codes.
+|requireUniqueTransactionSets="false" |Enforce globally unique Transaction Set Control Numbers (ST02) for received transaction sets. By default, transaction set control numbers need to be unique only within a particular functional group. Setting to `true` requires transaction set numbers to be unique across all functional groups received from the same partner and application.  This is derived from the interchange sender and receiver identification, combined with the functional group sender and receiver application codes.
+|daysToStore="30" |Minimum number of days to store interchange, group, and transaction set numbers for uniqueness checking.
+|ackAllSets="false" |Include a separate AK2/AK5 (`997`) or AK2/IK5 (`999`) acknowledgment for every Received transaction set. By default (`false`), transaction sets containing errors are part of the acknowledgment, with all other transaction sets implicitly acknowledged. Changing to `true` acknowledges each Received transaction set.
+|generate999Acks="false" |Generate `999` Implementation Acknowledgments instead of `997` Functional Acknowledgments. Setting to `false`, the `997` Functional Acknowledgment transaction sets are generated for each received interchange. Setting to `true` generates `999` Implementation Acknowledgments instead. Support for `999` Implementation Acknowledgments does not include CTX segment generation.
+|reportSegmentErrors="true" |Report segment error details to the sender in the `997`or`999` flag. Setting to `true` includes the details of any segment errors that are generated in the `997`or`999` flag. Setting to `false` does not include the details.
+|includeFASchema="true" |Expect `997` or `999` Functional Acknowledgments and include the `997` or `999` schema. `true` automatically includes the schema for the `997` or `999` acknowledgment transaction sets within the set of schemas used by X12 EDI connector. Setting to `false`, means directly specifying the `997` or `999` schema to process as the input. The schemas used for generating `997` or `999` Functional Acknowledgments are hardcoded and cannot be modified.
+|acknowledgmentSchemaPath="" |Expect the path either from the file system or the `classpath`. If the path is specified, it overwrites the default acknowledgment path.
+|enforceConditionalRules="false" |Enforce conditional rules for Receive values.
+|===
+
+== Writer Parameters
+
+These control the types of writer operations.
+
+[%header%autowidth.spread]
+|===
+|XML Value (default) |Studio Option
+|dataSeparator="*" |Data element separator character. The default uses the configured value for all output messages and can be overridden at the message level.
+|componentSeparator=">" |Component separator character. The default uses the configured value for all output messages and can be overridden at the message level.
+|repetitionSeparator="U" |Repetition separator character. The default uses the configured value for all output messages and can be overridden at the message level. `U` means repetitions are not used
+|segmentTerminator="~" |Segment terminator character. The default uses the configured value for all output messages and can be overridden at the message level.
+|lineEnding="NONE"/"LF"/"CRLF"/"CR" |Line ending to add between segments. The default is `NONE`. You can add line endings between segments to improve message text output readability.
+|sendUniqueGroupNumbers="false" |Send unique Group Control Numbers. `false` (default) assigns functional group control numbers sequentially within each interchange and reuses them in different interchanges. `true` assigns unique group numbers across all interchanges sent to the same partner and application. It is derived from the interchange sender and receiver identification combined with the functional group sender and receiver application codes.
+|sendUniqueTransactionNumbers="false" |Send unique Transaction Set Control Numbers. `false` (default) assigns transaction set control numbers sequentially within each functional group and reuses them in different groups. `true` assigns unique transaction set numbers across all interchanges sent to the same partner and application. It is derived from the interchange sender and receiver identification, combined with the functional group sender and receiver application codes.
+|implementationConventionReference="" |Implementation convention reference for transactions (ST segment). Setting this value uses the ST Implementation Convention Reference unless overridden in the message parameters.
+|initialInterchangeNumber="1" |The initial Interchange Control Number used for outgoing messages.
+|initialGroupNumber="1" |The initial Group Control Number used for outgoing messages.
+|initialSetNumber="1" |The initial Transaction Set Control Number used for outgoing messages.
+|ackRequested="false" |Request acknowledgments for sent transactions flag. If true, `997` or `999` acknowledgments are requested for all sent transactions.
+|defaultUsageIndicator="P" |Default ISA15 interchange usage indicator: `I` for Information, `P` for Production Data, `T` for Test Data.
+|useSuppliedValues="false" |Use values from supplied data for control segment identifiers (ISA/IEA, GS/GE, ST/SE segments). `false` generates control numbers when writing.
+|outputEdiMimeType="APPLICATION_PLAIN"/"APPLICATION_EDIX12" |Output MIME type to be set for the message, either the default `application/plain` or X12-specific alternative `application/edi-x12`.
+|writeEnforceLengthLimits="true" |Enforce minimum and maximum lengths for write values. The default of `true` throws an exception when an element is too long or too short. `false` leaves the values as-is.
+|writeTruncateExceedingMaxLength="false" |Truncate to the maximum lengths for received values.
+|enforceConditionalRulesOnWriter="false" |Enforce conditional rules for write values.
+|interchangeNumberKey="" |Interchange number key name for the object store.
+|===
+
+== Write Batch Parameters
+
+These control the types of Write batch (`<edifact:write-batch>`) operations.
+
+[%header%autowidth.spread]
+|===
+|XML Value (default) |Studio Option
+|batchDataSeparator="*" |Data element separator character. The default uses the configured value for all output messages and can be overridden at the message level.
+|batchComponentSeparator=">" |Component separator character. The default uses the configured value for all output messages and can be overridden at the message level.
+|batchRepetitionSeparator="U" |Repetition separator character. The default uses the configured value for all output messages and can be overridden at the message level. `U` means repetitions are not used
+|batchSegmentTerminator="~" |Segment terminator character. The default uses the configured value for all output messages and can be overridden at the message level.
+|batchLineEnding="NONE"/"LF"/"CRLF"/"CR" |Line ending to add between segments. The default is `NONE`. You can add line endings between segments to improve message text output readability.
+|batchSendUniqueGroupNumbers="false" |Send unique Group Control Numbers. `false` (default) assigns functional group control numbers sequentially within each interchange and reuses them in different interchanges. `true` assigns unique group numbers across all interchanges sent to the same partner and application. It is derived from the interchange sender and receiver identification combined with the functional group sender and receiver application codes.
+|batchSendUniqueTransactionNumbers="false" |Send unique Transaction Set Control Numbers. `false` (default) assigns transaction set control numbers sequentially within each functional group and reuses them in different groups. `true` assigns unique transaction set numbers across all interchanges sent to the same partner and application. It is derived from the interchange sender and receiver identification, combined with the functional group sender and receiver application codes.
+|batchInitialInterchangeNumber="1" |The initial Interchange Control Number used for outgoing messages.
+|batchInitialGroupNumber="1" |The initial Group Control Number used for outgoing messages.
+|batchInitialSetNumber="1" |The initial Transaction Set Control Number used for outgoing messages.
+|batchAckRequested="false" |Request acknowledgments for sent transactions flag. If true, `997` or `999` acknowledgments are requested for all sent transactions.
+|batchDefaultUsageIndicator="P" |Default ISA15 interchange usage indicator: `I` for Information, `P` for Production Data, `T` for Test Data.
+|batchOutputEdiMimeType="APPLICATION_PLAIN"/"APPLICATION_EDIX12" |Output MIME type to be set for the message, either the default `application/plain` or X12-specific alternative `application/edi-x12`.
+|batchInterchangeNumberKey="" |Interchange number key name for object store.
+|batchGroupNumberKey="" |Group number key name for object store.
+|batchTransactionNumberKey="" |Transaction number key name for object store.
+|batchEnforceLengthLimits="TRUE" |Enforce minimum and maximum lengths for received values.
+|batchTruncateExceedingMaxLength="false" |Truncate to the maximum lengths for received values.
+|===
+
+== Next Step
+
+After you complete configuring the connector, you can try
+the xref:x12-edi-connector-examples.adoc[Examples].
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
