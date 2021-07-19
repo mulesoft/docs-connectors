@@ -1,0 +1,592 @@
+= Salesforce CDP Connector 1.0 Examples - Mule 4
+
+The following examples show how to perform streaming and bulk operations such as upsert, query, delete, and more with Salesforce CDP Connector:
+
+* Streaming API Flows include: +
+** <<Upsert Data - Streaming API>> +
+Shows how to upsert data via the streaming API to an object's endpoint.
+** <<Query Data>> +
+Shows how to query data via the streaming API using a custom SOQL query.
+** <<Delete Data - Streaming API>> +
+Shows how to delete records via the streaming API for specific objects.
+* Bulk API Flows include: +
+** <<Create Job - Bulk API>> +
+Shows how to create a bulk job, which is needed for uploading data to Salesforce CDP Ingestion API objects.
+** <<Upload Job Data - Bulk API>> +
+Shows how to upload data for inserting to or deleting from a Salesforce CDP Ingestion API object.
+** <<Close Job - Bulk API>> +
+Shows how to update the status of the specified job ID so that the job is closed and queued for processing.
+** <<Abort Job - Bulk API>> +
+Shows how to update the status of the specified job ID so that the job is aborted and not queued for processing.
+** <<Get Job - Bulk API>> +
+Shows how to retrieve current status of the specified job ID.
+** <<Delete Job - Bulk API>> +
+Shows how to delete or close the specified job ID, which deletes job data and metadata stored by Salesforce.
+
+== Upsert Data - Streaming API
+
+This Mule flow shows how to upsert data via the streaming API to an object's endpoint.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP PUT requests with the connector and object name as the URI parameters.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Upsert Objects* operation.
+* *Streaming Upsert*
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the connector name, object name, and payload.
+** Calls the Salesforce API to upsert the payload to that object's endpoint.
+
+image::upsert-flow.png[Salesforce CDP Upsert Flow Diagram - (Listener - Logger - Upsert Objects - Response Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/>
+	</sdc:sdc-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection audienceUrl="${server.audienceUrl}" username="${server.userName}" password="${server.password}" clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}"/>
+	</sdc:sdc-config>
+
+	<flow name="upsert-objectsFlow" >
+		<http:listener doc:name="PUT /upsert/{connectorName}/{objectName}" config-ref="HTTP_Listener_config" path="/upsert/{connectorName}/{objectName}" allowedMethods="PUT"/>
+		<logger level="INFO" doc:name="Request Logger" message="#[payload]"/>
+		<sdc:upsert-objects doc:name="Streaming Upsert" config-ref="Salesforce_CDP_OAuth_JWT_config" connectorNameUriParam="#[attributes.uriParams.connectorName]" objectNameUriParam="#[attributes.uriParams.objectName]"/>
+		<logger level="INFO" doc:name="Response Logger" />
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `PUT` to `localhost:8081/{CONNECTOR_NAME}/{OBJECT_NAME}` with a JSON payload that matches your object's schema, for example:
++
+[source,json,linenums]
+----
+{
+    "data": [
+        {
+            "your_object_field_1": "value_1",
+            "your_object_field_2": "value_2",
+            "your_object_field_3": "value_3"
+        }
+    ]
+}
+----
+
+== Query Data
+
+This Mule flow shows how to query data from CDP using a custom SOQL query.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the query in the payload.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Query* operation.
+* *Query*
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the earlier SOQL query.
+** Calls the Salesforce API with the query and receives the result.
+
+image::query-flow.png[Salesforce CDP Query Flow Diagram - (Listener - Logger - Query - Response Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/>
+	</sdc:sdc-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection audienceUrl="${server.audienceUrl}" username="${server.userName}" password="${server.password}" clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}"/>
+	</sdc:sdc-config>
+
+	<flow name="query-objectsFlow" >
+		<http:listener doc:name="POST /query" config-ref="HTTP_Listener_config" path="/query" allowedMethods="POST"/>
+		<logger level="INFO" doc:name="Request Logger" message="#[payload]"/>
+		<sdc:query doc:name="Query" config-ref="Salesforce_CDP_OAuth_JWT_config"/>
+		<logger level="INFO" doc:name="Response Logger" message="#[payload]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `POST` to `localhost:8081/query` with SOQL query in the request body, for example:
++
+[source,json,linenums]
+----
+{
+    "sql": "SELECT ID FROM ACCOUNT LIMIT 1"
+}
+----
+
+== Delete Data - Streaming API
+
+This Mule flow shows how to delete data via the streaming API using an object's endpoint.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP DELETE requests with the connector and object name as URI parameters and record IDs as query parameters.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Streaming Delete* operation.
+* *Streaming Delete*
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the connector name, object name, and record IDs.
+** Calls the Salesforce API to delete the records from the query parameters using that object's endpoint.
+
+image::delete-flow.png[Salesforce CDP Delete Flow Diagram - (Listener - Logger - Delete Objects - Response Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/>
+	</sdc:sdc-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection audienceUrl="${server.audienceUrl}" username="${server.userName}" password="${server.password}" clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}"/>
+	</sdc:sdc-config>
+
+	<flow name="delete-objectsFlow" >
+		<http:listener doc:name="DELETE /delete/{connectorName}/{objectName}" config-ref="HTTP_Listener_config" path="/delete/{connectorName}/{objectName}" allowedMethods="DELETE"/>
+		<logger level="INFO" doc:name="Request Logger" />
+		<sdc:delete-objects doc:name="Streaming Delete" config-ref="Salesforce_CDP_OAuth_JWT_config" idsQueryParams="#[output application/java&#10;---&#10;[attributes.queryParams.ids]]" connectorNameUriParam="#[attributes.uriParams.connectorName]" objectNameUriParam="#[attributes.uriParams.objectName]"/>
+		<logger level="INFO" doc:name="Response Logger" />
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `DELETE` to
+`localhost:8081/delete/{CONNECTOR_NAME}/{OBJECT_NAME}?ids={RECORD_ID1},{RECORD_ID2}`, for example:
++
+`localhost:8081/delete/My_Connector/My_Object?ids=1,2,3`
+
+
+== Create Job - Bulk API
+
+This Mule flow shows how to create a bulk job, which uploads data to a Salesforce CDP Ingestion API object.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the connector and object name as URI parameters and record IDs as query parameters.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Create Job* operation.
+* Create Job:
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the connector name, object name, and job operation. You can find the job operations in the *Resources* page.
+** Calls the Salesforce API to create the job and returns the response.
+
+image::create-job-bulk.png[Salesforce CDP Create Job Flow Diagram - (Listener - Create Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="CreateJob" >
+		<http:listener doc:name="Post /jobs/create" config-ref="HTTP_Listener_config" path="/jobs/create/{connectorName}/{objectName}/{operation}"/>
+		<sdc:create-bulk-job doc:name="Create Job" config-ref="Salesforce_CDP_OAuth_UsernamePassword_config" connectorNameUriParam="#[attributes.uriParams.connectorName]" objectNameUriParam="#[attributes.uriParams.objectName]" operationUriParam="#[attributes.uriParams.operation]"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `POST` to
+`localhost:8081/jobs/create/{CONNECTOR_NAME}/{OBJECT_NAME}/{OPERATION}`.
+
+== Upload Job Data - Bulk API
+
+This Mule flow shows how to upload data for inserting to or deleting from a Salesforce CDP Ingestion API object specified by the job ID.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the job ID in the URI.
+* *CSV Reader* +
+Reads data from the CSV that is configured in the absolute file path.
+* *Set Payload* +
+Updates the payload with the CSV data for *Upload Job Data*.
+* *Upload Job Data* +
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the job ID from the HTTP request and CSV data that is now in the payload.
+** Uploads data from the CSV to the Salesforce CDP Ingestion API object, and eventually returns an HTTP response.
+* *Logger* +
+Shows the HTTP result from the *Upload Job Data* operation.
+
+image::upload-job-data-bulk.png[Salesforce CDP Upload Job Flow Diagram - (Listener - Read - Set Payload - Upload Job Data - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="UploadJobData" >
+        <http:listener doc:name="Upload Job Data Listener" config-ref="HTTP_Listener_config" path="/jobs/upload/{jobId}"/>
+        <file:read doc:name="CSV Reader" path="" target="content"/>
+        <set-payload value="#[vars.content]" doc:name="Set Payload" />
+        <sdc:upload-data-bulk-job doc:name="Upload Job Data" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]"/>
+        <logger level="INFO" doc:name="Logger" message="#[message]"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Enter a valid absolute file path to a CSV in the CSV Reader's *File Path* attribute.
+. Save the project.
+. Create a job and copy its job ID.
+. Test the flow by sending a `POST` to
+`localhost:8081/jobs/upload/{JOB_ID}` using the job ID you copied earlier.
+
+== Close Job - Bulk API
+
+This Mule flow shows how to update the status of the specified job ID so that the job is closed. After a job is closed, it is queued for processing.
+
+* *HTTP Listener* +
+Accepts data from HTTP GET requests with the job ID as a URI parameter.
+* *Logger* +
+Shows the HTTP response from the *Close Job* operation.
+* *Close Job*
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the specified job ID.
+** Calls the Salesforce API with the `UploadComplete` state, which completes that job and subsequently receives an HTTP response.
+
+image::close-job-bulk.png[Salesforce CDP Close Job Flow Diagram - (Listener - Close Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="CloseJob" >
+		<http:listener doc:name="Get /jobs/close/{jobId}" config-ref="HTTP_Listener_config" path="/jobs/close/{jobId}"/>
+		<sdc:update-bulk-operation-job doc:name="Close Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]" state="UploadComplete"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Create a job and copy the resulting job ID.
+. Test the flow by sending a `GET` to
+`localhost:8081/jobs/close/{JOB_ID}` with the job ID you copied earlier.
+
+== Abort Job - Bulk API
+
+This Mule flow shows how to update the status of the specified job ID so that the job is aborted. After a job is aborted, it will not be queued for processing.
+
+* *HTTP Listener* +
+Accepts data from HTTP GET requests with the job ID as a URI parameter.
+* *Logger* +
+Shows the HTTP response from the *Abort Job* operation.
+* *Abort Job*:
++
+** Authenticates based on your choice between JWT or username and password.
+** Receives the job ID that was used as the URI parameter.
+** Calls the Salesforce API with the aborted state, aborts that job, and then receives an HTTP response.
+
+image::abort-job-bulk.png[Salesforce CDP Abort Job Flow Diagram - (Listener - Abort Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="AbortJob" >
+		<http:listener doc:name="Get /jobs/abort/{jobId}"  config-ref="HTTP_Listener_config" path="/jobs/abort/{jobId}"/>
+		<sdc:update-bulk-operation-job doc:name="Abort Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]" state="Aborted"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Create a job and copy the resulting job ID.
+. Test the flow by sending a `GET` to
+`localhost:8081/jobs/abort/{JOB_ID}` with the job ID that you previously copied.
+
+== Get Job - Bulk API
+
+This Mule flow shows how to retrieve the current status of the specified job ID.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP GET requests with the job ID included in the URI parameters.
+* *Logger* +
+Shows the HTTP response from the *Get Job* operation.
+* *Get Job*
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the job ID from the URI parameters.
+** Calls the Salesforce API and returns the job status.
+
+image::get-job-bulk.png[Salesforce CDP Get Job Flow Diagram - (Listener - Get Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="GetJob" >
+		<http:listener doc:name="Get /jobs/get/{jobId}" config-ref="HTTP_Listener_config" path="/jobs/get/{jobId}"/>
+		<sdc:get-bulk-job doc:name="Get Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Create a job and copy the resulting job ID.
+. Test the flow by sending a `GET` to
+`localhost:8081/jobs/get/{JOB_ID}`, using the job ID you copied earlier.
+
+== Delete Job - Bulk API
+
+This Mule flow shows how to delete or close the specified job ID, which deletes job data and metadata that is stored by Salesforce.
+To be deleted, a job must have a state of `UploadComplete`, `JobComplete`, `Aborted`, or `Failed`.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP DELETE requests with the job ID included in the URI parameters.
+* *Logger* +
+Shows the HTTP response from the *Delete Job* operation.
+* *Delete Job*
++
+** Authenticates based on your choice of either JWT or username and password.
+** Receives the job ID used in the URI parameters.
+** Calls the Salesforce API and deletes the job.
+
+image::delete-job-bulk.png[Salesforce CDP Delete Job Flow Diagram - (Listener - Delete Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="DeleteJob" >
+		<http:listener doc:name="Delete /jobs/delete/{jobId}" config-ref="HTTP_Listener_config" path="/jobs/delete/{jobId}"/>
+		<sdc:delete-bulk-job doc:name="Delete Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Create a job and copy the resulting job ID.
+. Use the job you copied to close the job (see <<Close Job - Bulk API>> flow).
+. Test the flow by sending a `DELETE` to
+`localhost:8081/jobs/delete/{JOB_ID}`, using the job ID that you copied earlier.
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
