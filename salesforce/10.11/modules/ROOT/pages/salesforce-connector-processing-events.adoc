@@ -1,96 +1,94 @@
-= Processing Events With Salesforce Connector 10.11
-:page-aliases: connectors::salesforce/salesforce-connector-processing-events.adoc
+= Process Events with Salesforce Connector 10.11
 
-You can use Anypoint Connector for Salesforce (Salesforce Connector) as an inbound connector to stream data from Salesforce into your application. To use the connector this way, use one of these source operations:
+You can use Anypoint Connector for Salesforce (Salesforce Connector) as an inbound connector to stream data from Salesforce into your application. To use the connector this way, use one of these sources:
 
 * *Subscribe topic listener*
 * *Subscribe channel listener*
 * *Replay topic listener*
 * *Replay channel listener*
 
-[NOTE]
-When deploying apps on a distributed environment (such as a runtime cluster), the source operation must run on the primary node. If the same source runs on multiple nodes, it causes duplicate event consumption.
+When deploying apps in a distributed environment such as a runtime cluster, the source must run on the primary node. Running the source on multiple nodes causes duplicate event consumption.
+
+Each event that travels through your flow contains information about the Salesforce data that changed, including how the data changed and when the change occurred.
+
+Salesforce stores events for 24 hours (or 72 hours for high-volume events). A subscriber to a topic or channel can retrieve events related to that topic or channel during this retention window, after which the subscriber can retrieve only newer events that have not yet expired.
+
+Salesforce assigns each broadcast event a numeric ID that is unique to the organization and channel. IDs are incremented, but not necessarily consecutively; for example, the event following event `999` might be event `1025`. Salesforce does not reuse the IDs of deleted events.
 
 == Prerequisites
 
-To process events with Salesforce Connector, ensure you meet the following prerequisites:
+To process events with Salesforce Connector, ensure that you have:
 
-* You must have access to the Salesforce target resource.
-* Before you can receive events for Salesforce changes associated with a topic, you must create the topic, if it does not exist.
-* You must have the required Salesforce Streaming API permissions enabled in your organization.
+* Access to the Salesforce target resource
+* The required Salesforce Streaming API permissions enabled in your organization
+
+To receive events for Salesforce changes associated with a topic, either create a new topic or use an existing one.
 
 [[objectstoreusage]]
-== Object Store Usage
+== Object Store Usage in Events
 
-Both Salesforce Connector and Mule use an object store to persist data for features such as automatic message replay and message redelivery:
+Both Salesforce Connector and Mule runtime engine (Mule) use an object store to persist data for features such as automatic message replay and message redelivery:
 
 * The object store included in Mule for on-premises deployments of Mule apps has no transaction limits.
 * The free version of Object Store for CloudHub deployments of Mule apps has a limit of 10 transactions per second.
 
-For more information about object store versions, see https://docs.mulesoft.com/object-store/#object-store-notes[Object Store Notes].
+For more information about Object Store versions, see https://docs.mulesoft.com/object-store/#object-store-notes[Object Store Notes].
 
+=== Replay Topic Listener and Replay Channel Listener Operations
 
-=== Replay Topic and Replay Channel Listener Operations
+The *Replay topic* and *Replay channel listener* operations can continue from the last replay ID they received before restarting the application.
 
-The *Replay topic* and *Replay channel listener* operations have the option to continue from the last replay ID they received before restarting the application.
+When a Mule app starts for the first time, the connector creates an object store that saves data:
 
-When a Mule app starts for the first time, the connector creates an object store that is used to save data related to messages that were processed successfully or that failed:
+* If there are no failed events, the source starts from the event associated with the last successfully processed event ID.
+* If there are one or more failed events, the source starts with the event associated with the lowest replay ID that failed.
 
-* For each message that was processed successfully, the information stored consists of a replay ID associated with the message.
-* For each message that failed, the information stored consists of a number that represents the lowest replay ID for which the processing failed.
+Saving this change data capture in an object store ensures that no message is processed twice and that when the application restarts, it can reprocess any failed messages. The IDs are stored in the object store for 72 hours, after which they are automatically removed.
 
-These two structures ensure that no message is processed twice and that when the application is restarted, it can reprocess the failed messages.
+For each message that comes through a topic or streaming channel to which the connector is subscribed, the connector uses up to four transactions to update the object store information.
 
-For each message that comes through a topic or streaming channel to which the connector is subscribed, the connector updates the object store information using up to four transactions.
-
-[NOTE]
-====
-If you have multiple workers deployed in CloudHub, all Mule instances process each message when using the *Replay Topic* or *Replay Channel* operations.
-
-To avoid multiple Mule instances processing the same message, you can do one of the following:
+If you have multiple workers deployed in CloudHub, the *Replay topic listener* source processes each message on all Mule instances. To avoid this situation, you can do one of the following:
 
 * Modify your app to filter out duplicate messages.
 * Designate a single worker as a receiver and then use a shared queue to pass the messages to a different worker to process the message.
-====
 
 === Resume from the Last Replay ID
 
-To enable the *Resume from the Last Replay Id* functionality for the *Replay Topic Listener* and *Replay Channel Listener* source operations, the connector must store some information about the events that were successfully processed by the flow in which the source operation is used. The connector uses Object Store to store that information.
+To enable the resume from the last replay ID functionality for the *Replay topic listener* and *Replay channel listener* sources, the connector must store information about the events that were successfully processed by the flow in which the source is used. The connector uses an object store to store that information.
 
-The way Object Store is used to store the necessary data for the *Resume from the Last Replay Id* varies depending on the environment:
+The way that the object store stores the necessary data for the resume from the last replay ID functionality varies depending on the environment:
 
-* When a Mule application is running locally, the connector creates a persistent store in the file system. This way, if the application is stopped and restarted, or if there was a connection issue that triggered a reconnection, the data that was saved in the object store is not lost and the connector can continue processing messages at the point where it previously stopped.
-* When running the application in a cluster, either with the nodes on the same machine, or with the nodes on different machines, a distributed in-memory object store is used. This way, if the primary node (the one consuming the messages) shuts down, the node that takes over for the primary node will not consume the same messages again, but will continue from where the previous node stopped processing the messages. +
-If the cluster is stopped, the data from the object store is lost, so when the cluster restarted the messages might be reprocessed again depending on the configuration at the source level. +
-If you need data to be persisted so that the application can continue processing events when restarted, the object store can be configured to use a database as the persistence layer. For more information, see xref:mule-runtime::creating-and-managing-a-cluster-manually.adoc[Creating and Managing a Cluster]).
-* When running the application in CloudHub, if you are using multiple workers, all of the workers receive and process the events.
+* When a Mule app runs locally, the connector creates a persistent store in the file system.
++
+If the application stops and restarts, or if a connection issue triggers a reconnection, the data saved in the object store enables the connector to continue processing messages at the point where it stopped.
+* When a Mule app runs in a cluster with the nodes either on the same machine or on different machines, Mule uses a distributed in-memory object store:
+** If the primary node (the one consuming the messages) shuts down, the node that takes over for the primary node does not reprocess the same messages. Instead, the node continues from where the previous node stopped processing the messages.
+** If the cluster stops, the data from the object store is lost. When the cluster restarts, the configuration at the source level determines whether the connector reprocesses the messages.
 
-=== Multiple Flows That Use the Same Source
++
+To persist data so that the app continues processing events when restarted, create a persistent object store, as described in xref:mule-runtime::creating-and-managing-a-cluster-manually.adoc[Create and Manage a Cluster Manually].
+* If you use multiple workers when running the app in CloudHub, all of the workers receive and process the events.
 
-It is best that you do not have two or more flows using a source that listens to events on the same channel or topic because the events will be consumed twice from your user quota. If you have a use case that requires processing the same events in two or more different flows, consider implementing that logic in a single flow instead.
+== Multiple Flows That Use the Same Source
 
-Having multiple sources listening to the same events and having the *Resume from the Last Replay Id* option enabled leads to data corruption and potential loss of events.
+If you have two or more flows that use a source that listens to events on the same channel or topic, the events are consumed two or more times from your user quota. To avoid this, consider implementing that logic in a single flow instead.
 
-=== Streaming Channel with No Listener
+WARNING: Having multiple sources listening to the same events and having the *Resume from the Last Replay Id* option enabled can lead to data corruption and the potential loss of events.
 
-Users can push events to a streaming channel, even if the channel does not have a listener for reading published events. Once a listener is started for the channel, Salesforce Streaming API pushes as many messages it can to the listener, based on the maximum daily limit.
+== Work with Topic Events
 
-For example, given that the maximum number of delivered event notifications within a 24-hour period for a free Salesfoce organization is 10,000, suppose you publish 15,000 events to that channel. When Salesforce Connector subscribes to that channel, the Streaming API attempts to push 10,000 events, thus consuming the daily quota. The API will then attempt to push the remaining 5,000 events the next day before pushing any new events.
-
-In this scenario, the connector streams the events one-by-one into the Mule app. If the app takes too long to process a message, the Salesforce Streaming API might instruct the connector to reconnect. If this happens, the Streaming API drops all of the unprocessed messages.
-
-You can avoid this situation by implementing a reliability pattern, as described in xref:mule-runtime::reliability-patterns.adoc[Reliability Patterns].
+Work with topic events by creating a topic, subscribing to a topic, and replaying topic messages.
 
 [[createtopic]]
-== Create a Topic to Receive Data from Salesforce
+=== Create a Topic to Receive Data from Salesforce
 
-When you create a topic, the connector creates a `PushTopic`, which is a special object in Salesforce that binds a name (in this case, the topic's name) and a Salesforce Object Query Language (SOQL) query together. After you create a topic, you can then subscribe to it by its name.
+When you create a topic, the connector creates a `PushTopic`, which is a special object in Salesforce that binds a name (in this case, the topic's name) and a Salesforce Object Query Language (SOQL) query together. After you create a topic, you can subscribe to it by its name.
 
-You can use either the *Create* (`create`) or *Publish topic* (`publish-topic`) operation to create a topic. The following example uses the `publish-topic` operation to create a topic:
+You can use either the *Create* (`create`) operation or *Publish topic* (`publish-topic`) operation to create a topic. The following example uses the `publish-topic` operation to create a topic:
 
 `<sfdc:publish-topic name="AccountUpdates" query="SELECT Id, Name FROM Account"/>`
 
-Alternatively, you can create a topic in Salesforce by executing code such as this code from an *Enter Apex Code* window, which is accessible through the system logs:
+Alternatively, you can create a topic in Salesforce by executing code from an *Enter Apex Code* window, which is accessible through the system logs, for example:
 
 [source,text,linenums]
 ----
@@ -103,32 +101,10 @@ insert pushTopic;
 System.debug('Created new PushTopic: '+ pushTopic.Id);
 ----
 
-[[createchannel]]
-== Create a Streaming Channel to Receive Data from Salesforce
-
-To create a streaming channel, you must have the proper Salesforce Streaming API permissions enabled in your organization.
-
-Follow these steps to create a streaming channel:
-
-. Log in to your Salesforce Developer Edition organization.
-. Under *All Tabs (+)*, select *Streaming Channels*.
-. On the *Streaming Channels* tab, select *New* to create a new streaming channel.
-. Enter `/u/notifications/ExampleUserChannel` in the *Streaming Channel Name* field.
-. Enter an optional description.
-
-You can also create a streaming channel by using either the connector *Create* operation or the connector *Publish streaming channel* (`publish-streaming-channel`) operation. The following example uses the `publish-streaming-channel` operation:
-
-[source,xml,linenums]
-----
-<sfdc:publish-streaming-channel
-    name="/u/Notifications"
-    description="General notifications"/>
-----
-
 [[topicsub]]
-== Subscribe to a Topic
+=== Subscribe to a Topic
 
-To subscribe to a topic, add the *Subscribe topic listener* (`subscribe-topic-listener`) or *Replay topic listener* (`replay-topic-listener`) as an input source for your flow. The input source acts as an inbound endpoint. Every time the subscription receives an event, the input source executes the rest of the flow in your Mule app.
+To subscribe to a topic, add either the *Subscribe topic listener* (`subscribe-topic-listener`) or the *Replay topic listener* (`replay-topic-listener`) as a source for your flow. The source acts as an inbound endpoint. Every time the subscription receives an event, the source executes the rest of the flow in your Mule app.
 
 In the following XML example, Mule prints a message to the log at the INFO level when the `AccountUpdates` topic receives an event:
 
@@ -142,19 +118,73 @@ In the following XML example, Mule prints a message to the log at the INFO level
 </flow>
 ----
 
-You can subscribe to a topic that was not previously published in Salesforce. However, after the topic is published, you do not receive notifications for that topic unless you resubscribe to it.
+You can subscribe to a topic that was not previously published in Salesforce. However, after the topic is published, you won't receive notifications for that topic unless you resubscribe to it.
 
-Each event that travels through your flow contains information about the Salesforce data that changed, including how the data changed and when the change occurred.
+[[topicrep]]
+=== Replay Messages from a Topic
 
-Salesforce stores events for 24 hours (or 72 hours for high-volume events). A subscriber to a topic or channel can retrieve events related to that topic or channel during the 24-hour retention window. After the retention window ends, the subscriber can retrieve newer events that have not yet expired.
+A subscriber can specify which events to receive. By default, a subscriber receives only the events that occur after subscribing. Events outside of the 24-hour retention period (or 72-hour retention period for high-volume events) are discarded.
 
-Salesforce assigns each broadcast event a numeric ID. IDs are incremented, but not necessarily by 1 for each consecutive event. For example, the event following the event with ID 999 can have an ID of 1025. A broadcast event ID is unique for the organization and channel. Salesforce does not reuse the IDs of deleted events.
+The *Replay topic listener* source provides these options:
 
+* `ALL`
++
+Subscriber receives all events, including past events that are within the 24-hour (or 72-hour) retention period and new events that are sent after the client subscribes.
+* `ONLY_NEW`
++
+Subscriber receives new events that are sent after the client subscribes.
+* `FROM_REPLAY_ID`
++
+Subscriber receives all events after the specified event `replayId`.
+
+If you specify either the `ALL` replay option or `ONLY_NEW` replay option, the `replayId` value is ignored.
+
+The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines which events to replay.
+
+To support the resume from last replay ID functionality, the connector uses a persistent object store to keep different details regarding the processed messages. This feature reduces the possibility of message loss and avoids processing duplicate messages. For more information about how the object store is used, see <<objectstoreusage,Object Store Usage in Events>>.
+
+In the following XML example, the *Replay topic listener* operation (`replay-topic-listener`) acts like an inbound endpoint for the *Logger* component message:
+
+[source,xml,linenums]
+----
+<flow name="accountUpdatesReplay">
+    <!-- INBOUND ENDPOINT -->
+    <sfdc:replay-topic-listener topic="AccountUpdates" replayId="1" replayOption="ALL" autoReplay="true"/>
+    <!-- REST OF YOUR FLOW -->
+    <logger level="INFO" message="Replayed events: #[payload]"/>
+</flow>
+----
+
+== Work with Streaming Channel Events
+
+Work with streaming channel events by creating a streaming channel, subscribing to a streaming channel, replaying streaming channel events, and pushing events to a streaming channel.
+
+[[createchannel]]
+=== Create a Streaming Channel
+
+To create a streaming channel, you must have the proper Salesforce Streaming API permissions enabled in your organization.
+
+Follow these steps to create a streaming channel:
+
+. Log in to your Salesforce Developer Edition organization.
+. Under *All Tabs (+)*, select *Streaming Channels*.
+. On the *Streaming Channels* tab, select *New*.
+. Enter `/u/notifications/ExampleUserChannel` in the *Streaming Channel Name* field.
+. Enter an optional description.
+
+You can also create a streaming channel by using either the connector *Create* operation or the connector *Publish streaming channel* (`publish-streaming-channel`) operation. The following example uses the `publish-streaming-channel` operation:
+
+[source,xml,linenums]
+----
+<sfdc:publish-streaming-channel
+    name="/u/Notifications"
+    description="General notifications"/>
+----
 
 [[streamsub]]
-== Subscribe to a Streaming Channel
+=== Subscribe to a Streaming Channel
 
-After you create a streaming channel, you can start receiving events by subscribing to the channel. The `subscribe-channel-listener` input source acts like an inbound endpoint. In this example, every time a subscription to `/u/TestStreaming` receives an event, it executes the rest of the flow and logs a message at the INFO level:
+After you create a streaming channel, you can start receiving events by subscribing to the channel. The *Subscribe channel listener* (`subscribe-channel-listener`) source acts like an inbound endpoint. In this example, every time a subscription to `/u/TestStreaming` receives an event, it executes the rest of the flow and logs a message at the INFO level:
 
 [source,xml,linenums]
 ----
@@ -170,45 +200,10 @@ The *Streaming channel* field of the *Subscribe channel listener* operation does
 
 For more information, see https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_subscribe_channels.htm[Subscription Channels] in the Salesforce Change Data Capture Developer Guide.
 
-[[topicrep]]
-== Replay Messages From a Topic
-
-A subscriber can specify which events to receive. By default, a subscriber receives only the events that occur after subscribing. Events outside the 24-hour (or 72-hour for high-volume events) retention period are discarded.
-
-The *Replay Topic Listener* operation provides these options:
-
-* `ALL`
-+
-Subscriber receives all events, including past events that are within the 24-hour (or 72-hour) retention period and new events sent after the client subscribes.
-* `ONLY_NEW`
-+
-Subscriber receives new events that are broadcast after the client subscribes.
-* `FROM_REPLAY_ID`
-+
-Subscriber receives all events after the specified event `replayId`.
-
-If you specify either the `ALL` replay option or `ONLY_NEW` replay option, the `replayId` value is ignored.
-
-The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
-
-To support the *Resume from Last Replay ID* feature, the connector uses a persistent object store to keep different details regarding the processed messages. This feature is enhanced in Salesforce Connector 10.x to reduce message loss probability and to avoid processing duplicate messages. For more details about how Object Store is used, check the <<objectstoreusage,Object Store Usage>> section.
-
-In the following XML example, the *Replay topic listener* operation acts like an inbound endpoint for the Logger component message:
-
-[source,xml,linenums]
-----
-<flow name="accountUpdatesReplay">
-    <!-- INBOUND ENDPOINT -->
-    <sfdc:replay-topic-listener topic="AccountUpdates" replayId="1" replayOption="ALL" autoReplay="true"/>
-    <!-- REST OF YOUR FLOW -->
-    <logger level="INFO" message="Replayed events: #[payload]"/>
-</flow>
-----
-
 [[channelrep]]
-== Replay Messages From a Streaming Channel
+=== Replay Messages from a Streaming Channel
 
-A streaming channel can replay notifications. The *Replay channel listener* input source acts as an inbound endpoint. You can use it as shown in the following example:
+A streaming channel can replay notifications. The *Replay channel listener* (`replay-channel-listener`) source acts as an inbound endpoint, for example:
 
 [source,xml,linenums]
 ----
@@ -222,14 +217,26 @@ A streaming channel can replay notifications. The *Replay channel listener* inpu
 
 If you specify either the `ALL` replay option or the `ONLY_NEW` replay option, the `replayId` value is ignored.
 
-The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events, based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines what events to replay.
+The *Resume from the Last Replay Id* checkbox enables you to specify an automatic replay of stored events based on the Replay ID of the last event processed by the connector. You can use this functionality when the connector stops listening, such as a during a server shutdown or dropped connection. If the stored Replay ID is outside the 24-hour retention period, the replay option determines which events to replay.
 
-To support the *Resume from Last Replay ID* feature, the connector uses a persistent object store to keep different details regarding the processed messages. This feature is enhanced in Salesforce Connector 10.x to reduce message loss probability and to avoid processing duplicate messages. For more details about how Object Store is used, check the <<objectstoreusage,Object Store Usage>> section.
+To support the resume from the last replay ID feature, the connector uses a persistent object store to keep details regarding the processed messages. This feature reduces the possibility of message loss and avoids processing duplicate messages. For more information about how the object store is used, see <<objectstoreusage,Object Store Usage in Events>>.
+
+=== Push Events to a Streaming Channel with No Listener
+
+Users can push events to a streaming channel, even if the channel does not have a listener for reading published events. After a listener is started for the channel, Salesforce Streaming API pushes as many messages as it can to the listener, based on the maximum daily limit.
+
+For example, the maximum number of delivered event notifications within a 24-hour period for a free Salesforce organization is 10,000. Suppose you publish 15,000 events to that channel. When Salesforce Connector subscribes to that channel, Streaming API attempts to push 10,000 events, thus consuming the daily quota. The API then attempts to push the remaining 5,000 events the next day, before pushing any new events.
+
+In this scenario, the connector streams the events one-by-one into the Mule app. If the app takes too long to process a message, Streaming API might instruct the connector to reconnect. If this happens, Streaming API drops all of the unprocessed messages. You can avoid this situation by implementing a reliability pattern, as described in xref:mule-runtime::reliability-patterns.adoc[Reliability Patterns].
 
 [[customevents]]
-== Custom Event Notifications
+== Work with Custom Events
 
-Salesforce Connector enables you to obtain custom event notifications. These notifications apply to general events that are not tied to Salesforce data changes.
+Work with custom events by obtaining custom event notifications and pushing custom events to a streaming channel.
+
+=== Obtain Custom Event Notifications
+
+Salesforce Connector enables you to obtain custom event notifications, which apply to general events that are not tied to Salesforce data changes.
 
 To obtain custom event notifications:
 
@@ -243,14 +250,12 @@ You can also create a streaming channel through Salesforce or https://workbench.
 +
 Salesforce Connector converts the custom events in your streaming channel to Mule events.
 
-For more information about working with streaming channels, see <<createchannel,Create a Streaming Channel to Receive Data from Salesforce>> and <<eventshandling,Handling Events with Salesforce Connector>>.
-
 [[pushevents]]
-== Push Events to a Streaming Channel
+=== Push Custom Events to a Streaming Channel
 
 Salesforce enables you to push custom events to a specific streaming channel through the REST API. To do this, use https://workbench.developerforce.com/about.php[Workbench] or this connector.
 
-The following example uses the connector's `push-generic-event` operation to push custom events to the channel with the ID `0M6j0000000KyjBCAS`:
+The following example uses the connector's *Push generic event* (`push-generic-event`) operation to push custom events to the channel with the ID `0M6j0000000KyjBCAS`:
 
 [source,xml,linenums]
 ----
@@ -265,7 +270,7 @@ The following example uses the connector's `push-generic-event` operation to pus
 </flow>
 ----
 
-You can retrieve the channel ID from the response map of the `publish-streaming-channel` operation. Alternatively, you can retrieve the channel ID from the Salesforce page:
+You can retrieve the channel ID from the response map of the *Publish streaming channel* operation. Alternatively, you can retrieve the channel ID from the Salesforce page:
 
 . Log in to your Salesforce Developer Edition organization.
 . Under *All Tabs (+)*, select *Streaming Channels*.
@@ -297,8 +302,6 @@ The JSON received as a response from the push event operation looks something li
 == See Also
 
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
-* xref:salesforce-connector-config-topics.adoc[Additional Configuration]
+* xref:salesforce-connector-config-topics.adoc[Additional Configuration Information]
 * xref:salesforce-connector-examples.adoc[Examples]
-* xref:mule-runtime::creating-and-managing-a-cluster-manually.adoc[Creating and Managing a Cluster]
-* xref:salesforce-connector-troubleshoot.adoc[Troubleshoot]
 * https://help.mulesoft.com[MuleSoft Help Center]
