@@ -188,7 +188,7 @@ read('<MATMAS01>
 
 === Receive An Incoming IDoc Request
 
-This example shows you how to create a Mule app that waits for incoming IDoc requests from an external SAP system. In this example, the app acts like an RFC server and registers itself as an SAP gateway. When the app receives an IDoc request, it logs the IDoc contents to the Studio console.
+This example shows you how to create a Mule app that waits for incoming IDoc requests from an external SAP system. In this example, the app acts like an RFC server and registers itself as an SAP gateway. When the app receives an IDoc request, it uses a remote function (RFC) call to ask create the IDoc. Then it logs the IDoc contents to the Studio console.
 
 *Reviewers, Please revise the above text if needed.*
 
@@ -240,17 +240,13 @@ tables: {
 +
 . From the *Mule Palette* view, select *SAP* and Drag the *Synchronous Remote Function Call* operation to the right of the *Transform Message* component.
 +
-This operation transforms the request .
+This operation transforms the request.
 +
-. Configure the global element xxx.
+. Create a global element named `SAP_Config` and specify the connection information.
 . Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
-. If the connection is successful, save the configuration.
-+
-Otherwise, review and correct any invalid parameters, and test again.
-////
 . Enter the key value.
 +
-If the key value is correct, the payload of the function in *Transform Message* appears: *Where is the key value entered*.
+*Reviewers, the above text is in the old example. Is this needed only for a Certificate connection? Can I delete it? The key is in the transform as far as I can tell.*
 +
 image::sap-connector-remote-function-call-key.png[Payload for the function in the Transform Message component]
 +
@@ -259,16 +255,15 @@ image::sap-connector-remote-function-call-key.png[Payload for the function in th
 +
 Anypoint Studio provides a web server you can use to test the app from a browser.
 . From a web browser, test the application by entering +`http://localhost:8081/triggerIDoc`.
-////
 
 === Configure the Second Flow
 
-The second flow xxx
+The second flow logs each new IDoc to the Studio console.
 
 . From the *Mule Palette* view, select *SAP* and drag the *Document listener* source to the canvas.
-. Create a new *SAP_Inbound* global element configuration for the source and specify the required information.
+. Create a new global element for the source and specify the required information.
 +
-*Reviewers, should this be the same global element as in the previous flow?*
+*Reviewers, should this be the same global element as in the previous flow or a new one?*
 +
 Configure the *Document Listener* properties with the following values:
 +
@@ -298,13 +293,71 @@ To run the Mule app:
 
 Paste this code into a new Mule app in Studio to quickly load the flow for the Send IDoc example. Change the values to reflect your environment.
 
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/xml
+---
+<?xml version="1.0" encoding="UTF-8"?>
 
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:sap="http://www.mulesoft.org/schema/mule/sap"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/sap http://www.mulesoft.org/schema/mule/sap/current/mule-sap.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="75b36b20-040b-401f-a65c-f0a966b51190" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:request-config name="HTTP_Request_configuration" doc:name="HTTP Request configuration" doc:id="e2ee092f-cbd7-49fc-b136-732265e7522a" >
+		<http:request-connection host="xxx.xxx.com" />
+	</http:request-config>
+	<sap:sap-config name="SAP_Config" doc:name="SAP Config" doc:id="1f7e7c6e-4bb5-4270-870f-442cda3e3eb8" >
+		<sap:simple-connection-provider-connection username="User1" password="myPassword" systemNumber="00" client="800" applicationServerHost="sapdev.muletest.net" />
+	</sap:sap-config>
+	<flow name="sap-receive-idocFlow1" doc:id="bea8cd17-64d9-4f32-8229-d7eb909e8ee1">
+		<http:listener doc:name="Listener" doc:id="448acc4a-0078-485b-bc10-f70d05abf721" config-ref="HTTP_Listener_config" path="/trigger" />
+		<ee:transform doc:name="Transform Message" doc:id="44124bf5-7caf-4050-a3a6-06cfbd37da48">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/xml
+---
+{
+	ZMMFM_TRIGGER_IDOC_MATMAS: {
+		"import": {
+	IV_MTYP: "MATMAS"
+,
+IV_OBJ: "23"
+,
+IV_SYS: "MULE11_LS"
+}
+,
+export: {
+	EV_RET: "0"
+},export: {
+	EV_OBJ: "0000000003526552"
+},export: null,changing: null,
+tables: {
+	T_MSG: null
+},
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<sap:sync-rfc doc:name="Synchronous Remote Function Call" doc:id="e420d5e1-c436-471e-aa48-59a7d2cee1b9" key="ZCAFM_TRIGGER_IDOC_BY_MSG_TYPE" config-ref="SAP_Config" />
+	</flow>
+	<flow name="sap-receive-idocFlow2" doc:id="4b070ed0-19ac-4899-82ce-275226b08426" >
+		<sap:document-listener doc:name="Document listener" doc:id="a0d3bf88-1bf1-4210-9cf1-5403f30b2d80" gatewayHost="xxx.com" gatewayService="3200" programID="MULE01_PID" config-ref="SAP_Config"/>
+		<logger level="INFO" doc:name="Logger" doc:id="db7ff63b-31b7-48ab-b0ad-73082f4b66c7" />
+	</flow>
+</mule>
+----
 
-
-Example response:
+Example response on the Studio console:
 
 [source,dataweave,linenums]
 ----
+
 <MATMAS01>
  	<IDOC BEGIN="1">
  		<EDI_DC40 SEGMENT="1">
@@ -327,9 +380,7 @@ Example response:
  			<CRETIM>050305</CRETIM>
  			<SERIAL>20191004050305</SERIAL>
  		</EDI_DC40>
-
  		...
-
 ----
 
 == See Also
