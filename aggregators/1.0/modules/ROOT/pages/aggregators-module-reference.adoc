@@ -1,45 +1,43 @@
-= Aggregators Module Reference v1.0 - Mule 4
+= Aggregators Module Reference 1.0 - Mule 4
 :page-aliases: connectors::aggregator/aggregators-module-reference.adoc
 
 Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#anypoint-connectors[Select]
 
-Aggregators Module v1.0
-
 Release Notes: xref:release-notes::connector/aggregators-module-release-notes.adoc[Aggregators Module Release Notes]
 
-An Aggregator is a component that receives some data, processes it to extract some value and then adds that value to a list of aggregated elements. After that, and depending on the configuration, the list of elements is sent to a set of components.
+An aggregator scope is a component that receives some data, processes the data to extract some value, and then adds that value to a list of aggregated elements. After that process is complete, and depending on the aggregator scope configuration, a set of components in the flow process the list of elements.
 
-Aggregators are pass-through routers, meaning that the same data that is received by the aggregator is going to be processed by the components that follow it. The only modifications are the propagation of variables in case any is set while executing any of the aggregation routes.
+Aggregators are pass-through routers. The same data that an aggregator scope receives is processed by the components that follow the aggregator scope. 
+The only modifications are the propagation of variables in case any are set while executing any of the aggregation routes.
 
-When an aggregator releases the stored values, the list of aggregated elements is processed either by a route within the aggregator itself or in another Mule Flow, through an aggregator listener. All of that depends on the type and configuration of the aggregator being used.
+When an aggregator scope releases the stored values, a route component (*Incremental aggregation* or *Aggregation complete*) processes the list of aggregated elements within the aggregator scope itself or in another Mule flow, through an *Aggregator listener* source. The process depends on the configuration of the aggregator scope used.
 
 == Configurations
 
-There is no configuration for Aggregators because the module is based only on operations. Each different type of aggregator is a different operation that configurable through its parameters.
+There is no global configuration for the Aggregator Module because the module uses scopes. Each type of aggregator is a different scope that is configurable through its parameters. The following parameters are common in each scope:
 
-However, there are a couple of common parameters that are worth mentioning beforehand:
+* Content
++
+The expression that defines what to aggregate. The result of the evaluation is the value stored in the aggregation. Because all data related to an aggregator scope is stored in an object store, the content value must be serializable. Otherwise, there is no assurance that the module will work properly.
 
-* Content:
+* Object Store
 +
-The expression that defines what to aggregate. The result of the evaluation is the value stored in the aggregation.
-Since all data related to an aggregator is stored in an Object Store, it's really important that the content value is `Serializable`.
-Otherwise, there is no assurance that the module will work properly.
+All information related to an aggregator is stored in an object store. The type of object store relates to the expected behavior of the component.
+** Persistent Object Store (Default)
 +
-* Object Store:
+Slower but more reliable. Enables data recovery after the application restarts.
+** In Memory Object Store
 +
-All information related to an aggregator is stored in an Object Store. The type of Object Store should relate to the expected behavior of the component.
-+
-Generally speaking:
-+
-** Persistent Object Store (Default): More reliable, permits data recovery after restart. Slower.
-** In Memory Object Store: Faster. Loses all the data if the application is restarted.
+Faster but loses all the data if the application restarts.
 
-== Aggregator Types
+== Aggregators Scopes
 
 There are size-based, time-based, and group-based aggregators.
 
 [[size-based-aggregator]]
 === Size-Based Aggregator
+
+The *Size based aggregator* scope enables you to aggregate elements until a predefined size number of elements completes the aggregation, executing the routes and listeners.
 
 [source,xml,linenums]
 ----
@@ -60,48 +58,47 @@ There are size-based, time-based, and group-based aggregators.
 </aggregators:size-based-aggregator>
 ----
 
-This example aggregates elements until a pre-defined size is reached, executing the routes and listeners.
+If the elements reach the *Max size* specified, two things occur:
+
+* The elements in the storage are removed and the next element will belong to the new aggregation.
+* The *Aggregation complete* route executes with the aggregated elements.
+
+Additionally, if an *Aggregator listener* is registered to the aggregator scope, the listener's callback executes with the same set of elements. +
+If the *Incremental aggregation* route is not null, and the Max size is not reached, then the route component chain executes with all the aggregated elements, including the last element aggregated.
+
+You can also define a *Timeout* for the aggregator scope. In that case, a scheduled task with that timeout as a delay is registered for execution. The time is computed from the time at which the first element arrives and no extra task is scheduled if there is another task waiting to be executed. In the case of a timeout, the referenced listener executes only if it supports being called by timeout.
 
 ==== Parameters
 
 [%header%autowidth.spread]
 |===
 | Name | Type | Description | Default Value | Required
-| Name | String | The name of the aggregator. It can later be referenced by an aggregator listener. || x
+| Name | String | The name of the aggregator. An aggregator listener can later reference the name. || x
 | Content | Expression | The expression that defines what to aggregate. The result of the evaluation is the value stored in the aggregation. | #[payload] |
-| Max Size | Number | The total number of elements to be aggregated before considering the aggregation complete. | | x
-| Timeout | Number |  A maximum time to wait for the aggregation to complete. If the timeout is reached before the total number of elements is equal to max size, the aggregation is not considered complete. A value of `0` is not supported to avoid timing out the group constantly. | -1(UNLIMITED) |
+| Max Size | Number | The total number of elements to aggregate before considering the aggregation complete. | | x
+| Timeout | Number |  A maximum time to wait for the aggregation to complete. If the timeout is reached before the total number of elements is equal to Max Size, the aggregation is not considered complete. A value of `0` is not supported to avoid timing out the group constantly. | -1(UNLIMITED) |
 | Timeout unit | Time Unit | The time unit in which to measure the timeout. |  SECONDS |
 | Object Store | Object Store |  Either a name to reference a global object store or a definition of a private object store where the aggregated elements will be stored. |  Default Object Store partition. |
 | Aggregation Complete Route | Route | Components chain to execute once the aggregation is complete. The Aggregation Complete Route does not execute if the timeout is reached. | | x
-| Incremental Aggregation Route | Route | Components chain to execute for every new element that is aggregated. The payload is the list of all the elements that have been aggregated from the first one (in this aggregation) to the one that is being aggregated now. | |
+| Incremental Aggregation Route | Route | Components chain to execute for every new element that is aggregated. The payload is the list of all the elements that have been aggregated in the aggregation from the first one to the one that is currently aggregated. | |
 |===
 
 
 ==== Raises
 
 * AGGREGATORS:AGGREGATOR_CONFIG
-+
-Whenever maxSize or timeout have invalid values (for example, `maxSize < 0`).
-+
+
+The Max size or Timeout fields have invalid values, for example, `maxSize < 0`.
+
 * AGGREGATORS:OBJECT_STORE_ACCESS
-+
-If there is any issue accessing the ObjectStore used to store the aggregated values.
 
----
-image::size-based-aggregator.png[Size based Aggregator]
-. Input Data
-. Aggregated elements (Not complete)
-. Aggregated elements (Complete)
-. Input Data (same as 1) + New Variables
-. Aggregated elements, one of :
-.. `maxSize` reached (same as 3)
-.. `timeout` (only if timed out groups are accepted)
+An error occurred during an attempt to access the object store used to store the aggregated values.
 
----
 
 [[time-based-aggregator]]
 === Time-Based Aggregator
+
+The *Time based aggregator* scope enables you to aggregate elements until a time period completes, executing the routes and listeners.
 
 [source,xml,linenums]
 ----
@@ -119,46 +116,41 @@ image::size-based-aggregator.png[Size based Aggregator]
 </aggregators:time-based-aggregator>
 ----
 
-Aggregates elements until a time period is completed, executing the routes and listeners.
+The period taken into account is computed from the time the first element arrives. After the aggregation is released, the timer does not start until the next element arrives. 
+
+The aggregator also enables an *Incremental aggregation* route to be executed every time a new element arrives, unless a *Max size* is set.
+
+If that is the case, the *Incremental aggregation* route executes every time except when the size of the aggregated elements is equal to the *Max size*. If an *Aggregator listener* is present at that moment, the listener callback is also executed.
 
 ==== Parameters
 
 [%header%autowidth.spread]
 |===
 | Name | Type | Description | Default Value | Required
-| Name | String | The name of the aggregator. It can later be referenced by an aggregator listener. || x
+| Name | String | The name of the aggregator. An aggregator listener can later reference the name.. || x
 | Content | Expression | The expression that defines what to aggregate. The result of the evaluation is the value stored in the aggregation. | #[payload] |
-| Period | Number |  A time period to wait before considering the aggregation to be complete. | | x
+| Period | Number |  A time period to wait before considering the aggregation complete. | | x
 | Period unit | Time Unit | The time unit in which to measure the time period. |  SECONDS |
-| Max Size | Number | The total number of elements to be aggregated before considering the aggregation to be complete. | -1(UNLIMITED) |
+| Max Size | Number | The total number of elements to aggregate before considering the aggregation complete. | -1(UNLIMITED) |
 | Object Store | Object Store |  Either a name to reference a global object store or a definition of a private object store where the aggregated elements will be stored. |  Default Object Store partition. |
-| Incremental Aggregation Route | Route | Components chain to be executed for every new element that is aggregated. The payload is the list of all the elements that have been aggregated from the first one (in this aggregation) to the one that is being aggregated now. | |
+| Incremental Aggregation Route | Route | Components chain to execute for every new element that is aggregated. The payload is the list of all the elements that have been aggregated in the aggregation from the first one to the one that is currently aggregated. | |
 |===
 
 ==== Raises
 
 * AGGREGATORS:AGGREGATOR_CONFIG
-+
-Whenever period or `maxSize` has invalid values (for example, `Period = 0`).
-+
+
+The Period or Max size fields have invalid values, for example, Period = 0.
+
 * AGGREGATORS:OBJECT_STORE_ACCESS
-+
-If there is any issue accessing the ObjectStore used to store the aggregated values.
 
----
-image::time-based-aggregator.png[Time based Aggregator]
-. Input Data
-. Aggregated elements (Not complete)
-. Aggregated elements, one of:
-.. `period` completed (only if timed out groups are accepted)
-.. `maxSize` reached
-. Input Data (same as 1) + New Variables
-
----
+An error occurred during an attempt to access the object store used to store the aggregated values.
 
 
 [[group-based-aggregator]]
 === Group-Based Aggregator
+
+The *Group based aggregator* scope enables you to aggregate elements into groups by group ID.
 
 [source,xml,linenums]
 ----
@@ -182,16 +174,26 @@ image::time-based-aggregator.png[Time based Aggregator]
 </aggregators:group-based-aggregator>
 ----
 
+If the elements reach the *Max size* specified for the group, two things occur:
 
-Aggregates elements in different groups according to a group ID.
+* The elements in that group are removed from the storage. The group is marked as complete and every new element that arrives to that group will raise an exception.
+* The *Aggregation complete* route executes with the aggregated elements of that particular group.
 
-Every time a new element reaches the aggregator, an ID will be resolved. If a group with that ID already exists in the aggregator, the value will be added to that group. Otherwise, a new group with that ID will be created and the received element will be the first element in that group's aggregation.
+Every time a new element reaches the aggregator, an ID is resolved. If a group with that ID already exists in the aggregator, the value is added to that group. Otherwise, a new group with that ID is created and the received element is the first element in that group's aggregation.
+
+Additionally, if an *Aggregator listener* is registered to the aggregator scope, the listener's callback executes with the same set of elements. +
+If the *Incremental aggregation* route is not null, and the Max size is not reached, then the route component chain executes with all the aggregated elements, including the last element aggregated.
+
+You can also define a *Timeout* for the aggregator scope. In that case, a scheduled task with that timeout as a delay is registered for execution. The time is computed from the time at which the first element arrives and no extra task is scheduled if there is another task waiting to be executed. +
+If the group reaches a timeout, it will be marked as timeout and every new element that arrives for that group raises an exception. In the case of a timeout, the referenced listener executes only if it supports being called by timeout.
 
 Some important concepts appear with the group-based aggregator:
 
-* Group timeout: When a group has to be released because all the necessary elements for the group did not arrive within the expected time. If a group has timed out but is not yet evicted, it will reject attempts to add any new values to that group.
+* Group timeout
+When a group has to be released because all the necessary elements for the group did not arrive within the expected time. If a group has timed out but is not yet evicted, it will reject attempts to add any new values to that group.
 
-* Group eviction: When a group is removed from the aggregator, regardless of whether it was completed or timed out. If a new element with that group's ID is received by the aggregator, the group will be created again.
+* Group eviction
+When a group is removed from the aggregator, regardless of whether it was completed or timed out. If a new element with that group's ID is received by the aggregator, the group will be created again.
 
 Lastly, when elements that reach group-based aggregators come from a sequence that was splitted (by a xref:mule-runtime::for-each-scope-concept.adoc[ForEach] component for example), each will have assigned a different `sequenceNumber`. In that case, they are sorted in increasing order prior to the aggregation release.
 
@@ -216,39 +218,28 @@ Lastly, when elements that reach group-based aggregators come from a sequence th
 ==== Raises
 
 * AGGREGATORS:GROUP_COMPLETED
-+
-When a new element has to be added to an already completed group (and the group was not yet evicted).
-+
+
+An error occurred during an attempt to add a new element to an already completed group that was not yet evicted.
+
 * AGGREGATORS:GROUP_TIMED_OUT
-+
-When a new element has to be added to a group that timed out (and the group was not yet evicted).
-+
+
+An error occurred during an attempt to add a new element to a group that timed out but had not yet been evicted.
+
 * AGGREGATORS:NO_GROUP_ID
-+
-When the expression that resolves to the group ID returns null.
-+
+
+The expression that resolves to the group ID returns null.
+
 * AGGREGATORS:NO_GROUP_SIZE
-+
-When the expression that resolves to the group size returns null.
-+
+
+The expression that resolves to the group size returns null.
+
 * AGGREGATORS:AGGREGATOR_CONFIG
-+
-When the group size or timeout has invalid values (for example, `groupSize < 0`).
+
+The Group size or Timeout fields have invalid values, for example, groupSize < 0.
+
 * AGGREGATORS:OBJECT_STORE_ACCESS
-+
-If there is any issue accessing the ObjectStore used to store the aggregated values.
 
----
-image::group-based-aggregator.png[Group based Aggregator]
-. Input Data
-. Aggregated elements (Not complete)
-. Aggregated elements (Complete)
-. Input Data (same as 1) + New Variables
-. Aggregated elements, one of :
-.. `groupSize` reached (same as 3)
-.. `timeout` (only if timed out groups are accepted)
-
-
+An error occurred during an attempt to access the object store used to store the aggregated values.
 
 
 == Sources
