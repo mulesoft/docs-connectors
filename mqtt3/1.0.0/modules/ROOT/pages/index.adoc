@@ -7,27 +7,28 @@ Support Category: https://www.mulesoft.com/legal/versioning-back-support-policy#
 == Configure the Connector
 
 MQTT3 Connector comes out of the box with a set of default values for both publishing and consuming messages.
-The only requirement is for you to configure which connection to use and that you specify a value for the clientId which will uniquely identify that connection.
+The only requirement is for you to configure which connection to use and that you specify a value for the Client ID
+which will uniquely identify that connection.
 
 This example sets a minimal connection to a broker in `localhost`:
 
 [source,example,linenums]
 ----
 <mqtt3:config name="MQTT_Config">
-    <mqtt3:connection clientId="123">
-        <mqtt3:connection-settings >
+    <mqtt3:connection clientId="smart-bentley-123">
+        <mqtt3:connection-settings>
             <mqtt3:connection-string-mqtt3-authenticator url="tcp://127.0.0.1:1883" />
         </mqtt3:connection-settings>
     </mqtt3:connection>
 </mqtt3:config>
 ----
 
-Another, equivalent, option would be to use:
+Another, equivalent, option would be to use the form authenticator if you want to specify each url field separately:
 
 [source,example,linenums]
 ----
-<mqtt3:config name="MQTT3_Config" doc:name="MQTT3 Config">
-	<mqtt3:connection clientId="123" >
+<mqtt3:config name="MQTT3_Config">
+	<mqtt3:connection clientId="smart-bentley-123" >
 		<mqtt3:connection-settings >
 			<mqtt3:form-mqtt3-authenticator host="0.0.0.0" protocol="TCP" port="1883"/>
 		</mqtt3:connection-settings>
@@ -37,3 +38,124 @@ Another, equivalent, option would be to use:
 
 === Define Global Defaults
 
+There MQTT3 Connector allows you to define multiple parameters to use as a default while consuming or
+publishing messages. This way, you can define a global default behavior for all the operations associated with the config.
+
+For example, you can specify the keep alive interval and time units, which specify the maximum period of time that the
+connection will be kept alive without any messages being exchanged between client and broker. Or you can set the maximum
+number of in-flight messages allowed.
+
+[source,example,linenums]
+----
+<mqtt3:config name="MQTT_Config">
+    <mqtt3:connection clientId="smart-bentley-123" maxInFlight="60" keepAliveInterval="60" keepAliveIntervalUnit="SECONDS">
+        <mqtt3:connection-settings >
+            <mqtt3:connection-string-mqtt3-authenticator url="tcp://127.0.0.1:1883" />
+        </mqtt3:connection-settings>
+    </mqtt3:connection>
+</mqtt3:config>
+----
+
+
+== Set a Client ID
+
+A Client ID is mandatory and should uniquely identify an MQTT Connection to a broker. It is a recommended practice that
+the Client ID should be a meaningful name that uniquely identifies a client or device that connects to an MQTT broker,
+and not a random string. The client ID can be set in the connection element of the configuration.
+
+== Specify a Connection Protocol
+
+MQTT supports the following protocols which can be used to connect to and exchange MQTT messages with the broker:
+
+* TCP
+* SSL/TLS
+* WS
+* WSS
+* LOCAL
+
+The protocol should be set in the connection string in the connector's configuration and will default to TCP if none is specified.
+
+== Provide Credentials For Authentication
+
+Authentication credentials are optional, but you can provide a username and a password if it is required.
+
+For example, you can provide a basic username and password:
+
+[source,example,linenums]
+----
+<mqtt3:config name="MQTT_Config">
+    <mqtt3:connection clientId="smart-bentley-123" username="crowley" password="theDemon666">
+        <mqtt3:connection-settings >
+            <mqtt3:connection-string-mqtt3-authenticator url="tcp://127.0.0.1:1883" />
+        </mqtt3:connection-settings>
+    </mqtt3:connection>
+</mqtt3:config>
+----
+
+Or you can also provide a client certificate to authenticate by setting a TLS context.
+
+== Provide a Fail Over Server List
+
+There are certain deployment schemas that consist of more than one broker working together in order to
+provide clients with several connection endpoints. When there is more than one available server that the client can
+connect to, there are two possible scenarios. Either each mqtt server is operating separately or they might be working
+together and sharing a state (cluster mode). Given these scenarios, we might want to specify how our mqtt client will
+behave in the event of a reconnection.
+
+By providing a fail over server list, the connector can iterate over it until a it has successfully established a
+connection with one of the provided endpoints.
+
+[source,example,linenums]
+----
+<mqtt3:config name="MQTT_FailOver_Config">
+    <mqtt3:resilient-connection clientId="smart-bentley-123" >
+        <mqtt3:fail-over-servers >
+            <mqtt3:fail-over-url protocol="TCP" host="127.9.0.2" port="1883"/>
+            <mqtt3:fail-over-url protocol="TCP" host="127.0.0.3" port="1884"/>
+            <mqtt3:fail-over-url protocol="TCP" host="127.0.0.1" port="1885"/>
+        </mqtt3:fail-over-servers>
+    </mqtt3:resilient-connection>
+</mqtt3:config>
+----
+
+== Specify Clean Session
+
+Set the clean session flag to 'false' to indicate that the broker should remember the client next time it connects.
+While the client is offline, all its subscriptions will be saved and qos 1 and 2 messages that the client would want
+to receive will be saved too, until it reconnects. Some brokers support creating a cluster of MQTT brokers (the nodes share a state),
+and setting the clean session flag to 'false' could be useful if the node the connector is talking to happens to go offline.
+Then, the client could reconnect to a different node that will already know about subscriptions and deliver any messages
+the connector might have missed while offline.
+
+If clean session is set to 'true' (default), then when the connector disconnects, for whatever reason, all its subscriptions
+will be dropped and it will have to re-subscribe upon reconnection, also all messages sent for it while offline
+will be lost.
+
+[source,example,linenums]
+----
+<mqtt3:config name="MQTT_Config">
+    <mqtt3:connection clientId="smart-bentley-123" cleanSession="false">
+        <mqtt3:connection-settings >
+            <mqtt3:connection-string-mqtt3-authenticator url="tcp://127.0.0.1:1883" />
+        </mqtt3:connection-settings>
+    </mqtt3:connection>
+</mqtt3:config>
+----
+
+== Enable File Persistence
+
+Enabling file persistence, by setting enableFilePersistence flag to 'true', allows the mqtt client to persist its state
+to a file which is used to store any outbound or inbound in-flight messages the client might have with QoS ≥ 1. In contrast,
+if enableFilePersistence flag is set to 'false', the client state will only be saved in memory and in the event of a crash
+the client will not be able to recover its state.
+
+[source,example,linenums]
+----
+<mqtt3:config name="MQTT_Config">
+    <mqtt3:connection clientId="smart-bentley-123" cleanSession="false" enableFilePersistence="true">
+        <mqtt3:connection-settings >
+            <mqtt3:connection-string-mqtt3-authenticator url="tcp://127.0.0.1:1883" />
+        </mqtt3:connection-settings>
+    </mqtt3:connection>
+</mqtt3:config>
+----
