@@ -76,3 +76,46 @@ However, messages published to the following topics would NOT trigger our messag
 
 * quotes/american/actors
 * phrases/england/authors/neilGaiman
+
+== Sharing Configuration
+
+Listeners that share a configuration element will also share a connection and client id. This is important to keep in mind
+especially in the cases where one of the listeners is stopped but the other isn't.
+
+Suppose we have the following configuration element and listeners in our application:
+
+[source,xml,linenums]
+----
+<mqtt3:config name="MQTT_Config">
+    <mqtt3:connection clientId="smart-bentley-123" url="tcp://127.0.0.1:1883" />
+</mqtt3:config>
+
+<flow name="listenerReaderA">
+   <mqtt3:listener config-ref="MQTT_Config">
+            <mqtt3:topics>
+                <mqtt3:topic topicFilter="shakespeare"/>
+                <mqtt3:topic topicFilter="terryPratchett"/>
+            </mqtt3:topics>
+   </mqtt3:listener>
+
+   <logger level="INFO"  message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]">
+</flow>
+
+<flow name="listenerReaderB">
+    <mqtt3:listener config-ref="MQTT_Config">
+            <mqtt3:topics>
+                <mqtt3:topic topicFilter="neilGaiman"/>
+                <mqtt3:topic topicFilter="terryPratchett"/>
+            </mqtt3:topics>
+   </mqtt3:listener>
+
+   <logger level="INFO"  message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]">
+</flow>
+----
+
+As you can see, the listeners share the configuration, therefore they also share a connection and a client id, and will be indistinguishable from one another
+from the broker's perspective. You will also notice, that the listeners share a subscription to the topic 'terryPratchett'. The first thing to note, is that
+in this case, whichever listener subscribes first will be the one to set the subscription quality of service. Only one subscription with one quality of service
+level will exist for that topic. The second observation is that, if we were to stop the 'listenerReaderB' flow, the 'listenerReaderA' flow will still
+receive and process the messages for the 'terryPratchett' topic, and so, even if the configuration element has specified a cleanSession=false, the
+messages that were processed while 'listenerReaderB' was offline, will not be resent to this listener.
