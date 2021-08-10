@@ -3,7 +3,7 @@
 In these examples, you configure the Anypoint Connector for MQTT3 (MQTT3 Connector) *On New Message* (`<mqtt3:listener>`) source and *Publish* (`<mqtt3:publish>`) operation to listen and publish messages to a specific topic.
 
 
-== Create the First Mule Application
+== Create a Mule App to Listen and Publish Messages
 
 For the first example, you must start an MQTT broker and create a Mule app. To create the Mule app in the Studio XML editor, follow these steps:
 
@@ -17,11 +17,11 @@ For the first example, you must start an MQTT broker and create a Mule app. To c
 	</http:listener-config>
 	<mqtt3:config name="MQTT3_Config_1">
 		<mqtt3:connection clientId="crowley123" username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1883" />
-		<mqtt3:last-will-and-testament topic="topic/lwt" body="All the money goes to the cat" isRetained="true"/>
+		<mqtt3:last-will-and-testament topic="topic/lwt" body="This is the LWT message" isRetained="true"/>
 	</mqtt3:config>
 ----
 
-. Create a flow with a listener source `<mqtt3:listener>` that triggers an event for incoming messages on topics matching the filter `topic/quotes/#`:
+. Create a flow with a listener source `<mqtt3:listener>` that triggers an event for incoming messages on topics matching the filter `topic/quotes/#`, and add a `<logger>` component that logs the received message::
 
 [source,xml,linenums]
 ----
@@ -36,7 +36,7 @@ For the first example, you must start an MQTT broker and create a Mule app. To c
 	</flow>
 ----
 
-. Create a flow with a publish operation `<mqtt3:publish>` that publish messages to the topic `topic/quotes/shakespeare` and triggers an event in the `listener-flow`:
+. Create a flow with a publish operation `<mqtt3:publish>` that publishes messages to the topic `topic/quotes/shakespeare` and triggers an event in the `listener-flow`:
 
 [source,xml,linenums]
 ----
@@ -52,11 +52,40 @@ For the first example, you must start an MQTT broker and create a Mule app. To c
 . To publish the message, send a request to the HTTP endpoint using the following curl command: +
  `curl -v --request GET localhost:8081/publish/message`.
 
-== Create the Second Mule Application
+== Create a Mule App Subscribed to a LWT Message Topic
 
-In the following example, you use the previous application and create a second application that subscribes to the topic `topic/lwt` to be notified if the first application crashes or disconnects. Notice that in the previous application's MQTT configuration element you configured  a `<mqtt3:last-will-and-testament>` message and `topic`. To create the Mule app in the Studio XML editor, follow these steps:
+In the following example, you use the previous listener flow and create a second listener flow subscribed to the same LWT message topic of the first flow. So if the Mule app crashes due to some reason, and the first listener flow gets disconnected, the MQTT broker sends the LWT message to the configured topic and retains the message. When the Mule app restarts, the second listener flow subscribed to the same topic, listens the retained LWT message and logs it.
+
+ To create the Mule app in the Studio XML editor, follow these steps:
 
 . In a new Studio project, navigate to the *Configuration XML* tab.
+. Configure an `<mqtt3:config name="MQTT3_Config_1">` configuration element:
+
+[source,xml,linenums]
+----
+	<mqtt3:config name="MQTT3_Config_1">
+		<mqtt3:connection clientId="crowley123" username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1883" />
+		<mqtt3:last-will-and-testament topic="topic/lwt" body="This is the LWT message" isRetained="true"/>
+	</mqtt3:config>
+----
+
+[start=3]
+. Create a flow with a listener source `<mqtt3:listener>` that triggers an event for incoming messages on topics matching the filter `topic/quotes/#`, and add a `<logger>` component that logs the received message::
+
+[source,xml,linenums]
+----
+	<flow name="listener-flow">
+		<mqtt3:listener config-ref="MQTT3_Config_1" doc:name="On New Message 1">
+			<reconnect />
+			<mqtt3:topics >
+				<mqtt3:topic topicFilter="topic/quotes/#" />
+			</mqtt3:topics>
+		</mqtt3:listener>
+		<logger level="INFO" message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]"/>
+	</flow>
+----
+
+[start=4]
 . Configure a new `<mqtt3:config name="MQTT3_Config_2">` configuration:
 
 [source,xml,linenums]
@@ -66,7 +95,8 @@ In the following example, you use the previous application and create a second a
 </mqtt3:config>
 ----
 
-. And a listener source `<mqtt3:listener>` that subscribe to the topic `topic/lwt`:
+[start=5]
+. Create a second listener flow by adding a listener source `<mqtt3:listener>` that subscribes to the topic `topic/lwt`, and add a `<logger>` component that logs the received message:
 
 [source,xml,linenums]
 ----
@@ -80,10 +110,12 @@ In the following example, you use the previous application and create a second a
 </flow>
 ----
 
-. Save and run the Mule application.
-
-After both applications are running, you need to simulate a disconnection from the first application. A simple way to achieve the disconnection is by looking for the process ID of your first Mule app and killing it, which simulates an application crash.
-The second application then logs the last will and testament message that was set by the first application. The second application is also notified that the first application crashed.
+[start=6]
+. Save and run the Mule app.
+. Simulate the app crash by looking for the process ID of the Mule app and kill it in your terminal, for example `kill -9 <process-id>`. +
+Because the Mule app crashes, the first listener flow gets disconnected.
+. Restart the Mule app. +
+The MQTT broker retains the LWT message, and the second listener flow logs the LWT message that was configured in the first listener flow.
 
 == See Also
 
