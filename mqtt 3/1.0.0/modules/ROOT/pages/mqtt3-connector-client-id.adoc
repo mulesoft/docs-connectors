@@ -1,31 +1,43 @@
 = Set a Client ID with MQTT 3 Connector
 
 Client IDs are important for MQTT because they identify a connection to an MQTT broker. Moreover, they identify a specific device or client,
-and it can be useful in terms of traceability to set a client id that clearly identifies a device's connection to the broker. This is why
-it is a recommended practice that this parameter be set explicitly. However, MQTT brokers usually implement a mechanism by which, if new a connection
-request is received by the broker, and if that connection's client id coincides with that of an existing connection, the broker will close the old
-connection and accept the new one. This mechanism is known as a client take-over. MQTT brokers employ this mechanism to prevent situations such as
-TCP connections reaching a half-open or invalid state due to a crash in one of the communication ends, which is undesirable. The broker assumes the
-new incoming connection to be valid, closes the older connection, and continues using the newly established connection.
+and it can be useful in terms of traceability to set a client ID that clearly identifies a device's connection to the broker.
 
+MQTT brokers usually implement a mechanism that if new a connection request is received by the broker, and if that connection's client ID matches with an existing connection, the broker closes the old connection and accepts the new one. This mechanism is known as a client take-over. MQTT brokers employ this mechanism to prevent situations such as TCP connections reaching a half-open or invalid state due to a crash in one of the communication ends, which is undesirable. The broker assumes the new incoming connection to be valid, closes the older connection, and continues using the newly established connection.
 
-== Client ID Generators
+The client-takeover mechanism can become a problem if you want to deploy an application in a cluster, and still provide an explicit client ID that identifies the client. Anypoint Connector for MQTT 3 (MQTT 3 Connector) provides client ID generators that help you set a static client ID, set a client ID with a dynamic component to adjust to different deployment scenarios, or define your custom client ID generator.
 
-The client-takeover mechanism can become a problem if we want to deploy an application in cluster, and still provide an explicit client id, that
-will clearly identify the client. This is why the MQTT 3 Connector, provides client id generators, that will help you either: set a static client id,
-set a client id with a dynamic component to adjust to different deployment scenarios or define your own custom client id generator.
+== Configure the Client ID Custom Expression Generator
 
-=== Client ID Custom Expression Generator
+This generator enables you to set a static string prefix and an expression as a suffix. Both parameters are optional but you must provide at least one of them in order to generate a client ID. If you do not provide any parameter, an `INVALID_CLIENT_ID` exception is thrown.
 
-This generator allows you to set a static string prefix and an expression as a suffix. Both are optional, but at least one of them must be
-provided in order to generate a client id. If neither parameter is provided, an INVALID_CLIENT_ID exception will be thrown.
+In the following example, the configuration takes the client ID string and appends the current date, which generates a client ID similar to `principality-123-2020-09-03`:
 
-So, for example, the following configuration will take the clientId string and append the current date:
+. In Studio, navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box type `mqtt` and select *MQTT3 Config*.
+. Click *OK*.
+. In the *MQTT3 Config* window, for *Connection*, select *MQTT3 URL Connection*.
+. For *Client id generator* select *Client id custom expression generator*.
+. Set the following fields:
++
+* *Client ID*: `principality-123-`.
+* *Custom Client ID Suffix*: `#[%dw 2.0 output text/plain --- now() as String {format: 'y-MM-dd'}]"`
+* *Username*: `mosquitto`.
+* *Password*: `password`.
+* *URL*: `tcp://broker.hivemq.com:1883`.
+[start=7]
+. Click *OK*.
+
+.Client ID Custom Expression Generator configuration
+image::mqtt3-expression-generator.png[Client ID Custom Expression Generator configuration in Global Element Properties window]
+
+In the XML editor, the `<mqtt3:client-id-custom-expression-generator>` and `customClientIdSuffix` configurations look like these:
 
 [source,xml,linenums]
 ----
     <mqtt3:config name="MQTT_ClientID_Static_Prefix_And_Expression_Suffix_Config">
-        <mqtt3:form-connection username="aziraphale" password="principality" protocol="TCP" host="127.0.0.1" port="${mosquitto.port1}">
+        <mqtt3:connection username="mosquitto" password="password" url="tcp://broker.hivemq.com:1883"/>
             <mqtt3:client-id-generator>
                 <mqtt3:client-id-custom-expression-generator clientId="principality-123-" customClientIdSuffix="#[%dw 2.0 output text/plain --- now() as String {format: 'y-MM-dd'}]"/>
             </mqtt3:client-id-generator>
@@ -34,9 +46,8 @@ So, for example, the following configuration will take the clientId string and a
     </mqtt3:config>
 ----
 
-So, this would generate a client id similar to this one: `principality-123-2020-09-03`.
 
-You could also, only wish to specify an expression as a client id:
+You can also specify an expression as a client ID. In the following example, dynamic configurations generate new connections for each new expression value:
 
 [source,xml,linenums]
 ----
@@ -50,9 +61,8 @@ You could also, only wish to specify an expression as a client id:
     </mqtt3:config>
 ----
 
-Bare in mind that dynamic configurations like the ones shown above, will generate new connections for each new expression value.
 
-On the other hand, you might just want to set a simple string as your client id.
+In the following example, the configuration sets a simple string as the client ID, that generates a static client ID `principality-123`:
 
 [source,xml,linenums]
 ----
@@ -66,17 +76,38 @@ On the other hand, you might just want to set a simple string as your client id.
     </mqtt3:config>
 ----
 
-So this last example, would generate a static client id: `principality-123`.
 
-=== Client ID Random Suffix Generator
+== Configure the Client ID Random Suffix Generator
 
-This generator allows you to set an optional static string prefix and will add a random uuid as a suffix. If a static prefix is provided, it will
-be separated from the random uuid suffix with a '-' character.
+This generator enables you to set an optional static string prefix and adds a random UUID as a suffix. If you provide a static prefix, it will be separated from the random UUID suffix with a `-` character.
+
+In the following example, you configure the generator to generate a client ID similar to `smart-bentley-123-0f321a85-fddf-429f-ba89-26d201db9777`, but each new connection has its own randomly generated UUID suffix:
+
+. In Studio, navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box type `mqtt` and select *MQTT3 Config*.
+. Click *OK*.
+. In the *MQTT3 Config* window, for *Connection*, select *MQTT3 URL Connection*.
+. For *Client id generator* select *Client id random suffix generator*.
+. Set the following fields:
++
+* *Client ID*: `smart-bentley-123`.
+* *Username*: `mosquitto`.
+* *Password*: `password`.
+* *URL*: `tcp://127.0.0.1:${mosquitto.port1}`.
+[start=7]
+. Click *OK*.
+
+.Client ID Random Suffix Generator configuration
+image::mqtt3-random-generator.png[Client ID Random Suffix Generator configuration in Global Element Properties window]
+
+In the XML editor, the `<<mqtt3:client-id-random-suffix-generator>` configuration looks like this:
+
 
 [source,xml,linenums]
 ----
     <mqtt3:config name="MQTT_Static_Prefix_And_Random_Suffix_Config">
-        <mqtt3:connection username="mosquitto" password="mosquitto"  url="tcp://127.0.0.1:${mosquitto.port1}">
+        <mqtt3:connection username="mosquitto" password="password"  url="tcp://127.0.0.1:${mosquitto.port1}">
             <mqtt3:client-id-generator>
                 <mqtt3:client-id-random-suffix-generator clientId="smart-bentley-123" />
             </mqtt3:client-id-generator>
@@ -85,11 +116,8 @@ be separated from the random uuid suffix with a '-' character.
     </mqtt3:config>
 ----
 
-This example would generate a client id similar to: `smart-bentley-123-0f321a85-fddf-429f-ba89-26d201db9777`, but each new connection will
-have its own randomly generated uuid suffix.
 
-On the other hand, you could omit the clientId prefix, in which case, the generator will assign a random uuid as your client id. So,
-the following example, would generate a client id similar to: `0f321a85-fddf-429f-ba89-26d201db9777`
+You can also omit the client ID prefix, in which case, the generator assigns a random UUID as your client ID. In the following example, you configure the generator to generate a client ID similar to `0f321a85-fddf-429f-ba89-26d201db9777`:
 
 [source,xml,linenums]
 ----
@@ -103,23 +131,16 @@ the following example, would generate a client id similar to: `0f321a85-fddf-429
     </mqtt3:config>
 ----
 
-=== Use a Custom Client ID Generator
+== Configure a Custom Client ID Generator
 
-You might just want to supply your own custom client id generator. To achieve, you need to be familiar with the mule sdk subtypes
-and the import and export annotations.
+You might want to supply your own custom client ID generator. To do so, you must be familiar with the Mule SDK subtypes, and the import and export annotations.
 
-To provide your own client id generator you must:
 
-1. Create your own connector project with the mqtt connector as a dependency.
-2. In your custom extension, define your implementation for the ClientIDGenerator interface, exposed by the mqtt connector.
-3. Define the subtype in your connector definition and export your custom implementation.
-4. In studio import your custom connector and the MQTT Connector.
-5. Use your custom id generator in an MQTT Connector Configuration.
+In the following example, you configure your own client ID generator:
 
-1. Create your own connector project with the mqtt connector as a dependency.
-
-Create a connector project, and include the mqtt connector as a dependency.
-
+. Create your own Java connector project.
+. In the pom file of your connector project, add the MQTT 3 Connector as a dependency, for example:
++
 [source,xml,linenums]
 ----
     <modelVersion>4.0.0</modelVersion>
@@ -144,22 +165,22 @@ Create a connector project, and include the mqtt connector as a dependency.
     </dependencies>
 ----
 
-And create your connector's definition class:
-
+[start=3]
+. Create your connector's definition class, for example:
++
 [source,java,linenums]
 ----
 @Xml(prefix = "mqtt3-extended")
 @Extension(name = "MQTT3Extended", category = SELECT)
 public class MQTT3ExtendedConnector {
-
 }
 ----
 
-2. In your custom extension, define your implementation for the ClientIDGenerator interface, exposed by the mqtt connector.
-
-The MQTT Connector exposes the ClientIDGenerator interface, which only requires that you implement the method generateClientID().
-At this point you will need to import this interface, which is exported by the MQTT 3 Connector, using the @Import annotation.
-
+[start=4]
+. In your custom extension, define your implementation for the `ClientIDGenerator` interface, exposed by the MQTT Connector:
++
+MQTT Connector exposes the `ClientIDGenerator` interface, which only requires that you implement the method `generateClientID()`. At this point you will need to import this interface, which is exported by the MQTT 3 Connector, using the `@Import` annotation.
++
 [source,java,linenums]
 ----
 @Xml(prefix = "mqtt3-extended")
@@ -170,8 +191,9 @@ public class MQTT3ExtendedConnector {
 }
 ----
 
-Now that you can access the ClientIDGenerator interface from your connector, you will need to define an implementation
-for it.
+[start=5]
+. Define an implementation for the `ClientIDGenerator` interface:
++
 
 [source,java,linenums]
 ----
@@ -199,13 +221,11 @@ public class MyClientIdGenerator implements ClientIDGenerator {
   }
 }
 ----
-
-3. Define the subtype in your connector definition and export your custom implementation.
-
-Now you will need to make this implementation, that you've defined, available to the MQTT 3 Connector. To do this
-you need to define your custom implementation as a ClientIDGenerator subtype in your connector class, and also
-you will need to export your MyClientIdGenerator class using the Export annotation.
-
+[start=6]
+. Define the subtype in your connector definition and export your custom implementation:
++
+To do so, make the previous defined implementation, available to the MQTT 3 Connector by defining your custom implementation as a `ClientIDGenerator` subtype in your connector class. Also export your `MyClientIdGenerator` class using the `@Export` annotation.
++
 [source,java,linenums]
 ----
 @Xml(prefix = "mqtt3-extended")
@@ -217,14 +237,12 @@ public class MQTT3ExtendedConnector {
 
 }
 ----
++
+After you set up your custom connector project, you are ready to access the new implementation from your application using the MQTT 3 Connector.
 
-That's all you need to do in your custom connector project. Now we will explain how you can access this new
-implementation from your application using the MQTT 3 Connector.
-
-4. In studio import your custom connector and the MQTT Connector.
-
-First, you will need to import both connectors in your application's pom.xml file. For example:
-
+[start=7]
+. In Studio, import both your custom connector and the MQTT 3 Connector in your application's `pom.xml` file, for example:
++
 [source,xml,linenums]
 ----
 	<groupId>com.mycompany</groupId>
@@ -299,17 +317,33 @@ First, you will need to import both connectors in your application's pom.xml fil
 	</dependencies>
 </project>
 ----
++
+Now, if you try to create a new MQTT Connector configuration in your application, your custom client ID implementation should be in the list of available client ID generators.
 
-5. Use your custom id generator in an MQTT Connector Configuration.
+[start=8]
+. To use your custom ID generator in an MQTT Connector Configuration navigate to the *Global Elements* tab.
+. Click *Create*.
+. In the filter box type `mqtt` and select *MQTT3 Config*.
+. Click *OK*.
+. In the *MQTT3 Config* window, for *Connection*, select *MQTT3 URL Connection*.
+. For *Client id generator* select *Custom client id*.
+. Set the following fields:
+* *Client ID*: `123`.
+* *Username*: `mosquitto`.
+* *Password*: `password`.
+* *URL*: `tcp://broker.hivemq.com:1883"`.
+[start=15]
+. Click *OK*.
 
-Now, if you try to create a new MQTT Connector Config in your application, your custom client id implementation should
-have been added to the list of available client id generators. If we used the implementation from the previous example,
-our MQTT Connector configuration would look like this:
+.Custom Client Generator configuration
+image::mqtt3-custom-generator.png[Custom Client ID Generator configuration in Global Element Properties window]
+
+In the XML editor, the  `<mqtt3:client-id-generator>` and `<mqtt3-extended:custom-client-id>` configurations look like this:
 
 [source,xml,linenums]
 ----
 <mqtt3:config name="MQTT3_Config">
-	<mqtt3:connection username="mosquitto" password="mosquitto" url="tcp://localhost:1883">
+	<mqtt3:connection username="mosquitto" password="password" url="tcp://broker.hivemq.com:1883">
 		<mqtt3:client-id-generator >
 			<mqtt3-extended:custom-client-id clientId="123" />
 		</mqtt3:client-id-generator>
@@ -317,3 +351,7 @@ our MQTT Connector configuration would look like this:
 </mqtt3:config>
 ----
 
+== See Also
+
+* xref:mqtt3-connector-examples.adoc[MQTT3 Connector Examples]
+* https://help.mulesoft.com[MuleSoft Help Center]
