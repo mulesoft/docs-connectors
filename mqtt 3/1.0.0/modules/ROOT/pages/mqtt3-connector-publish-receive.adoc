@@ -1,136 +1,224 @@
 = Listen and Publish Messages with MQTT 3 Connector
 
-In these examples, you configure the Anypoint Connector for MQTT 3 (MQTT 3 Connector) *On New Message* (`<mqtt3:listener>`) source and *Publish* (`<mqtt3:publish>`) operation to listen and publish messages to a specific topic.
+In these examples, you configure the Anypoint Connector for MQTT 3 (MQTT 3 Connector) *On New Message* source and the *Publish* operation to listen and publish messages to a specific topic.
 
 
 == Create a Mule App to Listen and Publish Messages
 
-For the first example, you must start an MQTT broker and create a Mule app. To create the Mule app in the Studio XML editor, follow these steps:
+In the following example, you configure the *On New Message* source and the *Publish* operation to listen and publish messages to a specific topics.
 
-. In the Studio project, navigate to the *Configuration XML* tab.
-. Configure an `<mqtt3:config name="MQTT3_Config_1">` and an `<http:listener-config>` configuration element:
+image::mqtt3-example-1.png[MQTT 3 Listen and Publish example in Studio canvas]
+
+=== Create a Listener Flow
+
+In the first part of the example, create a flow with an *On New Message* source that triggers an event for incoming messages on topics matching the filter `topic/quotes/#`, and add a *Logger* component that logs the received message:
+
+. In Studio, in the *Mule Palette* view, select *MQTT3 > On New Message*.
+. Drag the *On New Message* source to the Studio canvas.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
+. In the *MQTT3 Config* window, for *Connection* select *MQTT3 URL Connection*.
+. For *Client id generator*, select *Client id custom expression generator*.
+. Set the following fields:
++
+* *Client ID*: `crowley123`
+* *Username*: `mosquitto`
+* *Password*: `mosquitto`
+* *URL*: `tcp://0.0.0.0:1883`
+[start=8]
+. Click the *LWT* tab.
+. Set the following fields:
++
+* *Topic*: `topic/lwt`
+* *Body*: `This is the LWT message`
+* *Is retained*: *True*
+[start=10]
+. Click *OK*.
+. In the *On New Message* configuration screen, set *Topics* to *Edit inline*.
+. Click the plus sign (*+*) to add a new topic.
+. In *Topic filter* set `topic/quotes/#`.
+. Click *OK*.
+. Drag a *Logger* component to the right of the *On New Message* source.
+. Set *Message* to `Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]`.
+
+=== Create a Publisher Flow
+
+For the second part of the example, create a flow with a *Publish* operation that publishes messages to the topic `topic/quotes/shakespeare` and triggers an event in the `listener-flow`:
+
+. In Studio, drag an HTTP *Listener* source below the first `listener-flow`.
+. Set *Path* to `publish/message`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
+. Set *Host* to `0.0.0.0` and *Port* to `8081`.
+. Click *OK*.
+. Drag an MQTT3 *Publisher* operation next to the HTTP *Listener* source.
+. For *Connector configuration*, select the `MQTT3_Config_1` configuration created in the `listener-flow`.
+. Set the following fields:
++
+* *Topic*: `topic/quotes/shakespeare`
+* *Message*: `"Uneasy lies the head that wears a crown"`
+[start=10]
+. Drag a *Set Payload* component to the right of the *Publish* operation.
+. Set *Value* to `SUCCESSFULLY PUBLISHED MESSAGE!`.
+. Save and run your Mule application.
+. To publish the message, send a request to the HTTP endpoint using the following curl command: +
+ `curl -v --request GET localhost:8081/publish/message`.
+
+=== XML for Listening and Publishing Messages with MQTT 3 Connector
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
 
 [source,xml,linenums]
 ----
-	<http:listener-config name="HTTP_Listener_config">
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:mqtt3="http://www.mulesoft.org/schema/mule/mqtt3"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mqtt3 http://www.mulesoft.org/schema/mule/mqtt3/current/mule-mqtt3.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+	<mqtt3:config name="MQTT3_Config1" >
+		<mqtt3:connection username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1883" >
+			<mqtt3:client-id-generator >
+	            <mqtt3:client-id-custom-expression-generator clientId="crowley123" />
+	        </mqtt3:client-id-generator>
+			<mqtt3:last-will-and-testament topic="topic/lwt" body="This is the LWT message" isRetained="true" />
+		</mqtt3:connection>
+	</mqtt3:config>
+	<http:listener-config name="HTTP_Listener_config" >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-	<mqtt3:config name="MQTT3_Config_1">
-		<mqtt3:connection username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1883" />
-		<mqtt3:client-id-generator >
-            <mqtt3:client-id-custom-expression-generator clientId="crowley123" />
-        </mqtt3:client-id-generator>
-		<mqtt3:last-will-and-testament topic="topic/lwt" body="This is the LWT message" isRetained="true"/>
-	</mqtt3:config>
-----
-
-[start=3]
-. Create a flow with a listener source `<mqtt3:listener>` that triggers an event for incoming messages on topics matching the filter `topic/quotes/#`, and add a `<logger>` component that logs the received message::
-
-[source,xml,linenums]
-----
-	<flow name="listener-flow">
-		<mqtt3:listener config-ref="MQTT3_Config_1" doc:name="On New Message 1">
-			<reconnect />
+	<flow name="listener-flow" >
+		<mqtt3:listener doc:name="On New Message" config-ref="MQTT3_Config1">
 			<mqtt3:topics >
 				<mqtt3:topic topicFilter="topic/quotes/#" />
 			</mqtt3:topics>
 		</mqtt3:listener>
-		<logger level="INFO" message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]"/>
+		<logger level="INFO" message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]" />
 	</flow>
-----
-
-[start=4]
-. Create a flow with a publish operation `<mqtt3:publish>` that publishes messages to the topic `topic/quotes/shakespeare` and triggers an event in the `listener-flow`:
-
-[source,xml,linenums]
-----
-	<flow name="publish-message-flow">
+	<flow name="publisher-flow" >
 		<http:listener config-ref="HTTP_Listener_config" path="publish/message"/>
-		<mqtt3:publish config-ref="MQTT3_Config_1" topic="topic/quotes/shakespeare">
+		<mqtt3:publish config-ref="MQTT3_Config1" topic="topic/quotes/shakespeare">
 			<mqtt3:message ><![CDATA[#["Uneasy lies the head that wears a crown"]]]></mqtt3:message>
 		</mqtt3:publish>
-		<set-payload value="SUCCESSFULLY PUBLISHED MESSAGE!" doc:name="Set Payload"/>
+		<set-payload value="SUCCESSFULLY PUBLISHED MESSAGE!" />
 	</flow>
+</mule>
 ----
-
-[start=5]
-. To publish the message, send a request to the HTTP endpoint using the following curl command: +
- `curl -v --request GET localhost:8081/publish/message`.
 
 == Create a Mule App and Subscribe to a LWT Message Topic
 
 In the following example, you use the previous listener flow and create a second listener flow subscribed to the same LWT message topic as the first flow. If the Mule app crashes and the first listener flow gets disconnected, the MQTT broker sends the LWT message to the configured topic and retains the message. When the Mule app restarts, the second listener flow listens for the retained LWT message and logs it.
 
-To create the Mule app in the Studio XML editor, follow these steps:
+image::mqtt3-example-2.png[MQTT 3 Listener flows example in Studio canvas]
 
-. In a new Studio project, navigate to the *Configuration XML* tab.
-. Configure an `<mqtt3:config name="MQTT3_Config_1">` configuration element:
+=== Create the First Listener Flow
 
-[source,xml,linenums]
-----
-	<mqtt3:config name="MQTT3_Config_1">
-		<mqtt3:connection username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1883" />
-		<mqtt3:client-id-generator>
-            <mqtt3:client-id-custom-expression-generator clientId="crowley123"/>
-        </mqtt3:client-id-generator>
-		<mqtt3:last-will-and-testament topic="topic/lwt" body="This is the LWT message" isRetained="true"/>
-	</mqtt3:config>
-----
+In the first part of the example, create a flow with an *On New Message* source that triggers an event for incoming messages on topics matching the filter `topic/quotes/#`, and add a *Logger* component that logs the received message:
 
-[start=3]
-. Create a flow with a listener source `<mqtt3:listener>` that triggers an event for incoming messages on topics matching the filter `topic/quotes/#`, and add a `<logger>` component that logs the received message:
+. In Studio, in the *Mule Palette* view, select *MQTT3 > On New Message*.
+. Drag the *On New Message* source to the Studio canvas.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
+. In the *MQTT3 Config* window, for *Connection* select *MQTT3 URL Connection*.
+. For *Client id generator*, select *Client id custom expression generator*.
+. Set the following fields:
++
+* *Client ID*: `crowley123`
+* *Username*: `mosquitto`
+* *Password*: `mosquitto`
+* *URL*: `tcp://0.0.0.0:1883`
+[start=8]
+. Click the *LWT* tab.
+. Set the following fields:
++
+* *Topic*: `topic/lwt`
+* *Body*: `This is the LWT message`
+* *Is retained*: *True*
+[start=10]
+. Click *OK*.
+. In the *On New Message* configuration screen, set *Topics* to *Edit inline*.
+. Click the plus sign (*+*) to add a new topic.
+. In *Topic filter* set `topic/quotes/#`.
+. Click *OK*.
+. Drag a *Logger* component to the right of the *On New Message* source.
+. Set *Message* to `Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]`.
 
-[source,xml,linenums]
-----
-	<flow name="listener-flow">
-		<mqtt3:listener config-ref="MQTT3_Config_1" doc:name="On New Message 1">
-			<reconnect />
-			<mqtt3:topics >
-				<mqtt3:topic topicFilter="topic/quotes/#" />
-			</mqtt3:topics>
-		</mqtt3:listener>
-		<logger level="INFO" message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]"/>
-	</flow>
-----
+=== Create the Second Listener Flow
 
-[start=4]
-. Configure a new `<mqtt3:config name="MQTT3_Config_2">` configuration:
+For the second part of the example, create a second listener flow by adding another *On New Message* source  that subscribes to the topic `topic/lwt`, and add a *Logger* component that logs the received message:
 
-[source,xml,linenums]
-----
-<mqtt3:config name="MQTT3_Config_2">
-	<mqtt3:connection username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1884">
-	    <mqtt3:client-id-generator>
-            <mqtt3:client-id-random-suffix-generator clientId="azfell123" />
-        </mqtt3:client-id-generator>
-	</mqtt3:connection>
-</mqtt3:config>
-----
-
-[start=5]
-. Create a second listener flow by adding a listener source `<mqtt3:listener>` that subscribes to the topic `topic/lwt`, and add a `<logger>` component that logs the received message:
-
-[source,xml,linenums]
-----
-<flow name="listener-lwt-flow">
-	<mqtt3:listener doc:name="On New Message 2" config-ref="MQTT3_Config_2">
-		<mqtt3:topics >
-			<mqtt3:topic topicFilter="topic/lwt" />
-		</mqtt3:topics>
-	</mqtt3:listener>
-	<logger level="INFO" message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]"/>
-</flow>
-----
-
-[start=6]
+. In Studio, drag another *On New Message* source below the first `listener-flow`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
+. In the *MQTT3 Config* window, for *Connection* select *MQTT3 URL Connection*.
+. For *Client id generator*, select *Client id random suffix generator*.
+. Set the following fields:
++
+* *Client ID*: `azfell123`
+* *Username*: `mosquitto`
+* *Password*: `mosquitto`
+* *URL*: `tcp://0.0.0.0:1884`
+[start=8]
+. Click *OK*.
+. In the *On New Message* configuration screen, set *Topics* to *Edit inline*.
+. Click the plus sign (*+*) to add a new topic.
+. In *Topic filter* set `topic/lwt`.
+. Click *OK*.
+. Drag a *Logger* component to the right of the *On New Message* source.
+. Set *Message* to `Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]`.
 . Save and run the Mule app.
 . Simulate the app crash by looking for the process ID of the Mule app and kill it in your terminal by using a command like the following: `kill -9 <process-id>`. +
 Because the Mule app crashes, the first listener flow gets disconnected.
 . Restart the Mule app. +
 The MQTT broker retains the LWT message, and the second listener flow logs the LWT message that was configured in the first listener flow.
 
+=== XML for Listening Messages Subscribed to a LWT Message Topic
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:mqtt3="http://www.mulesoft.org/schema/mule/mqtt3"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mqtt3 http://www.mulesoft.org/schema/mule/mqtt3/current/mule-mqtt3.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<mqtt3:config name="MQTT3_Config1" >
+		<mqtt3:connection username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1883" >
+			<mqtt3:client-id-generator>
+	            <mqtt3:client-id-custom-expression-generator clientId="crowley123"/>
+	        </mqtt3:client-id-generator>
+			<mqtt3:last-will-and-testament topic="topic/lwt" body="This is the LWT message" isRetained="true" />
+		</mqtt3:connection>
+	</mqtt3:config>
+	<http:listener-config >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<mqtt3:config name="MQTT3_Config2" >
+		<mqtt3:connection username="mosquitto" password="mosquitto" url="tcp://0.0.0.0:1884" />
+		<mqtt3:client-id-generator>
+					<mqtt3:client-id-random-suffix-generator clientId="azfell123" />
+			</mqtt3:client-id-generator>
+	</mqtt3:config>
+	<flow name="listener-flow" >
+		<mqtt3:listener config-ref="MQTT3_Config1">
+			<mqtt3:topics >
+				<mqtt3:topic topicFilter="topic/quotes/#" />
+			</mqtt3:topics>
+		</mqtt3:listener>
+		<logger level="INFO" message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]"/>
+	</flow>
+	<flow name="listener-flow2" >
+		<mqtt3:listener config-ref="MQTT3_Config2">
+			<mqtt3:topics >
+				<mqtt3:topic topicFilter="topic/lwt" />
+			</mqtt3:topics>
+		</mqtt3:listener>
+		<logger level="INFO" message="Received message '#[payload]' with at topic #[attributes.topic] with qos #[attributes.qos]"/>
+	</flow>
+</mule>
+----
 == See Also
 
-* xref:mqtt3-connector-examples.adoc[MQTT3 Connector Examples]
+* xref:mqtt3-connector-examples.adoc[MQTT 3 Connector Examples]
 * https://help.mulesoft.com[MuleSoft Help Center]
