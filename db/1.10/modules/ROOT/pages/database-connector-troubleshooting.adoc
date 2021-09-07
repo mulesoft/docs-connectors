@@ -23,6 +23,7 @@ To enable verbose logging in the configuration file:
 			<Loggers>
 				...
 				<AsyncLogger name="org.mule.extension.db" level="DEBUG"/>
+				<AsyncLogger name="org.mule.db.commons" level="DEBUG"/>
 				...
 			</Loggers>
 ----
@@ -34,7 +35,7 @@ To enable verbose logging in Anypoint Runtime Manager:
 
 . Access Anypoint Runtime Manager.
 . Navigate to the API configuration.
-. In the *Logging* subtab, add the `org.mule.extension.db` package at DEBUG level.
+. In the *Logging* subtab, add the `org.mule.extension.db` and `org.mule.db.commons` packages at DEBUG level.
 . Apply the changes.
 
 == Troubleshoot Pooling Profiles Connections Making the Flow Hang
@@ -76,6 +77,60 @@ The following example shows how to use pooling profiles with the *Stored procedu
 			</db:stored-procedure>
 		<logger level="INFO" message="#[output application/json --- payload.resultSet1]" />
 	</flow>
+----
+
+== Understand Select and Stored Procedure Operations Warning Exceptions
+
+When the Database Connector *Select* and *Stored procedure* operations execute correctly but do not return results, Mule runtime engine (Mule) returns a `WARN` exception message instead of throwing the exception.
+
+For the *Select* operation, the behavior occurs when executing an invalid SQL statement, and for the *Store procedure* operation, when there is an error within a set of statements that can collapse the procedure. In fact, JDBC returns a series of `ResultSets`, `UpdateCounts`, and `Exceptions`.
+
+Mule does not throw an exception for the flow to catch it because the root cause is in the driver's behavior. Some drivers comply strictly with JDBC and properly throw an exception at execution time, but other drivers do not. Therefore, adding in the connector code the behavior of throwing an exception would break backward compatibility for Mule apps that do not expect an exception.
+
+For the *Select* operation, Mule logs a `WARN` exception when a subquery returns more than one value and that result is used for filtering or as an expression. Mule returns the warning as soon as the operation's result is paginated and not when it's executed.
+
+For example, for the following SQL statement:
+
+[source,xml,linenums]
+----
+		<db:select doc:name="Select" config-ref="Database_Config">
+			<db:sql ><![CDATA[
+						SELECT *
+						FROM SomeTable
+						WHERE SomeColumn = (SELECT DISTINCT SomeColumn2 from SomeTable2)
+					 ]]>
+			</db:sql>
+		</db:select>
+----
+
+Mule logs the following `WARN` exception:
+[source,xml,linenums]
+----
+	WARN  2021-06-01 10:04:33,323 [[MuleRuntime].io.10: [some-mule-app].some-mule-app.BLOCKING @...] [event: ...] org.mule.extension.db.internal.result.resultset.ResultSetIterator: Unable to determine if there are more records
+	com.microsoft.sqlserver.jdbc.SQLServerException: Subquery returned more than 1 value. This is not permitted when the subquery follows =, !=, <, <= , >, >= or when the subquery is used as an expression.
+----
+
+For the *Store procedure* operation, Mule logs a `WARN` exception when a stored procedure contains multiple statements and one or more of them fail. Mule returns the warning as soon as the operation's result is consumed and not when it's executed. For example, for the following SQL Stored Procedure:
+
+[source,xml,linenums]
+----
+CREATE PROCEDURE dbo.SomeProcedure
+AS
+BEGIN
+	BEGIN TRY
+	select 1/0;
+	END TRY
+	BEGIN CATCH
+	THROW 50000, 'Divide by zero error encountered.', 255;
+	END CATCH
+END
+----
+
+Mule logs the following `WARN` exception:
+[source,xml,linenums]
+----
+	WARN  2021-06-02 09:38:14,624 [[MuleRuntime].io.10: [some-mule-app].some-mule-app.BLOCKING @...] [event: ...] org.mule.extension.db.internal.result.statement.StatementResultIterator: Unable to determine if there are more statement results
+	com.microsoft.sqlserver.jdbc.SQLServerException: 'The record does not exist.'
 ----
 
 
