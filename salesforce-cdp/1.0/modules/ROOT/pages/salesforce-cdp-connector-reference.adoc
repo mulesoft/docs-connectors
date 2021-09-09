@@ -52,6 +52,7 @@ Connector does not stream the request content. |  AUTO |
 [[SdcConfig_OauthJwt]]
 ===== OAuth JWT
 
+Custom connection provider for the OAuth JWT flow.
 
 ====== Parameters
 
@@ -109,6 +110,7 @@ Mule closes the connection after the first request completes. |  true |
 [[SdcConfig_OauthUserPass]]
 ===== OAuth Username Password
 
+Custom connection provider for the username and password flow.
 
 ====== Parameters
 
@@ -166,13 +168,13 @@ Mule closes the connection after the first request completes. |  true |
 == Associated Operations
 
 * <<CreateBulkJob>>
-* <<DeleteBulkJob>>
-* <<DeleteObjects>>
-* <<GetBulkJob>>
-* <<Query>>
-* <<UpdateBulkOperationJob>>
 * <<UploadDataBulkJob>>
-* <<UpsertObjects>>
+* <<UpdateBulkOperationJob>>
+* <<DeleteBulkJob>>
+* <<GetBulkJob>>
+* <<InsertObjects>>
+* <<DeleteObjects>>
+* <<Query>>
 
 
 
@@ -192,7 +194,7 @@ Creates a job that represents the bulk operation for managing data. This operati
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Connector name a| String | Name of the ingestion API connector to work with. |  | x
+| Source API name a| String | Name of the ingestion source API to work with. |  | x
 | Object name a| String | Name of object to work with. |  | x
 | Operation a| Enumeration, one of:
 
@@ -265,13 +267,12 @@ Connector does not stream the request content. |  |
 * SDC:UNAUTHORIZED
 * SDC:UNSUPPORTED_MEDIA_TYPE
 
+[[UploadDataBulkJob]]
+== Bulk - Upload Job Data
+`<sdc:upload-data-bulk-job>`
 
-[[DeleteBulkJob]]
-== Bulk - Delete Job
-`<sdc:delete-bulk-job>`
 
-
-Deletes the job for the specified job ID. This operation makes an HTTP DELETE request to the /ingest/jobs/{id} endpoint.
+Ingests external datasets into CDP. This operation makes an HTTP PUT request to the /ingest/jobs/{id}/batches endpoint.
 
 
 === Parameters
@@ -280,9 +281,10 @@ Deletes the job for the specified job ID. This operation makes an HTTP DELETE re
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Job ID a| String | Identifier of the job. |  | x
+| ID a| String | Job ID returned in the response body from the *Create Job* request. |  | x
+| Body a| String | Content to use. |  #[payload] |
 | Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
-| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  #[null] |
+| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  |
 | Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
 | Response Timeout a| Number | How long Mule waits for a response to complete before the response times out. |  |
 | Response Timeout Unit a| Enumeration, one of:
@@ -346,12 +348,12 @@ Connector does not stream the request content. |  |
 * SDC:UNSUPPORTED_MEDIA_TYPE
 
 
-[[DeleteObjects]]
-== Streaming - Delete Objects
-`<sdc:delete-objects>`
+[[UpdateBulkOperationJob]]
+== Bulk - Close / Abort Job
+`<sdc:update-bulk-operation-job>`
 
 
-Used to delete objects. This operation makes an HTTP DELETE request to the /ingest/connectors/{connector-name}/{object-name} endpoint.
+Updates the job for the specified job ID. This operation makes an HTTP PATCH request to the /api/v1/ingest/jobs/{id} endpoint.
 
 
 === Parameters
@@ -360,9 +362,95 @@ Used to delete objects. This operation makes an HTTP DELETE request to the /inge
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Connector name a| String | Ingest API connector developer name. |  | x
-| Object name a| String | Name of the collection to delete data from. |  | x
-| IDs a| Array of String | Comma-separated list of IDs to delete. |  | x
+| Job ID a| String | Identifier of the job. |  | x
+| State a| Enumeration, one of:
+
+** Aborted
+** UploadComplete | New state for the job. |  | x
+| Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream | Configures how Mule processes streams. The default is to use repeatable streams. |  |
+| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  |
+| Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
+| Response Timeout a| Number | How long Mule waits for a response to complete before the response times out. |  |
+| Response Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Response Timeout* field. |  |
+| Streaming Type a| Enumeration, one of:
+
+** AUTO
+** ALWAYS
+** NEVER | How the connector streams request content to the remote service:
+
+* `AUTO` (default)
+
+Connector automatically uses the best streaming strategy based on the request content.
+
+* `ALWAYS`
+
+Connector always streams the request content.
+
+* `NEVER`
+
+Connector does not stream the request content. |  |
+| Target Variable a| String | Name of the variable that stores the operation's output. |  |
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+|Type |Any
+| Attributes Type a| <<HttpResponseAttributes>>
+|===
+
+=== For Configurations
+
+* <<SdcConfig>>
+
+=== Throws
+
+* SDC:BAD_REQUEST
+* SDC:CLIENT_ERROR
+* SDC:CONNECTIVITY
+* SDC:INTERNAL_SERVER_ERROR
+* SDC:NOT_ACCEPTABLE
+* SDC:NOT_FOUND
+* SDC:RETRY_EXHAUSTED
+* SDC:SERVER_ERROR
+* SDC:SERVICE_UNAVAILABLE
+* SDC:TIMEOUT
+* SDC:TOO_MANY_REQUESTS
+* SDC:UNAUTHORIZED
+* SDC:UNSUPPORTED_MEDIA_TYPE
+
+
+
+[[DeleteBulkJob]]
+== Bulk - Delete Job
+`<sdc:delete-bulk-job>`
+
+
+Deletes the job for the specified job ID. This operation makes an HTTP DELETE request to the /ingest/jobs/{id} endpoint.
+
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Job ID a| String | Identifier of the job. |  | x
 | Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
 | Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  #[null] |
 | Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
@@ -511,6 +599,172 @@ Connector does not stream the request content. |  |
 * SDC:UNSUPPORTED_MEDIA_TYPE
 
 
+[[InsertObjects]]
+== Streaming - Insert Objects
+`<sdc:insert-objects>`
+
+
+Used to insert objects. This operation makes an HTTP POST request to the /ingest/connectors/{connector-name}/{object-name} endpoint.
+
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Source API name a| String | Ingest source API name. |  | x
+| Object name a| String | Name of the collection to load data into. |  | x
+| Body a| Any | Content to use. |  #[payload] |
+| Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
+| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  |
+| Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
+| Response Timeout a| Number | How long Mule waits for a response to complete before the response times out. |  |
+| Response Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Response Timeout* field. |  |
+| Streaming Type a| Enumeration, one of:
+
+** AUTO
+** ALWAYS
+** NEVER | How the connector streams request content to the remote service:
+
+* `AUTO` (default)
+
+Connector automatically uses the best streaming strategy based on the request content.
+
+* `ALWAYS`
+
+Connector always streams the request content.
+
+* `NEVER`
+
+Connector does not stream the request content. |  |
+| Target Variable a| String | Name of the variable that stores the operation's output. |  |
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+|Type |String
+| Attributes Type a| <<HttpResponseAttributes>>
+|===
+
+=== For Configurations
+
+* <<SdcConfig>>
+
+=== Throws
+
+* SDC:BAD_REQUEST
+* SDC:CLIENT_ERROR
+* SDC:CONNECTIVITY
+* SDC:INTERNAL_SERVER_ERROR
+* SDC:NOT_ACCEPTABLE
+* SDC:NOT_FOUND
+* SDC:RETRY_EXHAUSTED
+* SDC:SERVER_ERROR
+* SDC:SERVICE_UNAVAILABLE
+* SDC:TIMEOUT
+* SDC:TOO_MANY_REQUESTS
+* SDC:UNAUTHORIZED
+* SDC:UNSUPPORTED_MEDIA_TYPE
+
+
+
+
+[[DeleteObjects]]
+== Streaming - Delete Objects
+`<sdc:delete-objects>`
+
+
+Used to delete objects. This operation makes an HTTP DELETE request to the /ingest/connectors/{connector-name}/{object-name} endpoint.
+
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Source API name a| String | Ingest source API name. |  | x
+| Object name a| String | Name of the collection to delete data from. |  | x
+| IDs a| Array of String | Comma-separated list of IDs to delete. |  | x
+| Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
+| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  #[null] |
+| Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
+| Response Timeout a| Number | How long Mule waits for a response to complete before the response times out. |  |
+| Response Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Response Timeout* field. |  |
+| Streaming Type a| Enumeration, one of:
+
+** AUTO
+** ALWAYS
+** NEVER | How the connector streams request content to the remote service:
+
+* `AUTO` (default)
+
+Connector automatically uses the best streaming strategy based on the request content.
+
+* `ALWAYS`
+
+Connector always streams the request content.
+
+* `NEVER`
+
+Connector does not stream the request content. |  |
+| Target Variable a| String | Name of the variable that stores the operation's output. |  |
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+|Type |String
+| Attributes Type a| <<HttpResponseAttributes>>
+|===
+
+=== For Configurations
+
+* <<SdcConfig>>
+
+=== Throws
+
+* SDC:BAD_REQUEST
+* SDC:CLIENT_ERROR
+* SDC:CONNECTIVITY
+* SDC:INTERNAL_SERVER_ERROR
+* SDC:NOT_ACCEPTABLE
+* SDC:NOT_FOUND
+* SDC:RETRY_EXHAUSTED
+* SDC:SERVER_ERROR
+* SDC:SERVICE_UNAVAILABLE
+* SDC:TIMEOUT
+* SDC:TOO_MANY_REQUESTS
+* SDC:UNAUTHORIZED
+* SDC:UNSUPPORTED_MEDIA_TYPE
+
+
 [[Query]]
 == Query
 `<sdc:query>`
@@ -592,257 +846,6 @@ Connector does not stream the request content. |  |
 * SDC:TOO_MANY_REQUESTS
 * SDC:UNAUTHORIZED
 * SDC:UNSUPPORTED_MEDIA_TYPE
-
-
-[[UpdateBulkOperationJob]]
-== Bulk - Close / Abort Job
-`<sdc:update-bulk-operation-job>`
-
-
-Updates the job for the specified job ID. This operation makes an HTTP PATCH request to the /api/v1/ingest/jobs/{id} endpoint.
-
-
-=== Parameters
-
-[%header%autowidth.spread]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use. | | x
-| Job ID a| String | Identifier of the job. |  | x
-| State a| Enumeration, one of:
-
-** Aborted
-** UploadComplete | New state for the job. |  | x
-| Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
-| Streaming Strategy a| * <<RepeatableInMemoryStream>>
-* <<RepeatableFileStoreStream>>
-* non-repeatable-stream | Configures how Mule processes streams. The default is to use repeatable streams. |  |
-| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  |
-| Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
-| Response Timeout a| Number | How long Mule waits for a response to complete before the response times out. |  |
-| Response Timeout Unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS | Time unit for the *Response Timeout* field. |  |
-| Streaming Type a| Enumeration, one of:
-
-** AUTO
-** ALWAYS
-** NEVER | How the connector streams request content to the remote service:
-
-* `AUTO` (default)
-
-Connector automatically uses the best streaming strategy based on the request content.
-
-* `ALWAYS`
-
-Connector always streams the request content.
-
-* `NEVER`
-
-Connector does not stream the request content. |  |
-| Target Variable a| String | Name of the variable that stores the operation's output. |  |
-| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
-|===
-
-=== Output
-
-[%autowidth.spread]
-|===
-|Type |Any
-| Attributes Type a| <<HttpResponseAttributes>>
-|===
-
-=== For Configurations
-
-* <<SdcConfig>>
-
-=== Throws
-
-* SDC:BAD_REQUEST
-* SDC:CLIENT_ERROR
-* SDC:CONNECTIVITY
-* SDC:INTERNAL_SERVER_ERROR
-* SDC:NOT_ACCEPTABLE
-* SDC:NOT_FOUND
-* SDC:RETRY_EXHAUSTED
-* SDC:SERVER_ERROR
-* SDC:SERVICE_UNAVAILABLE
-* SDC:TIMEOUT
-* SDC:TOO_MANY_REQUESTS
-* SDC:UNAUTHORIZED
-* SDC:UNSUPPORTED_MEDIA_TYPE
-
-
-[[UploadDataBulkJob]]
-== Bulk - Upload Job Data
-`<sdc:upload-data-bulk-job>`
-
-
-Ingests external datasets into CDP. This operation makes an HTTP PUT request to the /ingest/jobs/{id}/batches endpoint.
-
-
-=== Parameters
-
-[%header%autowidth.spread]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use. | | x
-| ID a| String | Job ID returned in the response body from the *Create Job* request. |  | x
-| Body a| String | Content to use. |  #[payload] |
-| Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
-| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  |
-| Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
-| Response Timeout a| Number | How long Mule waits for a response to complete before the response times out. |  |
-| Response Timeout Unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS | Time unit for the *Response Timeout* field. |  |
-| Streaming Type a| Enumeration, one of:
-
-** AUTO
-** ALWAYS
-** NEVER | How the connector streams request content to the remote service:
-
-* `AUTO` (default)
-
-Connector automatically uses the best streaming strategy based on the request content.
-
-* `ALWAYS`
-
-Connector always streams the request content.
-
-* `NEVER`
-
-Connector does not stream the request content. |  |
-| Target Variable a| String | Name of the variable that stores the operation's output. |  |
-| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
-|===
-
-=== Output
-
-[%autowidth.spread]
-|===
-|Type |String
-| Attributes Type a| <<HttpResponseAttributes>>
-|===
-
-=== For Configurations
-
-* <<SdcConfig>>
-
-=== Throws
-
-* SDC:BAD_REQUEST
-* SDC:CLIENT_ERROR
-* SDC:CONNECTIVITY
-* SDC:INTERNAL_SERVER_ERROR
-* SDC:NOT_ACCEPTABLE
-* SDC:NOT_FOUND
-* SDC:RETRY_EXHAUSTED
-* SDC:SERVER_ERROR
-* SDC:SERVICE_UNAVAILABLE
-* SDC:TIMEOUT
-* SDC:TOO_MANY_REQUESTS
-* SDC:UNAUTHORIZED
-* SDC:UNSUPPORTED_MEDIA_TYPE
-
-
-[[UpsertObjects]]
-== Streaming - Upsert Objects
-`<sdc:upsert-objects>`
-
-
-Used to upsert objects. This operation makes an HTTP PUT request to the /ingest/connectors/{connector-name}/{object-name} endpoint.
-
-
-=== Parameters
-
-[%header%autowidth.spread]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use. | | x
-| Connector name a| String | Ingest API connector developer name. |  | x
-| Object name a| String | Name of the collection to load data into. |  | x
-| Body a| Any | Content to use. |  #[payload] |
-| Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
-| Custom Query Parameters a| Object | Custom query parameters to include in the request. The specified query parameters are merged with the default query parameters that are specified in the configuration. |  |
-| Custom Headers a| Object | Custom headers to include in the request. The specified custom headers are merged with the default headers that are specified in the configuration. |  |
-| Response Timeout a| Number | How long Mule waits for a response to complete before the response times out. |  |
-| Response Timeout Unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS | Time unit for the *Response Timeout* field. |  |
-| Streaming Type a| Enumeration, one of:
-
-** AUTO
-** ALWAYS
-** NEVER | How the connector streams request content to the remote service:
-
-* `AUTO` (default)
-
-Connector automatically uses the best streaming strategy based on the request content.
-
-* `ALWAYS`
-
-Connector always streams the request content.
-
-* `NEVER`
-
-Connector does not stream the request content. |  |
-| Target Variable a| String | Name of the variable that stores the operation's output. |  |
-| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
-|===
-
-=== Output
-
-[%autowidth.spread]
-|===
-|Type |String
-| Attributes Type a| <<HttpResponseAttributes>>
-|===
-
-=== For Configurations
-
-* <<SdcConfig>>
-
-=== Throws
-
-* SDC:BAD_REQUEST
-* SDC:CLIENT_ERROR
-* SDC:CONNECTIVITY
-* SDC:INTERNAL_SERVER_ERROR
-* SDC:NOT_ACCEPTABLE
-* SDC:NOT_FOUND
-* SDC:RETRY_EXHAUSTED
-* SDC:SERVER_ERROR
-* SDC:SERVICE_UNAVAILABLE
-* SDC:TIMEOUT
-* SDC:TOO_MANY_REQUESTS
-* SDC:UNAUTHORIZED
-* SDC:UNSUPPORTED_MEDIA_TYPE
-
 
 
 == Types
