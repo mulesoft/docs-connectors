@@ -65,44 +65,41 @@ The received `QuoteSnapshots` should be transformed to CSV format and appended t
 
 [source,xml,linenums]
 ----
-    <tls:context name="TLS_Context">
-        <tls:key-store
-		path="producer-keystore.jks"
-		alias="producerkey"
-		keyPassword="mule123"
-		password="mule123" />
-    </tls:context>
+	<tls:context name="TLS_Context">
+		<tls:key-store path="producer-keystore.jks"
+			alias="producerkey" keyPassword="mule123" password="mule123" />
+	</tls:context>
 
-    <http:listener-config name="HTTP_TLS_Listener_config">
-        <http:listener-connection
-		host="0.0.0.0"
-		port="60000"
-		tlsContext="TLS_Context"
-		protocol="HTTPS"/>
-    </http:listener-config>
+	<http:listener-config
+		name="HTTP_TLS_Listener_config">
+		<http:listener-connection host="0.0.0.0"
+			port="60000" tlsContext="TLS_Context" protocol="HTTPS" />
+	</http:listener-config>
 
-    <http:listener-config name="HTTP_Listener_config">
-        <http:listener-connection host="0.0.0.0" port="60001" />
-    </http:listener-config>
+	<http:listener-config name="HTTP_Listener_config">
+		<http:listener-connection host="0.0.0.0"
+			port="60001" />
+	</http:listener-config>
 
-    <websocket:config name="WebSockets_Config">
-        <websocket:connection >
-            <websocket:server-settings listenerConfig="HTTP_TLS_Listener_config" />
-        </websocket:connection>
-    </websocket:config>
+	<websocket:config name="WebSockets_Config">
+		<websocket:connection>
+			<websocket:server-settings
+				listenerConfig="HTTP_TLS_Listener_config" />
+		</websocket:connection>
+	</websocket:config>
 
-    <os:object-store name="Object_store" persistent="false" />
+	<os:object-store name="Object_store" persistent="false" />
 
- 	<flow name="stock-quotes-producer-flow">
-        <scheduler>
-            <scheduling-strategy >
-                <fixed-frequency frequency="15" timeUnit="SECONDS"/>
-            </scheduling-strategy>
-        </scheduler>
+	<flow name="stock-quotes-producer-flow">
+		<scheduler>
+			<scheduling-strategy>
+				<fixed-frequency frequency="15" timeUnit="SECONDS" />
+			</scheduling-strategy>
+		</scheduler>
 
-        <ee:transform doc:name="Transform Message">
-            <ee:message >
-                <ee:set-payload >
+		<ee:transform doc:name="Transform Message">
+			<ee:message>
+				<ee:set-payload>
                     <![CDATA[%dw 2.0
                     var randomStockSelector = randomInt(5)
                     var randomPriceVariation = (randomInt(401) / 100) - 2 as String { format: "#.00"} as Number
@@ -142,100 +139,89 @@ The received `QuoteSnapshots` should be transformed to CSV format and appended t
                         cur : selectedStock.cur,
                         timestamp : now() as Number
                     }]]>
-                </ee:set-payload>
-            </ee:message>
-        </ee:transform>
-        <flow-ref name="send-stock-quote-flow"/>
-    </flow>
+				</ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<flow-ref name="send-stock-quote-flow" />
+	</flow>
 
-    <flow name="send-stock-quote-flow">
-        <os:contains
-		objectStore="Object_store"
-		key="webSocketConnectedId"
-		target="webSocketConnected"/>
-        <choice>
-            <when expression="#[vars.webSocketConnected]">
-                <os:retrieve
-			objectStore="Object_store"
-			target="webSocketConnectedId"
-			key="webSocketConnectedId" />
-                <websocket:send
-			socketId="#[vars.webSocketConnectedId]"
-			config-ref="WebSockets_Config"/>
-            </when>
-        </choice>
-    </flow>
+	<flow name="send-stock-quote-flow">
+		<os:contains objectStore="Object_store"
+			key="webSocketConnectedId" target="webSocketConnected" />
+		<choice>
+			<when expression="#[vars.webSocketConnected]">
+				<logger level="INFO" doc:name="Logger"
+					doc:id="d5b23165-eb47-4caa-b4a8-464c13801932" message="Sending" />
+				<os:retrieve objectStore="Object_store"
+					target="webSocketConnectedId" key="webSocketConnectedId" />
+				<websocket:send
+					socketId="#[vars.webSocketConnectedId]"
+					config-ref="WebSockets_Config" />
+			</when>
+		</choice>
+	</flow>
 
 	<flow name="on-new-inbound-connection-flow">
 		<websocket:on-inbound-connection
-			doc:name="On New Inbound Connection"
-			config-ref="WebSockets_Config"
+			doc:name="On New Inbound Connection" config-ref="WebSockets_Config"
 			path="/feed" />
-		<os:contains
-			key="webSocketConnectedId"
-			target="webSocketConnected"
-			objectStore="Object_store"/>
+		<os:contains key="webSocketConnectedId"
+			target="webSocketConnected" objectStore="Object_store" />
 		<choice>
 			<when expression="#[vars.webSocketConnected]">
-				<os:retrieve
-					key="webSocketConnectedId"
-					objectStore="Object_store"
-					target="webSocketConnectedId" />
+				<os:retrieve key="webSocketConnectedId"
+					objectStore="Object_store" target="webSocketConnectedId" />
 				<websocket:close-socket
-					socketId="#[attributes.socketId]"
-					reason="Sorry, spot taken"
-					config-ref="WebSockets_Config"/>
+					socketId="#[attributes.socketId]" reason="Sorry, spot taken"
+					config-ref="WebSockets_Config" />
 			</when>
 			<otherwise>
-				<os:store key="webSocketConnectedId" objectStore="Object_store">
-					<os:value ><![CDATA[#[attributes.socketId]]]></os:value>
+				<os:store key="webSocketConnectedId"
+					objectStore="Object_store">
+					<os:value><![CDATA[#[attributes.socketId]]]></os:value>
 				</os:store>
 			</otherwise>
 		</choice>
 	</flow>
 
 	<flow name="on-new-inbound-message-flow">
-		<websocket:inbound-listener config-ref="WebSockets_Config" path="/feed"/>
-		<logger
-			level="INFO"
-			doc:name="Logger"
+		<websocket:inbound-listener
+			config-ref="WebSockets_Config" path="/feed" />
+		<logger level="INFO" doc:name="Logger"
 			message="#[output application/json
 		---
 		{
 			info: 'New message received from [' ++ attributes.socketId ++ ']',
 			payload : payload
-		}]"/>
+		}]" />
 	</flow>
 
 	<flow name="on-socket-closed-flow">
-		<websocket:on-socket-closed config-ref="WebSockets_Config" path="/feed"/>
-		<os:retrieve
-			key="webSocketConnectedId"
-			objectStore="Object_store"
-			target="webSocketConnectedId" />
+		<websocket:on-socket-closed
+			config-ref="WebSockets_Config" path="/feed" />
+		<os:retrieve key="webSocketConnectedId"
+			objectStore="Object_store" target="webSocketConnectedId" />
 		<choice>
-			<when expression="#[attributes.socketId == vars.webSocketConnectedId]">
-				<os:remove key="webSocketConnectedId" objectStore="Object_store"/>
+			<when
+				expression="#[attributes.socketId == vars.webSocketConnectedId]">
+				<os:remove key="webSocketConnectedId"
+					objectStore="Object_store" />
 			</when>
 		</choice>
 	</flow>
 
 	<flow name="close-websocket-flow">
-		<os:contains
-			key="webSocketConnectedId"
-			target="webSocketConnected"
-			objectStore="Object_store"/>
+		<os:contains key="webSocketConnectedId"
+			target="webSocketConnected" objectStore="Object_store" />
 		<choice>
 			<when expression="#[vars.webSocketConnected]">
-				<os:retrieve
-					doc:name="Retrieve"
-					key="webSocketConnectedId"
-					objectStore="Object_store"
+				<os:retrieve doc:name="Retrieve"
+					key="webSocketConnectedId" objectStore="Object_store"
 					target="webSocketConnectedId" />
 				<websocket:close-socket
 					config-ref="WebSockets_Config"
 					socketId="#[vars.webSocketConnectedId]"
-					reason="Producer app wanted to close the websocket"/>
+					reason="Producer app wanted to close the websocket" />
 			</when>
 		</choice>
 	</flow>
@@ -246,75 +232,63 @@ The received `QuoteSnapshots` should be transformed to CSV format and appended t
 [source,xml,linenums]
 ----
 	<tls:context name="TLS_Context">
-        <tls:trust-store path="aggregator-truststore.jks" password="mule123" />
-    </tls:context>
+		<tls:trust-store path="aggregator-truststore.jks"
+			password="mule123" insecure="true" />
+	</tls:context>
 
-    <http:listener-config name="HTTP_API_Listener_config">
-        <http:listener-connection host="0.0.0.0" port="61000" />
-    </http:listener-config>
+	<http:listener-config
+		name="HTTP_API_Listener_config">
+		<http:listener-connection host="0.0.0.0"
+			port="61000" />
+	</http:listener-config>
 
-    <websocket:config name="WebSockets_Client_Config">
-        <websocket:connection >
-            <websocket:client-settings
-	    	host="0.0.0.0"
-		port="60000"
-		protocol="WSS"
-		tlsContext="TLS_Context"/>
-        </websocket:connection>
-    </websocket:config>
+	<websocket:config name="WebSockets_Client_Config">
+		<websocket:connection>
+			<websocket:client-settings host="0.0.0.0"
+				port="60000" protocol="WSS" tlsContext="TLS_Context" />
+		</websocket:connection>
+	</websocket:config>
 
-    <os:object-store name="Object_store" persistent="false" />
+	<os:object-store name="Object_store" persistent="false" />
 
-    <http:listener-config name="HTTP_WebSockets_Listener_Config">
-        <http:listener-connection host="0.0.0.0" port="61001" protocol="HTTPS">
-            <tls:context >
-                <tls:key-store
-			path="broadcast-keystore.jks"
-			alias="broadcast"
-			keyPassword="mule123"
-			password="mule123" />
-            </tls:context>
-        </http:listener-connection>
-    </http:listener-config>
+	<tls:context name="TLS_Context_Broadcast">
+		<tls:key-store path="broadcast-keystore.jks"
+			alias="broadcast" keyPassword="mule123" password="mule123" />
+	</tls:context>
 
-    <websocket:config name="WebSockets_Server_Config">
-        <websocket:connection >
-            <websocket:server-settings
-	    	listenerConfig="HTTP_WebSockets_Listener_Config"
-		idleSocketTimeout="30"/>
-        </websocket:connection>
-    </websocket:config>
+	<http:listener-config
+		name="HTTP_WebSockets_Listener_Config">
+		<http:listener-connection host="0.0.0.0"
+			port="61001" tlsContext="TLS_Context_Broadcast" protocol="HTTPS" />
+	</http:listener-config>
 
-    <flow name="client-app-websocket-inbound-listener-flow">
-        <websocket:inbound-listener
-		doc:name="On New Inbound Message"
-		config-ref="WebSockets_Server_Config"
-		path="/quotes"/>
-        <logger level="INFO" doc:name="Logger" message="#[output application/json
-            ---
-            {
-                info: 'New message received from [' ++ attributes.socketId ++ ']',
-                payload: payload
-            }]" />
-    </flow>
+	<websocket:config name="WebSockets_Server_Config">
+		<websocket:connection>
+			<websocket:server-settings
+				listenerConfig="HTTP_WebSockets_Listener_Config" />
+		</websocket:connection>
+	</websocket:config>
+
+
+	<http:listener-config name="HTTP_Listener_config"
+		doc:name="HTTP Listener config"
+		doc:id="f9f68ced-9d25-4975-af23-e6f5c34933c4">
+		<http:listener-connection host="0.0.0.0"
+			port="8081" />
+	</http:listener-config>
 
 	<flow name="broadcasting-stock-quote-snapshot">
-        <logger level="INFO" doc:name="Logger" message="#[output application/json
+		<logger level="INFO" doc:name="Logger"
+			message="#[output application/json
             ---
             {
                 info: 'Broadcasting stock quote reduction',
                 payload: payload
-            }]"/>
-
-        <websocket:broadcast
-		config-ref="WebSockets_Server_Config"
-		path="/quotes"
-		socketType="INBOUND"
-		groups="#[[payload.ticker]]" />
-    </flow>
-
+            }]" />
+	</flow>
 	<flow name="producer-app-websocket-open-flow">
-        <websocket:open-outbound-socket config-ref="WebSockets_Client_Config" path="/feed"/>
+        <http:listener doc:name="Listener" doc:id="bc39fe0e-7315-4aa0-8762-104b8ddd38b9" config-ref="HTTP_Listener_config" path="/connect"/>
+		<websocket:open-outbound-socket config-ref="WebSockets_Client_Config" path="/feed"/>
         <logger
 		level="INFO"
 		message="#['New connection established with [' ++ attributes.socketId ++ ']']" />
@@ -336,7 +310,20 @@ The received `QuoteSnapshots` should be transformed to CSV format and appended t
         </choice>
     </flow>
 
-    <flow name="producer-app-websocket-outbound-listener-flow">
+    <flow name="webs-quote-aggFlow" doc:id="ec4429d0-fc47-472a-bd46-a226be13ed4b" >
+		<websocket:on-inbound-connection doc:name="On New Inbound Connection" doc:id="fec6e5f3-2685-4852-8104-d76aa3651107" config-ref="WebSockets_Server_Config" path="/quotes"/>
+		<websocket:subscribe-groups doc:name="Subscribe groups" doc:id="5dfa2459-ad20-4f7f-915c-0f76953c7347" config-ref="WebSockets_Server_Config" socketId="#[attributes.socketId]" groups='#[[attributes.headers.groups]]' />
+	</flow>
+	<flow name="client-app-websocket-inbound-listener-flow">
+        <websocket:inbound-listener doc:name="On New Inbound Message" config-ref="WebSockets_Server_Config" path="/quotes" />
+        <logger level="INFO" doc:name="Logger" message="#[output application/json
+            ---
+            {
+                info: 'New message received from [' ++ attributes.socketId ++ ']',
+                payload: payload
+            }]" />
+    </flow>
+	<flow name="producer-app-websocket-outbound-listener-flow">
         <websocket:outbound-listener
 		config-ref="WebSockets_Client_Config"
 		path="/feed"
@@ -347,6 +334,8 @@ The received `QuoteSnapshots` should be transformed to CSV format and appended t
                 info: 'New message received from [' ++ attributes.socketId ++ ']',
                 payload: payload
             }]" />
+		<logger level="INFO" doc:name="Logger" doc:id="6c3f60f7-d4b2-4ba3-bbb1-3661558d0658" message="#[[payload.ticker]]"/>
+		<websocket:broadcast config-ref="WebSockets_Server_Config" path="/quotes" groups="#[[payload.ticker]]"/>
     </flow>
 
     <flow name="producer-app-websocket-close-flow">
@@ -395,29 +384,38 @@ The received `QuoteSnapshots` should be transformed to CSV format and appended t
 [source,xml,linenums]
 ----
 
-    <http:listener-config name="HTTP_Listener_config">
-        <http:listener-connection host="0.0.0.0" port="62000" />
-    </http:listener-config>
+<http:listener-config name="HTTP_Listener_config">
+		<http:listener-connection host="0.0.0.0"
+			port="62000" />
+	</http:listener-config>
 
-    <websocket:config name="WebSockets_Client_App_Config">
-        <websocket:connection>
-            <websocket:client-settings host="0.0.0.0" port="61001" protocol="WSS">
-                <tls:context >
-                    <tls:trust-store path="client-truststore.jks" password="mule123" />
-                </tls:context>
-            </websocket:client-settings>
-        </websocket:connection>
-    </websocket:config>
+	<websocket:config name="WebSockets_Client_App_Config">
+		<websocket:connection>
+			<websocket:client-settings host="0.0.0.0"
+				port="61001" protocol="WSS">
+				<tls:context>
+					<tls:trust-store path="client-truststore.jks"
+						password="mule123" insecure="true" />
+				</tls:context>
+			</websocket:client-settings>
+		</websocket:connection>
+	</websocket:config>
 
-    <flow name="aggregator-app-websocket-open-flow">
-        <http:listener doc:name="Listener"
-		config-ref="HTTP_Listener_config"
-		path="open-aggregator-ws"/>
-        <set-variable value="#[attributes.queryParams.*ticker]" variableName="groups"/>
-        <websocket:open-outbound-socket
-		config-ref="WebSockets_Client_App_Config"
-		path="/quotes"
-		defaultGroups="#[vars.groups]" />
+	<flow name="aggregator-app-websocket-open-flow">
+		<http:listener doc:name="Listener"
+			config-ref="HTTP_Listener_config" path="open-aggregator-ws" />
+		<set-variable value="#[attributes.queryParams.*ticker]"
+			variableName="groups" />
+		<logger level="INFO" doc:name="Logger"
+			doc:id="23e98197-48c9-4e7c-8e9b-43c50273ad40"
+			message="#[vars.groups]" />
+		<websocket:open-outbound-socket config-ref="WebSockets_Client_App_Config" path="/quotes" socketId="#[attributes.socketId]" defaultGroups="#[vars.groups]">
+			<websocket:headers ><![CDATA[#[output application/java
+---
+{
+	groups : vars.groups[0]
+}]]]></websocket:headers>
+		</websocket:open-outbound-socket>
     </flow>
 
     <flow name="stock-quotes-clientFlow">
@@ -432,6 +430,9 @@ The received `QuoteSnapshots` should be transformed to CSV format and appended t
                 payload: payload
             }]"/>
     </flow>
+	<flow name="webs-clientFlow" doc:id="c50c42a1-7419-4349-a098-3066d19102aa" >
+		<websocket:subscribe-groups doc:name="Subscribe groups" doc:id="d0ae65fa-82e8-4f06-88de-7ad5aabb53d4" config-ref="WebSockets_Client_App_Config" socketId="#[attributes.socketId]" groups="#[vars.groups]" />
+	</flow>
 ----
 
 == See Also
