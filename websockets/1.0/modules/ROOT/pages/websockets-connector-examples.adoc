@@ -1,22 +1,17 @@
-= WebSockets Examples - Mule 4
+= WebSockets Connector Examples - Mule 4
 :page-aliases: connectors::websockets/websockets-connector-examples.adoc
 
-You can use the WebSockets connector to build an integration system that obtains and broadcasts stock quotes.
-
-This example consists of three apps:
-
-[%header,cols="50a,50a"]
-|===
-|App |Implementation
-|<<Quote Producer App>> |<<Quote Producer Implementation>>
-|<<Quote Aggregator App>> |<<Quote Aggregator Implementation>>
-|<<Quote Client App>> |<<Quote Client Implementation>>
-|===
+The following Mule app examples use Anypoint Connector for WebSockets (WebSockets Connector) to build an integration system that obtains and broadcasts stock quotes.
 
 == Quote Producer App
 
-This app generaates continuous random stock quotes like the following:
+The following Mule app generates continuous random stock quotes.
 
+.Quote Producer App flow
+image::websocket-example-1.png[Quote Producer App flow in Anypoint Studio Canvas]
+
+
+. Stock quotes example:
 [source,json,linenums]
 ----
 {
@@ -27,96 +22,81 @@ This app generaates continuous random stock quotes like the following:
 }
 ----
 
-In this example, this is called by the `Quote` type.
+* The `Quote` type identifies the previous mentioned stock quote sample.
+* The Mule app generates approximately 50 quotes with random stock prices that uses at least 5 different tickers, such as CRM, MELI, GOOG, NFLX and APPL.
+* The app also exposes the TLS secure `+wss://localhost:8080/feed+` endpoint that accepts only one connection.
+* The first client must connect to the endpoint successfully.
+* Subsequent clients need to receive a WSS message with the text `"Sorry, spot taken"` after that, the connection is dropped.
+* Each produced quote is sent to the connected feed client.
 
-This app generates approximately 50 quotes, using at least 5 different tickers (CRM, MELI, GOOG, NFLX, AAPL). The prices are random, so there's no need to get the real ones for this example.
+To generate the corresponding keystores:
 
-This app also exposes the `+wss://localhost:8080/feed+` endpoint. This TLS secure endpoint accepts one and only one connection. The first client to connect needs to do so successfully. Subsequent clients need to be sent a WSS message with the text "Sorry, spot taken" after which, the connection is dropped.
+. Open your terminal.
+. Navigate to the `src/main/resources` folder of your project application in Studio.
+. Run the following command:
++
+`keytool -genkey -v -keystore producer-keystore.jks -alias producerkey -keyalg RSA -keysize 2048 -validity 10000`
 
-Each produced quote is sent to the connected feed client.
+== XML for the Quote Producer App
 
-Generate the corresponding keystores in resources directory with:
-keytool -genkey -v -keystore producer-keystore.jks -alias producerkey -keyalg RSA -keysize 2048 -validity 10000
-
-== Quote Aggregator App
-
-This app connects to the feed endpoint in the prior app and receives all of the quotes. It splits them by ticker and places them in time-based aggregators that flush every 5 seconds.
-
-When the aggregators flush, they output an `Array<Quote>` that needs to be reduced to a single `QuoteSnapshot` type. `QuoteSnapshot` is as follows:
-
-[source,json,linenums]
-----
-{
-   "ticker": "CRM"
-   "price": "157.54 USD"
-}
-----
-
-Such reduction is done by picking the `Quote` with the greatest timestamp and transforming it per the example.
-
-The produced snapshots broadcast to a dynamic list of subscribers. Subscriptions are done through the `+wss://localhost:8082/quotes+` endpoint that this application exposes. Clients can connect to this endpoint, using a query parameter to indicate what stock quotes to follow. For example: `+wss://localhost:8082/quotes?ticker=CRM&ticker=MELI+`
-
-Generate the corresponding keystores in resources directory with:
-keytool -genkey -v -keystore broadcast-keystore.jks -alias broadcast -keyalg RSA -keysize 2048 -validity 10000
-
-Generate the corresponding keystores in resources directory with:
-keytool -genkey -v -keystore aggregator-truststore.jks -alias broadcast -keyalg RSA -keysize 2048 -validity 10000
-
-The request should establish a WebSocket that gets the snapshots for the `CRM` and `MELI` tickers. This should be done by subscribing the resulting sockets to the proper socket groups.
-To connect the Quote Aggregator App with the Quote Producer App needs to trigger the flow to open the outbound socket with 
-curl -k http://localhost:8081/connect
-
-== Quote Client App
-
-Finally, the client app should open at least three different WebSockets to the quotes endpoint in the aggregator app. Each of those sockets should be listening for a different set of tickers.
-
-The received `QuoteSnapshots` should be transformed to CSV format and appended to a file.
-
-Generate the corresponding keystores in resources directory with:
-keytool -genkey -v -keystore client-truststore.jks -alias client -keyalg RSA -keysize 2048 -validity 10000
-
-To connect the Quote Client App with the Quote Aggregator App needs to trigger the flow to open the outbound socket with
-curl -k http://localhost:62000/open-aggregator-ws\?ticker\=CRM
-
-== Quote Producer Implementation
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
 
 [source,xml,linenums]
 ----
-	<tls:context name="TLS_Context">
-		<tls:key-store path="producer-keystore.jks"
-			alias="producerkey" keyPassword="mule123" password="mule123" />
-	</tls:context>
+<?xml version="1.0" encoding="UTF-8"?>
 
-	<http:listener-config
-		name="HTTP_TLS_Listener_config">
-		<http:listener-connection host="0.0.0.0"
-			port="60000" tlsContext="TLS_Context" protocol="HTTPS" />
-	</http:listener-config>
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:websocket="http://www.mulesoft.org/schema/mule/websocket" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/websocket http://www.mulesoft.org/schema/mule/websocket/current/mule-websocket.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
 
-	<http:listener-config name="HTTP_Listener_config">
-		<http:listener-connection host="0.0.0.0"
-			port="60001" />
-	</http:listener-config>
 
-	<websocket:config name="WebSockets_Config">
-		<websocket:connection>
-			<websocket:server-settings
-				listenerConfig="HTTP_TLS_Listener_config" />
-		</websocket:connection>
-	</websocket:config>
+<tls:context name="TLS_Context">
+        <tls:key-store
+		path="producer-keystore.jks"
+		alias="producerkey"
+		keyPassword="mule123"
+		password="mule123" />
+    </tls:context>
 
-	<os:object-store name="Object_store" persistent="false" />
+    <http:listener-config name="HTTP_TLS_Listener_config">
+        <http:listener-connection
+		host="0.0.0.0"
+		port="60000"
+		tlsContext="TLS_Context"
+		protocol="HTTPS"/>
+    </http:listener-config>
 
-	<flow name="stock-quotes-producer-flow">
-		<scheduler>
-			<scheduling-strategy>
-				<fixed-frequency frequency="15" timeUnit="SECONDS" />
-			</scheduling-strategy>
-		</scheduler>
+    <http:listener-config name="HTTP_Listener_config">
+        <http:listener-connection host="0.0.0.0" port="60001" />
+    </http:listener-config>
 
-		<ee:transform doc:name="Transform Message">
-			<ee:message>
-				<ee:set-payload>
+    <websocket:config name="WebSockets_Config">
+        <websocket:connection >
+            <websocket:server-settings listenerConfig="HTTP_TLS_Listener_config" />
+        </websocket:connection>
+    </websocket:config>
+
+    <os:object-store name="Object_store" persistent="false" />
+
+ 	<flow name="stock-quotes-producer-flow">
+        <scheduler>
+            <scheduling-strategy >
+                <fixed-frequency frequency="15" timeUnit="SECONDS"/>
+            </scheduling-strategy>
+        </scheduler>
+
+        <ee:transform doc:name="Transform Message">
+            <ee:message >
+                <ee:set-payload >
                     <![CDATA[%dw 2.0
                     var randomStockSelector = randomInt(5)
                     var randomPriceVariation = (randomInt(401) / 100) - 2 as String { format: "#.00"} as Number
@@ -156,155 +136,227 @@ curl -k http://localhost:62000/open-aggregator-ws\?ticker\=CRM
                         cur : selectedStock.cur,
                         timestamp : now() as Number
                     }]]>
-				</ee:set-payload>
-			</ee:message>
-		</ee:transform>
-		<flow-ref name="send-stock-quote-flow" />
-	</flow>
+                </ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <flow-ref name="send-stock-quote-flow"/>
+    </flow>
 
-	<flow name="send-stock-quote-flow">
-		<os:contains objectStore="Object_store"
-			key="webSocketConnectedId" target="webSocketConnected" />
-		<choice>
-			<when expression="#[vars.webSocketConnected]">
-				<logger level="INFO" doc:name="Logger"
-					doc:id="d5b23165-eb47-4caa-b4a8-464c13801932" message="Sending" />
-				<os:retrieve objectStore="Object_store"
-					target="webSocketConnectedId" key="webSocketConnectedId" />
+    <flow name="send-stock-quote-flow">
+		<os:contains
+		objectStore="Object_store"
+		key="webSocketConnectedId"
+		target="webSocketConnected"/>
+        <choice>
+            <when expression="#[vars.webSocketConnected]">
+                <logger level="INFO" message="Sending" />
+				<os:retrieve
+			objectStore="Object_store"
+			target="webSocketConnectedId"
+			key="webSocketConnectedId" />
 				<websocket:send
-					socketId="#[vars.webSocketConnectedId]"
-					config-ref="WebSockets_Config" />
-			</when>
-		</choice>
-	</flow>
+			socketId="#[vars.webSocketConnectedId]"
+			config-ref="WebSockets_Config"/>
+            </when>
+        </choice>
+    </flow>
 
 	<flow name="on-new-inbound-connection-flow">
 		<websocket:on-inbound-connection
-			doc:name="On New Inbound Connection" config-ref="WebSockets_Config"
+			doc:name="On New Inbound Connection"
+			config-ref="WebSockets_Config"
 			path="/feed" />
-		<os:contains key="webSocketConnectedId"
-			target="webSocketConnected" objectStore="Object_store" />
+		<os:contains
+			key="webSocketConnectedId"
+			target="webSocketConnected"
+			objectStore="Object_store"/>
 		<choice>
 			<when expression="#[vars.webSocketConnected]">
-				<os:retrieve key="webSocketConnectedId"
-					objectStore="Object_store" target="webSocketConnectedId" />
+				<os:retrieve
+					key="webSocketConnectedId"
+					objectStore="Object_store"
+					target="webSocketConnectedId" />
 				<websocket:close-socket
-					socketId="#[attributes.socketId]" reason="Sorry, spot taken"
-					config-ref="WebSockets_Config" />
+					socketId="#[attributes.socketId]"
+					reason="Sorry, spot taken"
+					config-ref="WebSockets_Config"/>
 			</when>
 			<otherwise>
-				<os:store key="webSocketConnectedId"
-					objectStore="Object_store">
-					<os:value><![CDATA[#[attributes.socketId]]]></os:value>
+				<os:store key="webSocketConnectedId" objectStore="Object_store">
+					<os:value ><![CDATA[#[attributes.socketId]]]></os:value>
 				</os:store>
 			</otherwise>
 		</choice>
 	</flow>
 
 	<flow name="on-new-inbound-message-flow">
-		<websocket:inbound-listener
-			config-ref="WebSockets_Config" path="/feed" />
-		<logger level="INFO" doc:name="Logger"
+		<websocket:inbound-listener config-ref="WebSockets_Config" path="/feed"/>
+		<logger
+			level="INFO"
+			doc:name="Logger"
 			message="#[output application/json
 		---
 		{
 			info: 'New message received from [' ++ attributes.socketId ++ ']',
 			payload : payload
-		}]" />
+		}]"/>
 	</flow>
 
 	<flow name="on-socket-closed-flow">
-		<websocket:on-socket-closed
-			config-ref="WebSockets_Config" path="/feed" />
-		<os:retrieve key="webSocketConnectedId"
-			objectStore="Object_store" target="webSocketConnectedId" />
+		<websocket:on-socket-closed config-ref="WebSockets_Config" path="/feed"/>
+		<os:retrieve
+			key="webSocketConnectedId"
+			objectStore="Object_store"
+			target="webSocketConnectedId" />
 		<choice>
-			<when
-				expression="#[attributes.socketId == vars.webSocketConnectedId]">
-				<os:remove key="webSocketConnectedId"
-					objectStore="Object_store" />
+			<when expression="#[attributes.socketId == vars.webSocketConnectedId]">
+				<os:remove key="webSocketConnectedId" objectStore="Object_store"/>
 			</when>
 		</choice>
 	</flow>
 
 	<flow name="close-websocket-flow">
-		<os:contains key="webSocketConnectedId"
-			target="webSocketConnected" objectStore="Object_store" />
+		<os:contains
+			key="webSocketConnectedId"
+			target="webSocketConnected"
+			objectStore="Object_store"/>
 		<choice>
 			<when expression="#[vars.webSocketConnected]">
-				<os:retrieve doc:name="Retrieve"
-					key="webSocketConnectedId" objectStore="Object_store"
+				<os:retrieve
+					doc:name="Retrieve"
+					key="webSocketConnectedId"
+					objectStore="Object_store"
 					target="webSocketConnectedId" />
 				<websocket:close-socket
 					config-ref="WebSockets_Config"
 					socketId="#[vars.webSocketConnectedId]"
-					reason="Producer app wanted to close the websocket" />
+					reason="Producer app wanted to close the websocket"/>
 			</when>
 		</choice>
 	</flow>
+
+</mule>
 ----
 
-== Quote Aggregator Implementation
+== Quote Aggregator App
+
+The following Mule app connects to the feed endpoint of the previous Quote Producer App and receives all of the quotes. Then, the Quote Aggregator App splits the quotes by ticker and places them in time-based aggregators that occur every 5 seconds.
+
+.Quote Aggregator App flow
+image::websocket-example-2.png[Quote Aggregator App flow in Anypoint Studio Canvas]
+
+When the aggregations occur, the aggregators output an `Array<Quote>` to reduce to a single `QuoteSnapshot` type.
+
+.QuoteSnapshot Type example:
+[source,json,linenums]
+----
+{
+   "ticker": "CRM"
+   "price": "157.54 USD"
+}
+----
+
+* The reduction occurs by picking the `Quote` with the greatest timestamp and transforming it per the example.
+* The produced snapshots broadcast to a dynamic list of subscribers.
+* Subscriptions are done through the `+wss://localhost:8082/quotes+` endpoint that the Quote Aggregator App exposes.
+* Clients can connect to the previous endpoint by using a query parameter to indicate what stock quotes to follow, for example: `+wss://localhost:8082/quotes?ticker=CRM&ticker=MELI+`
+
+To generate the corresponding keystores and truststores:
+
+. Open your terminal.
+. Navigate to the `src/main/resources` folder of your project application in Studio.
+. Run the following command for keystores:
++
+`keytool -genkey -v -keystore broadcast-keystore.jks -alias broadcast -keyalg RSA -keysize 2048 -validity 10000`
+[start=4]
+. Run the following command for truststores:
++
+`keytool -genkey -v -keystore aggregator-truststore.jks -alias broadcast -keyalg RSA -keysize 2048 -validity 10000`
+
+The request establishes a WebSocket that gets the snapshots for the `CRM` and `MELI` tickers. This is done should by subscribing the resulting sockets to the proper socket groups.
+
+To connect the Quote Aggregator App with the Quote Producer App, trigger the flow to open the outbound socket with the following command:
++
+`curl -k http://localhost:8081/connect`
+
+== XML for the Quote Aggregator App
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
 
 [source,xml,linenums]
 ----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:websocket="http://www.mulesoft.org/schema/mule/websocket"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/websocket http://www.mulesoft.org/schema/mule/websocket/current/mule-websocket.xsd">
+
+
 	<tls:context name="TLS_Context">
-		<tls:trust-store path="aggregator-truststore.jks"
-			password="mule123" insecure="true" />
-	</tls:context>
+        <tls:trust-store path="aggregator-truststore.jks" password="mule123" insecure="true"/>
+    </tls:context>
 
-	<http:listener-config
-		name="HTTP_API_Listener_config">
-		<http:listener-connection host="0.0.0.0"
-			port="61000" />
-	</http:listener-config>
+    <http:listener-config name="HTTP_API_Listener_config">
+        <http:listener-connection host="0.0.0.0" port="61000" />
+    </http:listener-config>
 
-	<websocket:config name="WebSockets_Client_Config">
-		<websocket:connection>
-			<websocket:client-settings host="0.0.0.0"
-				port="60000" protocol="WSS" tlsContext="TLS_Context" />
-		</websocket:connection>
-	</websocket:config>
+    <websocket:config name="WebSockets_Client_Config">
+        <websocket:connection >
+            <websocket:client-settings
+	    	host="0.0.0.0"
+		port="60000"
+		protocol="WSS"
+		tlsContext="TLS_Context"/>
+        </websocket:connection>
+    </websocket:config>
 
-	<os:object-store name="Object_store" persistent="false" />
+    <os:object-store name="Object_store" persistent="false" />
 
 	<tls:context name="TLS_Context_Broadcast">
-		<tls:key-store path="broadcast-keystore.jks"
-			alias="broadcast" keyPassword="mule123" password="mule123" />
-	</tls:context>
+        <tls:key-store
+		path="broadcast-keystore.jks"
+		alias="broadcast"
+		keyPassword="mule123"
+		password="mule123" />
+    </tls:context>
 
-	<http:listener-config
-		name="HTTP_WebSockets_Listener_Config">
-		<http:listener-connection host="0.0.0.0"
-			port="61001" tlsContext="TLS_Context_Broadcast" protocol="HTTPS" />
-	</http:listener-config>
+    <http:listener-config name="HTTP_WebSockets_Listener_Config">
+        <http:listener-connection
+		host="0.0.0.0"
+		port="61001"
+		tlsContext="TLS_Context_Broadcast"
+		protocol="HTTPS"/>
+    </http:listener-config>
 
-	<websocket:config name="WebSockets_Server_Config">
-		<websocket:connection>
-			<websocket:server-settings
-				listenerConfig="HTTP_WebSockets_Listener_Config" />
-		</websocket:connection>
-	</websocket:config>
+    <websocket:config name="WebSockets_Server_Config">
+        <websocket:connection >
+            <websocket:server-settings listenerConfig="HTTP_WebSockets_Listener_Config" />
+        </websocket:connection>
+    </websocket:config>
 
 
-	<http:listener-config name="HTTP_Listener_config"
-		doc:name="HTTP Listener config"
-		doc:id="f9f68ced-9d25-4975-af23-e6f5c34933c4">
-		<http:listener-connection host="0.0.0.0"
-			port="8081" />
+    <http:listener-config name="HTTP_Listener_config"  >
+		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
 
 	<flow name="broadcasting-stock-quote-snapshot">
-		<logger level="INFO" doc:name="Logger"
-			message="#[output application/json
+		<logger level="INFO" doc:name="Logger" message="#[output application/json
             ---
             {
                 info: 'Broadcasting stock quote reduction',
                 payload: payload
-            }]" />
-	</flow>
+            }]"/>
+    </flow>
 	<flow name="producer-app-websocket-open-flow">
-        <http:listener doc:name="Listener" doc:id="bc39fe0e-7315-4aa0-8762-104b8ddd38b9" config-ref="HTTP_Listener_config" path="/connect"/>
+        <http:listener  config-ref="HTTP_Listener_config" path="/connect"/>
 		<websocket:open-outbound-socket config-ref="WebSockets_Client_Config" path="/feed"/>
         <logger
 		level="INFO"
@@ -327,9 +379,9 @@ curl -k http://localhost:62000/open-aggregator-ws\?ticker\=CRM
         </choice>
     </flow>
 
-    <flow name="webs-quote-aggFlow" doc:id="ec4429d0-fc47-472a-bd46-a226be13ed4b" >
-		<websocket:on-inbound-connection doc:name="On New Inbound Connection" doc:id="fec6e5f3-2685-4852-8104-d76aa3651107" config-ref="WebSockets_Server_Config" path="/quotes"/>
-		<websocket:subscribe-groups doc:name="Subscribe groups" doc:id="5dfa2459-ad20-4f7f-915c-0f76953c7347" config-ref="WebSockets_Server_Config" socketId="#[attributes.socketId]" groups='#[[attributes.headers.groups]]' />
+    <flow name="webs-quote-aggFlow"  >
+		<websocket:on-inbound-connection  config-ref="WebSockets_Server_Config" path="/quotes"/>
+		<websocket:subscribe-groups config-ref="WebSockets_Server_Config" socketId="#[attributes.socketId]" groups='#[[attributes.headers.groups]]' />
 	</flow>
 	<flow name="client-app-websocket-inbound-listener-flow">
         <websocket:inbound-listener doc:name="On New Inbound Message" config-ref="WebSockets_Server_Config" path="/quotes" />
@@ -351,7 +403,7 @@ curl -k http://localhost:62000/open-aggregator-ws\?ticker\=CRM
                 info: 'New message received from [' ++ attributes.socketId ++ ']',
                 payload: payload
             }]" />
-		<logger level="INFO" doc:name="Logger" doc:id="6c3f60f7-d4b2-4ba3-bbb1-3661558d0658" message="#[[payload.ticker]]"/>
+		<logger level="INFO" message="#[[payload.ticker]]"/>
 		<websocket:broadcast config-ref="WebSockets_Server_Config" path="/quotes" groups="#[[payload.ticker]]"/>
     </flow>
 
@@ -394,67 +446,100 @@ curl -k http://localhost:62000/open-aggregator-ws\?ticker\=CRM
             </otherwise>
         </choice>
     </flow>
+
+    </mule>
 ----
 
-== Quote Client Implementation
+== Quote Client App
+
+The following Mule app opens at least three different WebSockets to the quotes endpoint in the Quote Aggregator App. Each of those sockets listen to a different set of tickers.
+
+.Quote Client App flow
+image::websocket-example-3.png[Quote Client App flow in Anypoint Studio Canvas]
+
+The received `QuoteSnapshots` is transformed to CSV format and appended to a file.
+
+To generate the corresponding keystores:
+
+. Open your terminal.
+. Navigate to the `src/main/resources` folder of your project application in Studio.
+. Run the following command:
++
+`keytool -genkey -v -keystore client-truststore.jks -alias client -keyalg RSA -keysize 2048 -validity 10000`
+
+To connect the Quote Client App with the Quote Aggregator App, trigger the flow to open the outbound socket with the following command:
+
+`curl -k http://localhost:62000/open-aggregator-ws\?ticker\=CRM`
+
+== XML for the Quote Client App
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
 
 [source,xml,linenums]
 ----
+<?xml version="1.0" encoding="UTF-8"?>
 
-<http:listener-config name="HTTP_Listener_config">
-		<http:listener-connection host="0.0.0.0"
-			port="62000" />
-	</http:listener-config>
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+xmlns:http="http://www.mulesoft.org/schema/mule/http"
+xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xmlns:websocket="http://www.mulesoft.org/schema/mule/websocket"
+xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/websocket http://www.mulesoft.org/schema/mule/websocket/current/mule-websocket.xsd">
 
-	<websocket:config name="WebSockets_Client_App_Config">
-		<websocket:connection>
-			<websocket:client-settings host="0.0.0.0"
-				port="61001" protocol="WSS">
-				<tls:context>
-					<tls:trust-store path="client-truststore.jks"
-						password="mule123" insecure="true" />
-				</tls:context>
-			</websocket:client-settings>
-		</websocket:connection>
-	</websocket:config>
+    <http:listener-config name="HTTP_Listener_config">
+      <http:listener-connection host="0.0.0.0" port="62000" />
+  </http:listener-config>
 
-	<flow name="aggregator-app-websocket-open-flow">
-		<http:listener doc:name="Listener"
-			config-ref="HTTP_Listener_config" path="open-aggregator-ws" />
-		<set-variable value="#[attributes.queryParams.*ticker]"
-			variableName="groups" />
-		<logger level="INFO" doc:name="Logger"
-			doc:id="23e98197-48c9-4e7c-8e9b-43c50273ad40"
-			message="#[vars.groups]" />
-		<websocket:open-outbound-socket config-ref="WebSockets_Client_App_Config" path="/quotes" socketId="#[attributes.socketId]" defaultGroups="#[vars.groups]">
-			<websocket:headers ><![CDATA[#[output application/java
+  <websocket:config name="WebSockets_Client_App_Config">
+      <websocket:connection>
+          <websocket:client-settings host="0.0.0.0" port="61001" protocol="WSS">
+              <tls:context >
+                  <tls:trust-store path="client-truststore.jks" password="mule123" insecure="true"/>
+              </tls:context>
+          </websocket:client-settings>
+      </websocket:connection>
+  </websocket:config>
+
+  <flow name="aggregator-app-websocket-open-flow">
+      <http:listener doc:name="Listener"
+  config-ref="HTTP_Listener_config"
+  path="open-aggregator-ws"/>
+      <set-variable value="#[attributes.queryParams.*ticker]" variableName="groups"/>
+      <logger level="INFO" message="#[vars.groups]"/>
+  <websocket:open-outbound-socket config-ref="WebSockets_Client_App_Config" path="/quotes" socketId="#[attributes.socketId]" defaultGroups="#[vars.groups]">
+    <websocket:headers ><![CDATA[#[output application/java
 ---
 {
-	groups : vars.groups[0]
+groups : vars.groups[0]
 }]]]></websocket:headers>
-		</websocket:open-outbound-socket>
-    </flow>
+  </websocket:open-outbound-socket>
+  </flow>
 
-    <flow name="stock-quotes-clientFlow">
-        <websocket:outbound-listener
-		config-ref="WebSockets_Client_App_Config"
-		path="/quotes"
-		outputMimeType="application/json"/>
-        <logger level="INFO" doc:name="Logger" message="#[output application/json
-            ---
-            {
-                info: 'New message received on [' ++ attributes.socketId ++ ']',
-                payload: payload
-            }]"/>
-    </flow>
-	<flow name="webs-clientFlow" doc:id="c50c42a1-7419-4349-a098-3066d19102aa" >
-		<websocket:subscribe-groups doc:name="Subscribe groups" doc:id="d0ae65fa-82e8-4f06-88de-7ad5aabb53d4" config-ref="WebSockets_Client_App_Config" socketId="#[attributes.socketId]" groups="#[vars.groups]" />
-	</flow>
+  <flow name="stock-quotes-clientFlow">
+      <websocket:outbound-listener
+  config-ref="WebSockets_Client_App_Config"
+  path="/quotes"
+  outputMimeType="application/json"/>
+      <logger level="INFO" doc:name="Logger" message="#[output application/json
+          ---
+          {
+              info: 'New message received on [' ++ attributes.socketId ++ ']',
+              payload: payload
+          }]"/>
+  </flow>
+<flow name="webs-clientFlow" >
+  <websocket:subscribe-groups config-ref="WebSockets_Client_App_Config" socketId="#[attributes.socketId]" groups="#[vars.groups]" />
+</flow>
+
+</mule>
 ----
 
 == See Also
 
 * https://help.mulesoft.com[MuleSoft Help Center]
-* xref:websockets-connector-config-topics.adoc[Connector Configuration]
-* xref:websockets-connector-server-components.adoc[Server Components]
-* xref:websockets-connector-messaging-operations.adoc[Messaging Operations]
+* xref:websockets-connector-config-topics.adoc[WebSocket Connector Configuration]
+* xref:websockets-connector-server-components.adoc[WebSocket Connector Server Components]
+* xref:websockets-connector-messaging-operations.adoc[WebSocket Connector Messaging Operations]
