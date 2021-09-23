@@ -1,61 +1,81 @@
-= Configure Logging Variables with Tracing Module
+= Configure Tracing Module Logging Variables Operations
 
-In the following example, you configure the Anypoint Connector for MQTT (MQTT Connector) *Publish* operation that enables you to publish a message to the desired topic and with a specific quality of service (QoS).
+The Tracing module *Clear logging variables*, *Remove logging variable* and *Set logging variables* operations enable you to enhance your logs by adding, removing, and clearing variables from the logging context for a given Mule event. The logging context exists for the entire execution of the corresponding event.
 
-. In the *Mule Palette* view of Studio, select *HTTP > Listener*.
-. Drag *Listener* to the Studio canvas.
-. Set *Path* to `/mqtt3/publish`.
-. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
-. Configure the HTTP Listener global element and click *OK*.
-. In the *Mule Palette* view of Studio, select *MQTT3 > On New Message*.
-. Drag *On New Message* to the Studio canvas.
-. In the *On New Message* configuration screen, optionally change the value of the *Display Name* field.
-. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
-. In the *MQTT3 Config* window, for *Connection*, select *MQTT3 URL Connection*.
-. For *Client id generator*, select *Client id random suffix generator*.
-. Set the following fields:
-+
-* *Client ID*: `smart-bentley-123`
-* *Username*: `usertest`
-* *Password*: `passtest`
-* *URL*: `tcp://127.0.0.1:1883`
-[start=13]
-. Click *OK*.
-. In the *Publish* configuration screen, set the following fields:
-+
-* *Topic*: `quotes/terryPratchett`
-* *Message* `#["Stories of imagination tend to upset those without one."]`
-* *QoS*: *AT_LEAST_ONCE (Default)*
-* *Is retained*: *True*
+Mapped Diagnostic Context (MDC) enriches logging and improves tracking by providing more context or information in the logs for the current Mule event. By default, Mule logs two MDC entries: `processor`, which shows the location of the current event, and `event`, which shows the correlation ID of the event.
 
-image::mqtt3-publish.png[MQTT Publish operation configuration in Studio]
+== Prerequisites
 
-In the Configuration XML editor, the `<mqtt3:publish>` and `topic` configurations look like this:
+To use the Tracing module logging operations, complete the following tasks:
+
+* Install the Tracing module in your application.
+* Change the pattern layouts in the `log4j.xml` file to `MDC`.
+
+== Install the Tracing Module
+
+Follow the next steps to install the Tracing module in your application.
+
+. Open your Mule project in Anypoint Studio.
+. Go to *Mule Palette*.
+. Select *Search in Exchange*, and search for `tracing`.
+. Select the module and click *Add*.
+. Click *Finish*.
+
+== Change the Pattern Layouts in the log4j.xml File
+
+This change instructs Mule to automatically add the MDC context, which includes the correlation ID and the processor path. You can modify the `log4j.xml` file of your Mule app or the file of your Mule instance, which is located in `/conf/log4j2.xml`.
+
+Follow these steps to change the pattern layouts to MDC:
+
+. Open the `log4j.xml` file for editing.
+. Replace `[processor: %X{processorPath}; event: %X{correlationId}]` with `[%MDC]`.
+
+=== Example log4j.xml File Configurations
+
+.Example: Default log4j.xml file without MDC logging.
+----
+<PatternLayout pattern="%-5p %d [%t] [processor: %X{processorPath}; event: %X{correlationId}] %c: %m%n"/>
+----
+
+.Example: Updated log4j.xml file with MDC logging.
+----
+<PatternLayout pattern="%-5p %d [%t] [%MDC] %c: %m%n"/>
+----
+
+== Configure Tracing Module Operations in Studio
+
+To configure the logging variables operations, add any of the available operations *Clear logging variables*, *Remove logging variable* or *Set logging variables* to your Mule app flow and specify the corresponding attributes.
+
+In the following example, you configure the *Set logging variables* operation:
+
+. In Studio, navigate to the *Mule Palette* and search `tracing`.
+. Drag *Set logging variables* to your Mule app.
+. Set *Variable name* to `testVar`.
+. Set *Value* to `testValue`.
+
+image::tracing-module-set-logging-variable.png[Set logging variable operation configuration window]
+
+In the Configuration XML editor, the `<tracing:set-logging-variable>` configuration looks like this:
 
 [source,xml,linenums]
 ----
-<mqtt3:config name="MQTT_Config">
-    <mqtt3:connection username="usertest" password="passtest" url="tcp://127.0.0.1:1883">
-        <mqtt3:client-id-generator>
-            <mqtt3:client-id-random-suffix-generator clientId="smart-bentley-123" />
-        </mqtt3:client-id-generator>
-    </mqtt3:connection>
-</mqtt3:config>
-
-<flow name="publishQuote">
-    <http:listener config-ref="HTTP_Listener" path="/mqtt3/publish" />
-    <mqtt3:publish config-ref="MQTT_Config" topic="quotes/terryPratchett" qos="AT_LEAST_ONCE" isRetained="true">
-        <mqtt3:message>#["Stories of imagination tend to upset those without one."]</mqtt3:message>
-    </mqtt3:publish>
+<flow name="exmapleFlow">
+    ...
+    <tracing:set-logging-variable variableName="testVar" value="testValue" />
+    ...
 </flow>
 ----
 
-== Mark Messages as Retained
+After executing the flow, the output logs are:
+----
+INFO  2021-04-08 16:58:26,882 [[MuleRuntime].uber.15: [test-project-app].exmapleFlow.CPU_LITE @18f679] [{correlationId=c85e16c0-98a4-11eb-bc34-cac765a2219b, processorPath=exmapleFlow/processors/2, testVar=testValue}] org.mule.runtime.core.internal.processor.LoggerMessageProcessor: Example
+----
 
-By default, a broker discards a received message on a topic for which there are no current subscribers. Although, the broker retains the message if you configure the *Is retained* field to `True`. The broker stores the last retained message and the corresponding quality of service for the selected topic. +
-Each client that subscribes to a topic pattern that matches the topic of the retained message receives the retained messages after they subscribe. The broker stores only one retained message per topic. This enables new subscribers to receive the most current value rather than waiting for the next update from a publisher.
+The previous logging context affects any output of a *Logger* component and any internal logging that Mule runtime engine produces. Therefore, you can add more context to the event that Mule is processing if you need additional information for tracking down any potential issue, for example, when an unexpected error occurs.
+
+
 
 == See Also
 
-* xref:mqtt3-connector-examples.adoc[MQTT3 Connector Examples]
+* xref:tracing-module-examples.adoc[Tracing Module Examples]
 * https://help.mulesoft.com[MuleSoft Help Center]
