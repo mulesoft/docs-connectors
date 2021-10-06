@@ -260,17 +260,23 @@ payload]]></ee:set-payload>
 == Publish Datasource - Rest Configuration
 
 This Mule flow publishes a data source onto the specified site, or appends data
-onto an existing data source. You can use *customers.hyper* as an example
+onto an existing data source. You can use *customers.hyper* as an example of a
 datasource to upload.
 
 Here is what each operation is doing:
 
 * *HTTP Listener* +
 Accepts data from HTTP requests
-* *Initiate file upload* +
-Initiates the upload process for a file
+* *Read* +
+Reads a file
 * *Transform Message* +
-Outputs the results of the *Initiate file upload* operation in JSON format
+Transforms the HTTP input
+* *Transform Message* +
+Transforms the datasource into Java format
+* *Publish datasource* +
+Publishes a data source onto the site, or appends data onto an existing data source
+* *Transform Message* +
+Outputs the results of the *Publish datasource* operation in JSON format
 
 // image
 
@@ -297,10 +303,123 @@ http://www.mulesoft.org/schema/mule/tableau http://www.mulesoft.org/schema/mule/
 	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="6dd0ac5f-0a8b-421f-bd81-ceb4f450a792" >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-	<flow name="tableau-demo-initiate-file-upload" doc:id="2d565997-700f-4828-b129-ade9777d37f8" >
-		<http:listener doc:name="Listener" doc:id="4ca7aa6e-54e6-4b11-b3d9-8cd6c5a35527" config-ref="HTTP_Listener_config" path="/initiate-file-upload"/>
-		<tableau-specialist:initiate-file-upload doc:name="Initiate file upload" doc:id="2f6a418d-6122-49f1-83b9-21e37f64a86d" config-ref="Tableau_Specialist_Configuration"/>
-		<ee:transform doc:name="Transform Message" doc:id="7e32ae77-622a-4ba8-8b13-5529bbcf5dc1" >
+	<flow name="tableau-demo-publish-datasource" doc:id="58868707-a720-4cd1-ba45-80710dc93bb2" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/publish-datasource"/>
+        <file:read doc:name="Read" doc:id="a85bdc0e-605e-419b-9829-0d88962075fd" config-ref="File_Config" path="customers.hyper"/>
+		<ee:transform doc:name="Transform Message">
+                <ee:variables>
+                    <ee:set-variable variableName="fileContent"><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        <ee:transform doc:name="Transform Message">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	datasource: {
+		name: "datasource test",
+		description: "test",
+		project: {
+			id: "Id of the project to publish the datasource."
+		}
+	}
+}]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        <tableau-specialist:publish-datasource doc:name="Publish datasource" config-ref="Tableau_Specialist_Configuration" overwriteFlag="true">
+			<tableau-specialist:datasource-request-options >
+				 <tableau-specialist:publish-datasource-request-body datasourceFileContent="#[vars.fileContent]" datasourceFileName="myfile.hyper" />
+			</tableau-specialist:datasource-request-options>
+		</tableau-specialist:publish-datasource>
+		<ee:transform doc:name="Transform Message" doc:id="b2fc285a-a384-4c62-b9aa-afabf96d07d6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+== Publish Workbook - Rest Configuration
+
+This Mule flow publishes a workbook onto the specified site.
+
+Here is what each operation is doing:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Read* +
+Reads a file
+* *Transform Message* +
+Transforms the HTTP input
+* *Transform Message* +
+Transforms the datasource into Java format
+* *Publish workbook* +
+Publishes a workbook onto the site
+* *Transform Message* +
+Outputs the results of the *Publish workbook* operation in JSON format
+
+// image
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tableau="http://www.mulesoft.org/schema/mule/tableau" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:tableau-specialist="http://www.mulesoft.org/schema/mule/tableau-specialist" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/tableau-specialist http://www.mulesoft.org/schema/mule/tableau-specialist/current/mule-tableau-specialist.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/tableau http://www.mulesoft.org/schema/mule/tableau/current/mule-tableau.xsd">
+	<configuration-properties file="project-properties.properties"/>
+	<tableau-specialist:tableau-specialist-config name="Tableau_Specialist_Configuration" doc:name="Tableau Specialist Configuration" doc:id="6c0dc7f6-facd-4f38-acbe-b598686b2fb6" >
+		<tableau-specialist:basic-username-password-connection serverUrl="${credentials.serverUrl}" apiVersion="${credentials.apiVersion}" contentUrl="${credentials.contentUrl}" username="${credentials.username}" password="${credentials.password}" />
+	</tableau-specialist:tableau-specialist-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="6dd0ac5f-0a8b-421f-bd81-ceb4f450a792" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="tableau-demo-publish-workbook" doc:id="960ecd4c-91fd-4884-bb94-d2aedbcf94ec" >
+		<http:listener doc:name="Listener" doc:id="75a721e3-77fc-4c6c-93b4-6bc5b2e0a1cb" config-ref="HTTP_Listener_config" path="/publish-workbook"/>
+		<file:read doc:name="Read" doc:id="e5342f6f-02a1-4c38-982a-b780a7dcaaac" config-ref="File_Config" path="test-workbook.twbx"/>
+		<ee:transform doc:name="Transform Message">
+                <ee:variables>
+                    <ee:set-variable variableName="fileContent"><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+                </ee:variables>
+            </ee:transform>
+        <ee:transform doc:name="Transform Message">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	workbook: {
+		name: "Publish_workbook_test"
+	}
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<tableau-specialist:publish-workbook doc:name="Publish workbook" doc:id="74fe54f8-8165-4183-b7fd-1a1ed63a9428" config-ref="Tableau_Specialist_Configuration" overwriteFlag="true">
+			<tableau-specialist:workbook-request-options >
+					<tableau-specialist:publish-workbook-request-body workbookFileContent="#[vars.fileContent]" workbookFileName="test-workbook.twbx" />
+			</tableau-specialist:workbook-request-options>
+		</tableau-specialist:publish-workbook>
+		<ee:transform doc:name="Transform Message" doc:id="bc5a4103-da41-48ac-b08a-8676684d3965" >
 			<ee:message >
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
