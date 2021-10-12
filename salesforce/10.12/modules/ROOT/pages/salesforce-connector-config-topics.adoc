@@ -1,0 +1,98 @@
+= Salesforce Connector 10.12 Additional Configuration Information - Mule 4
+:page-aliases: connectors::salesforce/salesforce-connector-config-topics.adoc
+
+Configure Anypoint Connector for Salesforce (Salesforce Connector) to:
+
+* Load data in batches
+* Specify a Lead ID for a Lead Convert Request operation
+* Update field values to `null`
+* Generate an OAuth 2.0 keystore file
+
+[[batchdata]]
+== Load Data in Batches
+
+The Salesforce Bulk API loads batches of your organization's data into Salesforce. Salesforce Connector provides the *Create* and *Create Bulk* operations for working with the Bulk API.
+
+For all bulk operations, Salesforce handles the creation process in the background. The connector replies with a `BatchInfo` object, which contains the ID of the batch and the ID of the job it creates to upload the batched objects.
+
+In Salesforce, you can track the status of bulk data load jobs and their associated batches by using the job ID for Bulk Data Load Jobs:
+
+. Click *<YOUR_NAME > Setup > Monitoring > Bulk Data Load Jobs*.
+. Click the job ID to view the job detail page.
+
+The job detail page includes a list of all the batches related to the job. The list provides `View Request` and `View Response` links for each batch. If the batch is a CSV file, the links return the request or response in CSV format. If the batch is an XML file, the links return the request or response in XML format.
+
+[[leadconvert]]
+== Specify a Lead Convert Request ID
+
+To specify a lead ID for a `LeadConvertRequest` operation, use a DataWeave transform message. When you use a transform message before the operation, you must add the `leadId` field, because the metadata for the operation doesn't specify it:
+
+[source,example,linenums]
+----
+<ee:transform doc:name="Transform Message" >
+            <ee:message >
+                <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+    leadId: "LEAD_ID",
+    accountId: "ACCOUNT_ID",
+    convertedStatus: "Closed - Converted",
+    doNotCreateOpportunity: true
+} as Object {
+    class : "org.mule.extension.salesforce.api.core.LeadConvertRequest"
+}]]></ee:set-payload>
+            </ee:message>
+</ee:transform>
+----
+
+== Update Field Values to Null
+
+To set field values to `null`, use an *Update* or *Upsert* request operation and insert the names of the fields you want to nullify in the *Transform Message* component's *fieldsToNull* field:
+
+.Specify the field names you want to nullify in the *Transform Message* component *fieldsToNull* field.
+image::salesforce-connector-10-set-fields-to-null.png[Set a field to null]
+
+[[generate-keystore]]
+== Generate a Keystore File
+
+Salesforce Connector uses the Bouncy Castle cryptographic library to load the certificate from the keystore and sign the payload for the authentication requests.
+
+The library has a https://nvd.nist.gov/vuln/detail/CVE-2018-5382[vulnerability (CVE-2018-5382)] that relates to the BKS-V1 keystore file type. By default, Salesforce Connector uses JKS or PKCS12 keystores. Avoid using BKS-V1 keystore files, as documented in the https://www.kb.cert.org/vuls/id/306792[Bouncy Castle proposed solution].
+
+To generate a JKS keystore file:
+
+. Go to your Mule workspace and open the command prompt (for Windows) or Terminal (for Mac).
+. Enter this command:
++
+[source]
+----
+keytool -genkeypair -alias salesforce-cert -keyalg RSA -keystore salesforce-cert.jks
+----
++
+. Enter the following information:
++
+** Password for the keystore
+** Your first name and last name
+** Your organization unit
+** Your city and state, and the two-letter code for your country
++
+The system generates a Java keystore file (JKS format) that contains a private or public key pair in your workspace.
++
+. Provide the file path for the keystore in your connector configuration.
++
+Enter this command:
++
+[source]
+----
+keytool -exportcert -alias salesforce-cert -file salesforce-cert.crt -keystore salesforce-cert.jks
+----
++
+The system exports the public key from the keystore into the workspace. This is the public key to enter in your Salesforce instance.
++
+. Verify that you have both the keystore (`salesforce-cert.jks`) and the public key (`salesforce-cert.crt`) files in your workspace.
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
