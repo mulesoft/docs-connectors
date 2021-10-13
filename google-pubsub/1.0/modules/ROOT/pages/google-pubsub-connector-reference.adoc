@@ -254,7 +254,7 @@ Updates an existing snapshot.
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
 | Snapshot a| Any |  Snapshot object with updated fields. |  #[payload] |
-| Update Mask a| String |  Indicates which fields in the provided snapshot to update. Must be specified and not empty. This is a comma-separated list of fully qualified names of fields. |  | x
+| Update Mask a| String |  Indicates which fields in the provided snapshot to update. This is a comma-separated list of fully qualified names of fields. |  | x
 | Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  |
 | Target Value a| String |  Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
@@ -311,7 +311,7 @@ sent message in the topic.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Ordering Key a| String |  If not empty, the ordering key identifies related messages in which the publish order must be respected. This key is respected when the subscriber enables message ordering. |  |
+| Ordering Key a| String |  If specified, this field identifies related messages in which the publish order must be respected when the subscriber enables message ordering. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Project ID a| String |  Globally unique identifier for your project. |  |
 | Topic Name a| String |  Project-wide unique identifier for the topic. |  |
@@ -355,14 +355,13 @@ sent message in the topic.
 `<pubsub:seek-messages>`
 
 
-Supports bulk acknowledging or un-acknowledging of messages to a given snapshot or point of time based on the seekTarget provided. Seeking to a time marks every message received by Pub/Sub before the time as acknowledged, and all messages received after the time as unacknowledged. You can replay and reprocess previously acknowledged messages when seeking to a time in the past or purge messages when seeking to a time in the future.
+Supports the bulk acknowledging or un-acknowledging of messages to a given snapshot or point of time based on the provided seek target.
 
+Seeking to a point in time marks every message received by Pub/Sub before the time as acknowledged, and all messages received after the time as unacknowledged. You can replay and reprocess previously acknowledged messages when seeking to a time in the past or purge messages when seeking to a time in the future.
 
-If you seek to a timestamp using a subscription with a filter, the Pub/Sub service redelivers only the messages in the timestamp that match the filter of the subscription making the seek request. The snapshot feature enables you to capture the message acknowledgment state of a subscription. Once a snapshot is created, it retains:
+Seeking to a snapshot enables you to redeliver only the messages in the snapshot that match the filter of the subscription making the seek request.
 
-* all messages that were unacknowledged in the source subscription at the time of the snapshot's creation.
-* any messages published to the topic thereafter. You can replay these unacknowledged messages by using a snapshot to seek to any of the topic's subscriptions.
-
+Once a snapshot is created, it retains all messages that were unacknowledged in the source subscription at the time of the snapshot's creation and any messages published to the topic thereafter. You can replay these unacknowledged messages by using a snapshot to seek to any of the topic's subscriptions.
 
 If you seek to a snapshot using a subscription with a filter, the Pub/Sub service redelivers only the messages in the snapshot that match the filter of the subscription making the seek request.
 
@@ -379,7 +378,7 @@ If you seek to a snapshot using a subscription with a filter, the Pub/Sub servic
 | Snapshot Name a| String |  Snapshot to seek to. The snapshot's topic must be the same as that of the provided subscription. |  |
 | Timestamp a| DateTime |  Specific time to seek to. Messages retained in the subscription that were published before this time are marked as acknowledged, and messages retained in the subscription that were published after this time are marked as unacknowledged.
 
-Note that this operation affects only messages retained in the subscription (configured by the combination of *messageRetentionDuration* and *retainAckedMessages*), for example, if the time corresponds to a point before the message retention window (or to a point before the system's notion of the subscription creation time), only retained messages are marked as unacknowledged, and already-expunged messages will not be restored. A timestamp is in RFC3339 UTC Zulu format, with nanosecond resolution and up to nine fractional digits, such as 2014-10-02T15:01:23Z and 2014-10-02T15:01:23.045123456Z. |  |
+This operation affects only messages retained in the subscription (configured by the combination of *Message Retention Duration* and *Retain Acked Messages*). For example, if the time corresponds to a point before the message retention window (or to a point before the system's notion of the subscription creation time), only retained messages are marked as unacknowledged, and already-expunged messages are not restored. A timestamp is in RFC3339 UTC Zulu format, with nanosecond resolution and up to nine fractional digits, such as 2014-10-02T15:01:23Z and 2014-10-02T15:01:23.045123456Z. |  |
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
 |===
@@ -410,7 +409,7 @@ Note that this operation affects only messages retained in the subscription (con
 `<pubsub:message-listener>`
 
 
-Runnable message receiver, using Pub/Sub Subscriber.
+Asynchronous message listener that consumes messages from one subscriber.
 
 
 === Parameters
@@ -432,7 +431,23 @@ Runnable message receiver, using Pub/Sub Subscriber.
 
 ** THROW_EXCEPTION
 ** BLOCK
-** IGNORE |  If LimitExceededBehavior is not set to `IGNORE`, the flow control enables you to have control over the behavior of receiving messages by specifying the limits for *maxOutstandingRequestSize* and *maxOutstandingElementCount*. If the memory size or the amount of outstanding elements (messages where no Ack() or Nack() was performed) exceeds specified limits, the receiver won't receive more messages when LimitExceedBehavior is set to `BLOCK`, or will throw a FlowControlException when LimitExceedBehavior is set to `THROW_EXCEPTION`. |  BLOCK |
+** IGNORE |  Enables you to control the behavior of receiving messages:
+
+* `THROW_EXCEPTION`
++
+Specify a limit to throw a `FlowControlException` when the number of receiving messages exceeds the specified limit.
+
+* `BLOCK`
++
+Specify limits for the memory size or number of outstanding elements (messages
+in which Ack() or Nack() was not performed) to limit the number of receiving messages.
+If the memory size or number of outstanding elements exceeds the specified limit, the receiver
+does not receive more messages.
+
+* `IGNORE`
++
+Specify limits for *Max Outstanding Request Size* and *Max Outstanding Element Count*
+to control the number of receiving messages. |  BLOCK |
 | Max Outstanding Request Size a| Number |  Maximum amount of memory accumulated by the request before enforcing flow control. |  100 |
 | Max Outstanding Request Size Unit a| Enumeration, one of:
 
@@ -596,7 +611,7 @@ Configures how to identify a redelivered message and how to find out when the me
 [[Snapshot]]
 === Snapshot
 
-Snapshot resource. Use snapshots in seek operations, which manage message acknowledgments in bulk.
+Snapshot resource. You may use snapshots in seek operations, which manage message acknowledgments in bulk.
 This type enables you to set the acknowledgment state of messages in an existing subscription to the state captured by a snapshot.
 
 
@@ -605,7 +620,25 @@ This type enables you to set the acknowledgment state of messages in an existing
 | Field | Type | Description | Default Value | Required
 | Name a| String | Name of the snapshot. |  |
 | Topic a| String | Name of the topic from which the snapshot retains messages. |  |
-| Expire Time a| DateTime | Time that the snapshot is guaranteed to exist up until. A newly-created snapshot expires no later than seven days from the time of its creation. Its exact lifetime is determined at creation by the existing backlog in the source subscription. The lifetime of the snapshot is seven days, which is the age of the oldest unacked message in the subscription. Consider a subscription with an oldest unacked message that is three days old. If a snapshot is created from this subscription, the snapshot, which always captures this three day old backlog as long as the snapshot exists, will expire in four days. The service will refuse to create a snapshot that will expire in less than one hour after creation. A timestamp is in RFC3339 UTC Zulu format, with nanosecond resolution and up to nine fractional digits, such as 2014-10-02T15:01:23Z and 2014-10-02T15:01:23.045123456Z. |  |
+| Expire Time a| DateTime |
+
+Time that the snapshot is guaranteed to exist up until. A newly-created snapshot
+expires no later than seven days (the age of the oldest unacked message in the
+subscription) from the time of its creation. Its exact lifetime is determined
+at creation by the existing backlog in the source subscription.
+
+{sp} +
+
+Consider a subscription with an oldest unacked message that is three days old. If
+a snapshot is created from this subscription, the snapshot will expire in four
+days. The service will refuse to create a snapshot that will expire in less than one hour after
+creation.
+
+{sp} +
+
+A timestamp is in RFC3339 UTC Zulu format, with nanosecond resolution
+and up to nine fractional digits, such as 2014-10-02T15:01:23Z and
+2014-10-02T15:01:23.045123456Z. |  |
 | Labels a| Any | Object containing a list of key-value pairs, such as { "name": "wrench", "mass": "1.3kg", "count": "3" }. |  |
 |===
 
