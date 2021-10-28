@@ -61,6 +61,84 @@ In the XML editor, both the spring and database configurations look like this:
 </db:config>
 ----
 
+== Configure a Data Source Reference Connection When in XA Transaction Mode
+
+If your Mule app requires operations bound to XA transactions, and connection pooling is enabled for the database configuration in use, the default connection pool implementation for Data Source Reference Connection is Enhydra XAPool.
+
+Enhydra XAPool does not support prepared statements. To execute these operations use the Bitronix connection pool. Refer to xref:mule-runtime::using-bitronix-to-manage-transactions.adoc#configuring-the-bitronix-transaction-manager[Configuring the Bitronix Transaction Manager] documentation for details.
+
+[NOTE]
+When using XA transactions, you must provide an `XADataSource` object in the JDBC data source spring bean configuration file of your app.
+
+The following example shows how to configure a *Data Source Reference Connection* for a Derby database when in XA transaction mode:
+
+. In Studio, in the `src/main/resources` folder, create a `datasource-config.xml` spring bean file.
+. Add the `XADataSource` object to the end of the class `org.enhydra.jdbc.standard.Standard`, for example, `class="org.enhydra.jdbc.standard.StandardXaDataSource`:
++
+.datasource-config.xml File
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="
+               http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd">
+
+    <bean id="jdbcDataSource" class="org.enhydra.jdbc.standard.StandardXaDataSource" destroy-method="shutdown">
+        <property name="driverName" value="org.apache.derby.jdbc.EmbeddedDriver"/>
+        <property name="url" value="jdbc:derby:muleEmbeddedDB;create=true"/>
+    </bean>
+
+</beans>
+----
++
+. Return to your Mule flow and navigate to *Global Elements* > *Create* to open the *Choose Global Type* window.
+. In *Filter*, type `spring`, select *Spring Config*, and click *OK*.
+. In *Spring Config* > *Files*, add `datasource-config.xml` to reference the spring configuration file with the Spring module.
+. Click *OK*.
+
+image::database-spring-configuration.png[Spring Configuration window with datasource-config.xml configure in Files field]
+
+[start=8]
+. In *Global Elements*, click *Create* to open the *Choose Global Type* window.
+. In *Filter*, type `database`, select *Database Config*, and click *OK*.
+. In *Database Config* > *Connection*, select *Data Source Reference Connection*.
+. Click *Configure* to add the required JDBC driver and select either: +
++
+* *Use local file* +
+Install the library using a local file.
+* *Add Maven dependency* +
+Install a Maven dependency to add to the project.
++
+. For *Data source ref*, add the bean ID `jdbcDataSource` created in the `datasource-config.xml` bean file.
+. In the *Advanced* tab, configure the *Pooling profile*, *Column types*, and *Reconnection* fields.
+. Click *Test Connection* to confirm that Mule can connect to the database.
+. Click *OK*.
+
+In the XML editor, both the spring and database configurations look like this:
+
+[source,xml,linenums]
+----
+<spring:config name="spring-beans" files="datasource-spring-beans.xml"/>
+
+<db:config name="db-datasource">
+    <db:data-source-connection dataSourceRef="jdbcDataSource">
+        <reconnection failsDeployment="true">
+            <reconnect frequency="4000" count="4"/>
+        </reconnection>
+        <db:column-types>
+            <db:column-type id="124"
+                            typeName="column_type"
+                            className="class_name"/>
+        </db:column-types>
+        <db:pooling-profile maxPoolSize="6" minPoolSize="1"
+                            acquireIncrement="2"
+                            maxWait="1" maxWaitUnit="MINUTES"/>
+    </db:data-source-connection>
+</db:config>
+----
+
+
 == Configure a Derby Connection
 
 Use the *Derby Connection* field type when you want to connect to a Derby database.
