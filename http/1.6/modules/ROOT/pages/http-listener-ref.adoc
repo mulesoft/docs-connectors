@@ -1,19 +1,81 @@
-= HTTP Listener Reference - Mule 4
+= Configure an HTTP Listener Source - Mule 4
 :page-aliases: connectors::http/http-listener-ref.adoc
 
-The HTTP listener is an event source that enables you to set up an HTTP server and trigger flows when HTTP requests are received.
+The Anypoint Connector for HTTP (HTTP Connector) *Listener* source enables you to set up an HTTP server and trigger flows when receiving HTTP requests.
 
-You can choose what methods the source accepts, such as GET, POST or a list of methods, and on which path to accept requests, thereby allowing the routing of requests through different flows.
+You can choose what methods the source accepts, such as `GET`and `POST` or a list of methods, and in which *Path* to receive HTTP requests, thereby allowing the routing of requests through different flows.
 
-Once a request is accepted by the listener, the corresponding flow is triggered with the HTTP body as payload and the HTTP data as attributes (headers, query parameters and so on).
+When the HTTP *Listener* source receives an HTTP request, the source triggers the flow with the request data. The HTTP body is set as the payload, and the remaining HTTP data as attributes, such as headers and query parameters.
 
-When the flow finishes its execution, the HTTP listener enables you to customize the HTTP response based on whether the execution was successful or not, so that different status codes can be returned, for example.
+When the flow finishes its execution, the HTTP *Listener* source sends an HTTP response based on whether the flow execution was successful or not, which returns different status codes. You can also customize how the source generates HTTP responses in the connector configuration.
 
-== HTTP Listener Configuration
+== Configure an HTTP Listener Connection
 
-To use an HTTP listener, you need to declare a configuration with a corresponding connection. This declaration establishes the HTTP server that will listen to requests.
+To use an HTTP *Listener* source, you must configure a connection to the HTTP server that listens to the following settings:
 
-Additionally, you can configure a base path that applies to all listeners using the configuration.
+* *Host* +
+Indicates where the requests are sent.
+* *Port* +
+Indicates where the requests are received.
+* *Protocol* +
+Indicates the protocol for communication, it can be HTTP for plain connections or HTTPS for TLS secure connections.
+
+To enable secure connections through HTTPS, you must define a TLS context in the connection and provide:
+
+* A keystore for the server
+* A truststore if you need two-way authentication
+
+Refer to the xref:mule-runtime::tls-configuration.adoc[TLS Configuration] documentation for details.
+
+Additionally, you can configure a *Base path* that applies to all sources using the configuration.
+
+The following example shows how to configure the HTTP *Listener* connection in Studio:
+
+. In the *Mule Palette* view, select *HTTP>Listener*.
+. Drag *Listener* to the Studio canvas.
+. Set *Path* to `/test`.
+
+image::http-listener-1.png[HTTP Listener configuration window and Path field set to /test]
+
+[start=4]
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Listener* in the app.
+. Set *Host* to `0.0.0.0` and *Port* to `8081`.
+
+image::http-listener-2.png[HTTP Listener global configuration window with Host field set to 0.0.0.0 and Port field to 8081]
+
+[start=6]
+. Click the *TLS* tab.
+. Set *TLS configuration* to *Edit inline*.
+. Set *Path* to `keystore.jks` and *Password* to `MyP455W0rD`.
+. Click *OK*.
+
+image::http-listener-3.png[HTTP Listener TLS configuration window with Path field set to keystore.jks and Passwordd field to MyP455W0rD]
+
+In the Configuration XML editor, the `host`, `port`, `path` and `trust-store` configurations look like these:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_config" d >
+		<http:listener-connection host="0.0.0.0" port="8081" >
+			<tls:context >
+				<tls:trust-store path="keystore.jks" password="MyP455W0rD" />
+			</tls:context>
+		</http:listener-connection>
+	</http:listener-config>
+  <flow name="test" >
+		<http:listenerconfig-ref="HTTP_Listener_config" path="/path"/>
+	</flow>
+----
+
+To configure the *Base path* for the source:
+
+. In the HTTP *Listener* configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to configure a global element.
+. In *HTTP Listener config*, set *Base path* to `api/v1`.
+. Click *OK*.
+
+image::http-listener-4.png[HTTP Listener global configuration window with Base path field set to api/v1]
+
+In the Configuration XML editor, the `basePath` configuration looks like these:
 
 [source,xml,linenums]
 ----
@@ -22,64 +84,42 @@ Additionally, you can configure a base path that applies to all listeners using 
 </http:listener-config>
 ----
 
-=== HTTP Listener Connection
+[NOTE]
+If you deploy a project to CloudHub, set *Host* to *0.0.0.0* so the connection listens to all the interfaces of the machine. +
+If you deploy locally for testing purposes, set *Host* to *localhost* to receive only requests that are generated locally. The app is not vulnerable to external threats.
 
-The connection defines the host and port where the server will be set up, as well as the protocol to use: HTTP for plain connections or HTTPS for TLS connections.
+You can also configure advanced settings that can define whether the connections are persistent and if they are not, the timeout the connections will have.
 
-To allow secure connections through HTTPS, you need to define a TLS context in the connection and provide a key store for the server. You can also provide a trust store if
-you need two-way authentication. See xref:mule-runtime::tls-configuration.adoc[TLS Configuration] for details.
 
-[source,xml,linenums]
-----
-<http:listener-connection host="0.0.0.0" port="8081" protocol="HTTPS">
-  <tls:context>
-    <tls:trust-store path="keystore.jks" password="MyP455W0rD"/>
-  </tls:context>
-</http:listener-connection>
-----
+== Configure an HTTP Listener Path
 
-[TIP]
-===
-To deploy a project to CloudHub, setting the host to *0.0.0.0* is required because it sets up the connection to listen on all interfaces of the machine.
+Because an HTTP *Listener* source acts as an event trigger within flows, it  must reference the configuration to use and the *Path* where the source listens for HTTP requests.
 
-When you deploy locally for testing purposes, setting the host to *localhost* is better because it means only requests generated locally will be received: the app is not vulnerable to external threats.
-===
+The *Path* can be static, which requires exact matches, or feature placeholders. Placeholders can be:
 
-More advanced configurations can also define whether the connections will be persistent and if not, the timeout they will have.
+* Wildcards (`*`) +
+Match against anything they are compared to.
+* Parameters (`{param}`) +
+Match not only against anything but also capture those values on a URI parameters map.
 
-== HTTP Listener
+[NOTE]
+Wildcards at the end of a path can help provide better error messages by capturing requests to unmanaged resources.
 
-The HTTP listener is configured as an event source within flows and must reference the configuration to use and the path where it listens for requests.
+The following examples show different *Path* configurations for three HTTP *Listener* sources that have a *Base path* set to `api/v1`:
 
-[source,xml,linenums]
-----
-<flow name="http-triggered-flow">
-  <http:listener path="/" config-ref="HTTP_Listener_config"/>
-  <set-payload value="Help! I've been triggered!"/>
-</flow>
-----
+* `account/mulesoft/main-contact` +
+Matches only the exact path request `+http://awesome-company.com/api/v1/account/mulesoft/main-contact+`.
+* `account/{accountId}/main-contact` +
+Matches all path requests structured similarly, such as `+http://awesome-company.com/api/v1/account/salesforce/main-contact+`, and save `salesforce` as the value of `accountId`.
+* `account/{accountId}/*` +
+Matches all path requests different from `main-contact`, such as `+http://awesome-company.com/api/v1/account/mulesoft/users+`, and save `mulesoft` as the value of `accountId`.
 
-When an HTTP request matches a listener, its request data is used to trigger the flow. The body is set as the payload, while all other data from the request line to the headers are propagated as attributes.
-When the triggered flow is done, the HTTP listener uses its result to generate a proper HTTP response.
+When the Mule app has multiple HTTP *Listener* sources, HTTP requests are always routed to the most specific source. In the previous examples, a request with `accountId: mulesoft` and suffix `main-contact` are received by the first HTTP *Listener* source, and any different `accountId` value by the second HTTP *Listener* source instead of the third one.
 
-=== Paths
 
-The path of an HTTP listener can be static, which requires exact matches, or feature placeholders. Placeholders can be wildcards (`*`), which match against anything they are compared to, or parameters (`{param}`), which not only match against anything but also capture those values on a URI parameters map.
+== Configure HTTP Listener Allowed Methods
 
-Take the following example paths for three listeners using a configuration that establishes `api/v1` as the base path:
-
-* `account/mulesoft/main-contact`: only match the exact path request `+http://awesome-company.com/api/v1/account/mulesoft/main-contact+`
-* `account/{accountId}/main-contact`: matches all path requests structured similarly, such as `+http://awesome-company.com/api/v1/account/salesforce/main-contact+`, and save `salesforce` as the value of `accountId`.
-* `account/{accountId}/*`: matches all path requests different from `main-contact`, such as `+http://awesome-company.com/api/v1/account/mulesoft/users+`, and save `mulesoft` as the value of `accountId`.
-
-[TIP]
-Wildcards at the end of a path can help capture requests to unhandled resources to provide better error messages.
-
-When multiple listeners are defined, requests are always routed to the most specific one. Hence, in the previous examples, a request with `accountId: mulesoft` and suffix `main-contact` are handled by the first listener, and any different `accountId` value by the second listener instead of the third.
-
-=== About Methods
-
-Requests can also be routed based on the HTTP method received. By default, a listener handles all methods, but these can be restricted to the methods of your choosing, even custom ones. In the following example, `GET`, `POST` and `PUT` requests are routed to different flows.
+HTTP requests can also be routed based on the HTTP method received. By default, a listener handles all methods, but these can be restricted to the methods of your choosing, even custom ones. In the following example, `GET`, `POST` and `PUT` requests are routed to different flows.
 This is useful for restricting the visibility of data: you might allow certain users to see your data but only a few to modify it.
 
 [source,xml,linenums]
@@ -103,7 +143,7 @@ This is useful for restricting the visibility of data: you might allow certain u
 
 When multiple listeners are defined, requests are routed to the first listener matching the method, so default listeners should always be defined last.
 
-=== From HTTP Request to Mule Message
+=== From HTTP Request to Mule Message / Listening to HTTP Requests
 
 The data from the HTTP request line, including the method, request path, query, and URI parameters, as well as the headers are all available as attributes within a triggered flow.
 On the other hand, the body and the `Content-Type` header are used to set up the payload and its mime type, which allows other components to inspect the payload mime type: DataWeave, for example, won't need any input information to work with an HTTP payload.
@@ -216,7 +256,7 @@ A very common scenario is obtaining the filename of a part. For this reason, the
 
 See xref:dataweave::dataweave-formats.adoc[Formats Supported by DataWeave] to learn more about reading and writing multipart content.
 
-=== About HTTP Responses
+== About HTTP Responses
 
 After the triggered flow finishes its execution, the result is returned so that the listener can provide a response. If the flow executed successfully, a regular response is returned, but if the flow terminated with a failure, then an error response is returned.
 By default, a regular response returns a 200 status code and the message payload as the body, while an error response returns a 500 status code with the flow error's description as the body. These responses can be customized by providing the:
