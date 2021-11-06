@@ -9,7 +9,7 @@ When the HTTP *Listener* source receives an HTTP request, the source triggers th
 
 When the flow finishes its execution, the HTTP *Listener* source sends an HTTP response based on whether the flow execution was successful or not, which returns different status codes. You can also customize how the source generates HTTP responses in the connector configuration.
 
-== Configure an HTTP Listener Connection
+== Configure HTTP Listener Connection
 
 To use an HTTP *Listener* source, you must configure a connection to the HTTP server that listens to the following settings:
 
@@ -75,7 +75,7 @@ To configure the *Base path* for the source:
 
 image::http-listener-4.png[HTTP Listener global configuration window with Base path field set to api/v1]
 
-In the Configuration XML editor, the `basePath` configuration looks like these:
+In the Configuration XML editor, the `basePath` configuration looks like this:
 
 [source,xml,linenums]
 ----
@@ -91,7 +91,7 @@ If you deploy locally for testing purposes, set *Host* to *localhost* to receive
 You can also configure advanced settings that can define whether the connections are persistent and if they are not, the timeout the connections will have.
 
 
-== Configure an HTTP Listener Path
+== Configure Paths
 
 Because an HTTP *Listener* source acts as an event trigger within flows, it  must reference the configuration to use and the *Path* where the source listens for HTTP requests.
 
@@ -114,13 +114,31 @@ Matches all path requests structured similarly, such as `+http://awesome-company
 * `account/{accountId}/*` +
 Matches all path requests different from `main-contact`, such as `+http://awesome-company.com/api/v1/account/mulesoft/users+`, and save `mulesoft` as the value of `accountId`.
 
-When the Mule app has multiple HTTP *Listener* sources, HTTP requests are always routed to the most specific source. In the previous examples, a request with `accountId: mulesoft` and suffix `main-contact` are received by the first HTTP *Listener* source, and any different `accountId` value by the second HTTP *Listener* source instead of the third one.
+When the Mule app has multiple HTTP *Listener* sources, HTTP requests are always routed to the most specific source. In the previous examples, the first HTTP *Listener* source receives a request with `accountId: mulesoft` and suffix `main-contact`, and the second source receives any different `accountId` value.
 
 
-== Configure HTTP Listener Allowed Methods
+== Configure Allowed Methods
 
-HTTP requests can also be routed based on the HTTP method received. By default, a listener handles all methods, but these can be restricted to the methods of your choosing, even custom ones. In the following example, `GET`, `POST` and `PUT` requests are routed to different flows.
-This is useful for restricting the visibility of data: you might allow certain users to see your data but only a few to modify it.
+HTTP requests are routed based on the HTTP method received. By default, an HTTP *Listener* source supports all methods. You can also restrict the methods of your choosing, even configure custom ones.
+
+The following example shows how to configure *Allowed methods* in Studio:
+
+. In the *Mule Palette* view, select *HTTP>Listener*.
+. Drag *Listener* to the Studio canvas.
+. In the HTTP *Listener* source configuration screen, click the *Advanced* tab.
+. Set *Allowed methods* to `GET`.
+
+image::http-listener-1.png[HTTP Listener configuration window and Allowed methods field set to GET]
+
+In the Configuration XML editor, the `allowedMethods` configuration looks like this:
+[source,xml,linenums]
+----
+<http:listener path="/test" allowedMethods="GET" config-ref="HTTP_Listener_config"/>
+----
+
+When a Mule app has multiple HTTP *Listener* sources defined, requests are routed to the first source matching the method, so default sources should always be defined last.
+
+The following example shows different HTTP *Listener* sources configuration where the *Allowed method* is set to `GET`, `POST` and `PUT`. Therefore, HTTP requests are routed to different flows based on the restriction of data visibility. You might allow certain users to see your data but only a few users to modify it.
 
 [source,xml,linenums]
 ----
@@ -141,7 +159,52 @@ This is useful for restricting the visibility of data: you might allow certain u
 </flow>
 ----
 
-When multiple listeners are defined, requests are routed to the first listener matching the method, so default listeners should always be defined last.
+== Configure Response Streaming Mode
+
+When HTTP Connector manages response bodies, the connector considers the type of data to send and uses _chunked_ encoding when the body size is not clear. This behavior is also known as streams with no size information.
+
+To change this behavior configure the *Response streaming mode* to any of these options:
+
+* *AUTO (default)* +
+Uses `Content-Length` encoding if a size is defined for the body, otherwise uses `Transfer-Encoding: chunked`.
+* *ALWAYS* +
+Uses `Transfer-Encoding: chunked` regardless of any size data present.
+* *NEVER* +
+Uses `Content-Length` encoding, consuming streams if necessary to determine the data size.
+
+The following example shows how to configure  *Response streaming mode* in Studio. The main contact data for an account always returns using `Content-Length` encoding:
+
+. In the *Mule Palette* view, select *HTTP>Listener*.
+. Drag *Listener* to the Studio canvas.
+. Set *Path* to `account/{accountId}/main-contact`.
+. In the HTTP *Listener* source configuration screen, click the *Advanced* tab.
+. Set *Allowed methods* to `GET`.
+. Set *Response streaming mode* to `NEVER`.
+
+image::http-listener-1.png[HTTP Listener configuration window with Allowed methods field set to GET and Response streaming mode field set to NEVER]
+
+In the Configuration XML editor, the `allowedMethods` and `responseStreamingMode` configurations looks like these:
+
+[source,xml,linenums]
+----
+<flow name="main-contact-read">
+  <http:listener path="account/{accountId}/main-contact" allowedMethods="GET" responseStreamingMode="NEVER" config-ref="HTTP_Listener_config"/>
+  <!-- fetch main contact for accountId -->
+</flow>
+----
+
+== Configure Read Timeout
+
+To configure the read timeout for the source, in the HTTP *Listener* configuration window, set the *Read timeout* field to the desired value:
+
+image::http-listener-read-timeout.png[HTTP Listener configuration window with Read timeout field set to 30000]
+
+== Configure Rject Invalid Transfer Encoding
+
+To reject requests with invalid Transfer-Encoding headers, in the HTTP *Listener* configuration window, select the *Reject invalid transfer encoding* field:
+
+image::http-listener-reject-invalid.png[HTTP Listener configuration window with Reject invalid transfer encoding field deselected]
+
 
 === From HTTP Request to Mule Message / Listening to HTTP Requests
 
@@ -309,33 +372,6 @@ NOTE: While a reason phrase is not defined for error responses, the connector at
 </flow>
 ----
 
-==== HTTP Streaming Mode
-
-When handling response bodies, the HTTP connector  considers the kind of data to send and use `chunked` encoding when the size is not clear (think streams with no size information). You can change this behavior using the `responseStreamingMode` options:
-
-* AUTO (default): If a size is defined for the body, the listener uses `Content-Length` encoding. Otherwise it uses `Transfer-Encoding: chunked`.
-* ALWAYS: Uses `Transfer-Encoding: chunked` regardless of any size data present.
-* NEVER: Uses `Content-Length` encoding, consuming streams if necessary to determine the data size.
-
-In the next example, the main contact data for an account always returns using `Content-Length` encoding.
-
-[source,xml,linenums]
-----
-<flow name="main-contact-read">
-  <http:listener path="account/{accountId}/main-contact" allowedMethods="GET" responseStreamingMode="NEVER" config-ref="HTTP_Listener_config"/>
-  <!-- fetch main contact for accountId -->
-</flow>
-----
-
-=== Configure Read Timeout and Reject Invalid Transfer Encoding Fields
-
-To configure the read timeout for the listener, in the HTTP Listener configuration window, set the *Read timeout* field to the desired value:
-
-image::http-listener-read-timeout.png[HTTP Listener configuration window with Read timeout field set to 30000]
-
-To reject requests with invalid Transfer-Encoding headers, in the HTTP Listener configuration window, select the *Reject invalid transfer encoding* field:
-
-image::http-listener-reject-invalid.png[HTTP Listener configuration window with Reject invalid transfer encoding field deselected]
 
 == See Also
 
