@@ -1,5 +1,4 @@
 = Authenticate HTTP Requests - Mule 4
-:page-aliases: connectors::http/http-authentication.adoc
 
 Use the authentication that you configure in HTTP requests. You can use authentication when your Mule runtime (Mule) app uses the HTTP Connector to send requests to a service that requires authentication, such as the GitHub OAuth2 server described in <<OAuth2 - Authorization Code>>. In this case, your Mule app is the client. On the other hand, when you want to protect your API or app from receiving requests from unauthorized access, use an API Manager policy, such as the xref:api-manager::external-oauth-2.0-token-validation-policy.adoc[OAuth 2.0 Access Token Enforcement Using External Provider] policy.
 
@@ -715,79 +714,7 @@ To set when to perform a call to obtain a new access token, set a DataWeave expr
 
 When a request authorization fails, the response contains an XML node named *status* with value `‘unauthorized’`. In the previous example, the DataWeave expression evaluates that condition. When it evaluates to true, Mule sends a request to the Token URL to retrieve a new access token.
 
-=== Access Resources on Behalf of Several Users
 
-In the preceding examples, you authenticated a single user. You can handle access tokens for multiple users in a single application by defining a way to identify each user during the authorization period. During this period, you send a request to the Token URL to retrieve an access token and execute operations against the API with the acquired access token.
-
-To identify which user is granting access to the Mule client app, define a DataWeave expression to retrieve a *Resource Owner ID* against the call to the local authorization URL.
-
-////
-[.ex]
-=====
-[discrete.view]
-////
-
-=== Access - Studio Visual Editor
-
-In the *Authentication* section, configure the options as follows for the *OAuth2 - Authorization Code*:
-
-* *Resource Owner ID* to `#[vars.userId]`
-* *Local Authorization URL resource owner id* to `#[attributes.queryParams.userId]`
-
-The field *Resource Owner ID* must be set with a DataWeave expression that allows each execution of the HTTP Request Connector to retrieve the resource owner (RO) identifier from the Mule Message. So in this example, whenever the HTTP Request Connector is executed, there must be a flow variable named ‘userId’ with the RO identifier to use. To create this variable, you can add a Variable transformer to your flow, positioned before the HTTP Request Connector, and configure the transformer to create the userId variable in the Mule Event.
-
-The *Local Authorization* *URI* field (the one in the Advanced section), defines how to get a RO identifier, the `userId` query parameter must be parsed from the call done to the local authorization URL.
-
-So if you browse to `+http://localhost:8082/authorization?userId=sara+`, then the RO `sara` can grant access to the CA on her behalf. If you browse to `+http://localhost:8082/authorization?userId=polly+` then the RO `polly` can grant access to the CA on her behalf.
-
-////
-[discrete.view]
-////
-
-=== Access - XML Editor
-
-Set `resourceOwnerId` to `#[vars.userId]` and `localAuthorizationUrlResourceOwnerId` to  `#[attributes.queryParams.userId]`
-
-[source,xml,linenums]
-----
-<http:request-config name="HTTP_Request_Configuration"
-         host="api.box.com" port="443" basePath="/2.0"
-         tlsContext-ref="TLS_Context">
-    <http:authentication>
-        <oauth:authorization-code-grant-type
-            localCallbackUrl="http://localhost:8082/redirectUrl"
-            externalCallbackUrl="http://myapp.mycompany.com:8082/callback"
-            localAuthorizationUrlResourceOwnerId="#[attributes.queryParams.userId]"
-            localAuthorizationUrl="http://localhost:8082/authorization"
-            authorizationUrl="http://www.box.com/api/oauth2/authorize"
-            resourceOwnerId="#[vars.userId]"
-            clientId="your_client_id"
-            clientSecret="your_client_secret"
-            scopes="access_user_details, read_user_files"
-            tokenUrl="http://www.box.com/api/oauth2/token"
-            refreshTokenWhen="#[payload.response.status == 'unauthorized']" />
-    </http:authentication>
-</http:request-config>
-----
-
-The attribute `resourceOwnerId` must be set with a DataWeave expression that allows each `http:request` execution to retrieve the RO identifier from the Mule event. For this example, whenever the `http:request` is executed, there must be a flow variable named ‘userId’ with the RO identifier to use.
-
-[source,xml,linenums]
-----
-    <flow name="accessROFolders">
-        <set-variable variableName="userId" value="#['Polly']"/>
-        <http:request config-ref="HTTP_Request_Configuration"
-            path="/folders" method="GET"/>
-    </flow>
-----
-
-The attribute `localAuthorizationUrlResourceOwnerId` defines this. To get a RO identifier, the `userId` query parameter must be parsed from the call sent to the local authorization URL.
-
-So if you browse to `+http://localhost:8082/authorization?userId=sara+`, then the RO `sara` can grant access to the CA on her behalf. If you browse to `+http://localhost:8082/authorization?userId=polly+` then the RO `polly` can grant access to the CA on her behalf.
-
-////
-=====
-////
 
 === Use HTTPS for OAuth Authorization Code
 
@@ -905,16 +832,17 @@ You must include the following information:
 
 [source,xml,linenums]
 ----
-<http:request-config name="HTTP_Request_Configuration"
-                     host="some.api.com" port="80" basePath="/api/1.0">
-        <http:authentication>
-            <oauth:client-credentials-grant-type
-            clientId="your_client_id"
-            clientSecret="your_client_secret"
-            tokenUrl="http://some.api.com/api/1.0/oauth/token"
-            scopes="access_user_details, read_user_files" />
-        </http:authentication>
-    </http:request-config>
+<http:request-config name="HTTP_Request_configuration" >
+	<http:request-connection host="some.api.com" port="80" >
+	<http:authentication>
+		<oauth:client-credentials-grant-type
+		clientId="your_client_id"
+		clientSecret="your_client_secret"
+		tokenUrl="http://some.api.com/api/1.0/oauth/token"
+		scopes="access_user_details, read_user_files" />
+	</http:authentication>
+	</http:request-connection>
+</http:request-config>
 ----
 
 ////
@@ -1097,6 +1025,10 @@ When using multiple RO with a single Token Manager, if you want to only clear th
 === Token Manager - Customize the Token Manager Object Store
 
 By default, the token manager uses an in-memory object store to store the credentials. You can customize the token manager object store by using the `objectStore` attribute. See also xref:object-store-connector::object-store-to-define-a-new-os.adoc[Configure a custom object store].
+
+== Access Resources on Behalf of Several Users
+
+When you need to access resources on behalf of several users, use SDK Connectors instead of using HTTP Connector in conjunction with the OAuth module.
 
 == See Also
 
