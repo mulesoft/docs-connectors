@@ -1,11 +1,20 @@
 = Configure HTTP Request Operation
 :page-aliases: connectors::http/http-request-ref.adoc
 
-Anypoint Connector for HTTP (HTTP Connector) *Request* operation enables you to consume an external HTTP service using the default `GET` method. You can choose what methods the operation accepts. The `GET` and `OPTIONS` methods do not send the payload in the request, the body of the HTTP request is empty. The remaining methods `CONNECT`, `DELETE`, `PATCH`, `POST`, and `PUT` send the message payload as the body of the HTTP request.
+Anypoint Connector for HTTP (HTTP Connector) *Request* operation enables you to consume an external HTTP service using the default `GET` method. You can choose what methods the operation accepts.
+
+* The `GET` and `OPTIONS` methods do not send the payload in the request, the body of the HTTP request is empty.
+* The `CONNECT`, `DELETE`, `PATCH`, `POST`, and `PUT` methods send the message payload as the body of the HTTP request.
 
 After the HTTP *Request* operation sends an HTTP request, the connector receives an HTTP response and passes it to the next element in the Mule app's flow. The HTTP response can be successful or not and return different status codes. You can also customize how the operation generates HTTP responses in the connector operation configuration.
 
-By default, the operation sends the Mule message payload as the HTTP request body but you can customize it using a DataWeave script or expression.
+By default, the operation sends the Mule message payload as the HTTP request body but you can customize it using a DataWeave script or expression. In addition to the body of the request, you can configure:
+
+* Request and response size limits
+* Headers
+* Query parameters
+* URI parameters
+* A map of multiple headers or parameters
 
 == Configure HTTP Request Connection
 
@@ -35,7 +44,7 @@ The following example shows how to configure the HTTP *Request* connection in St
 
 . In the *Mule Palette* view, select *HTTP > Request*.
 . Drag *Request* to the Studio canvas.
-. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Listener* in the app.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Request* in the app.
 . Set *Host* to `localhost` and *Port* to `8081`.
 
 image::http-listener-1.png[HTTP Request global configuration window with Host field set to localhost and Port field to 8081]
@@ -77,19 +86,9 @@ In the *Configuration XML* editor, the `host`, `port`, `path`, `trust-store`, an
 By default, the HTTP request operation sends the Mule message payload as the HTTP request body but you can customize it using a DataWeave script or expression.
 
 
-== Add Custom Parameters
+== Configure HTTP Request and Response Size Limits
 
-In addition to the body of the request, you can configure:
-
-* Request and response size limits
-* Headers
-* Query parameters
-* URI parameters
-* A map of multiple headers or parameters
-
-=== HTTP Request and Response Size Limits
-
-By default, Mule defines different limits for the HTTP request size, response size, and request/response header size. However, you can change these max values by modifying the corresponding property in the `wrapper.conf` file.
+By default, Mule defines different limits for the HTTP request size, response size, and request/response header size. However, you can change these max values by modifying the following properties in the `wrapper.conf` file:
 
 [%header%autowidth.spread,cols="a,a,a"]
 |===
@@ -99,41 +98,107 @@ By default, Mule defines different limits for the HTTP request size, response si
 | Response Size | `org.glassfish.grizzly.nio.transport.TCPNIOTransport.max-send-buffer-size` | `1048576` (1MB)
 |===
 
-=== Headers
+To learn how to set system properties in the `wrapper.conf` file, refer to the xref:mule-runtime::mule-app-properties-system.adoc#set-properties[Set System Properties in the wrapper.conf File] documentation.
 
-Select *Headers* in the *General* configuration to add headers to the request. For example, add header names `HeaderName1` and `HeaderName2`, add header values `HeaderValue1` and `HeaderValue2`. You can use DataWeave expressions, for example `#[{'HeaderName1' : 'HeaderValue1', 'HeaderName2' : 'HeaderValue2'}]`.
+== Configure Headers
 
-There are also use cases in which there are a set of default headers you always want to set. For example, you might want to always send authentication headers like `x-csrf-token: Fetch`.
+To add headers to an HTTP request, you can configure two options:
 
-You can specify default headers at the config level so that you don't have to specify them on every single request. For example:
+* *Headers* +
+At the HTTP *Request* operation level.
+* *Default headers* +
+At the HTTP global connection level.
+
+You configure default headers at the HTTP global connection level so that you don't have to specify every header on every single request. With this configuration, those headers are added to every outbound request, alongside any headers you configure at the HTTP *Request* operation level.
+Additionally, the default headers also accept expressions, allowing you to use dynamic values.
+
+The following example shows how to configure *Headers* at HTTP *Request* operation level in Studio:
+
+. Select the HTTP *Request* operation from your flow.
+. In *General*, select the *Headers* tab.
+. Click the plus sign (*+*) to add a new header.
+. In the *Name* column, change *"Key"* to `"HeaderName1"`.
+. In the *Value* column, change *"Value"* to `"HeaderValue1"`.
+
+image::http-listener-3.png[Headers configuration at HTTP Request operation level]
+
+In the *Configuration XML* editor, the `headers` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request method="GET" config-ref="HTTP_Request_configuration" path="/testpath">
+			<http:headers ><![CDATA[#[output application/java
+---
+{
+	"HeaderName1" : "HeaderValue1"
+}]]]></http:headers>
+		</http:request>
+----
+
+You can use DataWeave expressions to add headers as well, for example:
+
+. In the HTTP *Request* operation configuration window, select the *Headers* tab.
+. Select the *fx* button to switch to literal mode.
+. In the box, add the DataWeave expression `[{'HeaderName1' : 'HeaderValue1'}]`.
+
+image::http-listener-3.png[Headers configuration at HTTP Request operation level with DataWeave expression]
+
+In the *Configuration XML* editor, the `headers` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request method="GET" config-ref="HTTP_Request_configuration" path="/testpath">
+			<http:headers ><![CDATA[#[[{'HeaderName1' : 'HeaderValue1'}]]]]></http:headers>
+		</http:request>
+----
+
+The following example shows how to configure *Headers* at HTTP global connection level in Studio:
+
+. Select the HTTP *Request* operation from your flow.
+. In *General*, select the *Headers* tab.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Request* in the app.
+. Click *Settings*.
+. Set *Default headers* to *Edit inline*.
+. Click the plus sign (*+*) to add a new header.
+. Set *Key* to `x-csrf-token`.
+. Set *Value* to `Fetch`.
+. Click *Finish*.
+
+image::http-listener-3.png[Default headers configuration at HTTP Request global connection]
+
+In the *Configuration XML* editor, the `default-headers` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:default-headers >
+    <http:default-header key="x-csrf-token" value="Fetch" />
+</http:default-headers>
+----
+
+The following example shows how to configure default headers with DataWeave expressions, allowing you to use dynamic values:
+
+. In the *Default headers* configuration window.
+. For *Value*, select the *fx* button to switch to literal mode.
+. Set *Value* to `#[vars.role]`.
+
+image::http-listener-3.png[Default headers configuration at HTTP Request global connection]
+
+In the *Configuration XML* editor, the `default-headers` configuration looks like this:
 
 [source,xml,linenums]
 ----
 <http:request-config name="requestConfig">
-    <http:request-connection host="localhost" port="8081" streamResponse="true" responseBufferSize="1024"/>
-    <http:default-headers >
-        <http:default-header key="x-csrf-token" value="Fetch" />
-    </http:default-headers>
-</http:request-config>
-----
-
-With this configuration, those headers will be added to every outbound request, alongside any headers you specify in the actual request.
-
-The default headers also accept expressions, allowing you to use dynamic values. For example:
-
-[source,xml,linenums]
-----
-<http:request-config name="requestConfig">
-    <http:request-connection host="localhost" port="8081" streamResponse="true" responseBufferSize="1024"/>
     <http:default-headers >
         <http:default-header key="custom-role" value="#[vars.role]" />
     </http:default-headers>
 </http:request-config>
 ----
 
-This practice is helpful and convenient but has some important caveats to consider. Using expressions in a configuration element constitutes a dynamic configuration. The lifecycle of a dynamic configuration is not explained here, but in a nutshell, all expressions in the config are evaluated each time the connector is used and for each set of distinct values a new configuration instance is created and initialized.
+Using DataWeave expressions in a configuration element constitutes a dynamic configuration. Each time a Mule app uses an HTTP *Request* operation, all expressions in the configuration are evaluated and for each set of distinct values, a new configuration instance is created and initialized.
 
-For the particular case of the HTTP connector, this means that it's only a good idea to use default headers with expressions when you are certain that the universe of all possible values that those expressions can take is small. If, on the contrary, it is likely that every single evaluation is going to yield a different value, you'll end up creating several instances of the HTTP client, which will affect performance (due to the extra work that initializing a client takes) and be resource-consuming. For such cases, the recommendation is to not use default headers but rather to specify headers on the request operation itself:
+For HTTP Connector, use default headers with small value expressions. Otherwise, every single evaluation returns a different value and creates several instances of the HTTP client. This behavior affects performance because of the extra work that takes to initialize a client and can be resource-consuming.
+
+In such cases, configure headers with expressions at the HTTP *Request* operation level, for example:
 
 [source,xml,linenums]
 ----
@@ -142,11 +207,49 @@ For the particular case of the HTTP connector, this means that it's only a good 
 </http:request>
 ----
 
-=== Query Parameters
+== Configure Query Parameters
 
-In *General > Request > Query Parameters*, click the plus icon (*+*) to add a parameter to a request. Type a name and value for the parameter or use a DataWeave expression to define the name and value.
+To configure *Query Parameters* for the HTTP request, follow these steps:
 
-=== URI Parameters
+. In Studio, select the HTTP *Request* operation from your flow.
+. In *General*, select the *Query Parameters* tab.
+. Click the plus sign (*+*) to add a parameter to the request.
+. In the *Name* column, change *"Key"* to `"Keyquery"`.
+. In the *Value* column, change *"Value"* to `"Valuequery"`.
+
+image::http-listener-3.png[Query parameters configuration with Key field set to Keyqueryand Value field set to Valuequery]
+
+In the *Configuration XML* editor, the `query-params` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request method="GET" config-ref="HTTP_Request_configuration" path="/testpath">
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"keyquery" : "Valuequery"
+}]]]></http:query-params>
+		</http:request>
+----
+
+You can use DataWeave expressions to add query parameters as well, for example:
+
+. In the HTTP *Request* operation configuration window, select the *Query Parameters* tab.
+. Select the *fx* button to switch to literal mode.
+. In the box, add the DataWeave expression `[{'Keyquery' : 'Valuequery'}]`.
+
+image::http-listener-3.png[Query parameters configuration with DataWeave expression]
+
+In the *Configuration XML* editor, the `query-params` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request method="GET" config-ref="HTTP_Request_configuration" path="/testpath">
+			<http:query-params ><![CDATA[#[[{'Keyquery' : 'Valuequery'}]]]]></http:query-params>
+		</http:request>
+----
+
+== Configure URI Parameters
 
 You configure a URI parameter when you want to use a placeholder, such as `/customer/{customerId}`, in the path of your request. To configure a URI parameter, type the placeholder enclosed in curly brackets in the *Path* field. Select *URI Parameters*, click *+*, and enter a name and value.
 
