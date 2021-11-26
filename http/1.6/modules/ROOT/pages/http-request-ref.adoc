@@ -6,7 +6,7 @@ Anypoint Connector for HTTP (HTTP Connector) *Request* operation enables you to 
 * The `GET` and `OPTIONS` methods do not send the payload in the request, the body of the HTTP request is empty.
 * The `CONNECT`, `DELETE`, `PATCH`, `POST`, and `PUT` methods send the message payload as the body of the HTTP request.
 
-After the HTTP *Request* operation sends an HTTP request, the connector receives an HTTP response and passes it to the next element in the Mule app's flow. The HTTP response can be successful or not and return different status codes. You can also customize how the operation generates HTTP responses in the connector operation configuration.
+After the HTTP *Request* operation sends an HTTP request, the connector receives an HTTP response and passes it to the next element in the Mule app's flow. The HTTP response can be successful or not and return different status codes. You can also customize how the operation generates HTTP responses in the connector operation global configuration.
 
 By default, the operation sends the Mule message payload as the HTTP request body but you can customize it using a DataWeave script or expression. In addition to the body of the request, you can configure:
 
@@ -18,7 +18,7 @@ By default, the operation sends the Mule message payload as the HTTP request bod
 
 == Configure HTTP Request Connection
 
-To use an HTTP *Request* operation, the required minimum setting for the operation is a *Host* URI, which can include a path. You can configure a connection with these settings:
+To use an HTTP *Request* operation, the required minimum setting for the operation is a host URI, which can include a path. You can configure a connection with these settings:
 
 * *Host* +
 Indicates where the requests are sent.
@@ -27,14 +27,14 @@ Indicates where the requests are received.
 * *Protocol* +
 Indicates the protocol for communication, either HTTP for plain connections or HTTPS for TLS secure connections.
 
-To enable secure connections through HTTPS, you must define a *TLS Configuration* context in the connection and provide:
+To enable secure connections through HTTPS, you must define a TLS configuration context in the connection and provide:
 
 * A keystore for the server
 * A truststore if you need two-way authentication
 
 Refer to the xref:mule-runtime::tls-configuration.adoc[Configure TLS with Keystores and Truststores] documentation for details.
 
-Additionally, you can configure the following *Authentication* types for the operation:
+Additionally, you can configure the *Authentication* field with the following types:
 
 * *Basic authentication*
 * *Digest authentication*
@@ -81,11 +81,6 @@ In the *Configuration XML* editor, the `host`, `port`, `path`, `trust-store`, an
 </flow>
 ----
 
-== Map Between Mule Messages and HTTP Requests
-
-By default, the HTTP request operation sends the Mule message payload as the HTTP request body but you can customize it using a DataWeave script or expression.
-
-
 == Configure HTTP Request and Response Size Limits
 
 By default, Mule defines different limits for the HTTP request size, response size, and request/response header size. However, you can change these max values by modifying the following properties in the `wrapper.conf` file:
@@ -107,12 +102,12 @@ To add headers to an HTTP request, you can configure two options:
 * *Headers* +
 At the HTTP *Request* operation level.
 * *Default headers* +
-At the HTTP global connection level.
+At the HTTP *Request* global configuration level.
 
-You configure default headers at the HTTP global connection level so that you don't have to specify every header on every single request. With this configuration, those headers are added to every outbound request, alongside any headers you configure at the HTTP *Request* operation level.
+You configure default headers at the HTTP global configuration level so that you don't have to specify every header on every single request. With this configuration, those headers are added to every outbound request, alongside any headers you configure at the HTTP *Request* operation level.
 Additionally, the default headers also accept expressions, allowing you to use dynamic values.
 
-The following example shows how to configure *Headers* at HTTP *Request* operation level in Studio:
+The following example shows how to configure the *Headers* field at the HTTP *Request* operation level in Studio:
 
 . Select the HTTP *Request* operation from your flow.
 . In *General*, select the *Headers* tab.
@@ -152,7 +147,7 @@ In the *Configuration XML* editor, the `headers` configuration looks like this:
 		</http:request>
 ----
 
-The following example shows how to configure *Headers* at HTTP global connection level in Studio:
+The following example shows how to configure the *Default headers* field at the HTTP *Request* global configuration level in Studio:
 
 . Select the HTTP *Request* operation from your flow.
 . In *General*, select the *Headers* tab.
@@ -209,7 +204,7 @@ In such cases, configure headers with expressions at the HTTP *Request* operatio
 
 == Configure Query Parameters
 
-To configure *Query Parameters* for the HTTP request, follow these steps:
+To configure query parameters for the HTTP request, follow these steps:
 
 . In Studio, select the HTTP *Request* operation from your flow.
 . In *General*, select the *Query Parameters* tab.
@@ -251,98 +246,180 @@ In the *Configuration XML* editor, the `query-params` configuration looks like t
 
 == Configure URI Parameters
 
-You configure a URI parameter when you want to use a placeholder, such as `/customer/{customerId}`, in the path of your request. To configure a URI parameter, type the placeholder enclosed in curly brackets in the *Path* field. Select *URI Parameters*, click *+*, and enter a name and value.
+You configure URI parameters when you want to use a placeholder, such as `/customer/{customerId}`, in the path of your request.
 
-For example, enter *customerId* and *20* as the name and value.
+The following example shows how to configure the *URI Parameters* field in Studio:
 
-image::http-mule4-uriparams.png[]
+. Select the HTTP *Request* operation from your flow.
+. In *General*, set *Path* to `/customer/{customerId}`.
+. Select the *URI  Parameters* tab.
+. Click the plus sign (*+*) to add a new URI parameter.
+. In the *Name* column, change *"Key"* to `"customerID"`.
+. In the *Value* column, change *"Value"* to `"20"`.
 
-Alternatively, you can use DataWeave expressions in the name and value fields.
+image::http-listener-3.png[URI Query parameters configuration with Key field set to customerID and Value field set to 20]
 
-When the application runs, it performs a GET request to `+http://www.example.com/customer/20+`.
+In the *Configuration XML* editor, the `uri-params` configuration looks like this:
 
-=== Dynamic Parameters and Headers
+[source,xml,linenums]
+----
+<http:request method="GET" config-ref="HTTP_Request_configuration" path="/customer/{customerId}">
+			<http:uri-params ><![CDATA[#[output application/java
+---
+{
+	"customerID" : "20"
+}]]]></http:uri-params>
+		</http:request>
+----
 
-If, at design time, you don't know how many query parameters or headers a request might need, use DataWeave and a variable map to dynamically assign parameters or headers to the request.
+You can use DataWeave expressions to add URI parameters as well, for example:
 
-For example, you create a map variable named `customMap` and assign the variable a map of values using DataWeave, then use that variable to set up the headers of your request:
+. In the HTTP *Request* operation configuration window, select the *URI Parameters* tab.
+. Select the *fx* button to switch to literal mode.
+. In the box, add the DataWeave expression `[{'customerID' : '20'}]`.
 
-`#[vars.customMap ++ {'HeaderName1' : 'HeaderValue1'}]`
+image::http-listener-3.png[URI Query parameters configuration with DataWeave expression]
+
+In the *Configuration XML* editor, the `uri-params` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request method="GET" config-ref="HTTP_Request_configuration" path="/customer/{customerId}">
+			<http:uri-params ><![CDATA[#[[{'customerID' : '20'}]]]]></http:uri-params>
+		</http:request>
+----
+
+When the Mule app runs, it performs a `GET` request to: +
+
+`+http://www.example.com/customer/20+`.
+
+== Configure Dynamic Parameters and Headers
+
+If during design time, you don't know how many parameters or headers a request might need, use DataWeave expressions and a variable map to dynamically assign parameters or headers to the HTTP request.
+
+To set headers dynamically, create a variable map and assign the variable values using DataWeave. Then, use that variable to set up the headers of your request. For example, with a variable map named `customMap`, you set up the following headers for the request: `#[vars.customMap ++ {'HeaderName1' : 'HeaderValue1'}]`
 
 To set URI parameters dynamically, use a DataWeave expression that returns a map of the parameters. For example:
 
-* Set Path to: `/test/{p1}/{p2}`
+* Path to: `/test/{p1}/{p2}`
 * URI Parameter names: p1 and p2
 * URI Parameter value: `#[vars.customMap]`
-* Before the request, assuming p1 already set: `#[vars.customMap ++ {'p2': 'customer'}]`
 
-The connector resolves parameters for each request, and evaluates DataWeave expressions in the context of the current message, in the order specified in the request. If the same parameter is defined more than once, the latest value is used.
+Before the request, assuming p1 already set: `#[vars.customMap ++ {'p2': 'customer'}]`
 
+HTTP Connector resolves parameters for each request, and evaluates DataWeave expressions in the context of the current message, in the order specified in the request. If the same parameter is defined more than once, the latest value is used.
 
-=== Sending Form Parameters in a POST Request
+== Send Form Parameters
 
-To send parameters in a POST request, In *General > Request*, select the *POST* method.
-In *Body*, construct the payload of the Mule message as `application/x-www-form-urlencoded` with the names and the values of the parameters to send. For example:
+To send form parameters in a POST request, follow these steps:
 
-`#[output application/x-www-form-urlencoded --- {'key1':'value1', 'key2':'value2'}]`
+. In Studio, select the HTTP *Request* operation from your flow.
+. In *General*, set *Method* to *POST*.
+. In *Body*, construct the payload of the Mule message as `application/x-www-form-urlencoded` with the names and the values of the parameters to send, for example:
 
-A POST request is sent to the host location you specify with `Content-Type: application/x-www-form-urlencoded`, and the body is "`key1=value1&key2=value2`".
+`[output application/x-www-form-urlencoded --- {'key1':'value1', 'key2':'value2'}`
 
-== Map Between HTTP Responses and Mule Messages
+image::http-listener-3.png[Body configuration with DataWeave expression]
 
-An HTTP response is mapped to a Mule message similar to the way the HTTP request is mapped to a Mule message.
+In the *Configuration XML* editor, the `body` configuration looks like this:
 
-The following elements *don't* apply to HTTP responses:
-
-* Query parameters
-* URI parameters
-* Inbound attributes related to the HTTP request URI
-
-In addition, the HTTP request operation adds the following attributes to the Mule message when receiving a response:
-
-* `attributes.statusCode`: Status code of the HTTP response
-* `attributes.reasonPhrase`: Reason phrase of the HTTP response
-
-== Round-Robin Requests
-
-The request operation connects to configured hosts using round robin DNS. Mule runtime engine resolves all IP addresses associated to the specified host and performs load balancing by distributing the requests across all returned IPs.
-
-When connecting to resources that require authentication, the external service needs to replicate session information between IP addresses under the host of your service. Otherwise, your requests might get rejected for being unauthorized.
-
-When your external resource does not handle sticky sessions you need to add the service host name to the `mule.http.disableRoundRobin` system property when starting the Mule Runtime:
-
-[source,console]
+[source,xml,linenums]
 ----
-./mule -M-Dmule.http.disableRoundRobin=serverhostname.com
+<flow name="httprequestFlow" >
+		<http:request method="POST" config-ref="HTTP_Request_configuration" path="testpath">
+			<http:body ><![CDATA[#[output application/x-www-form-urlencoded --- {'key1':'value1', 'key2':'value2'}]]]></http:body>
+		</http:request>
+	</flow>
 ----
 
-When configured in this way, the request does not use round robin DNS when connecting to the configured host.
+The HTTP *Request* operation sends a POST request to the host location. The HTTP request contains `Content-Type: application/x-www-form-urlencoded` and the body is `key1=value1&key2=value2`.
 
-== HTTP Response Validation
 
-When the HTTP request operation receives an HTTP response, it validates the response through its status code. By default, it throws an error when the status code is higher than or equal to 400. Consequently, if the server returns a 404 (Resource Not Found) or a 500 (Internal Server Error) a failure occurs and error handling is triggered.
+== Configure Round-Robin Requests
 
-To get a detailed overview of an HTTP response body when an exception is thrown during an HTTP request call, review the following xref:mule-runtime::mule-error-concept.adoc#http-request-error[example] in the Mule Errors documentation.
+The HTTP *Request* operation connects to configured hosts using round robin DNS. Mule resolves all IP addresses associated to the specified host and performs load balancing by distributing the requests across all returned IPs.
 
-You can change the set of valid HTTP response codes by configuring *General > Response > Response Validator*.
+When the operation connects to resources that require authentication, the external service needs to replicate session information between IP addresses under the host of your service. Otherwise, the HTTP requests might get rejected for being unauthorized.
 
-* None: Connector uses the default validator, which throws an error when the status code is greater than or equal to 400.
-* Success Status Code Validator: All the status codes defined within this element are considered valid. The request throws an error for any other status code.
-* Failure Status Code Validator: All the status codes defined within this element are considered invalid and an error is thrown. The request is considered valid with any other status code.
+If the external resource does not manage sticky sessions, add the service host name to the `mule.http.disableRoundRobin` system property. The HTTP request won't use round robin DNS to connect to the configured host.
 
-To set which status codes are acceptable as successful responses, in *General > Response > Response Validator*, select *Success Status Code Validator*. In *Values*, enter the list of acceptable status codes, separated by commas. For example: *200,201*. If the HTTP response has any other status value, it fails and raises an error.
+To configure this system property, set it when starting Mule by adding: +
+`./mule -M-Dmule.http.disableRoundRobin=serverhostname.com`
 
-A range of failure status codes is defined by two ASCII `..` full stop characters. Any value between 500 and 599 is considered a failure and raises an error. If the HTTP response has any other status value, it's considered a success.
+== Configure Response Validator
 
-== Configure a Target
+When the HTTP *Request* operation receives an HTTP response, the operation validates the response through its status code. By default, HTTP Connector throws an HTTP error response when the status code is higher than or equal to 400. Consequently, if the server returns a 404 (Resource Not Found) or a 500 (Internal Server Error) a failure occurs and the connector triggers the error handling.
 
-By default, the body of a request is taken from the `#[payload]` of the incoming Mule message and the response is sent onwards as the `#[payload]` of the output Mule message. You can change this default behavior through the *General > Request > Body* and *General > Output > Target Variable* attributes. Use this attribute to specify a location other than payload for the output data, such as a variable.
+Two ASCII `..` full stop characters define the range of failure status codes. Any value between 500 and 599 is considered a failure and raises an error. If the HTTP response has any other status code value, it's considered a success.
+
+The HTTP *Request* operation adds the following attributes to the Mule message when receiving an HTTP response:
+
+* `attributes.statusCode` +
+Status code of the HTTP response
+* `attributes.reasonPhrase` +
+Reason phrase of the HTTP response
+
+To get a detailed overview of an HTTP response body during an HTTP request call, refer to the  xref:mule-runtime::mule-error-concept.adoc#http-request-error[HTTP Error Response example] documentation.
+
+In the HTTP *Request* operation configuration, you can customize HTTP responses by configuring the *Response validator* field to any of these options:
+
+* *None* +
+Uses the default validator, which throws an error when the status code is greater than or equal to 400.
+* *Expression or Bean reference* +
+Uses a DataWeave expression or bean reference to define the status code.
+* *Failure status coded validator* +
+Defines failure status codes that throw errors.
+* *Success status code validator* +
+Defines successful status codes.
+
+The following example shows how to configure the *Response validator* field in Studio:
+
+. Select the HTTP *Request* operation from your flow.
+. In *General*, click the *Response* tab.
+. Set *Response validator* to *Success status code validator*.
+. In *Values*, add the list of acceptable status codes, separated by commas, for example `200,201`. +
+ If the HTTP response returned has any other status value, it fails and raises an error.
+
+image::http-listener-3.png[Response validator field set to Success status code validator ]
+
+In the *Configuration XML* editor, the `response-validator` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request method="POST" config-ref="HTTP_Request_configuration" path="testpath">
+    <http:response-validator >
+      <http:success-status-code-validator values="200,201" />
+    </http:response-validator>
+  </http:request>
+----
+
+== Configure a Target Variable
+
+By default, the body of an HTTP request is taken from the `#[payload]` of the incoming Mule message and the HTTP response is sent as the `#[payload]` of the output Mule message.
+
+You can change this behavior for the HTTP *Request* operation, either in the *Body* field section or updating the *Target Variable* field attribute. This attribute specifies a location other than payload for the output data, such as a variable.
+
+The following example shows how to configure the *Target Variable* field in Studio:
+
+. Select the HTTP *Request* operation from your flow.
+. In *General*, click the *Advanced* tab.
+. Set *Target Variable* to ``.
+. Set *Target Value* to ``.
+
+image::http-listener-3.png[Target variable configuration ]
+
+In the *Configuration XML* editor, the `response-validator` configuration looks like this:
+
+[source,xml,linenums]
+----
+
+----
 
 == Configure Request Streaming Mode
 
 When HTTP Connector manages request bodies, the connector considers the type of data to send. You can configure the HTTP *Request* operation to send HTTP requests in chunks. By default, if the payload type is stream, the operation uses the streaming mechanism to send HTTP requests. +
 
-To control this behavior, configure *Request streaming mode* to any of these options:
+To control this behavior, configure the *Request streaming mode* field to any of these options:
 
 * *ALWAYS* +
 Always enable streaming regardless of the payload type.
@@ -353,7 +430,7 @@ Never stream, even if the payload is a stream.
 
 When streaming, the HTTP request does not contain the `Content-Length` header. The request contains the `Transfer-Encoding` header and sends the body in chunks until the stream is fully consumed.
 
-The following example shows how to configure *Request streaming mode* in Studio:
+The following example shows how to configure the *Request streaming mode* field in Studio:
 
 . In the *Mule Palette* view, select *HTTP > Request*.
 . Drag *Request* to the Studio canvas.
@@ -374,39 +451,52 @@ In the *Configuration XML* editor, the `requestStreamingMode` configuration look
 
 === Configure the Request Streaming System Property
 
-The previous *Request streaming mode* configuration causes the Mule app to send HTTP requests in chunks, but the configuration doesn't imply that the Mule app streams the payload internally. The HTTP *Request* operation needs all the data in memory before sending HTTP requests. Therefore, if the Mule app needs to send a very large request body, the Mule app can generate a high memory consumption, and eventually cause an out-of-memory error. To prevent this issue, Mule provides the `mule.http.requestStreaming.enable` system property to enable internal request streaming.
+Setting *Request streaming mode*  to `ALWAYS` causes the Mule app to send HTTP requests in chunks, but the configuration doesn't imply that the Mule app streams the payload internally. The HTTP *Request* operation needs all the data in memory before sending HTTP requests. Therefore, if the Mule app needs to send a very large request body, the Mule app can generate a high memory consumption, and eventually cause an out-of-memory error. To prevent this issue, Mule provides the `mule.http.requestStreaming.enable` system property to enable internal request streaming.
 
 If you configure this system property, the HTTP *Request* operation starts sending the request body before all of the data is in memory. Therefore, the Mule app won't need as much memory as it would need if you don't configure this property.
 
 To configure this system property, set it when starting Mule by adding: +
- `-M-Dmule.http.requestStreaming.enable=true` +
+ `./mule -M-Dmule.http.requestStreaming.enable=true` +
  This property defaults to `false`.
 
 You can also configure the internal buffer `mule.http.requestStreaming.bufferSize` system property for the streaming mechanism. +
 To configure this property, set it when starting Mule by adding: +
- `-M-Dmule.http.requestStreaming.bufferSize=value` +
+ `./mule -M-Dmule.http.requestStreaming.bufferSize=value` +
 This property is measured in bytes and defaults to `8192`.
 
 To learn how to set system properties in Anypoint Studio or for on-premises deployments, refer to the xref:mule-runtime::mule-app-properties-system.adoc[system properties] documentation.
 
-== Configuring Response Streaming
+== Configure Response Streaming
 
-When requesting a large payload, you can choose to stream the response by setting the `streamResponse` attributes in the HTTP request configuration.
+When requesting a large payload, you can choose to stream the response by selecting the *Stream response* field in the HTTP *Request* global configuration.
 
-By default, the `streamResponse` attribute is set to false. When setting this attribute to true, you enable Mule to handle the response as a stream by saving chunks to an in-memory buffer. You can configure the buffer size using the `responseBufferSize` attribute, but its default size is 10 KB.
+By default, the *Stream response* field is deselected (`false`). When you select this field (`true`), you enable Mule to manage the HTTP response as a stream by saving chunks to an in-memory buffer. You can also configure the *Response buffer size* field attribute. Defaults to `1024`.
+
+The following example shows how to configure the *Request streaming mode* and *Response buffer size* fields in Studio:
+
+. In the *Mule Palette* view, select *HTTP > Request*.
+. Drag *Request* to the Studio canvas.
+. Set *Path* to `/path`.
+. Click the plus sign (*+*) to open the HTTP Request global configuration.
+. Select *Stream response*.
+. Set *Response buffer size* to `100`.
+
+image::http-request-.png[HTTP Request configuration window with Stream response field selected and Response buffer size field set to 100]
+
+In the *Configuration XML* editor, the `streamResponse` and `responseBufferSize` configurations look like these:
 
 [source,xml,linenums]
 ----
 <http:request-config name="requestConfig">
-    <http:request-connection host="localhost" port="8081" streamResponse="true" responseBufferSize="1024"/>
+    <http:request-connection host="localhost" port="8081" streamResponse="true" responseBufferSize="100"/>
 </http:request-config>
 ----
 
 To avoid issues, it's important to consume responses when streaming.
 
-== Retry Mechanisms
+== Configure Retry Mechanisms
 
-The HTTP Connector uses a retry mechanism that enables you to configure how many times it tries consuming an external HTTP service. The HTTP Connector uses this mechanism to reconnect an HTTP client with an HTTP service. The HTTP Connector does not manage TCP connections, so this mechanism does not reconnect sockets.
+HTTP Connector uses a retry mechanism that enables you to configure how many times it tries consuming an external HTTP service. The connector uses this mechanism to reconnect an HTTP client with an HTTP service. HTTP Connector does not manage TCP connections, so this mechanism does not reconnect sockets.
 
 [WARNING]
 The *HTTP Request* operation does not use the reconnection strategy for retries. The reconnection strategy is a mechanism the Mule SDK uses to re-establish _Connections_ when a `ConnectionException` is caught. It does not affect connections to an HTTP service created by the HTTP Requester.
