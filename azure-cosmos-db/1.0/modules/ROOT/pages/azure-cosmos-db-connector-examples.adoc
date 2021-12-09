@@ -4,10 +4,24 @@ The following examples show several Mule flows for Azure Cosmos DB Connector, in
 
 The authorization for Azure Cosmos DB Connector supports the master key and resource token mechanisms. The resource token authorization is for temporary (1-5 hours) access on a specific resource without providing direct access to the master key.
 
-
-
-* <<create-hyper-file>>
-
+* <<create-document>>
+* <<get-document>>
+* <<replace-document>>
+* <<list-documents>>
+* <<query-documents>>
+* <<delete-document>>
+* <<create-stored-procedure>>
+* <<execute-stored-procedure>>
+* <<replace-stored-procedure>>
+* <<list-stored-procedures>>
+* <<delete-stored-procedure>>
+* <<create-permission>>
+* <<get-permission>>
+* <<replace-permission>>
+* <<list-permissions>>
+* <<delete-permission>>
+* <<list-documents-resource-token>>
+* <<list-stored-procedures-resource-token>>
 
 
 == Prerequisites
@@ -1329,23 +1343,29 @@ http://www.mulesoft.org/schema/mule/azure-cosmos-db-connector-mule-4 http://www.
 . Save the project.
 . From a web browser, test the application by entering `http://localhost:8081/delete-permission`.
 
-[[get-permission]]
-== Get Permission
+[[list-documents-resource-token]]
+== List Documents Resource Token
 
-This Mule flow retrieves an existing permission.
+This Mule flow obtains a list of existing documents, with pagination support
+handled internally by the connector, and uses the short-lived tokens from the
+Resource Token authorization.
 
 This example uses the following operations:
 
 * *HTTP Listener* +
 Accepts data from HTTP requests
-* *Get Permission* +
-Gets a permission from a database
+* *Flow Reference* +
+Obtains the resource token
+* *List Documents* +
+Returns a list of documents under the collection
 * *Transform Message* +
-Outputs the results of the *Get Permission* operation in JSON format
+Outputs the results of the *List Documents* operation in JSON format
+* *Flow Reference* +
+Clears the permissions
 * *Logger* +
-Shows the HTTP response from the *Get Permission* operation
+Shows the HTTP response from the *List Documents* operation
 
-image::get-permission.png[Studio Flow for the Get Permission operation]
+image::list-documents-resource-token.png[Studio Flow for the List Documents Resource Token operation]
 
 === XML for This Example
 
@@ -1379,14 +1399,15 @@ http://www.mulesoft.org/schema/mule/azure-cosmos-db-connector-mule-4 http://www.
                                                                          version="${config.version}"
                                                                          baseUri="${config.baseUri}"/>
     </azure-cosmos-db-connector-mule-4:resource-token-config>
-    <flow name="get-permission-flow">
-        <http:listener config-ref="HTTP_Listener_config" path="/get-permission"/>
-        <azure-cosmos-db-connector-mule-4:get-permission config-ref="Cosmos_Db_Connector_Config"
+    <flow name="list-documents-resource-token-flow">
+        <http:listener config-ref="HTTP_Listener_config" path="/list-documents-resource-token"/>
+        <flow-ref name="obtain-resource-token"/>
+        <azure-cosmos-db-connector-mule-4:list-documents config-ref="Cosmos_Db_Connector_Config_Resource_Token"
                                                          dbIdUriParam="${config.database}"
-                                                         username="${config.username}"
-                                                         permissionId="Mule_CosmosDB_DemoApp_ResourceToken_PermissionId"
-                                                         xMsDocumentdbExpirySeconds="1800">
-        </azure-cosmos-db-connector-mule-4:get-permission>
+                                                         collIdUriParam="${config.collection}"
+                                                         xMsConsistencyLevelHeader="SESSION"
+                                                         ifNoneMatchHeader="noneMatch">
+        </azure-cosmos-db-connector-mule-4:list-documents>
         <ee:transform>
             <ee:message>
                 <ee:set-payload><![CDATA[%dw 2.0
@@ -1395,6 +1416,7 @@ output application/json
 payload]]></ee:set-payload>
             </ee:message>
         </ee:transform>
+        <flow-ref name="clear-permissions"/>
         <logger level="INFO" message="#[payload]"/>
     </flow>
 </mule>
@@ -1404,25 +1426,30 @@ payload]]></ee:set-payload>
 
 . Verify that your connector is configured.
 . Save the project.
-. From a web browser, test the application by entering `http://localhost:8081/get-permission`.
+. From a web browser, test the application by entering `http://localhost:8081/list-documents-resource-token`.
 
-[[get-permission]]
-== Get Permission
+[[list-stored-procedures-resource-token]]
+== List Stored Procedures Resource Token
 
-This Mule flow retrieves an existing permission.
+This Mule flow obtains a list of existing stored procedures using short-lived tokens
+from the Resource Token authorization.
 
 This example uses the following operations:
 
 * *HTTP Listener* +
 Accepts data from HTTP requests
-* *Get Permission* +
-Gets a permission from a database
+* *Flow Reference* +
+Obtains the resource token
+* *List Stored Procedures* +
+Returns a list of the stored procedures in the collection
 * *Transform Message* +
-Outputs the results of the *Get Permission* operation in JSON format
+Outputs the results of the *List Stored Procedures* operation in JSON format
+* *Flow Reference* +
+Clears the permissions
 * *Logger* +
-Shows the HTTP response from the *Get Permission* operation
+Shows the HTTP response from the *List Stored Procedures* operation
 
-image::get-permission.png[Studio Flow for the Get Permission operation]
+image::list-stored-procedures.png[Studio Flow for the List Stored Procedures operation]
 
 === XML for This Example
 
@@ -1456,14 +1483,13 @@ http://www.mulesoft.org/schema/mule/azure-cosmos-db-connector-mule-4 http://www.
                                                                          version="${config.version}"
                                                                          baseUri="${config.baseUri}"/>
     </azure-cosmos-db-connector-mule-4:resource-token-config>
-    <flow name="get-permission-flow">
-        <http:listener config-ref="HTTP_Listener_config" path="/get-permission"/>
-        <azure-cosmos-db-connector-mule-4:get-permission config-ref="Cosmos_Db_Connector_Config"
-                                                         dbIdUriParam="${config.database}"
-                                                         username="${config.username}"
-                                                         permissionId="Mule_CosmosDB_DemoApp_ResourceToken_PermissionId"
-                                                         xMsDocumentdbExpirySeconds="1800">
-        </azure-cosmos-db-connector-mule-4:get-permission>
+    <flow name="list-stored-procedures-resource-token-flow">
+        <http:listener config-ref="HTTP_Listener_config" path="/list-stored-procedures-resource-token"/>
+        <flow-ref name="obtain-resource-token"/>
+        <azure-cosmos-db-connector-mule-4:list-stored-procedures config-ref="Cosmos_Db_Connector_Config_Resource_Token"
+                                                                 dbIdUriParam="${config.database}"
+                                                                 collIdUriParam="${config.collection}">
+        </azure-cosmos-db-connector-mule-4:list-stored-procedures>
         <ee:transform>
             <ee:message>
                 <ee:set-payload><![CDATA[%dw 2.0
@@ -1472,6 +1498,7 @@ output application/json
 payload]]></ee:set-payload>
             </ee:message>
         </ee:transform>
+        <flow-ref name="clear-permissions"/>
         <logger level="INFO" message="#[payload]"/>
     </flow>
 </mule>
@@ -1481,7 +1508,7 @@ payload]]></ee:set-payload>
 
 . Verify that your connector is configured.
 . Save the project.
-. From a web browser, test the application by entering `http://localhost:8081/get-permission`.
+. From a web browser, test the application by entering `http://localhost:8081/list-stored-procedures-resource-token`.
 
 
 == See Also
