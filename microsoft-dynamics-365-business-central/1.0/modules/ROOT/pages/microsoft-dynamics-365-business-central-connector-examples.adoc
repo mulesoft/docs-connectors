@@ -46,10 +46,28 @@ api.companyId=
 ----
 +
 
-/// find comapny ID 
+(Optional) If you're using a custom instance, you can set your baseUri and OAuth paths in `src/main/resources/advanced.properties`.
 
 For more information about creating a properties file, refer
 to xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+==== Find your Company ID
+
+To find your company ID, follow these steps:
+. Log in to your Business Central account and navigate to the *Companies* tab.
+. Select the company you want to use.
+
+image::company-id-1.png[Companies tab window]
+
+. Click the question mark button on the top right corner and select *Help & Support*.
+. Under the troubleshooting section, click *Inspect pages and data*.
+. In the inspector, you can enter `Id` in the search field and the first result contains your company ID.
++
+image::company-id-2.png[Getting company ID]
++
+
+You can copy this ID and paste it into the `src/main/resources/mule-app.properties` file for the property `api.companyId=`.
+
 
 [[configure-business-central-global]]
 === Configure the Business Central Connection Global Elements
@@ -78,13 +96,11 @@ Configure global elements for either `Basic Auth` or `OAuth2`:
 |===
 | Field | Value
 | Name | `OAuth2`
-| Username | Username used to authenticate the requests
-| Private key | `${config.private_key}`
-| Client id | `${config.client_id}`
-| Client email | `${config.client_email}`
-| Default Project Id | `${config.default_project_id}`
-| Default Subscription Name | `orders-subscription`
-| Default Topic Name | `orders-topic`
+| Consumer Key | OAuth consumer key, as registered with the service provider
+| Consumer Secret | OAuth consumer secret, as registered with the service provider
+| Listener Config | Configuration for the HTTP listener that listens for requests on the access token callback endpoint
+| Callback Path | Path of the access token callback endpoint
+| Authorize Path | Path of the local HTTP endpoint that triggers the OAuth dance
 |===
 
 . Click *OK*.
@@ -101,23 +117,37 @@ where to find it:
 . Click *OK*.
 
 
-[[create-snapshot]]
-== Create a Snapshot
+[[list-items]]
+== List Items
 
-This Mule flow creates a snapshot from the requested subscription.
+This Mule flow lists all items.
 
-This example uses the following operations:
+The first flow uses the following operations:
 
 * *HTTP Listener* +
 Accepts data from HTTP requests
-* *Create snapshot* +
-Creates a snapshot
-* *Logger* +
-Shows the HTTP response from the *Create snapshot* operation
-* *Transform Message* +
-Outputs the results of the *Create snapshot* operation in JSON format
+* *Parse Template* +
+Processes a template
 
-image::create-snapshot-flow.png[Studio Flow for the Create Snapshot Operation]
+The second flow uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *List Entities* +
+Retrieves a list of entities
+* *Set Payload* +
+Defines how Mule sets the payload
+----
+output application/json
+---
+payload.payload map (item) -> {
+		"id": item.id,
+		"name": item.displayName
+	}
+----
+
+
+image::list-items.png[Studio Flow for the List Entities Operation]
 
 === XML for This Example
 
@@ -127,49 +157,31 @@ Paste this code into the Studio XML editor to quickly load the flow for this exa
 ----
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:pubsub="http://www.mulesoft.org/schema/mule/pubsub"
-      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+<mule xmlns:dynamics365-bc="http://www.mulesoft.org/schema/mule/dynamics365-bc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
       xmlns="http://www.mulesoft.org/schema/mule/core"
-      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-                          http://www.mulesoft.org/schema/mule/pubsub http://www.mulesoft.org/schema/mule/pubsub/current/mule-pubsub.xsd
-                          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/dynamics365-bc http://www.mulesoft.org/schema/mule/dynamics365-bc/current/mule-dynamics365-bc.xsd">
+    <configuration-properties file="mule-app.properties"/>
+    <configuration-properties file="advanced.properties"/>
 
-    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" basePath="/">
         <http:listener-connection host="0.0.0.0" port="8081" />
     </http:listener-config>
 
-    <pubsub:config name="Google_Pub_Sub_Configuration" doc:name="Google Pub Sub Configuration" projectId="${config.default_project_id}">
-        <pubsub:connection privateKeyId="${config.private_key_id}" privateKey="${config.private_key}" clientId="${config.client_id}" clientEmail="${config.client_email}" />
-    </pubsub:config>
+    <dynamics365-bc:config name="Business_Central_BasicAuth" doc:name="Microsoft Dynamics 365 - Business Central Config" >
+        <dynamics365-bc:basic-connection baseUri="${config.baseUri}" username="${auth.username}" password="${auth.password}" />
+    </dynamics365-bc:config>
 
-    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <flow name="Home" >
+        <http:listener doc:name="/" config-ref="HTTP_Listener_config" path="/" />
+        <parse-template doc:name="Parse Template" location="dynamics365-bc-demo-template.html" />
+    </flow>
 
-    <flow name="create-snapshot-flow">
-        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/createSnapshot"/>
-        <pubsub:create-snapshot
-                doc:name="Create snapshot"
-                config-ref="Google_Pub_Sub_Configuration"
-                snapshotName="#[attributes.queryParams.snapshot]"
-                subscriptionName="#[attributes.queryParams.sub]">
-            <pubsub:labels ><![CDATA[#[output application/java
----
-{
-	"label1" : "test-snapshot-demo"
-}]]]></pubsub:labels>
-        </pubsub:create-snapshot>
-        <logger level="INFO" doc:name="Logger" message="Created Snapshot with name: #[payload.name]"/>
-        <ee:transform doc:name="Transform Message">
-            <ee:message >
-                <ee:set-payload ><![CDATA[%dw 2.0
-output application/json
----
-payload]]></ee:set-payload>
-            </ee:message>
-        </ee:transform>
+    <flow name="flow-list-items" >
+        <http:listener doc:name="/items" config-ref="HTTP_Listener_config" path="/items"/>
+        <dynamics365-bc:list-entities doc:name="List Entities" config-ref="Business_Central_BasicAuth" companyId="${api.companyId}" entity="items"/>
+        <set-payload value='#[output application/json&#10;---&#10;payload.payload map (item) -&gt; {&#10;		"id": item.id,&#10;		"name": item.displayName&#10;	}]' doc:name="Set Payload" />
     </flow>
 </mule>
 ----
@@ -178,7 +190,8 @@ payload]]></ee:set-payload>
 
 . Verify that your connector is configured.
 . Save the project.
-. From a web browser, test the application by entering `http://localhost:8081/`. You should see the *Create Snapshot* form with pre-populated *Snapshot Name* and *Subscription Name* fields.
+. From a web browser, test the application by entering `http://localhost:8081/`. You should see the *List Items* tab expanded with a *List* button.
+. Click on the *List* button. You should see an alert showing a sample JSON of the response listing the ID and display names of all items.
 
 +
 image::create-snapshot.png[Create Snapshot Form]
