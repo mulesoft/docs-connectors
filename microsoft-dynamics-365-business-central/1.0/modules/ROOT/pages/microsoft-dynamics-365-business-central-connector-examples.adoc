@@ -191,32 +191,39 @@ http://www.mulesoft.org/schema/mule/dynamics365-bc http://www.mulesoft.org/schem
 . Verify that your connector is configured.
 . Save the project.
 . From a web browser, test the application by entering `http://localhost:8081/`. You should see the *List Items* tab expanded with a *List* button.
+
++
+image::list-button.png[List button]
++
+
 . Click on the *List* button. You should see an alert showing a sample JSON of the response listing the ID and display names of all items.
 
 +
-image::create-snapshot.png[Create Snapshot Form]
+image::list-response.png[Response from List button]
 +
 
-. Click *Create Snapshot*. You should see an alert that the snapshot was successfully created.
 
+[[get-item]]
+== Get an Item
 
-[[patch-snapshot]]
-== Patch a Snapshot
+This Mule flow retrieves an item.
 
-This Mule flow updates an existing snapshot.
-
-This example uses the following operations:
+The first flow uses the following operations:
 
 * *HTTP Listener* +
 Accepts data from HTTP requests
-* *Patch snapshot* +
-Updates a snapshot
-* *Transform Message* +
-Outputs the results of the *Patch snapshot* operation in JSON format
-* *Logger* +
-Shows the HTTP response from the *Patch snapshot* operation
+* *Parse Template* +
+Processes a template
 
-image::patch-snapshot-flow.png[Studio Flow for the Patch Snapshot Operation]
+The second flow uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Get Entity* +
+Retrieves a single entity by its ID if it exists
+
+
+image::get-item.png[Studio Flow for the Get Entity Operation]
 
 === XML for This Example
 
@@ -226,114 +233,113 @@ Paste this code into the Studio XML editor to quickly load the flow for this exa
 ----
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:pubsub="http://www.mulesoft.org/schema/mule/pubsub"
-      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+<mule xmlns:dynamics365-bc="http://www.mulesoft.org/schema/mule/dynamics365-bc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
       xmlns="http://www.mulesoft.org/schema/mule/core"
-      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-                          http://www.mulesoft.org/schema/mule/pubsub http://www.mulesoft.org/schema/mule/pubsub/current/mule-pubsub.xsd
-                          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/dynamics365-bc http://www.mulesoft.org/schema/mule/dynamics365-bc/current/mule-dynamics365-bc.xsd">
+    <configuration-properties file="mule-app.properties"/>
+    <configuration-properties file="advanced.properties"/>
 
-    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" basePath="/">
         <http:listener-connection host="0.0.0.0" port="8081" />
     </http:listener-config>
 
-    <pubsub:config name="Google_Pub_Sub_Configuration" doc:name="Google Pub Sub Configuration" projectId="${config.default_project_id}">
-        <pubsub:connection privateKeyId="${config.private_key_id}" privateKey="${config.private_key}" clientId="${config.client_id}" clientEmail="${config.client_email}" />
-    </pubsub:config>
+    <dynamics365-bc:config name="Business_Central_BasicAuth" doc:name="Microsoft Dynamics 365 - Business Central Config" >
+        <dynamics365-bc:basic-connection baseUri="${config.baseUri}" username="${auth.username}" password="${auth.password}" />
+    </dynamics365-bc:config>
 
-    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <flow name="Home" >
+        <http:listener doc:name="/" config-ref="HTTP_Listener_config" path="/" />
+        <parse-template doc:name="Parse Template" location="dynamics365-bc-demo-template.html" />
+    </flow>
 
-     <flow name="patch-snapshot-flow">
-        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/patch-snapshot"/>
-        <pubsub:patch-snapshot doc:name="Patch snapshot" config-ref="Google_Pub_Sub_Configuration" updateMask="labels">
-            <pubsub:snapshot><![CDATA[#[%dw 2.0
-output application/json
- ---
+    <flow name="flow-get-item" >
+        <http:listener doc:name="/item" config-ref="HTTP_Listener_config" path="/item"/>
+        <dynamics365-bc:get-entity entity="items" doc:name="Get Entity" config-ref="Business_Central_BasicAuth" companyId="${api.companyId}" entityId="#[attributes.queryParams.id]"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. From a web browser, test the application by entering `http://localhost:8081/`.
+. Click on the *Get Item* form.
+. After the form shows up, fill in a valid item ID, for example, a previous item ID from *List Items*.
+
++
+image::get-item-form.png[Get Item form]
++
+
+. Click *Get*. You should see an alert showing a JSON with all the details available for this item, such as its number, type, and price.
+
++
+image::get-item-response.png[Response from Get Item form]
++
+
+[[add-item]]
+== Add an Item
+
+This Mule flow adds an item.
+
+The first flow uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Parse Template* +
+Processes a template
+
+The second flow uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Create Entity* +
+Creates a single new entity
+
+
+image::add-item.png[Studio Flow for the Create Entity Operation]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dynamics365-bc="http://www.mulesoft.org/schema/mule/dynamics365-bc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/dynamics365-bc http://www.mulesoft.org/schema/mule/dynamics365-bc/current/mule-dynamics365-bc.xsd">
+    <configuration-properties file="mule-app.properties"/>
+    <configuration-properties file="advanced.properties"/>
+
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" basePath="/">
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+
+    <dynamics365-bc:config name="Business_Central_BasicAuth" doc:name="Microsoft Dynamics 365 - Business Central Config" >
+        <dynamics365-bc:basic-connection baseUri="${config.baseUri}" username="${auth.username}" password="${auth.password}" />
+    </dynamics365-bc:config>
+
+    <flow name="Home" >
+        <http:listener doc:name="/" config-ref="HTTP_Listener_config" path="/" />
+        <parse-template doc:name="Parse Template" location="dynamics365-bc-demo-template.html" />
+    </flow>
+
+    <flow name="flow-add-item" >
+        <http:listener doc:name="/item/add" config-ref="HTTP_Listener_config" path="/item/add"/>
+        <dynamics365-bc:create-entity entity="items" doc:name="Create Entity" config-ref="Business_Central_BasicAuth" companyId="${api.companyId}">
+            <dynamics365-bc:body ><![CDATA[#[output application/json
+---
 {
-  "name": "projects/<<project-name>>/snapshots/<<snapshot-name>>",
-    "topic": "projects/<<project-name>>/topic/<<topic-name>>"
-    "expireTime": "2099-01-01T00:00:00Z",
-    "labels": {
-      "label1": "test-patch-snapshot"
-    }
-}]]]></pubsub:snapshot>
-        </pubsub:patch-snapshot>
-        <ee:transform doc:name="Transform Message">
-            <ee:message>
-                <ee:set-payload><![CDATA[%dw 2.0
-output application/json
----
-payload]]></ee:set-payload>
-            </ee:message>
-        </ee:transform>
-        <logger level="INFO" doc:name="Logger" message="Updated Snapshot: #[payload]"/>
-    </flow>
-</mule>
-----
-
-[[get-snapshot]]
-== Get a Snapshot
-
-This Mule flow retrieves an existing snapshot.
-
-This example uses the following operations:
-
-* *HTTP Listener* +
-Accepts data from HTTP requests
-* *Get snapshot* +
-Retrieves a snapshot
-* *Logger* +
-Shows the HTTP response from the *Get snapshot* operation
-* *Transform Message* +
-Outputs the results of the *Get snapshot* operation in JSON format
-
-image::get-snapshot-flow.png[Studio Flow for the Get Snapshot Operation]
-
-=== XML for This Example
-
-Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
-
-[source,xml,linenums]
-----
-<?xml version="1.0" encoding="UTF-8"?>
-
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:pubsub="http://www.mulesoft.org/schema/mule/pubsub"
-      xmlns:http="http://www.mulesoft.org/schema/mule/http"
-      xmlns="http://www.mulesoft.org/schema/mule/core"
-      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-                          http://www.mulesoft.org/schema/mule/pubsub http://www.mulesoft.org/schema/mule/pubsub/current/mule-pubsub.xsd
-                          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-
-    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
-        <http:listener-connection host="0.0.0.0" port="8081" />
-    </http:listener-config>
-
-    <pubsub:config name="Google_Pub_Sub_Configuration" doc:name="Google Pub Sub Configuration" projectId="${config.default_project_id}">
-        <pubsub:connection privateKeyId="${config.private_key_id}" privateKey="${config.private_key}" clientId="${config.client_id}" clientEmail="${config.client_email}" />
-    </pubsub:config>
-
-    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
-
-    <flow name="get-snapshot-flow">
-        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/getSnapshot"/>
-        <pubsub:get-snapshot doc:name="Get snapshot" config-ref="Google_Pub_Sub_Configuration" snapshotName="#[attributes.queryParams.getsnapshot]"/>
-        <logger level="INFO" doc:name="Logger" message="Received Snapshot Topic: #[payload.topic]"/>
-        <ee:transform doc:name="Transform Message">
-            <ee:message >
-                <ee:set-payload ><![CDATA[%dw 2.0
-output application/json
----
-payload]]></ee:set-payload>
-            </ee:message>
-        </ee:transform>
+	number: attributes.queryParams.number,
+	displayName: attributes.queryParams.name
+}]]]></dynamics365-bc:body>
+        </dynamics365-bc:create-entity>
     </flow>
 </mule>
 ----
@@ -342,145 +348,21 @@ payload]]></ee:set-payload>
 
 . Verify that your connector is configured.
 . Save the project.
-. From a web browser, test the application by entering `http://localhost:8081/`. You should see the *Get Snapshot* form with a pre-populated *Snapshot Name* field.
+. From a web browser, test the application by entering `http://localhost:8081/`.
+. Click on the *Create Item* form.
+. After the form shows up, fill in an item number you want to create and its display name.
 
 +
-image::get-snapshot.png[Get Snapshot Form]
+image::create-item-form.png[Create Item form]
 +
 
-. Click *Get Snapshot*. You should see an alert that the snapshot was successfully retrieved.
-
-
-[[delete-snapshot]]
-== Delete a Snapshot
-
-This Mule flow deletes an existing snapshot.
-
-This example uses the following operations:
-
-* *HTTP Listener* +
-Accepts data from HTTP requests
-* *Delete snapshot* +
-Deletes a snapshot
-
-image::delete-snapshot-flow.png[Studio Flow for the Delete Snapshot Operation]
-
-=== XML for This Example
-
-Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
-
-[source,xml,linenums]
-----
-<?xml version="1.0" encoding="UTF-8"?>
-
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:pubsub="http://www.mulesoft.org/schema/mule/pubsub"
-      xmlns:http="http://www.mulesoft.org/schema/mule/http"
-      xmlns="http://www.mulesoft.org/schema/mule/core"
-      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-                          http://www.mulesoft.org/schema/mule/pubsub http://www.mulesoft.org/schema/mule/pubsub/current/mule-pubsub.xsd
-                          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-
-    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
-        <http:listener-connection host="0.0.0.0" port="8081" />
-    </http:listener-config>
-
-    <pubsub:config name="Google_Pub_Sub_Configuration" doc:name="Google Pub Sub Configuration" projectId="${config.default_project_id}">
-        <pubsub:connection privateKeyId="${config.private_key_id}" privateKey="${config.private_key}" clientId="${config.client_id}" clientEmail="${config.client_email}" />
-    </pubsub:config>
-
-    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
-
-    <flow name="delete-snapshot-flow">
-        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/deleteSnapshot"/>
-        <pubsub:delete-snapshot doc:name="Delete snapshot" config-ref="Google_Pub_Sub_Configuration" snapshotName="#[attributes.queryParams.deletesnapshot]"/>
-    </flow>
-</mule>
-----
-
-=== Steps for Running This Example
-
-. Verify that your connector is configured.
-. Save the project.
-. From a web browser, test the application by entering `http://localhost:8081/`. You should see the *Delete Snapshot* form with a pre-populated *Snapshot Name* field.
+. Click *Create*. You should see an alert showing the details of your newly created item. The newly created item ID shows up on the bottom of the form, which you can use in future operations.
 
 +
-image::delete-snapshot.png[Delete Snapshot Form]
+image::create-item-response.png[Response from Create Item form]
 +
 
-. Click *Delete Snapshot*. You should see an alert that the snapshot was successfully deleted.
 
-
-[[publish-message]]
-== Publish a Message
-
-This Mule flow publishes a single message to a selected topic.
-
-This example uses the following operations:
-
-* *HTTP Listener* +
-Accepts data from HTTP requests
-* *Publish Message* +
-Publishes a message
-
-image::publish-message-flow.png[Studio Flow for the Publish Message Operation]
-
-=== XML for This Example
-
-Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
-
-[source,xml,linenums]
-----
-<?xml version="1.0" encoding="UTF-8"?>
-
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:pubsub="http://www.mulesoft.org/schema/mule/pubsub"
-      xmlns:http="http://www.mulesoft.org/schema/mule/http"
-      xmlns="http://www.mulesoft.org/schema/mule/core"
-      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-                          http://www.mulesoft.org/schema/mule/pubsub http://www.mulesoft.org/schema/mule/pubsub/current/mule-pubsub.xsd
-                          http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-
-    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
-        <http:listener-connection host="0.0.0.0" port="8081" />
-    </http:listener-config>
-
-    <pubsub:config name="Google_Pub_Sub_Configuration" doc:name="Google Pub Sub Configuration" projectId="${config.default_project_id}">
-        <pubsub:connection privateKeyId="${config.private_key_id}" privateKey="${config.private_key}" clientId="${config.client_id}" clientEmail="${config.client_email}" />
-    </pubsub:config>
-
-    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
-
-    <flow name="publish-message-flow">
-        <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/message"/>
-        <pubsub:publish-message
-                doc:name="Publish Message"
-                config-ref="Google_Pub_Sub_Configuration"
-                topicName="#[attributes.queryParams.topicname]"
-                orderingKey="#[attributes.queryParams.orderkey]">
-            <pubsub:message ><![CDATA[#[attributes.queryParams.message]]]></pubsub:message>
-        </pubsub:publish-message>
-    </flow>
-</mule>
-----
-
-=== Steps for Running This Example
-
-. Verify that your connector is configured.
-. Save the project.
-. From a web browser, test the application by entering `http://localhost:8081/`. You should see the *Publish Message* form with pre-populated *Topic Name*, *Ordering Key*, and *Message* fields.
-
-+
-image::publish-message.png[Publish Message]
-+
-
-. Click *Publish Message*. You should see an alert that the snapshot was successfully published.
 
 == See Also
 
