@@ -1,0 +1,206 @@
+= Troubleshoot Database Connector - Mule 4
+
+To troubleshoot Anypoint Connector for Database (Database Connector), become familiar with the information about enabling verbose logging, troubleshooting pooling profile connections, troubleshooting Snowflake JDBC driver, and interpreting commonly thrown messages.
+
+Database Connector follows the standards and guidelines detailed by the JDBC library (working with Java SE JDK 1.8).
+
+== Enable Verbose Logging
+
+To get a better understanding of why an application's interaction with the database is failing, temporarily enable verbose logging for Database Connector. +
+Choose one of two options to enable verbose logging: manually change the `log4j2.xml` file or via Anypoint Runtime Manager if you are using CloudHub APIs. +
+Remember to always disable the enhanced verbosity after troubleshooting because it affects your Mule application performance.
+
+To enable verbose logging in the configuration file:
+
+. Access Anypoint Studio and navigate to the *Package Explorer* view.
+. Open your application's project name.
+. Open the `src/main/resources` path folder.
+. Open the `log4j2.xml` file inside the folder.
+. Add an `<AsyncLogger>` tag inside the `<Loggers>` tag:
++
+[source,xml,linenums]
+----
+			<Loggers>
+				...
+				<AsyncLogger name="org.mule.extension.db" level="DEBUG"/>
+				<AsyncLogger name="org.mule.db.commons" level="DEBUG"/>
+				...
+			</Loggers>
+----
+[start=6]
+. Save your application changes.
+. Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*.
+
+To enable verbose logging in Anypoint Runtime Manager:
+
+. Access Anypoint Runtime Manager.
+. Navigate to the API configuration.
+. In the *Logging* subtab, add the `org.mule.extension.db` and `org.mule.db.commons` packages at DEBUG level.
+. Apply the changes.
+
+== Troubleshoot Pooling Profiles Connections Making the Flow Hang
+Using a pooling profile that provides fewer connections than the flow requires can make the entire flow hang.
+
+To resolve this issue:
+
+One solution is to increase the size of the pool. When that's not possible, use Anypoint Connector for Virtual Machine (VM Connector) to shorten the life of the connection to match the life of a VM message. This way, every call to the *Stored procedure* operation is executed, its result is consumed, and the connection associated with the operation is closed and returned to the pool.
+
+The following example shows how to use pooling profiles with the *Stored procedure* operation and VM Connector. In this example, When the `foreach` element reaches the eleventh iteration, the *Stored procedure* operation doesn't hang, because the pool is able to provide a connection:
+
+[source,xml,linenums]
+----
+	<db:config name="Database_Config">
+		<db:generic-connection url="someUrl" user="someUser" password="somePassword" driverClassName="someDriver">
+			<db:pooling-profile maxPoolSize="10">
+			</db:pooling-profile>
+		</db:generic-connection>
+	</db:config>
+
+	<vm:config name="VM_Config">
+		<vm:queues >
+			<vm:queue queueName="testQueue" />
+		</vm:queues>
+	</vm:config>
+
+	<flow name="processingFlow">
+		<foreach collection="#[1 to 11]">
+			<logger level="INFO" message="#['Starting Iteration ' ++ payload as String]" />
+			<vm:publish config-ref="VM_Config" queueName="testQueue"/>
+			<logger level="INFO" message="#['Finishing Iteration ' ++ payload as String]"/>
+		</foreach>
+	</flow>
+
+	<flow name="coolFlow">
+		<vm:listener config-ref="VM_Config" queueName="testQueue" numberOfConsumers="1"/>
+		<db:stored-procedure config-ref="Database_Config">
+				<db:sql><![CDATA[{call testProc2()}]]></db:sql>
+			</db:stored-procedure>
+		<logger level="INFO" message="#[output application/json --- payload.resultSet1]" />
+	</flow>
+----
+
+== Understand Select and Stored Procedure Operations Warning Exceptions
+
+When the Database Connector *Select* and *Stored procedure* operations execute correctly but do not return results, Mule runtime engine (Mule) returns a `WARN` exception message instead of throwing the exception.
+
+For the *Select* operation, the behavior occurs when executing an invalid SQL statement, and for the *Store procedure* operation, when there is an error within a set of statements that can collapse the procedure. In fact, JDBC returns a series of `ResultSets`, `UpdateCounts`, and `Exceptions`.
+
+Mule does not throw an exception for the flow to catch it because the root cause is in the driver's behavior. Some drivers comply strictly with JDBC and properly throw an exception at execution time, but other drivers do not. Therefore, adding in the connector code the behavior of throwing an exception would break backward compatibility for Mule apps that do not expect an exception.
+
+For the *Select* operation, Mule logs a `WARN` exception when a subquery returns more than one value and that result is used for filtering or as an expression. Mule returns the warning as soon as the operation's result is paginated and not when it's executed.
+
+For example, for the following SQL statement:
+
+[source,xml,linenums]
+----
+		<db:select doc:name="Select" config-ref="Database_Config">
+			<db:sql ><![CDATA[
+						SELECT *
+						FROM SomeTable
+						WHERE SomeColumn = (SELECT DISTINCT SomeColumn2 from SomeTable2)
+					 ]]>
+			</db:sql>
+		</db:select>
+----
+
+Mule logs the following `WARN` exception:
+[source,xml,linenums]
+----
+	WARN  2021-06-01 10:04:33,323 [[MuleRuntime].io.10: [some-mule-app].some-mule-app.BLOCKING @...] [event: ...] org.mule.extension.db.internal.result.resultset.ResultSetIterator: Unable to determine if there are more records
+	com.microsoft.sqlserver.jdbc.SQLServerException: Subquery returned more than 1 value. This is not permitted when the subquery follows =, !=, <, <= , >, >= or when the subquery is used as an expression.
+----
+
+For the *Store procedure* operation, Mule logs a `WARN` exception when a stored procedure contains multiple statements and one or more of them fail. Mule returns the warning as soon as the operation's result is consumed and not when it's executed. For example, for the following SQL Stored Procedure:
+
+[source,xml,linenums]
+----
+CREATE PROCEDURE dbo.SomeProcedure
+AS
+BEGIN
+	BEGIN TRY
+	select 1/0;
+	END TRY
+	BEGIN CATCH
+	THROW 50000, 'Divide by zero error encountered.', 255;
+	END CATCH
+END
+----
+
+Mule logs the following `WARN` exception:
+[source,xml,linenums]
+----
+	WARN  2021-06-02 09:38:14,624 [[MuleRuntime].io.10: [some-mule-app].some-mule-app.BLOCKING @...] [event: ...] org.mule.extension.db.internal.result.statement.StatementResultIterator: Unable to determine if there are more statement results
+	com.microsoft.sqlserver.jdbc.SQLServerException: 'The record does not exist.'
+----
+
+
+== Troubleshoot Snowflake JDBC Driver That Throws an Exception for a Stored Procedure
+
+Some drivers have their own specifications when calling stored procedures. Running the application when you set the callable statement with curly brackets (`{` and `}`), for example, `{call doubleMyInt(:myInt)}`, causes the Snowflake JDBC driver to throw the following exception:
+
+`net.snowflake.client.jdbc.SnowflakeSQLException: Unsupported feature 'call'`
+
+
+To resolve this issue:
+
+For Snowflake JDBC driver, set the callable statement without the curly brackets `{` and `}`, for example:
+
+`call doubleMyInt(:myInt)`
+
+== Troubleshoot CloudHub with Static IP Failure on Deployment
+
+Deploying a CloudHub application with a static IP throws a database test connection error making the process fail. This occurs because the test is performed before the static IP gets assigned.
+
+The following stack trace shows the test connection error `Could not obtain connection from data source`:
+
+[source,xml,linenums]
+----
+[2021-03-05 00:26:11.262] INFO    org.mule.runtime.module.extension.internal.runtime.config.LifecycleAwareConfigurationInstance [[MuleRuntime].uber.02: [iagsatellite-snowflake-sys-api-v1-dev].uber@org.mule.runtime.module.extension.internal.runtime.config.LifecycleAwareConfigurationInstance.testConnectivity:179 @10f9d7dc]: Connectivity test failed for config 'Database_Config'. Application deployment will continue. Error was: Could not obtain connection from data source
+org.mule.runtime.api.connection.ConnectionException: Could not obtain connection from data source
+----
+
+To resolve this issue:
+
+Set the following system property to the deployment `-DdoTestConnectivity=false`.
+
+
+== Understand Common Throws
+
+Here is a list of common throws messages and how to interpret them.
+
+* DB:BAD_SQL_SYNTAX
+
+ The provided SQL query contains invalid syntax.
+
+* DB:CANNOT_LOAD_DRIVER
+
+ Database Connector cannot load the JDBC driver.
+
+* DB:CANNOT_REACH
+
+ Database Connector cannot establish a connection with the RDBMS.
+
+* DB:CONNECTIVITY
+
+ Any of several possible connectivity issues, including poorly configured connections, lack of a database response while waiting for results or fetching rows, loss of database connection, and so on.
+
+* DB:INVALID_DATABASE
+
+ The connection to the RDBMS is established but the database doesn't exist.
+
+* DB:INVALID_CREDENTIALS
+
+ The database rejects the provided credentials.
+
+* DB:QUERY_EXECUTION
+
+ The query execution failed.
+
+* DB:RETRY_EXHAUSTED
+
+ All reconnection attempts failed.
+
+
+== See Also
+
+https://help.mulesoft.com[MuleSoft Help Center]
