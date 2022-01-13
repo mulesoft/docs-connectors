@@ -1,0 +1,210 @@
+= List Emails with Email Connector Examples - Mule 4
+:page-aliases: connectors::email/email-list.adoc
+
+Anypoint Connector for Email (Email Connector) provides the *List - IMAP* and *List - POP3* operations, which list emails from any part of the flow. The following examples illustrate how to configure these operations for the connector:
+
+* <<send-attachments,List Emails from an IMAPS Server>> +
+Configure the *List - IMAP* operation to list all the emails in the configured IMAP mailbox folder from an IMAPS server that has a TLS connection. Additionally, set a *For Each* scope component and two *Set Variable* components to iterate over the emails and save the email body and attachment content in variables.
+
+* <<send-attachments,List Emails from a POP3 Server>> +
+Configure the *List - POP3* operation to list all the emails in the configured POP3 mailbox folder that matched the criteria specified in the *Match with* parameter.
+
+These example use variables for some field values. You can either: +
+
+* Replace the variables with their values in the code.
+* Provide the values for each variable in a properties file and then refer to that file from the connector configuration. +
+If you don’t know how to use a properties file, see xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+== List Emails from an IMAPS Server
+
+The following example illustrates how to list all the emails in the configured IMAP mailbox folder from an IMAPS server that has a TLS connection. A *Scheduler* component initiates the flow, and then the *List - IMAP* operation lists the emails. Subsequently, a *For Each* scope component and two *Set Variable* components iterate over the emails, and save the body and attachments of the email content payload in variables:
+
+The following screenshot shows the app flow for this example:
+
+.List Emails from an IMAPS Server flow
+image::email-list-flow-1.png[List Emails from an IMAPS Server flow]
+
+To create the flow: +
+
+. Create a new Mule project in Studio.
+. In the *Mule Palette* view, select the *Scheduler* component and drag it onto the canvas. +
+This source initiates a flow when a time-based condition is met.
+. Drag the *List - IMAP* operation to the right of the *Scheduler* source.
+. On the *List - IMAP* configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to configure a global element for the operation.
+. In the *Connection* field, select *IMAPS Connection*.
+. In the *General* tab, enter the following values:
++
+* *Host* +
+`imap.gmail.com`
+* *Port* +
+`993`
+* *User* +
+`user1@domain.com`
+* *Password* +
+`passwordconnection`
++
+
+[start=7]
+. In the *TLS Configuration* section, select *Edit inline*.
+. In the *Trust Store Configuration* section, enter the following values:
++
+* *Path* +
+`aTruststore.jks`
+* *Password* +
+`passwordtrust`
++
+[start=9]
+. In the *Key Store Configuration* section, enter the following values:
++
+* *Path* +
+`aKeystore`
+* *Password*
+`passwordkey`
++
+[start=10]
+. In the *Advanced* section, set *Enabled Protocols* to `TLSv1.2,SSLv3`.
+. Click *OK* to close the configuration window.
+
+The following screenshot shows the IMAP global configuration:
+
+.IMAPS Connection Configuration
+image::email-list-imap-config.png[IMAPS Connection Configuration]
+
+[start=12]
+. On the *List - IMAP* configuration screen, set the *Mailbox folder* field to `INBOX`.
+
+The following screenshot shows the *List - IMAP* configuration screen:
+
+.List - IMAP Configuration
+image::email-list-listimap-config.png[List - IMAP Configuration]
+
+[start=13]
+. Drag the *For each* scope component to the right of the *List - IMAP* operation.
+. Drag a *Set Variable* component inside the *For each* scope component.
+. Set the *Name* field to `email-content` and the *Value* field to `payload.body`. +
+This component saves the body content of the email in a new variable.
+. Drag another *Set Variable* component to the right of the first *Set Variable* component.
+. Set the *Name* field to `json-attachment` and the *Value* field to `#[payload.attachments.'attachment-name']`. +
+This component saves the email `.json` attachment to a new variable.
+. Save and run the app.
+
+=== XML for Listing Emails from an IMAPS Server
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source, xml, linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<email:imap-config name="Email_IMAP" doc:name="Email IMAP" doc:id="e1aa73b1-4719-4463-b0d9-4b92fb6b2622" >
+		<email:imaps-connection host="imap.gmail.com" user="user1@domain.com" password="passwordconnection" >
+			<tls:context enabledProtocols="TLSv1.2,SSLv3">
+				<tls:trust-store path="aTruststore.jks" password="passwordtrust" />
+				<tls:key-store path="aKeystore" password="passwordkey" />
+			</tls:context>
+		</email:imaps-connection>
+	</email:imap-config>
+	<flow name="ListIMAP" >
+		<scheduler doc:name="Scheduler" >
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+		</scheduler>
+		<email:list-imap doc:name="List - IMAP" config-ref="Email_IMAP"/>
+		<foreach doc:name="For Each" >
+			<set-variable value="#[payload.body]" doc:name="Set Variable" variableName="email-content"/>
+			<set-variable value="#[payload.attachments.'attachment-name']" doc:name="Set Variable" variableName="json-attachment"/>
+		</foreach>
+	</flow>
+</mule>
+----
+
+== List Emails from a POP3 Server
+
+When listing emails, you can filter them using the *Match with* parameter, which defines the criteria to process the emails. All matcher attributes are optional. They are also related to each other under an `AND` operator, meaning that all the criteria must be true. These attributes vary depending on the type of configuration that you are using. For example, the IMAP protocol provides more metadata about the retrieved email such as the `recent`, `seen`, `deleted`, and `answered` attribute flags.
+
+The following example illustrates how to list all the emails in the configured POP3 mailbox folder that match the specified criteria set in the *Match with* parameter for the configuration. A *Scheduler* component initiates the flow, and then the *List - POP3* operation lists only the emails whose subject regex match `BETA`:
+
+The following screenshot shows the app flow for this example:
+
+.List Emails from an POP3 Server flow
+image::email-list-flow-2.png[List Emails from an POP3 Server flow]
+
+To create the flow: +
+
+. Create a new Mule project in Studio.
+. In the *Mule Palette* view, select the *Scheduler* component and drag it onto the canvas. +
+This source initiates a flow when a time-based condition is met.
+. Drag the *List - POP3* operation to the right of the *Scheduler* source.
+. On the *List - POP3* configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to configure a global element for the operation.
+. In the *Connection* field, select *POP3 Connection*.
+. In the *General* tab, enter the following values:
++
+* *Host* +
+`pop.gmail.com`
+* *Port* +
+`995`
+* *User* +
+`user2@domain.com`
+* *Password* +
+`passwordconnection`
++
+[start=7]
+. Click *OK*.
+
+The following screenshot shows the POP3 global configuration:
+
+.POP3 Connection Configuration
+image::email-list-pop3-config.png[POP3 Connection Configuration]
+
+[start=8]
+. On the *List - POP3* configuration screen, set the *Mailbox folder* field to `INBOX`.
+. Set the *Match with* field to `Edit inline`
+. Set the *Subject regex* field to `BETA.`
+
+The following screenshot shows the *List - POP3* configuration screen:
+
+.List - POP3 Configuration
+image::email-list-listpop3-config.png[List - IMAP Configuration]
+
+[start=11]
+. Save and run the app.
+
+=== XML for Listing Emails from a POP3 server
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source, xml, linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<email:pop3-config name="Email_POP3" doc:name="Email POP3" >
+		<email:pop3-connection host="pop.gmail.com" port="995" user="user2@domain.com" password="passwordconnection" />
+	</email:pop3-config>
+	<flow name="ListPOP3" >
+		<scheduler doc:name="Scheduler">
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+		</scheduler>
+		<email:list-pop3 doc:name="List - POP3" config-ref="Email_POP3">
+			<email:pop3-matcher subjectRegex="BETA" />
+		</email:list-pop3>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
