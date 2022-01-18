@@ -1,0 +1,306 @@
+= HTTP Request Configuration Reference
+:page-aliases: connectors::http/http-polling-source-ref.adoc
+
+The HTTP Polling Source allows you to have an event source that, instead of waiting for an HTTP request from a user (like the HTTP Listener), performs an scheduled HTTP Request to a given HTTP Server.
+
+You can configure the scheduling frequency. May it be a fixed frequency, or a cron expression. You can also configure how to split the HTTP Response from the server, as well how to retrieve watermarking (if any) and ids (if any).
+
+== Relationship with HTTP Request Operation
+
+Since this Event Source performs an HTTP Request, as the operation does, this event source uses an HTTP Request Configuration as well. There, you can set the url, port, basepath, protocol, as well as any other request configuration needed. 
+
+This Polling Source will execute an HTTP Request, similar to the one performed in the operation, and with the resulting response it will create an event (or more than one) to execute its flow. 
+
+So, for example: 
+
+[source,xml,linenums]
+----
+<http:request-config name="requestConfig">
+    <http:request-connection host="localhost" port="8081"/>
+</http:request-config>
+
+<flow name="example-polling-source">
+    <http:polling-source config-ref="requestConfig" path="/test">
+        <scheduling-strategy >
+            <fixed-frequency frequency="10" timeUnit="HOURS"/>
+         </scheduling-strategy>        
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+== Configuring Polling Frequency
+
+In the previous example, we had a Polling Source that polled every 10 hours. We can configure this by changing the scheduling strategy in the Event Source element:
+
+[ADD IMAGES]
+
+In the latest last example, the resulting XML will be: 
+
+[source,xml,linenums]
+----
+<flow name="example-polling-source">
+    <http:polling-source config-ref="requestConfig" path="/test">
+        <scheduling-strategy>
+            <cron expression="0/1 * * * * ?"/>
+        </scheduling-strategy>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+== Setting up Parameters
+
+As in the HTTP Requester, in the HTTP Polling Source you can set up the Body, Headers, URI Parameters and Query Parameters. For example: 
+
+[ADD IMAGE/S]
+
+In the latest last example, the resulting XML will be: 
+
+[source,xml,linenums]
+----
+<flow name="basic-polling-full-params">
+    <http:polling-source config-ref="requestConfig" path="/{testPath}">
+        <scheduling-strategy >
+            <fixed-frequency frequency="2" timeUnit="SECONDS"/>
+        </scheduling-strategy>
+        <http:request-body ><![CDATA[{'someBodyValue': 10}]]></http:request-body>
+        <http:request-headers >
+            <http:request-header key="content" value="application/json" />
+            <http:request-header key="testHeader" value="Messi" />
+        </http:request-headers>
+        <http:request-uri-params >
+            <http:request-uri-param key="testPath" value="test" />
+        </http:request-uri-params>
+        <http:request-query-params >
+            <http:request-query-param key="testQueryParam" value="parameter value" />
+        </http:request-query-params>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+
+In their values, you can add expressions, that could depend on the watermark. Check on next sections to see more about this. 
+
+[FOR DOCS TEAM: even though the last paragraph is true, there is a problem: given that the sdk doesn't allow sources to have expressions we have a way for the users to add expressions here without the sdk not letting deploy the application, but it won't have Studio Support. I don't know how to phrase this in a way it doesn't sound... bad]
+
+== Splitting the Response
+
+After performing the HTTP Request and retrieving the HTTP Response, you might as well perform a transformation and split the response, so every item in the response is executed in a different execution of the flow. 
+
+An example for this might be that you are polling to a server that gets its data from a Data Base, and returns 50 results, and you want to send each result, separately, to the flow (without needing to split it in the flow, and then use a `foreach`). The Source handles this, when an splitting expression is provided.
+
+In the splitting expression you shall refer to the response as `payload`, as you would do after an HTTP Request Operation.
+
+A simple example would be if the server simply returns a JSON payload, in which the items are in an array:
+
+[source,xml,linenums]
+----
+<flow name="jsonListenerFlow">
+    <http:listener config-ref="listenerConfig" path="/json"/>
+    <set-payload value="#[output application/json --- [{'name': 'Mondi'}, {'name': 'Viena'}]]"/>
+</flow>
+----
+
+Then, the corresponding expression to split the array would simply be `#[payload]`:
+
+[source,xml,linenums]
+----
+<flow name="jsonPollingFlow">
+    <http:polling-source config-ref="requestConfig" path="json">
+        <scheduling-strategy>
+            <fixed-frequency frequency="10" timeUnit="SECONDS"/>
+        </scheduling-strategy>
+        <http:split-expression><![CDATA[#[payload]]]></http:split-expression>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+In the splitting expression, the refered `payload` is the entire response (already treated as a JSON). Meanwhile, the `payload` refered in the `logger` processor will refer to the corresponding payload for its execution (on one execution `{'name': 'Mondi'}`, on the other `{'name': 'Viena'}`).
+
+Another example could be recieving an XML response:
+
+[source,xml,linenums]
+----
+<flow name="xmlListenerFlow">
+    <http:listener config-ref="listenerConfig" path="/xml"/>
+    <set-payload value="#[output application/xml --- {'something': {'element': [{name: 'Mondi'}, {name: 'Viena'}]}}]"/>
+</flow>
+
+<flow name="xmlPollingFlow">
+    <http:polling-source config-ref="requestConfig" path="xml">
+        <scheduling-strategy>
+            <fixed-frequency frequency="10" timeUnit="HOURS"/>
+        </scheduling-strategy>
+        <http:split-expression>
+            <![CDATA[#[payload.something.*element]]]>
+        </http:split-expression>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+In this last example, you will have two concurrent executions of the flow after one same polling: one with `<name>Mondi</name>` and another one with `<name>Viena</name>`. After 10 hours, the Polling will be executed again (in this very simple example, the server will return the same result, of course).
+
+== Watermarking
+
+In previous examples we have already seen a problem: the server returns always the same response. Of course, this were simple examples, but the situation would be quite similar in more complex scenarios: how can the server know that it has to send the "next" response? You can send headers, uri parameters, a body, or query parameters, but if these are always the same values, there wouldn't be any way that, from the Request, the server would be to know which is the "following" response.
+
+To solve this, we have watermarking. In polling scenarios, the server should return a watermark value. This could be directly on the payload itself, or in every item. For example, this could be a timestamp. The timestamp could refer to the entire collection, or every item could have its own.
+
+In any case, you can provide a watermark expression. This expression will be used to extract the watermark from the response. Then, you can use this watermark to send the subsequent requests to the server. You can use expressions for the Body, Headers, URI Parameters and Query Parameters's values, that can depend on this watermark value, using the `watermark` placeholder. One thing to consider: in the first execution, the `watermark` placeholder value will be `null`, which you might want to consider (in the server or the expression where the placeholder is used).
+To refer to the entire payload in the watermark expression, use the `payload` placeholder (as in the splitting expression), and `item` placeholder, to refer to the item. This watermarking expression will be applied to every item, one by one.
+
+Consider the follwing HTTP Listener Flow:
+[source,xml,linenums]
+----
+<flow name="watermarkInPayloadListenerFlow">
+    <http:listener config-ref="watermarkListenerConfig" path="/watermark-payload"/>
+    <choice>
+        <when expression="#[payload.watermark == null]">
+            <set-payload value="#[output application/json --- {'items': [{'name': 'Eze'}, {'name': 'Fabi'}, {'name': 'Sofi'}], 'wm': 0}]"/>
+        </when>
+        <when expression="#[payload.watermark == '0']">
+            <set-payload value="#[output application/json --- {'items': [{'name': 'Euge'}, {'name': 'Juli'}], 'wm': 1}]"/>
+        </when>
+        <when expression="#[payload.watermark == '1']">
+            <set-payload value="#[output application/json --- {'items': [{'name': 'Pablo'}, {'name': 'Martín'}], 'wm': 2}]"/>
+        </when>
+        <otherwise>
+            <set-payload value="#[output application/json --- {'items': [], 'wm': 3}]"/>
+        </otherwise>
+    </choice>
+</flow>
+----
+
+In this case, when there is no watermark, a first payload is return, with a watermark value in it (set in the `wm` property). In the second polling iteration, a watermark value would be expected to be used, so the payload is different. In this case, coming from the request's payload.
+
+We can achieve this like this:
+
+[source,xml,linenums]
+----
+<flow name="watermarkInPayloadPollingFlow">
+    <http:polling-source config-ref="watermarkRequestConfig" path="watermark-payload">
+        <scheduling-strategy>
+            <fixed-frequency frequency="5" timeUnit="MINUTES"/>
+        </scheduling-strategy>
+        <http:request-body><![CDATA[#[output application/json --- {'watermark': watermark}]]]></http:request-body>
+        <http:request-headers >
+            <http:request-header key="Content-Type" value="application/json" />
+        </http:request-headers>
+        <http:split-expression><![CDATA[#[output application/json --- payload.items]]]></http:split-expression>
+        <http:watermark-expression><![CDATA[#[payload.wm]]]></http:watermark-expression>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+You can see how the `watermark` placeholder is being used in the `water-expression`, retrieving the watermark from the property `wm` from the response.
+With this, in the first iteration we will have 3 executions of the flow (one with `{name: 'Eze'}`, another one for `{name: 'Fabi'}`, and another one with `{name: 'Sofi'}`). In the second iteration, 5 minutes later, we will have 2 executions (one with `{name: 'Euge'}` and another one with `{name: 'Juli'}`). 5 minutes later, we will have a third polling iteration, which will end up in two more executions of the flow (one with `{name: 'Pablo'}` and another one with `{name: Martin}`). Afterwards, we will continue having iterations but since the results will be empty, no executions of the flow are going to be made.
+
+This was an example extracting the watermark from the entire payload, and then using it in the Body of the request. A similar example would be to extract it from each item, and then using it in the Query Parameters. Of course, this depends completely on how the HTTP server uses this watermarking values.
+
+[source,xml,linenums]
+----
+<flow name="watermarkIntoQueryParamsListenerFlow">
+    <http:listener config-ref="watermarkListenerConfig" path="/watermark-into-query"/>
+    <choice>
+        <when expression="#[attributes.queryParams.watermark == '0']">
+            <set-payload value="#[output application/json --- {'items': [{'name': 'Rodro', 'wm': 1}, {'name': 'Steve', 'wm': 2}, {'name': 'Juan', 'wm': 3}]}]"/>
+        </when>
+        <when expression="#[attributes.queryParams.watermark == '2']">
+            <set-payload value="#[output application/json --- {'items': [{'name': 'Axel', 'wm': 4}, {'name': 'Mariano', 'wm': 5}]}]"/>
+        </when>
+        <when expression="#[attributes.queryParams.watermark == '5']">
+            <set-payload value="#[output application/json --- {'items': [{'name': 'Ivan', 'wm': 6}, {'name': 'Hyeran', 'wm': 7}]}]"/>
+        </when>
+        <otherwise>
+            <set-payload value="#[output application/json --- {'items': []}]"/>
+        </otherwise>
+    </choice>
+</flow>
+
+<flow name="watermarkIntoQueryParamsPollingFlow">
+    <http:polling-source config-ref="watermarkRequestConfig" path="watermark-into-query">
+        <scheduling-strategy>
+            <fixed-frequency frequency="1" timeUnit="SECONDS"/>
+        </scheduling-strategy>
+        <http:request-query-params >
+            <http:request-query-param key="watermark" value="#[watermark default 0]" />
+        </http:request-query-params>
+        <http:split-expression><![CDATA[#[output application/json --- payload.items]]]></http:split-expression>
+        <http:watermark-expression><![CDATA[#[item.wm]]]></http:watermark-expression>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+== Idempotency
+
+Another feature used in Polling Sources is Idempotency. This is to avoid the concurrent execution of two flows with the same_ payload identification. This way, we can ensure that payloads with the same id are going to processed not concurrently. For more information about Idempotency, please refer to its documentation.
+
+To add idempotency to this Polling Source, you just need to add an id expression, similar to the watermarking expression, to retrieve the id from the item. You can use `payload` and `item` placeholders in this expression.
+
+For example:
+
+[source,xml,linenums]
+----
+<flow name="identityWithoutWatermarkListenerFlow">
+    <http:listener config-ref="watermarkListenerConfig" path="/identity-no-watermark"/>
+    <set-payload value="#[output application/json --- {'items': [{'name': 'Rodro', 'value': 5}, {'name': 'Eze', 'value': 8}, {'name': 'MG', 'value': 7}, {'name': 'Rodro', 'value': 14}]}]"/>
+</flow>
+
+<flow name="identityWithoutWatermarkPollingFlow">
+    <http:polling-source config-ref="watermarkRequestConfig" path="identity-no-watermark">
+        <scheduling-strategy>
+            <fixed-frequency frequency="1" timeUnit="HOURS"/>
+        </scheduling-strategy>
+        <http:split-expression><![CDATA[#[output application/json --- payload.items]]]></http:split-expression>
+        <http:id-expression><![CDATA[#[item.name]]]></http:id-expression>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+In this example, the first three items will execute the flow concurrently, and it is ensured that the 4th item will only start being processed after the first item (both with same ID) is finished processing.
+
+== Response Validation
+
+Another thing to consider is wether the response is actually a valid or correct response. For this, as in the HTTP Request Operation, you can add a Response Validator. Please refer to xref:http-request-ref#HTTP-Response-Validation[HTTP Request Operation] documentation for more information about Response Validators.
+
+For example:
+
+[source,xml,linenums]
+----
+<flow name="responseErrorListenerFlow">
+    <http:listener config-ref="responseListenerConfig" path="/response-error">
+        <http:response statusCode="301"/>
+    </http:listener>
+    <set-payload value="#[output application/json --- [{'name': 'ex1'}, {'name': 'ex2'}, {'name': 'ex3'}]]"/>
+</flow>
+
+<flow name="responseErrorPollingFlow">
+    <http:polling-source config-ref="responseRequestConfig" path="response-error">
+        <scheduling-strategy>
+            <fixed-frequency frequency="10" timeUnit="SECONDS"/>
+        </scheduling-strategy>
+        <http:response-validator>
+            <http:success-status-code-validator values="200..299" />
+        </http:response-validator>
+        <http:split-expression><![CDATA[#[payload]]]></http:split-expression>
+    </http:polling-source>
+    <logger message="#[payload]"/>
+</flow>
+----
+
+In this case, since the server always returns a status code of 301, and the validator expects from 200 to 299, the response will always fail in this simple example. This means the flow is not going to be executed. The payload will only be considered valid when the response validator defines it so (and the splitting, watermarking and idempotency will only be applied then).
+
+The default response validator is a Status Code Validator from values from 200 to 399.
+
+== References
+
+[Put references to docs related to HTTP Request, Polling sources in general, watermarking, idempotency]
+
+
