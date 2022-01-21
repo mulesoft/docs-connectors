@@ -18,12 +18,12 @@ By default, the operation sends the Mule message payload as the HTTP request bod
 
 == Configure HTTP Request Connection
 
-To use an HTTP *Request* operation, you must set, at a minimum, a host URI, which can include a path. You can additionally configure a receiving port and a communication protocol.
+To use an HTTP *Request* operation, you must set a request global configuration with a connection provider to a host URI, which can include a path. You can additionally configure a receiving port and a communication protocol.
 
 * *Host* +
-Indicates where the requests are sent.
+Indicates where the requests are sent. Additionally, it can be a host name or an IP.
 * *Port* +
-Indicates where the requests are received.
+Indicates where the requests are sent.
 * *Protocol* +
 Indicates the protocol for communication, either HTTP for standard connections or HTTPS for TLS secure connections.
 
@@ -112,7 +112,7 @@ Additionally, the default headers also accept expressions, allowing you to use d
 The following example shows how to configure the *Headers* field at the HTTP *Request* operation level in Studio:
 
 . Select the HTTP *Request* operation from your flow.
-. In *General*, select the *Headers* tab.
+. In *General*, at the *Request* section, select the *Headers* tab.
 . Click the plus sign (*+*) to add a new header.
 . In the *Name* column, change *"Key"* to `"HeaderName1"`.
 . In the *Value* column, change *"Value"* to `"HeaderValue1"`.
@@ -124,7 +124,7 @@ In the *Configuration XML* editor, the `headers` configuration looks like this:
 [source,xml,linenums]
 ----
 <http:request method="GET" config-ref="HTTP_Request_configuration" path="/testpath">
-			<http:headers ><![CDATA[#[output application/java
+ <http:headers ><![CDATA[#[output application/java
 ---
 {
 	"HeaderName1" : "HeaderValue1"
@@ -152,8 +152,7 @@ In the *Configuration XML* editor, the `headers` configuration looks like this:
 The following example shows how to configure the *Default headers* field at the HTTP *Request* global configuration level in Studio:
 
 . Select the HTTP *Request* operation from your flow.
-. In *General*, select the *Headers* tab.
-. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Request* in the app.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Request* in the app. If a configuration is already created, click the edit button instead.
 . Click *Settings*.
 . Set *Default headers* to *Edit inline*.
 . Click the plus sign (*+*) to add a new header.
@@ -193,6 +192,7 @@ In the *Configuration XML* editor, the `default-headers` configuration looks lik
 
 Using DataWeave expressions in a configuration element constitutes a dynamic configuration. Each time a Mule app uses an HTTP *Request* operation, all expressions in the configuration are evaluated, and for each set of distinct values, a new configuration instance is created and initialized.
 
+[NOTE]
 For HTTP Connector, use default headers with small value expressions. Otherwise, every single evaluation returns a different value and creates several instances of the HTTP client, consuming valuable resources and negatively affecting performance.
 
 In such cases, configure headers with expressions at the HTTP *Request* operation level:
@@ -209,7 +209,7 @@ In such cases, configure headers with expressions at the HTTP *Request* operatio
 To configure query parameters for an HTTP request, follow these steps:
 
 . In Studio, select the HTTP *Request* operation from your flow.
-. In *General*, select the *Query Parameters* tab.
+. In *General*, at the *Request* section, select the *Query Parameters* tab.
 . Click the plus sign (*+*) to add a parameter to the request.
 . In the *Name* column, change *"Key"* to `"Keyquery"`.
 . In the *Value* column, change *"Value"* to `"Valuequery"`.
@@ -221,7 +221,7 @@ In the *Configuration XML* editor, the `query-params` configuration looks like t
 [source,xml,linenums]
 ----
 <http:request method="GET" config-ref="HTTP_Request_configuration" path="/testpath">
-			<http:query-params ><![CDATA[#[output application/java
+	<http:query-params ><![CDATA[#[output application/java
 ---
 {
 	"keyquery" : "Valuequery"
@@ -242,8 +242,8 @@ In the *Configuration XML* editor, the `query-params` configuration looks like t
 [source,xml,linenums]
 ----
 <http:request method="GET" config-ref="HTTP_Request_configuration" path="/testpath">
-			<http:query-params ><![CDATA[#[[{'Keyquery' : 'Valuequery'}]]]]></http:query-params>
-		</http:request>
+	<http:query-params ><![CDATA[#[[{'Keyquery' : 'Valuequery'}]]]]></http:query-params>
+</http:request>
 ----
 
 == Configure URI Parameters
@@ -299,14 +299,27 @@ When designing your application, if you don't know how many parameters or header
 
 To set headers dynamically, create a variable map and assign the variable values using DataWeave. Then, use that variable to set up the headers of your request. For example, with a variable map named `customMap`, you set up the following headers for the request: `#[vars.customMap ++ {'HeaderName1' : 'HeaderValue1'}]`
 
-To set URI parameters dynamically, use a DataWeave expression that returns a map of the parameters. For example:
+To set URI parameters dynamically, use a DataWeave expression that returns a map of the parameters. For example, folow these steps:
 
-//Need to clarify this section with developers, as it is not a full DW expression
-* Set Path to: `/test/{p1}/{p2}`
-* URI Parameter names: p1 and p2
-* URI Parameter value: `#[vars.customMap]`
+. Set *Path* to ``/test/{p1}/{p2}`.`
+. In *General*, at *Request* section, click the *URI Parameters* tab.
+. Click the *fx* button to enter literal mode.
+. Set the following expression `vars.customMap ++ {'p2': 'customer'}`.
+. Before the *Request* operation, add a *Set Variable* operation.
+. Set *Name* to `customMap`.
+. Set *Value* to the expression `{'p1': 'some'}`.
 
-Before the request, assuming p1 already set: `#[vars.customMap ++ {'p2': 'customer'}]`
+The XML looks like this:
+
+[source,xml,linenums]
+----
+<set-variable value="#[{'p1': 'some'}]" variableName="customMap"/>
+<http:request method="GET" config-ref="HTTP_Request_configuration" path="/test/{p1}/{p2}">
+  <http:uri-params ><![CDATA[#[vars.customMap ++ {'p2': 'customer'}]]]></http:uri-params>
+</http:request>
+----
+
+If you trigger this flow, the request operation sends a request to the path `/test/some/customer`.
 
 HTTP Connector resolves parameters for each request, and evaluates DataWeave expressions in the context of the current message, in the order specified in the request. If a single parameter is defined more than once, the latest value is used.
 
@@ -327,10 +340,10 @@ In the *Configuration XML* editor, the `body` configuration looks like this:
 [source,xml,linenums]
 ----
 <flow name="httprequestFlow" >
-		<http:request method="POST" config-ref="HTTP_Request_configuration" path="testpath">
-			<http:body ><![CDATA[#[output application/x-www-form-urlencoded --- {'key1':'value1', 'key2':'value2'}]]]></http:body>
-		</http:request>
-	</flow>
+	<http:request method="POST" config-ref="HTTP_Request_configuration" path="testpath">
+		<http:body ><![CDATA[#[output application/x-www-form-urlencoded --- {'key1':'value1', 'key2':'value2'}]]]></http:body>
+	</http:request>
+</flow>
 ----
 
 The HTTP *Request* operation sends a POST request to the host location. The HTTP request contains `Content-Type: application/x-www-form-urlencoded` and the body is `key1=value1&key2=value2`.
@@ -351,7 +364,16 @@ Configure this system property when starting Mule by adding: +
 
 When the HTTP *Request* operation receives an HTTP response, the operation validates the response through the response status code. By default, HTTP Connector throws an HTTP error response when the status code is 400 or above. Consequently, if the server returns a 404 (Resource Not Found) or a 500 (Internal Server Error) a failure occurs and the connector triggers the error handling.
 
-Two ASCII `..` full stop characters define the range of failure status codes. Any value from 500 through 599 is considered a failure and raises an error. If the HTTP response has any other status code value, it's considered a success.
+Two ASCII `..` full stop characters define the range of failure status codes, which means that you can configure a range in a status code validator for example `200..399`. In XML looks like this:
+
+[source,xml,linenums]
+----
+<http:response-validator >
+	<http:success-status-code-validator values="200..399" />
+</http:response-validator>
+----
+
+Any value from 500 through 599 is considered a failure and raises an error. If the HTTP response has any other status code value, it's considered a success.
 
 The HTTP *Request* operation adds the following attributes to the Mule message when receiving an HTTP response:
 
@@ -522,7 +544,7 @@ The following example shows how to configure the retry mechanism with the *Until
 
 image::http-request-17.png[Until Successful scope configuration with HTTP Request operation]
 
-In the *Configuration XML* editor, the `until-successful`, `maxRetries`, and `rmillisBetweenRetries` configurations look like this example:
+In the *Configuration XML* editor, the `until-successful`, `maxRetries`, and `millisBetweenRetries` configurations look like this example:
 
 [source,xml,linenums]
 ----
