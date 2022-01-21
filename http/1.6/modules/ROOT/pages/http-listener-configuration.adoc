@@ -14,7 +14,7 @@ When the flow finishes its execution, the HTTP *Listener* source sends an HTTP r
 To use an HTTP *Listener* source, you must configure a connection with these settings:
 
 * *Host* +
-Indicates where the requests are sent.
+Indicates where the requests are received. Also, the host can be a hostname, such as `localhost`, `www.mulesoft.com`, or an IP, for example `127.0.0.1`, `::1`.
 * *Port* +
 Indicates where the requests are received.
 * *Protocol* +
@@ -55,7 +55,7 @@ In the *Configuration XML* editor, the `host`, `port`, `path` and `trust-store` 
 
 [source,xml,linenums]
 ----
-<http:listener-config name="HTTP_Listener_config" d >
+	<http:listener-config name="HTTP_Listener_config" >
 		<http:listener-connection host="0.0.0.0" port="8081" >
 			<tls:context >
 				<tls:trust-store path="keystore.jks" password="MyP455W0rD" />
@@ -193,6 +193,19 @@ In the *Configuration XML* editor, the `allowedMethods` and `responseStreamingMo
 
 == Configure Read Timeout
 
+The read timeout means that if the HTTP *Listener* source doesn't read data after read timeout milliseconds, the connector raises a timeout error. Use the *Read timeout* field to prevent a client from sending an HTTP request such as:
+
+[source,JSON,linenums]
+----
+POST /test HTTP/1.1
+Host: localhost:8081
+Content-Length: 10000
+
+2
+----
+
+Notice that you don't specify a read timeout, the *Listener* source waits for data for ever, and the connection is not released. The *Read timeout* field defaults to a value of 30000, and the time unit in milliseconds.
+
 To configure the read timeout for the source, in the HTTP *Listener* configuration window, set the *Read timeout* field to the desired value:
 
 image::http-listener-7.png[HTTP Listener configuration window with Read timeout field set to 30000]
@@ -202,11 +215,13 @@ In the *Configuration XML* editor, the `readTimeout` configuration looks like th
 [source,xml,linenums]
 ----
 <http:listener-config >
-		<http:listener-connection host="0.0.0.0" port="8081" readTimeout="3000" />
-	</http:listener-config>
+		<http:listener-connection host="0.0.0.0" port="8081" readTimeout="30000" />
+</http:listener-config>
 ----
 
-== Configure Reject Invalid Transfer Encoding
+== Configure Reject Invalid Transfer Encoding Headers
+
+Based on https://www.rfc-editor.org/rfc/rfc7230.html[RFC7230] and https://www.rfc-editor.org/rfc/rfc2616.html[RFC2616] valid Transfer-Encoding headers are `chunked`, `deflate`, `compress`, `identity`, and `gzip`. These headers are not case-sensitive.
 
 To reject requests with invalid Transfer-Encoding headers, in the HTTP *Listener* configuration window, select the *Reject invalid transfer encoding* checkbox:
 
@@ -395,7 +410,20 @@ The following example shows how to configure HTTP responses for the HTTP *Listen
 ** The body returns `Corporate Logo could not be stored`.
 ** If there is a `CONNECTIVITY` error storing the logo, the returned status code is `504`, while any other errors result in a `500` status code.
 
-While a reason phrase is not defined for error responses, HTTP Connector attempts to define a reason phrase based on the status code. Thereby, a `Gateway Timeout` or `Internal Server Error` error can return for the previous explained HTTP responses scenarios.
+While a reason phrase is not defined for error responses, HTTP Connector attempts to define a reason phrase based on the status code. Thereby, a `Gateway Timeout` or `Internal Server Error` error can be returned for the previous explained HTTP responses scenarios.
+
+To test the Mule app you need a table named logo with 2 columns: `(accountId,logoName)`. You can use Mule to create the table or create it some other way. For example, the following XML code shows how to create the table using the Database Connector *Execute script* operation:
+
+[source,xml,linenums]
+----
+<db:execute-script config-ref="Database_Config">
+  <db:sql ><![CDATA[CREATE TABLE logo (
+	accountId VARCHAR(255),
+	logoName VARCHAR(255),
+	PRIMARY KEY (accountId)
+)]]></db:sql>
+</db:execute-script>
+----
 
 To create the Mule app in Studio, follow these steps:
 
@@ -421,10 +449,10 @@ To create the Mule app in Studio, follow these steps:
 [source,DataWeave,linenums]
 ----
 output application/java
-        ---
-        {
-          "X-Time" : "50s" // 4
-        }
+---
+  {
+    "X-Time" : "50s" // 4
+  }
 ----
 * *Status code* : `vars.errorCode default 500`.
 
@@ -433,18 +461,49 @@ image::http-listener-9.png[HTTP Listener Responses configuration window with Bod
 [start=10]
 . Drag a *Set Variable* component to the right of HTTP *Listener*.
 . Set *Name* to `logoName`.
-. Set *Value* to `payload.parts.name.content`.
+. Set *Value* to the expression `payload.parts.name.content`.
 . Drag another *Set Variable* component to the right of first *Set Variable* component.
 . Set *Name* to `accountId`.
-. Set *Value* to `attributes.uriParams.accountId`.
-. Drag an *Insert* operation to the right of the second *Set Variable* component.
-. Click the plus sign (*+*) next to the *Connector configuration* field to configure the database connection.
-. In the *Insert* operation configuration screen, set *SQL Query Text* to `INSERT INTO logo (accountId,logoName)`.
+. Set *Value* to the expression `attributes.uriParams.accountId`.
+. Drag a Database *Insert* operation to the right of the second *Set Variable* component.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure the database connection. +
+For further information about how to configure a database connection, refer to the xref:database-connector-connection.adoc[configure a database connection] documentation.
+. In the *Insert* operation configuration screen, set *SQL Query Text* to `INSERT INTO logo (accountId,logoName) VALUES (:accountId, :logoName`).
+. Set *Input parameters* to the expression `{'accountId': vars.accountId as String, 'logoName': vars.logoName as String}`.
 . Drag an *On Error Propagate* component in the *Error handling* section of the flow.
 . Set *Type* to `DB:CONNECTIVITY`.
 . Drag a *Set Variable* component into the *On Error Propagate* component.
 . Set *Name* to `errorCode`.
 . Set *Value* to `504`.
+. Save and run your Mule app.
+. Send the following CURL command:  `curl -v -F 'data=@/path/to/MuleSoft_logo.svg' -F name=mulesoftlogo http://localhost:8081/account/muley/logo`.
+
+Note that the complete payload has been hidden because the content length is too big to be human readable:
+
+[source,json,linenums]
+----
+*   Trying 127.0.0.1...
+* TCP_NODELAY set
+* Connected to localhost (127.0.0.1) port 8081 (#0)
+> POST /account/muley/logo HTTP/1.1
+> Host: localhost:8081
+> User-Agent: curl/7.64.1
+> Accept: */*
+> Content-Length: 5313
+> Content-Type: multipart/form-data; boundary=------------------------d96e85d23101a1c3
+> Expect: 100-continue
+>
+< HTTP/1.1 100 Continue
+* We are completely uploaded and fine
+< HTTP/1.1 201 Created
+< Content-Type: text/plain; charset=UTF-8
+< Content-Length: 45
+< Date: Tue, 18 Jan 2022 20:30:20 GMT
+<
+* Connection #0 to host localhost left intact
+mulesoftlogo has been stored as a muley logo.* Closing connection 0
+----
+
 
 === XML for Sending HTTP Responses Mule App Example
 
@@ -483,7 +542,8 @@ http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/cu
 		<set-variable value="payload.parts.name.content" variableName="logoName"/>
 		<set-variable value="attributes.uriParams.accountId"  variableName="accountId"/>
 		<db:insert doc:name="Insert" config-ref="Database_Config">
-			<db:sql ><![CDATA[INSERT INTO logo (accountId,logoName)]]></db:sql>
+			<db:sql><![CDATA[INSERT INTO logo (accountId,logoName) VALUES (:accountId, :logoName)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{'accountId': vars.accountId as String, 'logoName': vars.logoName as String}]]]></db:input-parameters>
 		</db:insert>
 		<error-handler >
 			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate"  type="DB:CONNECTIVITY">
