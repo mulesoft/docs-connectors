@@ -20,6 +20,7 @@ Default configuration
 | Connection a| <<Config_Connection, Connection>>
  | Connection types for this configuration. | | x
 | Name a| String |  ID used to reference this configuration. |  | x
+| Expiration Policy a| <<ExpirationPolicy>> | Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
 |===
 
 ==== Connection Types
@@ -35,6 +36,29 @@ Default configuration
 | Namespace a| String |  Namespace that exists in the Azure Event Hubs subscription. |  | x
 | Shared Access Key Name a| String |  Name of the shared access key. |  | x
 | Shared Access Key a| String |  Shared access key. |  | x
+| Read Timeout a| Number |  Amount of time that the client waits for a response before timing out. `0` specifies that the client waits indefinitely. |  60000 |
+| Read Timeout Unit a| Enumeration, one of:
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  SECONDS |
+| Connection Timeout a| Number |  Amount of time that the client attempts to establish a connection before timing out. `0` specifies that the client continues to attempt to open a connection indefinitely. |  60 |
+| Connection Timeout Unit a| Enumeration, one of:
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Connection Timeout* field. |  SECONDS |
+| Host a| String | Hostname or IP address of the proxy server. |  |
+| Port a| Number | Port of the proxy server. |  |
+| Username a| String | Username to authenticate against the proxy server. |  |
+| Password a| String | Password to authenticate against the proxy server. |  |
+| Non proxied hosts a| String |  Comma-separated list of hosts that the proxy must not be used against. |  |
 | Reconnection a| <<Reconnection>> a|  What to do if, when an app is deployed, a connectivity test does not pass after exhausting the associated reconnection strategy:
 
 * `true`
@@ -80,6 +104,9 @@ Retrieves an event from a specific event hub, consumer group, and partition.
 | Output Mime Type a| String |  MIME type of the payload that this operation outputs. |  |
 | Output Encoding a| String |  Encoding of the payload that this operation outputs. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
 | Event Hub a| String |  Event Hub name. |  | x
 | Consumer Group a| String |  Consumer group name. |  | x
 | Partition Id a| String |  Partition ID. |  | x
@@ -116,7 +143,7 @@ Retrieves an event from a specific event hub, consumer group, and partition.
 == Send a single event
 `<azure-event-hubs-messaging:send-event>`
 
-Sends a single event.
+Sends a single event to a specific Event Hub.
 
 
 === Parameters
@@ -128,21 +155,11 @@ Sends a single event.
 | Event Data a| Binary |  Content of the event. |  #[payload] |
 | Message Id a| String |  Message ID. |  |
 | Correlation Id a| String |  Correlation ID. |  |
-| Output Mime Type a| String |  MIME type of the payload that this operation outputs. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Event Hub a| String |  Event Hub name. |  | x
 | Partition Id a| String |  Partition ID. |  |
-| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
-| Target Value a| String |  Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
-|===
-
-=== Output
-
-[%autowidth.spread]
-|===
-|Type |String
 |===
 
 === For Configurations
@@ -164,7 +181,7 @@ Sends a single event.
 == Send a batch of events
 `<azure-event-hubs-messaging:send-events-batch>`
 
-Sends a batch of events.
+Sends a batch of events to a specific Event Hub.
 
 === Parameters
 
@@ -173,21 +190,11 @@ Sends a batch of events.
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
 | Events Data a| Array of Any |  Content of the event. |  #[payload] |
-| Output Mime Type a| String |  MIME type of the payload that this operation outputs. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Event Hub a| String |  Event Hub name. |  | x
 | Partition Id a| String |  Partition ID. |  |
-| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
-| Target Value a| String |  Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
-|===
-
-=== Output
-
-[%autowidth.spread]
-|===
-|Type |String
 |===
 
 === For Configurations
@@ -231,6 +238,9 @@ Receives messages from a specific consumer group.
 | Output Encoding a| String |  Encoding of the payload that this operation outputs. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  true |
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
 | Event Hub a| String |  Event Hub name. |  | x
 | Consumer Group a| String |  Consumer group name. |  | x
@@ -298,6 +308,25 @@ Configures a forever reconnection strategy by which the connector source or oper
 | Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. |  |
 |===
 
+[[ExpirationPolicy]]
+=== Expiration Policy
+
+Configures an expiration policy strategy.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Idle Time a| Number | Configures the maximum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+| Time Unit a| Enumeration, one of:
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Max Idle Time* field. |  |
+|===
+
 [[EventAttributes]]
 === Event Attributes
 
@@ -310,6 +339,44 @@ Configures a forever reconnection strategy by which the connector source or oper
 | Message Id a| String |  |  |
 | Offset a| Number |  |  |
 | Sequence Number a| Number |  |  |
+|===
+
+[[RepeatableInMemoryStream]]
+=== Repeatable In Memory Stream
+
+Configures the in-memory streaming strategy by which the request fails if the data exceeds the MAX buffer size. Always run performance tests to find the optimal buffer size for your specific use case.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Initial Buffer Size a| Number | Initial amount of memory to allocate to the data stream. If the streamed data exceeds this value, the buffer expands by *Buffer Size Increment*, with an upper limit of *Max In Memory Size* value. |  |
+| Buffer Size Increment a| Number | Amount by which the buffer size expands if it exceeds its initial size. Setting a value of `0` or lower specifies that the buffer can’t expand. |  |
+| Max Buffer Size a| Number | The maximum amount of memory to use. If more than that is used then a STREAM_MAXIMUM_SIZE_EXCEEDED error is raised. A value lower than or equal to zero means no limit. |  |
+| Buffer Unit a| Enumeration, one of:
+** BYTE
+** KB
+** MB
+** GB | Unit for the *Initial Buffer Size*, *Buffer Size Increment*, and *Buffer Unit* fields. |  |
+|===
+
+[[RepeatableFileStoreStream]]
+=== Repeatable File Store Stream
+
+Configures the repeatable file-store streaming strategy by which Mule keeps a portion of the stream content in memory. If the stream content is larger than the configured buffer size, Mule backs up the buffer’s content to disk and then clears the memory.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| In Memory Size a| Number a| Maximum amount of memory that the stream can use for data. If the amount of memory exceeds this value, Mule buffers the content to disk. To optimize performance:
+
+* Configure a larger buffer size to avoid the number of times Mule needs to write the buffer on disk. This increases performance, but it also limits the number of concurrent requests your application can process, because it requires additional memory.
+
+* Configure a smaller buffer size to decrease memory load at the expense of response time. |  |
+| Buffer Unit a| Enumeration, one of:
+** BYTE
+** KB
+** MB
+** GB | Unit for the *In Memory Size* field. |  |
 |===
 
 === Redelivery Policy
