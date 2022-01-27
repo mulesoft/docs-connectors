@@ -1,0 +1,132 @@
+= Troubleshoot JMS Connector - Mule 4
+
+To troubleshoot Anypoint Connector for JMS (Java Message Service Connector), become familiar with the information about enabling verbose logging, troubleshooting acknowledgment issues, troubleshooting JMS stopped consuming messages, troubleshooting redeployment errors when using binding mode, and interpreting commonly thrown messages.
+
+== Enable Verbose Logging
+
+Sometimes you are not sure why the application is failing and you require a better understanding of what is going on in the app's interaction with the JMS server.
+
+To gather detailed logs:
+
+* Use the configuration file to increase the logging level on the server side.
+* Enable verbose logging for JMS Connector:
++
+. Access Anypoint Studio and navigate to the *Package Explorer* view.
+. Open your application's project name.
+. Open the `src/main/resources` path folder.
+. Open the `log4j2.xml` file inside the folder.
+. If the following line is already in the `log4j2.xml` file, uncomment it to enable it; otherwise, add it:
++
+[source,xml,linenums]
+----
+    <AsyncLogger name=“org.mule.extensions.jms” level=“DEBUG”/>
+    <AsyncLogger name=“org.mule.jms.commons” level=“DEBUG”/>
+----
+
+== Troubleshoot Acknowledgment Issues
+
+There are several ways an application setup can be inconsistent in terms of message acknowledgment.
+You can configure the session acknowledgment for an application as:
+
+* *IMMEDIATE*
+* *AUTO*
+* *MANUAL*
+* *DUPS_OK*
+
+When you set the session acknowledgment to *IMMEDIATE*, the message gets acknowledged as soon as it's received. Do not mix *IMMEDIATE* acknowledgment with *Ack* or *Recovery session* operations.
+
+When you set the session acknowledgment to *AUTO*, the *On New Message* source takes control of the acknowledgment when the event finishes, or the session recovers when an error is thrown while processing the event. Adding a manual acknowledgment or session recover in an application with *AUTO* acknowledgment leads to duplicate operations on a channel.
+
+When you set the session acknowledgment to either *MANUAL* or *DUPS_OK*, check that every path of the flow execution gets a message acknowledgment or a session recover. Otherwise, a message can leak and lead to an unresponsive consumer when the max depth of the unit of work is reached.
+
+To resolve this issue:
+
+Take a detailed look at the flow design and be sure that every message is acknowledged or the session recovers.
+
+== Troubleshoot JMS Stopped Consuming Messages
+
+Usually when JMS stopped consuming messages is related to a large number of unacknowledged messages. When your  Mule app that has an *On New Message* source or *Consume* operation with manual acknowledgement of messages, and not every path of the message has the proper acknowledgement or session recovery configuration, the Mule app can lead to an unresponsive consumer.
+
+To resolve this error:
+
+Check the depth of unacknowledged messages on the broker side and review the application logic.
+
+== Troubleshoot Redeployment Errors When Using Binding Mode
+
+When using binding mode for connections, the driver loads a JNI resource. Because the JNI resource can be loaded only once, when the application is redeployed, an error is thrown.
+
+To resolve this error:
+
+Add the driver dependency at the domain level, which enables application redeployment.
+
+== HA Enviroments and Durable Suscriptions
+
+The configuration of HA systems consists of two components: the primary node (which is providing continuous service) and the secondary node (which is a clone of the previous one so that it provides the same service). Both of them must be identical so that the end-user is not aware of the system crash and can continue to use it transparently.
+When you are working with Durable Suscriptions, only one node can getting the connection and the other one fails.
+In this kind or scenarios, the nodes are not clones since one of them has something that the other does not: the connection.
+The possibility of using connections that cannot be initialized in multiple nodes simultaneously was not considered in the design of Mule running in HA clusters. The current design is aimed at having all nodes initializing connections to ensure that they are capable of facing a failure of the primary node.
+For that reasons, the JMS connector does not support durable ActiveMQ subscriptions in HA cluster environments
+
+To resolve this scenario:
+You could implement a fallback solution by managing the life cycle of containers, to detect when the primary node fails and start a new node.
+
+== Understand Common Throws
+
+Here is a list of common throw messages and how to interpret them.
+
+* JMS:ACK
+
+ There was an error in the context of the acknowledgment of an inflight message.
+
+* JMS:CONNECTIVITY
+
+ The connection is no longer valid. It is disposed of, but you can apply a reconnection policy if defined in the application setup.
+
+* JMS:CONSUMING
+
+ An error occurred while consuming messages from WMQ. This error might relate to the absence of a pending message.
+
+* JMS:DESTINATION_NOT_FOUND
+
+ IBM MQ Connector is not able to find or create the destination.
+
+* JMS:RETRY_EXHAUSTED
+
+ The maximum number of retries for the operation is reached.
+
+* JMS:SECURITY
+
+ The thrown exception in due to of security-related errors.
+
+* JMS:TIMEOUT
+
+ The timeout for the requested operation is exceeded.
+
+* JMS:ILLEGAL_BODY
+
+ The message body is invalid or cannot be converted to a supported type.
+
+* JMS:PUBLISHING
+
+ There is an error while publishing to the target queue or topic.
+
+* MULE:SOURCE_ERROR_RESPONSE_GENERATE
+
+ Indicates that an error occurred in the source of the flow generating the parameters of an error response. This error cannot be handled since the source has already executed the failing path.
+
+* MULE:SOURCE_ERROR_RESPONSE_SEND
+
+ Indicates that an error occurred in the source of the flow sending an error response. This error cannot be handled since the source has already executed the failing path.
+
+* MULE:SOURCE_RESPONSE_GENERATE
+
+ Indicates an error occurred in the source of the flow while generating the parameters of a successful response.
+
+* MULE:SOURCE_RESPONSE_SEND
+
+ Indicates an error occurred in the source of the flow while sending a successful response.
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
+* xref:jms-connector-reference.adoc[JMS Connector Reference]
