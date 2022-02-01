@@ -21,8 +21,14 @@ Release Notes: xref:release-notes::connector/microsoft-dynamics-365-connector-re
 * <<oauth-client-credentials, OAuth Client Credentials>>
 * <<dynamics-config_oauth-user-pass, OAuth Username Password>>
  | The connection types that can be provided to this configuration. | | x
+| Encoding a| a| The body encoding.
+
+* If no value is specified, set the Mule default encoding.
+
+* If a value is specified, set the `-M-Dmule.encoding` VM argument to the same value to avoid an encoding mismatch. | |
+
+| Name a| String |  ID used to reference this configuration. |  | x
 | Expiration Policy a| <<ExpirationPolicy>> | Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. This does not mean that the instance expires at the exact moment that it becomes eligible. Mule purges the instances as appropriate. | |
-| Encoding a| | The default body encoding type. If the encoding type is not specified at the operation level, this encoding type is used. | |
 |===
 
 ==== Connection Types
@@ -37,17 +43,16 @@ Release Notes: xref:release-notes::connector/microsoft-dynamics-365-connector-re
 |===
 | Name | Type | Description | Default Value | Required
 | Version a| String |  The version number of the API to which to connect |  9.0 |
-| Scope a| String |  |  openid |
-| Resource a| String | Connector resource URL |  | x
-| Response Type a| String |  |  query |
-| Read Timeout a| Number |  Specifies the amount of time, in milliseconds, that the consumer waits for a response before it times out. Default value is 0, which means a maximum of 30 seconds for bulk-operations and indefinite for the rest operations. |  0 |
+| (Deprecated) Scope a| String | Do not use this parameter. This parameter cannot be used for the authentication request. The authentication fails if both the *Scope* and *Scopes* parameters are used, since they both provide the same functionality. This parameter will be removed in a future version. |  openid |
+| Resource a| String | Endpoint URL. |  | x
+| Response Type a| String | The response type must be `query`. |  query |
+| Read Timeout a| Number |  Specifies the amount of time, in milliseconds, that the consumer waits for a response before it times out. Default value is 0, which means infinite. |  0 |
 | Connection Timeout a| Number |  Specifies the amount of time, in milliseconds, for which the consumer attempts to establish a connection before the connection times out. Default value is 0, which means infinite. |  0 |
 | Host a| String |  Hostname of the proxy. If this property is not set, then no proxy will be used; otherwise, a proxy will be used, but a proxy host must be specified. |  |
 | Port a| Number |  Port of the proxy. If host is set, then this property must be set and cannot be a negative number. |  |
 | Username a| String |  Username used to authenticate against the proxy. If this property is not set, then  authentication is not applied to the proxy, otherwise this value must be specified. |  |
 | Password a| String |  Password used to authenticate against the proxy. |  |
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
-| Pooling Profile a| <<PoolingProfile>> |  Characteristics of the connection pool |  |
 | Consumer Key a| String |  The OAuth key registered with the service provider |  | x
 | Consumer Secret a| String |  The OAuth consumer secret registered with the service provider |  | x
 | Authorization Url a| String |  The service provider's authorization endpoint URL |  `+https://login.microsoftonline.com/oauth2/authorize+` |
@@ -71,11 +76,15 @@ Release Notes: xref:release-notes::connector/microsoft-dynamics-365-connector-re
 [%header%autowidth.spread]
 |===
 | Name | Type | Description | Default Value | Required
+| Version a| String |  The version number of the API to connect to. |  9.0 |
 | Endpoint a| String |  Location where to send the requests. |  | x
+| Read Timeout a| Number |  Specifies the amount of time, in milliseconds, that the consumer waits for a response before it times out. Default value is 0, which means infinite. |  0 |
+| Connection Timeout a| Number |  Specifies the amount of time, in milliseconds, that the consumer attempts to establish a connection before the connection times out. Default value is 0, which means infinite. |  0 |
 | Host a| String |  Hostname of the proxy. If this property is not set, then no proxy is used; otherwise, a proxy is used, but a proxy host must be specified. |  |
 | Port a| Number |  Port of the proxy. If a host is set, this property must be set and cannot be a negative number. |  |
 | Username a| String |  Username used to authenticate against the proxy. If this property is not set, then no authentication is used against the proxy.|  |
 | Password a| String |  Password used to authenticate against the proxy. |  |
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
 | Client id a| String |  The OAuth client ID, as registered with the service provider. |  | x
 | Client secret a| String |  The OAuth client secret, as registered with the service provider. |  | x
 | Token url a| String |  The service provider's token endpoint URL. |  `\https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` |
@@ -106,10 +115,9 @@ Release Notes: xref:release-notes::connector/microsoft-dynamics-365-connector-re
 | Client Secret a| String |  The Application Secret that you created in the app registration portal for your app. It should not be used in a native app, because client secrets cannot be reliably stored on devices. It is required for web apps and web APIs, which have the ability to store the client secret securely on the server side. |  | x
 | Token Request Endpoint a| String |  |  | x
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
-| Pooling Profile a| <<PoolingProfile>> |  Characteristics of the connection pool |  |
 |===
 
-== Operations
+== Associated Operations
 
 * <<create>>
 * <<createMultiple>>
@@ -128,6 +136,13 @@ Release Notes: xref:release-notes::connector/microsoft-dynamics-365-connector-re
 [NOTE]
 Microsoft Dynamics 365 Connector sources use Object Store to save watermarks. You might experience limitations that are specific to the Object Store implementation you are using (Object Store for CloudHub deployments or Object Store for on-premises deployments), so configure Object Store to suit your needs. +
 For more information, see https://help.mulesoft.com/s/article/The-Different-Types-of-Object-Stores-Explained[The Different Types of Object Stores Explained].
+
+
+== Associated Sources
+* <<OnDeletedObjectListener>>
+* <<OnModifiedObject>>
+* <<OnNewObject>>
+
 
 
 [[create]]
@@ -150,11 +165,17 @@ Creates a new Entity:
 | Configuration | String | The name of the configuration to use. | | x
 | Logical Name a| String |  The logical name of the entity. It is always the schema name in lower case. |  | x
 | Attributes a| Object |  The attributes of the entity to be created as a Map. |  `#[payload]` |
+| Encoding a| a| The body encoding.
+
+* If no value is specified, set the Mule default encoding.
+
+* If a value is specified, set the `-M-Dmule.encoding` VM argument to the same value to avoid an encoding mismatch. | |
+
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  `#[payload]` |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
-| Encoding a| String | The body encoding type | |
 |===
 
 ==== Output
@@ -164,7 +185,7 @@ Creates a new Entity:
 |Type |String
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -176,6 +197,7 @@ Creates a new Entity:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -201,6 +223,8 @@ Creates Multiple Entities:
 | Logical Name a| String |  The logical name of the entities to be created. It is always the schema name in lower case. |  | x
 | Entities Attributes a| Array of Object |  A list with the attributes of the entities to be created as a List of Maps. |  `#[payload]` |
 | Use Single Transaction a| Boolean |  Use a single transaction for creation. If the entity creation fails, the transaction is rolled-back. |  false |
+| Encoding a| String |  The body encoding. Set the Mule default encoding if no value is specified. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  `#[payload]` |
 | Reconnection Strategy a| * <<reconnect>>
@@ -215,7 +239,7 @@ Creates Multiple Entities:
 |Type |<<BulkOperationResult>>
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -227,6 +251,7 @@ Creates Multiple Entities:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -249,12 +274,13 @@ Delete an Entity:
 | Configuration | String | The name of the configuration to use. | | x
 | Logical Name a| String |  The logical name of the entity. It is always the schema name in lower case. |  | x
 | Id a| String |  The ID of the entity to delete. |  `#[payload]` |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
 |===
 
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -266,6 +292,7 @@ Delete an Entity:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -291,6 +318,7 @@ Delete Multiple Entities:
 | Logical Name a| String |  The logical name of the entity. It is always the schema name in lower case. |  | x
 | Ids a| Array of String |  The list of IDs to delete. |  `#[payload]` |
 | Use Single Transaction a| Boolean |  Use a single transaction for deletion. If the deletion fails, the transaction is rolled back. |  true |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  `#[payload]` |
 | Reconnection Strategy a| * <<reconnect>>
@@ -304,7 +332,7 @@ Delete Multiple Entities:
 |Type |<<BulkOperationResult>>
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -316,6 +344,7 @@ Delete Multiple Entities:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -337,12 +366,13 @@ Removes a reference to an entity.
 | Configuration | String | The name of the configuration to use. | | x
 | Logical Name a| String |  The logical name of the entity. It is always the schema name in lower case. |  | x
 | Attributes a| Object |  Disassociates a request's payload. |  `#[payload]` |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
 |===
 
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -354,6 +384,7 @@ Removes a reference to an entity.
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -379,11 +410,16 @@ Call Action:
 | Bounded Entity Type a| String |  An optional bounded entity type. You must provide this Value if the action is bounded. |  |
 | Bounded Entity Id a| String |  An optional bounded entity ID. You must provide this value if the action is bounded. |  |
 | Related Entities a| Object |  The body to send in the request as a Map. |  `#[payload]` |
+| Encoding a| a| The body encoding.
+
+* If no value is specified, set the Mule default encoding.
+
+* If a value is specified, set the `-M-Dmule.encoding` VM argument to the same value to avoid an encoding mismatch. | |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  `#[payload]` |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
-| Encoding a| String | The body encoding type | |
 |===
 
 ==== Output
@@ -393,7 +429,7 @@ Call Action:
 |Type |Object
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -405,6 +441,7 @@ Call Action:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -434,11 +471,16 @@ Generic Simple Invoke.
 ** DELETE |  The HTTP Method to invoke |  | x
 | Headers a| Object |  The HTTP headers used in the request. There are some default headers that are used; read more in the documentation. |  |
 | Body a| String |  The string that will be placed in the body of the request. |  |
+| Encoding a| a| The body encoding.
+
+* If no value is specified, set the Mule default encoding.
+
+* If a value is specified, set the `-M-Dmule.encoding` VM argument to the same value to avoid an encoding mismatch. | |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  `#[payload]` |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
-| Encoding a| String | The body encoding type | |
 |===
 
 ==== Output
@@ -448,7 +490,7 @@ Generic Simple Invoke.
 |Type |Object
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -460,6 +502,7 @@ Generic Simple Invoke.
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -483,6 +526,7 @@ Retrieve an Entity:
 | Configuration | String | The name of the configuration to use. | | x
 | Logical Name a| String |  The logical name of the entity. It is always the schema name in lower case. |  | x
 | Id a| String |  The id of the entity that is going to be retrieved. |  `#[payload]` |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  `#[payload]` |
 | Reconnection Strategy a| * <<reconnect>>
@@ -496,7 +540,7 @@ Retrieve an Entity:
 |Type |Object
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -508,6 +552,7 @@ Retrieve an Entity:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -528,7 +573,7 @@ Retrieve Multiple by URL:
 | Configuration | String | The name of the configuration to use. | | x
 | Data Query URL a| String |  The URL to use for data retrieval |  | x
 | Page Size a| Number |  The size of a page |  5000 |
-| Expand a| String |  Text about the specified relationship to put in the response |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Streaming Strategy a| * <<repeatable-in-memory-iterable>>
 * <<repeatable-file-store-iterable>>
 * non-repeatable-iterable |  Configure how Mule processes streams with streaming strategies. Repeatable streams are the default behavior. |  |
@@ -545,7 +590,7 @@ Retrieve Multiple by URL:
 |Type |Array of Object
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -556,6 +601,7 @@ Retrieve Multiple by URL:
 * DYNAMICS:NOT_FOUND
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -579,6 +625,7 @@ Retrieve Multiple by DSQL Query:
 | Datasense Query a| String |  The DSQL query to use to retrieve. The query is transformed in a retrieve URL internally. |  | x
 | Page Size a| Number |  Number of items in a results page |  5000 |
 | Expand a| String |  Information about the specified relationship to include in the response. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Streaming Strategy a| * <<repeatable-in-memory-iterable>>
 * <<repeatable-file-store-iterable>>
 * non-repeatable-iterable |  Configure how Mule processes streams with streaming strategies. Repeatable streams are the default behavior. |  |
@@ -595,7 +642,7 @@ Retrieve Multiple by DSQL Query:
 |Type |Array of Object
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -606,6 +653,7 @@ Retrieve Multiple by DSQL Query:
 * DYNAMICS:NOT_FOUND
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -626,6 +674,7 @@ Deletes all the access token information for a given resource owner ID so that i
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
 | Resource Owner Id a| String |  The ID of the resource owner to invalidate. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 |===
 
 
@@ -656,13 +705,18 @@ Update:
 | Configuration | String | The name of the configuration to use. | | x
 | Logical Name a| String |  The logical name of the entity. It is always the schema name in lower case. |  | x
 | Attributes a| Object |  The attributes of the entity. |  `#[payload]` |
+| Encoding a| a| The body encoding.
+
+* If no value is specified, set the Mule default encoding.
+
+* If a value is specified, set the `-M-Dmule.encoding` VM argument to the same value to avoid an encoding mismatch. | |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
-| Encoding a| String | The body encoding type | |
 |===
 
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -674,6 +728,7 @@ Update:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
@@ -700,11 +755,16 @@ Update Multiple Entities:
 | Logical Name a| String |  The logical name of the entity. It is always the schema name in lower case. |  | x
 | Entities Attributes a| Array of Object |  A list with the attributes of the entities that are going to be updated as a List of Maps. |  `#[payload]` |
 | Use Single Transaction a| Boolean |  Use a single transaction for an update. If the update fails, the transaction is rolled back. |  false |
+| Encoding a| a| The body encoding.
+
+* If no value is specified, set the Mule default encoding.
+
+* If a value is specified, set the `-M-Dmule.encoding` VM argument to the same value to avoid an encoding mismatch. | |
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Target Variable a| String |  The name of a variable that stores the operation's output |  |
 | Target Value a| String |  An expression that evaluates against the operation's output. The outcome of this expression is stored in the target variable. |  `#[payload]` |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
-| Encoding a| String | The body encoding type | |
 |===
 
 ==== Output
@@ -714,7 +774,7 @@ Update Multiple Entities:
 |Type |<<BulkOperationResult>>
 |===
 
-=== For Configurations
+==== For Configurations
 
 * <<dynamics-config>>
 
@@ -726,14 +786,10 @@ Update Multiple Entities:
 * DYNAMICS:OPERATION_FAILED
 * DYNAMICS:PARSE_ERROR
 * DYNAMICS:RETRY_EXHAUSTED
+* DYNAMICS:TIMEOUT
 * DYNAMICS:UNAUTHORIZED
 * DYNAMICS:UNKNOWN
 
-== Sources
-
-* <<on-deleted-object>>
-* <<on-modified-object>>
-* <<on-new-object>>
 
 [[on-deleted-object]]
 === On Deleted Object
@@ -782,6 +838,7 @@ Starts your app when an object is modified
 | Configuration | String | The name of the configuration to use. | | x
 | Since a| String |  The required date format is `'yyyy-MM-dd'T'HH:mm:ss'Z'` |  |
 | Entity Type a| String | Describes business data. Example values are `account` and `contact`, which are defined in the Microsoft Dynamics 365 instance. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Primary Node Only a| Boolean |  Whether to execute this source on only the primary node when running in a cluster. |  |
 | Scheduling Strategy a| scheduling-strategy |  Configures the scheduler that triggers the polling. |  | x
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
@@ -815,6 +872,7 @@ Starts your app when a new object is created
 | Configuration | String | The name of the configuration to use. | | x
 | Since a| String |  The required date format is `'yyyy-MM-dd'T'HH:mm:ss'Z'` |  |
 | Entity Type a| String | Describes business data. Example values are `account` and `contact`, which are defined in the Microsoft Dynamics 365 instance.  |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration used to execute this component. |  | x
 | Primary Node Only a| Boolean |  Whether to execute this source on only the primary node when running in a cluster. |  |
 | Scheduling Strategy a| scheduling-strategy |  Configures the scheduler that triggers the polling. |  | x
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
@@ -867,40 +925,6 @@ Starts your app when a new object is created
 | blocking |Boolean |If false, the reconnection strategy runs in a separate, non-blocking thread. |true |
 |===
 
-[[PoolingProfile]]
-=== Pooling Profile
-
-[%header%autowidth.spread]
-|===
-| Field | Type | Description | Default Value | Required
-| Max Active a| Number | Controls the maximum number of Mule components that can be borrowed from a session at one time. When set to a negative value, there is no limit to the number of components that can be active at one time. When Max Active is exceeded, the pool is exhausted. |  |
-| Max Idle a| Number | Controls the maximum number of Mule components that can sit idle in the pool at any time. When set to a negative value, there is no limit to the number of Mule components that can be idle at one time. |  |
-| Max Wait a| Number | Specifies the number of milliseconds to wait for a pooled component to become available when the pool is exhausted and the Exhausted Action is set to `WHEN_EXHAUSTED_WAIT` |  |
-| Min Eviction Millis a| Number | Determines the minimum amount of time an object can sit idle in the pool before it is eligible for eviction. When non-positive, no objects are evicted from the pool due to idle time alone. |  |
-| Eviction Check Interval Millis a| Number | Specifies the number of milliseconds between runs of the object evictor. When non-positive, no object evictor is executed. |  |
-| Exhausted Action a| Enumeration, one of:
-
-** WHEN_EXHAUSTED_GROW
-** WHEN_EXHAUSTED_WAIT
-** WHEN_EXHAUSTED_FAIL a| Specifies the behavior of the Mule component pool when the pool is exhausted. Possible values are:
-
-* WHEN_EXHAUSTED_FAIL, which throws a NoSuchElementException
-* WHEN_EXHAUSTED_WAIT, which blocks by invoking Object.wait(long) until a new or idle object is available
-* WHEN_EXHAUSTED_GROW, which creates a new Mule instance and returns it, which makes the Max Active value meaningless. If a positive Max Wait value is supplied, it blocks for at most that many milliseconds, after which a NoSuchElementException is thrown. If Max Thread Wait is a negative value, it blocks indefinitely.
-|  |
-
-| Initialisation Policy a| Enumeration, one of:
-
-** INITIALISE_NONE
-** INITIALISE_ONE
-** INITIALISE_ALL a| Determines how components in a pool should be initialized: Possible values are:
-
-* INITIALISE_NONE, which does not load components into the pool at startup
-* INITIALISE_ONE, which loads one initial component into the pool at startup
-* INITIALISE_ALL, which loads all components into the pool at startup |  |
-
-| Disabled a| Boolean | Whether pooling is disabled |  |
-|===
 
 [[ExpirationPolicy]]
 === Expiration Policy
