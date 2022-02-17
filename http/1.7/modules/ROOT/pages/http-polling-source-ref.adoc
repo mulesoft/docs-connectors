@@ -2,7 +2,7 @@
 
 Anypoint Connector for HTTP Connector (HTTP Connector) provides a *Polling Source* event source that executes a scheduled HTTP request to a given HTTP server. This source does not wait for an HTTP request from a user, such as the HTTP *Listener* source does.
 
-In the HTTP *Polling Source*, you can configure a scheduled frequency that can be a fixed frequency or a cron expression. You can also configure the event source to split the HTTP response, so every item in the response is executed in a different execution of the flow. As well as configure how to retrieve watermarking.
+In the HTTP *Polling Source* event source, you can configure a scheduled frequency that can be a fixed frequency or a cron expression. You can also configure the event source to split the HTTP response, so every item in the response is executed in a different execution of the flow. As well as configure how to retrieve watermarking.
 
 == Relationship with HTTP Request Operation
 
@@ -52,9 +52,7 @@ In the *Configuration XML* editor, the `<scheduling-strategy>` and `<cron>` conf
 
 As in the HTTP *Request* operation, you can also configure the body, headers, URI parameters and query parameters for the HTTP *Pooling Source* event source.
 
-The following example shows how to configure the *Body* (`polling-request-body`), *Headers* (`polling-request-headers`), *URI parameters* (`polling-request-uri-param`) and *Query parameters* (`polling-request-query-param`) fields with values where you can add expressions. These expressions can depend on the watermark:
-
-[FOR DOCS TEAM: even though the last paragraph is true, there is a problem: given that the sdk doesn't allow sources to have expressions we have a way for the users to add expressions here without the sdk not letting deploy the application, but it won't have Studio Support. I don't know how to phrase this in a way it doesn't sound... bad]
+The following example shows how to configure the *Body* (`polling-request-body`), *Headers* (`polling-request-headers`), *URI parameters* (`polling-request-uri-param`) and *Query parameters* (`polling-request-query-param`) fields with values where you can add expressions. These expressions can depend on the watermark.
 
 
 // Add Studio Configuration steps once I have a .jar file example to open in Studio
@@ -88,7 +86,7 @@ In the *Configuration XML* editor, the `polling-request-body`, `polling-request-
 
 After the HTTP *Pooling Source* event source executes the HTTP request and retrieves an HTTP response, you can perform a transformation and split the HTTP response, so every item in the response is executed in a different execution of the flow.
 
-For example, you poll to a server that gets its data from a database, and the server returns 50 results. You want to send each result separately to the flow, without the need to split the response in the flow and the usage of a *For each* component. To split the response, configure the *Split expression* (`splitExpression`) field:
+For example, you poll to a server that gets its data from a database, and the server returns 50 results. You want to send each result separately to the flow, without the need to split the response between the flow and the usage of a *For each* component. To split the response, configure the *Split expression* (`splitExpression`) field.
 
 In the splitting expression refer to the response as `payload`, as you would do after an HTTP *Request* operation.
 
@@ -102,7 +100,7 @@ The following example shows a server that returns a JSON payload, in which the i
 </flow>
 ----
 
-Then, the corresponding expression to split the array would simply be `#[payload]`. In the splitting expression, the referred `payload` is the entire response already treated as a JSON file. Meanwhile, the `payload` referred in the `logger` processor refers to the corresponding payload for its execution, on one execution `{'name': 'Mondi'}`, on the other execution `{'name': 'Viena'}`). The `splitExpression` configuration looks like this:
+Then, the corresponding expression to split the array is `#[payload]`. In the splitting expression, the referred `payload` is the entire response already treated as a JSON file. Meanwhile, the `payload` referred in the `logger` processor refers to the corresponding payload for its execution, on one execution `{'name': 'Mondi'}`, on the other execution `{'name': 'Viena'}`). The `splitExpression` configuration looks like this:
 
 [source,xml,linenums]
 ----
@@ -136,16 +134,21 @@ The following example shows two concurrent executions of the flow after one same
 </flow>
 ----
 
-== Configure Watermarking
+== Configure Watermarking Expression
 
-In previous examples we have already seen a problem: the server returns always the same response. Of course, these were simple examples, but the situation would be quite similar in more complex scenarios: how can the server know that it has to send the "next" response? You can send headers, uri parameters, a body, or query parameters, but if these are always the same values, there wouldn't be any way that, from the Request, the server would be to know which is the "following" response.
+In the previous simple examples, the server always returned the same HTTP response. In more complex scenarios the server needs to know that it has to send the next response. You can send headers, URI parameters, body, or query parameters, but if these parameters always contain the same values in the HTTP request, the server does not know what would be the next response.
 
-To solve this, we have watermarking. In polling scenarios, the server should return a watermark value. This could be directly on the payload itself, or in every item. For example, this could be a timestamp. The timestamp could refer to the entire collection, or every item could have its own.
+For these polling scenarios, you use watermarking, where the server returns a watermark value on the payload itself, or in every item. For example, the watermark value can be a timestamp that can refer to the entire collection, or every item could have its own timestamp. In any case, you provide a watermark expression using the `watermark` placeholder.
 
-In any case, you can provide a watermark expression. This expression will be used to extract the watermark from the response. Then, you can use this watermark to send the subsequent requests to the server. You can use expressions for the Body, Headers, URI Parameters and Query Parameters's values, that can depend on this watermark value, using the `watermark` placeholder. One thing to consider: in the first execution, the `watermark` placeholder value will be `null`, which you might want to consider (in the server or the expression where the placeholder is used).
-To refer to the entire payload in the watermark expression, use the `payload` placeholder (as in the splitting expression), and `item` placeholder, to refer to the item. This watermarking expression will be applied to every item, one by one.
+The expression extracts the watermark from the response, and subsequently, use this watermark to send the requests to the server. You can use expressions for the body, headers, URI parameters and query parameters' values in the the `watermark` placeholder.
 
-Consider the follwing HTTP Listener Flow:
+Note that in the first execution, the `watermark` placeholder value is `null`, which you might want to consider in the server or the expression where the placeholder is used.
+
+* To refer to the entire payload in the watermark expression, use the `payload` placeholder, as in the splitting expression.
+* To refer to an item, use the `item` placeholder, the  watermarking expression applies to every item, one by one.
+
+The following XML configuration example shows an HTTP *Listener* flow. In the first pooling iteration, when there is no watermark, a payload is returned with a watermark value set in the `wm` property. In the second polling iteration, a watermark value is expected to be used, so the payload is different. In this case, coming from the request's payload:
+
 [source,xml,linenums]
 ----
 <flow name="watermarkInPayloadListenerFlow">
@@ -167,9 +170,7 @@ Consider the follwing HTTP Listener Flow:
 </flow>
 ----
 
-In this case, when there is no watermark, a first payload is return, with a watermark value in it (set in the `wm` property). In the second polling iteration, a watermark value would be expected to be used, so the payload is different. In this case, coming from the request's payload.
-
-We can achieve this like this:
+The following XML configuration example shows how to extract the watermark value from the entire payload, and then use the value in the body of the request. The configuration uses the HTTP *Pooling Source* event source instead of the HTTP *Listener* source:
 
 [source,xml,linenums]
 ----
@@ -188,10 +189,13 @@ We can achieve this like this:
 </flow>
 ----
 
-You can see how the `watermark` placeholder is being used in the `water-expression`, retrieving the watermark from the property `wm` from the response.
-With this, in the first iteration we will have 3 executions of the flow (one with `{name: 'Eze'}`, another one for `{name: 'Fabi'}`, and another one with `{name: 'Sofi'}`). In the second iteration, 5 minutes later, we will have 2 executions (one with `{name: 'Euge'}` and another one with `{name: 'Juli'}`). 5 minutes later, we will have a third polling iteration, which will end up in two more executions of the flow (one with `{name: 'Pablo'}` and another one with `{name: Martin}`). Afterwards, we will continue having iterations but since the results will be empty, no executions of the flow are going to be made.
+* The `watermarkExpression` has the `watermark` placeholder that retrieves the watermark from the property `wm` from the response.
+* In the first pooling iteration, there are three executions of the flow, one execution with `{name: 'Eze'}`, another execution with `{name: 'Fabi'}` and the last execution with `{name: 'Sofi'}`.
+* In the second pooling iteration, that occurs 5 minutes later, there are 2 executions, one execution with `{name: 'Euge'}` and another execution with `{name: 'Juli'}`).
+* In the third pooling iteration, that also occurs 5 minutes later, there are two executions of the flow, one execution with `{name: 'Pablo'}` and another one with `{name: Martin}`).
+* Afterwards, there will be continue pooling iterations but because the results are empty, there are no flow executions.
 
-This was an example extracting the watermark from the entire payload, and then using it in the Body of the request. A similar example would be to extract it from each item, and then using it in the Query Parameters. Of course, this depends completely on how the HTTP server uses this watermarking values.
+The following XML configuration example shows how to extract the watermark value from each item, and then use the value in the query parameters. The behavior depends completely on how the HTTP server uses the watermarking value:
 
 [source,xml,linenums]
 ----
@@ -227,13 +231,13 @@ This was an example extracting the watermark from the entire payload, and then u
 </flow>
 ----
 
-== Idempotency
+== Configure Idempotency Expression
 
-Another feature used in Polling Sources is Idempotency. This is to avoid the concurrent execution of two flows with the same_ payload identification. This way, we can ensure that payloads with the same id are going to processed not concurrently. For more information about Idempotency, please refer to its documentation.
+To avoid the concurrent execution of two flows with the same payload identification, configure idempotency for the HTTP *Polling Source* event source. The configuration ensures that payloads with the same ID are processed not concurrently.
 
-To add idempotency to this Polling Source, you just need to add an id expression, similar to the watermarking expression, to retrieve the id from the item. You can use `payload` and `item` placeholders in this expression.
+To configure idempotency for the event source, add an ID expression to retrieve the ID from the item, similar to the watermarking expression configuration. Use `payload` and `item` placeholders for the idempotency expression `idExpression`.
 
-For example:
+The following XML configuration example shows that the first three items execute the flow concurrently, and the fourth item starts only its process after the first item, both with the same ID, finishes processing.
 
 [source,xml,linenums]
 ----
@@ -253,13 +257,16 @@ For example:
 </flow>
 ----
 
-In this example, the first three items will execute the flow concurrently, and it is ensured that the 4th item will only start being processed after the first item (both with same ID) is finished processing.
 
-== Response Validation
 
-Another thing to consider is wether the response is actually a valid or correct response. For this, as in the HTTP Request Operation, you can add a Response Validator. Please refer to xref:http-request-ref#HTTP-Response-Validation[HTTP Request Operation] documentation for more information about Response Validators.
+== Configure Response Validator
 
-For example:
+Another thing to consider is whether the response is valid. You can configure a response validator, as you do with the HTTP *Request* operation.
+
+For more information, refer to the xref:http-request-ref#HTTP-Response-Validation[Configure Response Validator] in the HTTP *Request* operation documentation.
+
+The following XML configuration example shows that because the server always returns a status code of 301, and the response validator expects the default status code from 200 to 299, the HTTP response always fails. This indicates that the flow does not execute, and the payload is only considered valid when the response validator defines 301 as the status code (the splitting, watermarking and idempotency configurations are applied then):
+
 
 [source,xml,linenums]
 ----
@@ -284,10 +291,10 @@ For example:
 </flow>
 ----
 
-In this case, since the server always returns a status code of 301, and the validator expects from 200 to 299, the response will always fail in this simple example. This means the flow is not going to be executed. The payload will only be considered valid when the response validator defines it so (and the splitting, watermarking and idempotency will only be applied then).
 
-The default response validator is a Status Code Validator from values from 200 to 399.
 
-== References
+== See Also
 
-[Put references to docs related to HTTP Request, Polling sources in general, watermarking, idempotency]
+* xref:http-request-ref.adoc[Configure HTTP Request Operation]
+* xref:http-connector-examples.adoc[HTTP Connector Examples]
+* xref:http-documentation.adoc[HTTP Connector Reference]
