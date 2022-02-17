@@ -1,54 +1,59 @@
-= VeevaVault Connector 1.3 Examples - Mule 4
+= Veeva Vault Connector 1.3 Examples - Mule 4
 :page-aliases: connectors::veevavault/veevavault-connector-examples.adoc
 
+The following examples show how to configure the connector in Anypoint Studio:
 
-You can use the provided example project as a starting point for your MuleSoft project.
+* <<create-documents-on-the-vault>>
 
+
+[[create-documents-on-the-vault]]
 == Create Documents on the Vault
 
 This example creates documents in bulk with document metadata fetched from an external source (database). Before creating documents on the Vault, the document files are uploaded using the Veeva Vault FTP server. The documents' `created` status is inserted into the database.
 
-To create the Mule flow:
+The following screenshots show the Studio app flows for this example:
 
-. Drag and drop *HTTP Listener* from the Mule Palette to the project canvas.
+image::veevavault-connector-create-documents-example.png[Create Documents Mule flow]
+
+image::veevavault-connector-upload-documents-example.png[Upload Documents Mule flow]
+
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* source to the canvas.
 . Configure HTTP Listener for your environment.
-. Drag the *Database Select* operation to fetch document metadata from the table.
+. From the *Mule Palette* view, select *Database* and drag the *Select* operation to fetch document metadata from the table.
 . Configure the Database Connector configuration with your connection credentials.
-. Drag the *Flow Reference* element to reference the Sub Flow `upload-files-on-vault-ftp-server`.
-. Drag the *Transform Message* component to transform document metadata into CSV format.
-. Drag the *Create Documents* operation from the VeevaVault Connector palette.
+. Enter the following text for the SQL Query Text field:
++
+`>SELECT * FROM createdocuments`
+. From the *Mule Palette* view, select *Core* and drag the *Flow Reference* component to reference the subflow `upload-files-on-vault-ftp-server`.
+. From the *Mule Palette* view, select *Core* and drag the *Transform Message* component to transform document metadata into CSV format.
+. From the *Mule Palette* view, select *Veeva Vault* and drag the *Create Documents* operation.
 . Enter the values for the Veeva Vault connection: +
 * Username
 * Password
 * Vault URL
 * Vault version
 * Vault client ID
-. Drag the *Database Bulk Insert* operation to insert the document created status data into the database table.
-. Drag the *Logger* component to log information in the console or log file.
-. Create a sub-flow with the *Logger* component to log information for the sub-flow.
-. Drag the *For-Each* scope containing the `Read file` operation and FTPS `Write` operation to write the file to the Veeva Vault FTP server.
-. Configure the FTPS Connector configuration with the credentials for the Veeva Vault FTP server.
+. From the *Mule Palette* view, select *Database* and drag the *Bulk insert* operation to insert the document created status data into the database table.
+. From the *Mule Palette* view, select *Core* and drag the *Logger* component to log information in the console or log file.
+. Create a subflow with the *Logger* component to log information for the subflow.
+.. From the *Mule Palette* view, select *Core* and drag the *Logger* component.
+.. From the *Mule Palette* view, select *Core* and drag the *For Each* scope containing a *Logger* component, an FTPS *Read* operation, a *Logger* component, and an FTPS *Write* operation to write the file to the Veeva Vault FTP server.
+.. From the *Mule Palette* view, select *Core* and drag another *Logger* component.
+.. Configure the FTPS Connector configuration with the credentials for the Veeva Vault FTP server.
 
-== Studio Flows
+=== XML for the Example
 
-image::veevavault-connector-create-documents-example.png[]
-
-image::veevavault-connector-upload-documents-example.png[]
-
-== XML Code
-
-The following example XML code shows the Create Documents operation flow:
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
 
 [source,xml,linenums]
 ----
-<flow name="create-documents-operationFlow"
-doc:id="98fe428d-3961-41e9-afaf-1cbe2b38dee5" >
-    <http:listener doc:name="Listener" doc:id="a894ea19-6344-4553-aa50-b7827c8e8096" config-ref="HTTP_Listener_config" path="/create-documents"/>
-    <db:select doc:name="Select" doc:id="e5af2ee1-faf6-4397-aea8-7df1ca873abb" config-ref="Database_Config">
+<flow name="create-documents-operationFlow" >
+    <http:listener doc:name="Listener" config-ref="HTTP_Listener_config" path="/create-documents"/>
+    <db:select doc:name="Select" config-ref="Database_Config">
         <db:sql >SELECT * FROM createdocuments</db:sql>
     </db:select>
-    <!-- <flow-ref doc:name="upload-files-on-vault-ftp-server" doc:id="8be764bb-bf76-4c9f-870b-fe708077e28e" name="upload-files-on-vault-ftp-server"/> -->
-    <ee:transform doc:name="Transform Message" doc:id="ac21fdf2-9117-4201-a595-907e4dd1ea12">
+    <flow-ref doc:name="upload-files-on-vault-ftp-server" name="upload-files-on-vault-ftp-server"/>
+    <ee:transform doc:name="Transform Message" >
         <ee:message>
             <ee:set-payload><![CDATA[%dw 2.0
 output application/csv headerLineNumber = 0 , header = true
@@ -65,8 +70,8 @@ payload map ( payload01 , indexOfPayload01 ) -> {
 	}]]></ee:set-payload>
         </ee:message>
     </ee:transform>
-    <veevavault:create-documents metadataFormat="CSV" doc:name="Create Documents" doc:id="5b98678c-1559-4827-80a9-289aad4a8873" config-ref="Veeva_Vault_Config"/>
-    <db:bulk-insert doc:name=__"Bulk insert" doc:id="e8dd307e-40db-42bb-b82a-b72f6b235d00" config-ref="Database_Config">
+    <veevavault:create-documents metadataFormat="CSV" doc:name="Create Documents" config-ref="Veeva_Vault_Config"/>
+    <db:bulk-insert doc:name=__"Bulk insert" config-ref="Database_Config">
         <db:bulk-input-parameters ><![CDATA[#[output application/java
 ---
 payload.data map () -> {
@@ -78,10 +83,10 @@ payload.data map () -> {
         <db:sql >INSERT into documents (id, external_id__v, responseStatus) VALUES (:id: external_id__v, :responseStatus)
 </db:sql>
     </db:bulk-insert>
-    <logger level="INFO" doc:name="Logger" doc:id="a447ff60-8deb-471c-a1be-cc6c01dfcc29" message="Document Created :: #[output application/json --- payload]"/>
+    <logger level="INFO" doc:name="Logger" message="Document Created :: #[output application/json --- payload]"/>
     <error-handler >
-        <on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="19d98427-1566-4f82-b694-f59cc6eb169a" type="ANY" >
-            <logger level="INFO" doc:name="Logger" doc:id="9c23d079-fbf2-42e7-afe2-b5186a7b9a3f" message="Flow Exception Handled --  #[payload]" />
+        <on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" type="ANY" >
+            <logger level="INFO" doc:name="Logger" message="Flow Exception Handled --  #[payload]" />
         </on-error-propagate>
     </error-handler>
 </flow>
