@@ -1,8 +1,14 @@
 = SAP Connector 5.5 Examples - Mule 4
 :page-aliases: connectors::sap/sap-connector-examples.adoc
 
-The following examples show how to send an IDoc to SAP and receive an SAP function.
+The following examples show several Mule flows for SAP Connector:
 
+* <<send-an-idoc-to-sap>>
+* <<receive-an-incoming-idoc-request>>
+* <<receive-an-sap-function>>
+* <<manage-transactions>>
+
+[[send-an-idoc-to-sap]]
 == Send an IDoc to SAP
 
 This example shows you how to create a Mule app that sends an IDoc to SAP. The following screenshot shows the Studio flow for this example:
@@ -450,6 +456,7 @@ read('<MATMAS01>
             </mule>
 ----
 
+[[receive-an-incoming-idoc-request]]
 == Receive an Incoming IDoc Request
 
 This example shows you how to create a Mule app that waits for incoming IDoc requests from an external SAP system. In this example, the app acts like an RFC server and registers itself as an SAP gateway. When the app receives an IDoc request, it uses a remote function (RFC) call to ask SAP to create the IDoc. Then it logs the IDoc contents to the Studio console.
@@ -636,6 +643,7 @@ Example response on the Studio console:
  		...
 ----
 
+[[receive-an-sap-function]]
 == Receive an SAP Function
 
 This example shows you how to create a Mule app that receives an SAP function. This example displays a result when a function is triggered from either another Mule flow or from the SAP GUI. The following screenshot shows the Studio flow for this example:
@@ -689,6 +697,217 @@ output application/java
                                       </flow>
                                       </mule>
 ----
+
+
+[[manage-transactions]]
+== Manage Transactions
+
+This example performs two calls on standard BAPIs that handle bank records. The following screenshots show the Studio flows for this example:
+
+IMAGE
+
+=== Configure the First Flow
+
+The first flow retrieves a list of available banks in the United States and filters the first result and fetches information about the bank. To configure this flow:
+
+. In Anypoint Studio, create a new Mule project.
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* operation to the canvas to start a new flow.
+. Configure the global element using the default values.
+. In the *Listener* properties tab, set the path to `/sync-rfc`.
+. Drag a *Transform Message* component next to *Listener*.
++
+The content of this message filters the banks by country.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETLIST: {
+		"import": {
+			BANK_CTRY: "US",
+			MAX_ROWS: 0
+		}
+	}
+}
+----
+
+. From the *Mule Palette* view, select *SAP* and drag the *Synchronous Remote Function Call* operation to the right of the *Transform Message* component.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `BAPI_BANK_GETLIST` for the *Function Name* and `payload` for the *Content*.
+. Drag another *Transform Message* component next to *Synchronous Remote Function Call*.
++
+The content of this message filters the first result.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETDETAIL: {
+		"import" : {
+			BANKCOUNTRY: payload.BAPI_BANK_GETLIST.tables.BANK_LIST.*row[0].BANK_CTRY,
+			BANKKEY: payload.BAPI_BANK_GETLIST.tables.BANK_LIST.*row[0].BANK_KEY
+		}
+	}
+}
+----
+. From the *Mule Palette* view, select *SAP* and drag another *Synchronous Remote Function Call* operation to the right of the *Transform Message* component.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `"BAPI_BANK_GETDETAIL"` for the *Function Name* and `payload` for the *Content*.
+. In the *Mule Palette* view, select *Core* and drag a *Logger* component next to *Synchronous Remote Function Call*.
+
+== Configure the Second Flow
+
+The second flow creates a sales order from the data. To configure this flow:
+
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* operation to the canvas to start a new flow.
+. Configure the global element using the default values.
+. In the *Listener* properties tab, set the path to `/sync-mule-transaction`.
+. Drag a *Transform Message* component next to *Listener*.
++
+The content of this message creates a sales order from the data.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_SALESORDER_CREATEFROMDAT2: {
+		"import": {
+			ORDER_HEADER_IN: {
+				DOC_TYPE: "TA",
+				SALES_ORG: "3000",
+				DISTR_CHAN: "10",
+				DIVISION: "00"
+			},
+			ORDER_HEADER_INX: {
+				DOC_TYPE: "X",
+				SALES_ORG: "X",
+				DISTR_CHAN: "X",
+				DIVISION: "X"
+			}
+		},
+		tables: {
+			ORDER_ITEMS_IN: {
+				row: {
+					ITM_NUMBER: "000010",
+					MATERIAL: "000000000050066128" as Number as String {format: "000000000000000000"},
+					PLANT: "3000",
+					TARGET_QTY: "1"
+				}
+			},
+			ORDER_ITEMS_INX: {
+				row: {
+					ITM_NUMBER: "000010",
+					MATERIAL: "X",
+					PLANT: "X",
+					TARGET_QTY: "X"
+				}
+			},
+			ORDER_PARTNERS: {
+				row: {
+					PARTN_ROLE: "WE",
+					PARTN_NUMB: "0000000448"
+				}
+			},
+			ORDER_SCHEDULES_IN: {
+				row: {
+					ITM_NUMBER: "000010",
+					SCHED_LINE: "0001",
+					REQ_QTY: "1"
+				}
+			},
+			ORDER_SCHEDULES_INX: {
+				row: {
+					ITM_NUMBER: "000010",
+					SCHED_LINE: "0001",
+					REQ_QTY: "X"
+				}
+			}
+		}
+	}
+}
+----
+
+. From the *Mule Palette* view, select *SAP* and drag the *Synchronous Remote Function Call* operation to the right of the *Transform Message* component.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `BAPI_SALESORDER_CREATEFROMDAT2` for the *Function Name* and `payload` for the *Content*.
+. From the *Mule Palette* view, select *Core* and drag *On Error Continue* under *Synchronous Remote Function Call*.
+. In the *Mule Palette* view, select *Core* and drag a *Logger* component into *On Error Continue*.
+. In the *Mule Palette* view, select *Core* and drag another *Logger* component next to *Synchronous Remote Function Call*.
+. Enter `payload.BAPI_SALESORDER_CREATEFROMDAT2.export.SALESDOCUMENT` for the *Message*.
+
+== Create the Third Flow
+
+The third flow creates a transaction ID and gets a list. To configure this flow:
+
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* operation to the canvas to start a new flow.
+. Configure the global element using the default values.
+. In the *Listener* properties tab, set the path to `/async-rfc`.
+. From the *Mule Palette* view, select *SAP* and drag the *Start SAP transaction* operation next to *Listener*.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. In the *Mule Palette* view, select *Core* and drag a *Set Variable* transformer next to *Start SAP transaction*.
+. Enter `createdTransactionId` for the *Name* and `payload` for the *Value*.
+. Drag a *Transform Message* component next to *Set Variable*.
++
+The content of this message gets a list of banks.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETLIST: {
+		"import": {
+			BANK_CTRY: "US",
+			MAX_ROWS: 0
+		}
+	}
+}
+----
+. From the *Mule Palette* view, select *SAP* and drag the *Asynchronous Remote Function Call* operation next to *Transform Message*.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `"BAPI_BANK_GETLIST"` for the *Function Name* and `payload` for the *Content*.
+. From the *Mule Palette* view, select *SAP* and drag the *Confirm transaction* operation next to *Asynchronous Remote Function Call*.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `vars.createdTransactionId` for the *Transaction ID (TID)*.
+
+=== Run the App
+
+To run the Mule app:
+
+. Click *Run* > *Run as* > *Mule Application*.
++
+. From a web browser, test the application by entering the following URL:
++
+`+http://localhost:8081/sync-rfc+`
++
+You should
+
+=== XML for Receiving an IDoc Request
+
+Paste this code into a new Mule app in Studio to quickly load the flow for the receiving an IDoc request example. Change the values to reflect your environment.
+
+[source,dataweave,linenums]
+----
+
+
+
+
 
 == See Also
 
