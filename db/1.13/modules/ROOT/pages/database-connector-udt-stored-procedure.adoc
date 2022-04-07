@@ -11,7 +11,7 @@ To accomplish this example, you must: +
 * Run a script to create UDTs, the table, and the stored procedure
 * Configure an Oracle database connection
 * Create the Mule application
-* Use `createStruct` and `createArray` DataWeave functions to map application data to custom types
+* Use `prepareStruct` and `prepareArray` DataWeave functions to map application data to custom types
 * Run and test the application with curl commands
 
 .Oracle Stored procedure with UDTs Flow
@@ -179,51 +179,49 @@ image::database-oracleudt-example-4.png[The Set payload component configuration]
 
 === Configure the Transform Message Component with DataWeave Functions
 
-Continue creating the Mule application using a *Transform Message* component with `createStruct` and `createArray` DataWeave functions that map application data to the example custom user data types:
+Continue creating the Mule application using a *Transform Message* component with `prepareStruct` and `prepareArray` DataWeave functions that map application data to the example custom user data types:
 
 . Drag a *Transform Message* component to the right of *Set Payload*. +
 This component transforms the JSON objects into an object that can be mapped to the data type `PEOPLE` that the stored procedure expects as an input parameter.
 . Double-click the component in the Studio canvas and set the name to `Transform Message - Prepare UDT`.
 . In the *Output* source code view of the component, click the *Edit Current Target* button.
 . In the *Selection dialog* box, set the *Output* field to `Variable` and the *Variable name* to `in_people_tab`, and then click *OK*.
-. In the *Output* field, specify the following DataWeave expression that contains the `createStruct`  and `createArray` functions:
+. In the *Output* field, specify the following DataWeave expression that contains the `prepareStruct`  and `prepareArray` functions:
 +
 [source,DataWeave,linenums]
 ----
 %dw 2.0
 output application/java
 
-fun toPhoneNumberArray(phoneNumber) = Db::createArray("dbConfig", "PHONE_NUMBER_ARRAY",[Db::createStruct("dbConfig", "PHONE_NUMBER", [phoneNumber.areaCode, phoneNumber.phoneNumber])])
-fun toPerson(person) = Db::createStruct("dbConfig", "PERSON", [person.name, person.surname, person.age, toPhoneNumberArray(person.phoneNumber)])
+fun toPhoneNumberArray(phoneNumber) = Db::prepareArray("PHONE_NUMBER_ARRAY",[Db::prepareStruct("PHONE_NUMBER", [phoneNumber.areaCode, phoneNumber.phoneNumber])])
+fun toPerson(person) = Db::prepareStruct("PERSON", [person.name, person.surname, person.age, toPhoneNumberArray(person.phoneNumber)])
 ---
-Db::createArray("dbConfig", "PEOPLE", payload map (item, index) -> ( toPerson(item) ) )
+Db::prepareArray("PEOPLE", payload map (item, index) -> ( toPerson(item) ) )
 ----
 +
 
 .Transform Message configuration
 image::database-oracleudt-example-6.png[Transform Message configuration]
 
-The `createStruct` function creates JDBC struct objects based on the `Name` type and their corresponding properties. In the example, types `PERSON` and `PHONE_NUMBER` are struct objects. The function expects the following parameters in order:
+The `prepareStruct` instructs Mule to create JDBC struct objects based on the `Name` type and their corresponding properties when a database operation is performed. In the example, types `PERSON` and `PHONE_NUMBER` are struct objects. The function expects the following parameters in order:
 
-* `configName` +
-A string with the name of the configuration that creates the `Struct` type: in this example, `dbConfig`
 * `typeName` +
 A string with the name of the `Struct` type to create: in this example, `PERSON` or `PHONE_NUMBER`
 * `values` +
 An array of values that conforms to the `Struct` properties: in this example, for `PHONE_NUMBER`, `['046', '666']`
 
-The `createArray` function creates JDBC array objects based on the `Array` type. In this example, types `PHONE_NUMBER_ARRAY`, `PEOPLE`, and `PHONE_BOOK` are array objects. The function expects the following parameters in order:
+The `prepareArray` function instructs Mule to create JDBC array objects based on the `Array` type when a database operartion is performed. In this example, types `PHONE_NUMBER_ARRAY`, `PEOPLE`, and `PHONE_BOOK` are array objects. The function expects the following parameters in order:
 
-* `configName` +
-A string with the name of the configuration that creates the `Array` type: in this example, `dbConfig`
 * `typeName` +
 A string with the name of the `Array` type to create: in this example, `PEOPLE` or `PHONE_NUMBER_ARRAY`
 * `values` +
-An array of values that conforms to the `Array` type: in this example, is an array of `PERSON` objects created using the `createStruct` function
+An array of values that conforms to the `Array` type: in this example, is an array of arrays, each of those representing `PERSON` objects, created using the `prepareStruct` function
+
+Both `prepareStruct` and `prepareArray` functions return special arrays that hold all the information to create the requested SQL values. At operation time the parameter data is recursively analyzed and these arrays are replaced with the proper SQL object.
 
 Note that you can combine and use these functions to create subtypes or nested types. In this example, the type `PERSON` contains the `PHONE_NUMBER_ARRAY` objects. At the same time, the type `PHONE_NUMBER_ARRAY` is defined as an array of `PHONE_NUMBER`.
 
-Additionally, you can combine these functions for complex types if you use the `createArray` function when you are matching to a UDT based on the `Array` type.
+Additionally, you can combine these functions for complex types if you use the `prepareArray` function when you are matching to a UDT based on the `Array` type.
 
 === Configure the Stored Procedure Operation
 
@@ -311,10 +309,10 @@ http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/cu
 			<ee:variables>
 				<ee:set-variable variableName="in_people_tab"><![CDATA[%dw 2.0
 				output application/java
-				fun toPhoneNumberArray(phoneNumber) = Db::createArray("dbConfig", "PHONE_NUMBER_ARRAY",[Db::createStruct("dbConfig", "PHONE_NUMBER", [phoneNumber.areaCode, phoneNumber.phoneNumber])])
-				fun toPerson(person) = Db::createStruct("dbConfig", "PERSON", [person.name, person.surname, person.age, toPhoneNumberArray(person.phoneNumber)])
+				fun toPhoneNumberArray(phoneNumber) = Db::prepareArray("PHONE_NUMBER_ARRAY",[Db::prepareStruct("PHONE_NUMBER", [phoneNumber.areaCode, phoneNumber.phoneNumber])])
+				fun toPerson(person) = Db::prepareStruct("PERSON", [person.name, person.surname, person.age, toPhoneNumberArray(person.phoneNumber)])
 				---
-				Db::createArray("dbConfig", "PEOPLE", payload map (item, index) -> ( toPerson(item) ) )
+				Db::prepareArray("PEOPLE", payload map (item, index) -> ( toPerson(item) ) )
 				]]></ee:set-variable>
 			</ee:variables>
 		</ee:transform>
@@ -339,6 +337,12 @@ http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/cu
 
 </mule>
 ----
+
+== Migrating away from createStruct and createArray
+
+Previous Mule versions only provided `createStruct` and `createArray`. These now deprecated functions create JDBC values right away. However, these JDBC values must be created with the same connection that's used for the database operation. That's why `prepareStruct` and `prepareArray` were added so these values' creation is deferred until the right SQL connection is available.
+
+Existing code using the deprecated functions can be updated by replacing `createStruct` with `prepareStruct` and + `createArray` with `prepareArray`, and by removing the first parameter (a database configuration).
 
 == See Also
 
