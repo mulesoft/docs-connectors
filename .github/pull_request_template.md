@@ -19,4 +19,4 @@ Before merging your PR, did you:
   - Product Manager
   - Editor or peer reviewer
   - Reporter, if this content is in response to a reported issue (internal or external feedback)
-- [ ] Verify that the software actually got released
+- [ ] If applicable, verify that the software actually got released
