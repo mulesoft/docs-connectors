@@ -29,7 +29,6 @@ Mule server notifications are not supported because the Kafka library used in th
 * <<consumer-sasl-plain, Consumer SASL/PLAIN Connection>>
 * <<consumer-config_consumer-sasl-token-connection, Consumer SASL/TOKEN Connection>>
 | The connection types to provide to this configuration. | | x
-|  Name a| String| The name for this configuration. Connectors reference the configuration with this name. | | x
 |Default acknowledgment mode a| Enumeration, one of
 
 ** AUTO
@@ -62,6 +61,7 @@ Mule server notifications are not supported because the Kafka library used in th
 ** HOURS
 ** DAYS |  The time unit for the operation timeout. This combines with operationTimeout to define the total default timeout for the operations that use this configuration. |  SECONDS |
 | Zone ID a| String |  Converts the provided timestamps into `ZonedLocalDateTimes` in the results. The default value is provided by the system. |  |
+| Expiration Policy a| <<ExpirationPolicy>> |  +++Configures the minimum amount of time that a dynamic configuration instance can remain idle before the runtime considers it eligible for expiration. This does not mean that the platform will expire the instance at the exact moment that it becomes eligible. The runtime will actually purge the instances when it sees it fit.+++ |  |
 |===
 
 ==== Connection Types
@@ -393,16 +393,13 @@ In a Windows environment, if a ticket cannot be retrieved from the file ticket c
 [[consumer-sasl-scram]]
 ===== Consumer SASL/SCRAM Connection
 
+Salted Challenge Response Authentication Mechanism (SCRAM), or SASL/SCRAM, is a family of SASL mechanisms that addresses the security concerns with traditional mechanisms that perform username/password authentication like PLAIN. Apache KafkaÂ® supports SCRAM-SHA-256 and SCRAM-SHA-512.
+
+
 ====== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
-| username | String | The username with which to login |  | x
-| password | String | The password with which to login |  | x
-| encryptionType | Enumeration, one of:
-
-** SHA256
-** SHA512 | The encryption algorithm used by SCRAM|  | x
 | Bootstrap Server URLs a| Array of String |  The list of servers to bootstrap the connection with the Kafka cluster. This can be a partial list of the available servers. |  | x
 | Group ID a| String |  Default group ID for all Kafka consumers that use this configuration |  |
 | Consumer Amount a| Number | The number of consumers the connection initially creates  |  `1` |
@@ -568,6 +565,12 @@ The maximum record batch size accepted by the broker is defined using `message.m
 ** MINUTES
 ** HOURS
 ** DAYS |  The time unit for the fetch maximum wait timeout scalar. |  `MILLISECONDS` |
+| Username | String | The username with which to login |  | x
+| Password | String | The password with which to login |  | x
+| Encryption type | Enumeration, one of:
+
+** SHA256
+** SHA512 | The encryption algorithm used by SCRAM|  | x
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
 |===
 
@@ -949,6 +952,7 @@ Each entry is resolved and expanded into a list of canonical names. | USE_ALL_DN
 |===
 | Name | Type | Description | Default Value | Required
 | Bootstrap server URLs a| Array of String |  The list of servers to bootstrap the connection with the Kafka cluster. This can be a partial list of the available servers. |  | x
+| Endpoint identification algorithm a| String |  +++The endpoint identification algorithm used by clients to validate server host name. The default value is an empty string, which means it is disabled. Clients including client connections created by the broker for inter-broker communication verify that the broker host name matches the host name in the brokers certificate.+++ |  | {nbsp}
 | Batch size a| Number |  The producer attempts to batch records together into fewer requests whenever multiple records are sent to the same partition. This helps performance on both the client and the server. This configuration controls the default batch size in bytes. No attempt is made to batch records larger than this size. Requests sent to brokers will contain multiple batches, one for each partition with the data that is available to send. A small batch size makes batching less common and can reduce throughput (a batch size of zero disables batching entirely). A very large batch size can result in more wasteful use of memory as a buffer of the specified batch size is always allocated in anticipation of additional records. |  `16` |
 | The batch size unit of measure. a| Enumeration, one of:
 
@@ -1063,7 +1067,7 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 ** KB
 ** MB
 ** GB |  The unit of measure for the send buffer size scalar. You can override this parameter at source level. |  `KB` |
-| Default request timeout a| Number |  The configuration controls the maximum amount of time the client will wait for the response of a request. If the response is not received before the timeout elapses, the client will resend the request if necessary or fail the request if retries are exhausted. This should be larger than `replica.lag.time.max.ms` (a broker configuration) to reduce the possibility of message duplication due to unnecessary producer retries. |  `30` |
+| Default request timeout a| Number |  The maximum amount of time the client waits for the response to a request. If the response is not received before the timeout elapses, the client resends the request if necessary or fails the request if retries are exhausted. This value should be larger than `replica.lag.time.max.ms` (a broker configuration) to reduce the possibility of message duplication due to unnecessary producer retries. |  30 |
 | Default request timeout time unit a| Enumeration, one of:
 
 ** NANOSECONDS
@@ -1073,7 +1077,6 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 ** MINUTES
 ** HOURS
 ** DAYS |  The time unit for the request timeout time scalar |  SECONDS |
-| Default request timeout a| Number |  The maximum amount of time the client waits for the response to a request. If the response is not received before the timeout elapses, the client resends the request if necessary or fails the request if retries are exhausted. This value should be larger than `replica.lag.time.max.ms` (a broker configuration) to reduce the possibility of message duplication due to unnecessary producer retries. |  30 |
 | Partitioner a| Enumeration, one of:
 
 ** DEFAULT
@@ -1091,6 +1094,7 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 |===
 | Name | Type | Description | Default Value | Required
 | Bootstrap Server URLs a| Array of String |  The list of servers to bootstrap the connection with the Kafka cluster. This can be a partial list of the available servers. |  | x
+| Endpoint identification algorithm a| String |  +++The endpoint identification algorithm used by clients to validate server host name. The default value is an empty string, which means it is disabled. Clients including client connections created by the broker for inter-broker communication verify that the broker host name matches the host name in the brokers certificate.+++ |  | {nbsp}
 | Batch size a| Number |  The producer attempts to batch records together into fewer requests when multiple records are sent to the same partition. This helps performance on both the client and the server. This parameter controls the default batch size, in bytes. No attempt is made to batch records larger than this size.
 {sp} +
 {sp} +
@@ -1253,13 +1257,8 @@ Producer requests are failed before the number of retries is exhausted if the ti
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
 | Name | Type | Description | Default Value | Required
-| Username | String | The username with which to login. |  | x
-| Password | String | The password with which to login. |  | x
-| EncryptionType | Enumeration, one of:
-
-** SHA256
-** SHA512 | The encryption algorithm used by SCRAM. Only acceptable values are SHA-256 and SHA-512. |  | x
 | Bootstrap server URLs a| Array of String |  The list of servers to bootstrap the connection with the Kafka cluster. This can be a partial list of the available servers. |  | x
+| Endpoint identification algorithm | String | The endpoint identification algorithm used by clients to validate server host name. The default value is an empty string, which means it is disabled. Clients including client connections created by the broker for inter-broker communication verify that the broker host name matches the host name in the brokers certificate. | |
 | Batch size a| Number |  The producer attempts to batch records together into fewer requests whenever multiple records are sent to the same partition. This helps performance on both the client and the server. This configuration controls the default batch size in bytes. No attempt is made to batch records larger than this size. Requests sent to brokers will contain multiple batches, one for each partition with the data that is available to send. A small batch size makes batching less common and can reduce throughput (a batch size of zero disables batching entirely). A very large batch size can result in more wasteful use of memory as a buffer of the specified batch size is always allocated in anticipation of additional records. |  `16` |
 | The batch size unit of measure. a| Enumeration, one of:
 
@@ -1379,8 +1378,18 @@ After the specified `batch.size` worth of records  is received for a partition, 
 ** MINUTES
 ** HOURS
 ** DAYS |  The request timeout time unit. |  `SECONDS` |
+| Partitioner a| Enumeration, one of:
+
+** DEFAULT
+** ROUND_ROBIN
+** UNIFORM_STICKY |  +++The configuration controls which partitioning strategy is used when sending messages without providing a key or a partition.+++ |  +++DEFAULT+++ | {nbsp}
 | TLS Configuration a| <<Tls>> |  Defines a configuration for TLS, which can be used from both the client and server sides to secure communication for the Mule app. When using the HTTPS protocol, the HTTP communication is secured using TLS or SSL. If HTTPS is configured as the protocol then the user needs to configure at least the keystore in the `tls:context` child element of the `listener-config`. |  |
-| Endpoint identification algorithm | String | The endpoint identification algorithm used by clients to validate server host name. The default value is an empty string, which means it is disabled. Clients including client connections created by the broker for inter-broker communication verify that the broker host name matches the host name in the brokers certificate. | |
+| Username | String | The username with which to login. |  | x
+| Password | String | The password with which to login. |  | x
+| EncryptionType | Enumeration, one of:
+
+** SHA256
+** SHA512 | The encryption algorithm used by SCRAM. Only acceptable values are SHA-256 and SHA-512. |  | x
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
 |===
 
