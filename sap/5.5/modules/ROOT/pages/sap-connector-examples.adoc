@@ -1,8 +1,14 @@
 = SAP Connector 5.5 Examples - Mule 4
 :page-aliases: connectors::sap/sap-connector-examples.adoc
 
-The following examples show how to send an IDoc to SAP and receive an SAP function.
+The following examples show several Mule flows for SAP Connector:
 
+* <<send-an-idoc-to-sap>>
+* <<receive-an-incoming-idoc-request>>
+* <<receive-an-sap-function>>
+* <<manage-transactions>>
+
+[[send-an-idoc-to-sap]]
 == Send an IDoc to SAP
 
 This example shows you how to create a Mule app that sends an IDoc to SAP. The following screenshot shows the Studio flow for this example:
@@ -450,6 +456,7 @@ read('<MATMAS01>
             </mule>
 ----
 
+[[receive-an-incoming-idoc-request]]
 == Receive an Incoming IDoc Request
 
 This example shows you how to create a Mule app that waits for incoming IDoc requests from an external SAP system. In this example, the app acts like an RFC server and registers itself as an SAP gateway. When the app receives an IDoc request, it uses a remote function (RFC) call to ask SAP to create the IDoc. Then it logs the IDoc contents to the Studio console.
@@ -636,6 +643,7 @@ Example response on the Studio console:
  		...
 ----
 
+[[receive-an-sap-function]]
 == Receive an SAP Function
 
 This example shows you how to create a Mule app that receives an SAP function. This example displays a result when a function is triggered from either another Mule flow or from the SAP GUI. The following screenshot shows the Studio flow for this example:
@@ -688,6 +696,505 @@ output application/java
                                         </ee:transform>
                                       </flow>
                                       </mule>
+----
+
+
+[[manage-transactions]]
+== Manage Transactions
+
+This example performs two calls on standard BAPIs that handle bank records and manages those transactions.
+
+The following screenshots show the Studio flows for this example:
+
+image::managetransactions-flow1.png[Studio flow for the first flow of Managing Transactions]
+
+image::managetransactions-flow2.png[Studio flow for the second flow of Managing Transactions]
+
+image::managetransactions-flow3.png[Studio flow for the third flow of Managing Transactions]
+
+
+=== Configure the First Flow
+
+The first flow retrieves a list of available banks in the United States, filters the first result, and fetches information about the bank. Transactions are not necessary for queries to SAP.
+
+To configure this flow:
+
+. In Anypoint Studio, create a new Mule project.
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* operation to the canvas to start a new flow.
+. Configure the global element using the default values.
+. In the *Listener* properties tab, set the path to `/sync-rfc`.
+. Drag a *Transform Message* component next to *Listener*.
++
+The content of this message filters the banks by country.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETLIST: {
+		"import": {
+			BANK_CTRY: "US",
+			MAX_ROWS: 0
+		}
+	}
+}
+----
+
+. From the *Mule Palette* view, select *SAP* and drag the *Synchronous Remote Function Call* operation next to the *Transform Message* component.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `BAPI_BANK_GETLIST` for the *Function Name* and `payload` for the *Content*.
+. Drag another *Transform Message* component next to *Synchronous Remote Function Call*.
++
+The content of this message filters the first result.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETDETAIL: {
+		"import" : {
+			BANKCOUNTRY: payload.BAPI_BANK_GETLIST.tables.BANK_LIST.*row[0].BANK_CTRY,
+			BANKKEY: payload.BAPI_BANK_GETLIST.tables.BANK_LIST.*row[0].BANK_KEY
+		}
+	}
+}
+----
+. From the *Mule Palette* view, select *SAP* and drag another *Synchronous Remote Function Call* operation next to the *Transform Message* component.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `"BAPI_BANK_GETDETAIL"` for the *Function Name* and `payload` for the *Content*.
+. In the *Mule Palette* view, select *Core* and drag a *Logger* component next to *Synchronous Remote Function Call*.
+
+=== Configure the Second Flow
+
+The second flow creates a sales order from the data. You must add `try` to the BAPI call to create a transaction, otherwise the change does not impact SAP.
+
+To configure this flow:
+
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* operation to the canvas to start a new flow.
+. Configure the global element using the default values.
+. In the *Listener* properties tab, set the path to `/sync-mule-transaction`.
+. Drag a *Transform Message* component next to *Listener*.
++
+The content of this message creates a sales order from the data.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_SALESORDER_CREATEFROMDAT2: {
+		"import": {
+			ORDER_HEADER_IN: {
+				DOC_TYPE: "TA",
+				SALES_ORG: "3000",
+				DISTR_CHAN: "10",
+				DIVISION: "00"
+			},
+			ORDER_HEADER_INX: {
+				DOC_TYPE: "X",
+				SALES_ORG: "X",
+				DISTR_CHAN: "X",
+				DIVISION: "X"
+			}
+		},
+		tables: {
+			ORDER_ITEMS_IN: {
+				row: {
+					ITM_NUMBER: "000010",
+					MATERIAL: "000000000050066128" as Number as String {format: "000000000000000000"},
+					PLANT: "3000",
+					TARGET_QTY: "1"
+				}
+			},
+			ORDER_ITEMS_INX: {
+				row: {
+					ITM_NUMBER: "000010",
+					MATERIAL: "X",
+					PLANT: "X",
+					TARGET_QTY: "X"
+				}
+			},
+			ORDER_PARTNERS: {
+				row: {
+					PARTN_ROLE: "WE",
+					PARTN_NUMB: "0000000448"
+				}
+			},
+			ORDER_SCHEDULES_IN: {
+				row: {
+					ITM_NUMBER: "000010",
+					SCHED_LINE: "0001",
+					REQ_QTY: "1"
+				}
+			},
+			ORDER_SCHEDULES_INX: {
+				row: {
+					ITM_NUMBER: "000010",
+					SCHED_LINE: "0001",
+					REQ_QTY: "X"
+				}
+			}
+		}
+	}
+}
+----
+
+. From the *Mule Palette* view, select *SAP* and drag the *Synchronous Remote Function Call* operation next to the *Transform Message* component.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `BAPI_SALESORDER_CREATEFROMDAT2` for the *Function Name* and `payload` for the *Content*.
+. From the *Mule Palette* view, select *Core* and drag *On Error Continue* under *Synchronous Remote Function Call*.
+. In the *Mule Palette* view, select *Core* and drag a *Logger* component into *On Error Continue*.
+. In the *Mule Palette* view, select *Core* and drag another *Logger* component next to *Synchronous Remote Function Call*.
+. Enter `payload.BAPI_SALESORDER_CREATEFROMDAT2.export.SALESDOCUMENT` for the *Message*.
+
+=== Configure the Third Flow
+
+The third flow creates a transaction ID and gets a list. Asynchronous calls do not expect a response and require a different way of managing the transaction. Use specific operations to manage transactions of asynchronous calls. 
+
+To configure this flow:
+
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* operation to the canvas to start a new flow.
+. Configure the global element using the default values.
+. In the *Listener* properties tab, set the path to `/async-rfc`.
+. From the *Mule Palette* view, select *SAP* and drag the *Start SAP transaction* operation next to *Listener*.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. In the *Mule Palette* view, select *Core* and drag a *Set Variable* transformer next to *Start SAP transaction*.
+. Enter `createdTransactionId` for the *Name* and `payload` for the *Value*.
+. Drag a *Transform Message* component next to *Set Variable*.
++
+The content of this message gets a list of banks.
+. In the *Output* section of the *Transform Message* component, overlay the brackets with this text:
++
+----
+%dw 2.0
+output application/xml
+---
+%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETLIST: {
+		"import": {
+			BANK_CTRY: "US",
+			MAX_ROWS: 0
+		}
+	}
+}
+----
+. From the *Mule Palette* view, select *SAP* and drag the *Asynchronous Remote Function Call* operation next to *Transform Message*.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `"BAPI_BANK_GETLIST"` for the *Function Name* and `payload` for the *Content*.
+. From the *Mule Palette* view, select *SAP* and drag the *Confirm transaction* operation next to *Asynchronous Remote Function Call*.
+. Create a global element named `SAP_Config` and specify the connection information.
+. Click *Test Connection* to confirm that Mule runtime engine can connect with the SAP instance.
+. Enter `vars.createdTransactionId` for the *Transaction ID (TID)*.
+
+=== Run the App
+
+To run the Mule app:
+
+. Click *Run* > *Run as* > *Mule Application*.
++
+. From a web browser, test the first flow by entering the following URL:
++
+`+http://localhost:8081/sync-rfc+`
++
+You should see the XML output of the request, similar to the following:
++
+
+[source,dataweave,linenums]
+----
+<BAPI_BANK_GETDETAIL>
+    <import>
+        <BANKCOUNTRY>US</BANKCOUNTRY>
+        <BANKKEY>021000089</BANKKEY>
+    </import>
+    <export>
+        <BANK_ADDRESS>
+            <BANK_NAME>Citibank</BANK_NAME>
+            <REGION>NY</REGION>
+            <STREET>Park Avenue</STREET>
+            <CITY>New York</CITY>
+            <SWIFT_CODE>CITIUSXX</SWIFT_CODE>
+            <BANK_GROUP/>
+            <POBK_CURAC/>
+            <BANK_NO>021000089</BANK_NO>
+            <POST_BANK/>
+            <BANK_BRANCH>Manhattan</BANK_BRANCH>
+            <ADDR_NO/>
+        </BANK_ADDRESS>
+        <BANK_DETAIL>
+        <CREAT_DATE>2005-03-11</CREAT_DATE>
+        <CREATOR>C5031845</CREATOR>
+        <METHOD/>
+        <FORMATTING/>
+        <BANK_DELETE/>
+        <IBAN_RULE/>
+        <B2B_SUPPORTED>0</B2B_SUPPORTED>
+        <COR1_SUPPORTED>0</COR1_SUPPORTED>
+        <R_TRANSACTION_SUPPORTED>0</R_TRANSACTION_SUPPORTED>
+        </BANK_DETAIL>
+        <RETURN>
+            <TYPE/>
+            <ID/>
+            <NUMBER>000</NUMBER>
+            <MESSAGE/>
+            <LOG_NO/>
+            <LOG_MSG_NO>000000</LOG_MSG_NO>
+            <MESSAGE_V1/>
+            <MESSAGE_V2/>
+            <MESSAGE_V3/>
+            <MESSAGE_V4/>
+            <PARAMETER/>
+            <ROW>0</ROW>
+            <FIELD/>
+            <SYSTEM/>
+        </RETURN>
+    </export>
+</BAPI_BANK_GETDETAIL>
+----
+
+. From a web browser, test the second flow by entering the following URL:
++
+`+http://localhost:8081/sync-mule-transaction+`
++
+You should see the XML output of the request, similar to the following:
++
+[source,dataweave,linenums]
+----
+<BAPI_SALESORDER_CREATEFROMDAT2>
+    <import>
+    <BEHAVE_WHEN_ERROR/>
+    <BINARY_RELATIONSHIPTYPE/>
+    <CONVERT/>
+    <INT_NUMBER_ASSIGNMENT/>
+    <LOGIC_SWITCH>
+    <PRICING/>
+    <ATP_WRKMOD/>
+    <SCHEDULING/>
+    <NOSTRUCTURE/>
+    <COND_HANDL/>
+    <ADDR_CHECK/>
+    </LOGIC_SWITCH>
+    <ORDER_HEADER_IN>
+    <REFOBJTYPE/>
+    <REFOBJKEY/>
+    <REFDOCTYPE/>
+    <DOC_TYPE>TA</DOC_TYPE>
+    <COLLECT_NO/>
+    <SALES_ORG>3000</SALES_ORG>
+    <DISTR_CHAN>10</DISTR_CHAN>
+    <DIVISION>00</DIVISION>
+    <SALES_GRP/>
+    <SALES_OFF/>
+    <REQ_DATE_H/>
+    ....................
+
+    <row id="2">
+    <TYPE>S</TYPE>
+    <ID>V1</ID>
+    <NUMBER>311</NUMBER>
+    <MESSAGE>Standard Order 23669 has been saved</MESSAGE>
+    <LOG_NO/>
+    <LOG_MSG_NO>000000</LOG_MSG_NO>
+    <MESSAGE_V1>Standard Order</MESSAGE_V1>
+    <MESSAGE_V2>23669</MESSAGE_V2>
+    <MESSAGE_V3/>
+    <MESSAGE_V4/>
+    <PARAMETER>SALES_HEADER_IN</PARAMETER>
+    <ROW>0</ROW>
+    <FIELD/>
+    <SYSTEM>T90CLNT090</SYSTEM>
+    </row>
+    </RETURN>
+    </tables>
+</BAPI_SALESORDER_CREATEFROMDAT2>
+----
+
+. From a web browser, test the third flow by entering the following URL:
++
+`+http://localhost:8081/async-rfc+`
++
+You should see the XML output of the request, similar to the following:
++
+[source,dataweave,linenums]
+----
+<BAPI_BANK_GETLIST>
+    <import>
+        <BANK_CTRY>US</BANK_CTRY>
+        <MAX_ROWS>0</MAX_ROWS>
+    </import>
+</BAPI_BANK_GETLIST>
+----
+
+=== XML for Managing Transactions
+
+Paste this code into a new Mule app in Studio to quickly load the flow for the managing transactions example. Change the values to reflect your environment.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:sap="http://www.mulesoft.org/schema/mule/sap" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sap http://www.mulesoft.org/schema/mule/sap/current/mule-sap.xsd">
+	<configuration-properties file="mule-artifact.properties"/>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="b89c52ef-8c07-4788-b87e-4c698d718341" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	  <sap:sap-config name="SAP_Config" doc:name="SAP Config" doc:id="90c5a950-aefd-4fba-9e28-db3fa29767bb">
+        <sap:simple-connection-provider-connection username="${sap.jcoUser}" password="${sap.jcoPasswd}"
+                                                   systemNumber="${sap.jcoSysnr}" client="${sap.jcoClient}"
+                                                   applicationServerHost="${sap.jcoAsHost}"/>
+    </sap:sap-config>
+	<flow name="bapi-srfc" doc:id="26ade074-48b4-47bb-a8e9-ca040034dee6" >
+		<http:listener doc:name="Listener" doc:id="16a60ec9-f1c9-4a07-9a02-e7fcbb185a12" config-ref="HTTP_Listener_config" path="/sync-rfc"/>
+				<ee:transform doc:name="Filter by country" doc:id="f285db36-da88-4e96-b7e6-c92acf4a8e5b" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETLIST: {
+		"import": {
+			BANK_CTRY: "US",
+			MAX_ROWS: 0
+		}
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<sap:sync-rfc doc:name="Synchronous Remote Function Call" doc:id="cd5a8815-c5be-4bcc-aaf5-77c90090d124" config-ref="SAP_Config" key="BAPI_BANK_GETLIST"/>
+		<ee:transform doc:name="Filter first result" doc:id="55eecae1-4e9a-4e5b-93f2-1633bf14dbc9" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETDETAIL: {
+		"import" : {
+			BANKCOUNTRY: payload.BAPI_BANK_GETLIST.tables.BANK_LIST.*row[0].BANK_CTRY,
+			BANKKEY: payload.BAPI_BANK_GETLIST.tables.BANK_LIST.*row[0].BANK_KEY
+		}
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<sap:sync-rfc doc:name="Synchronous Remote Function Call" doc:id="10404fb9-f887-4cea-9a64-32f8559814d2" config-ref="SAP_Config" key='#["BAPI_BANK_GETDETAIL"]'/>
+		<logger level="INFO" doc:name="Logger" doc:id="f65b06a8-ff33-4906-9bd0-6c3895e5e0cf" message="#[payload]"/>
+		</flow>
+		<flow name="bapi-mule-transaction" doc:id="f47687b3-6e2b-4c22-b4b1-900f9ac5a078" >
+		<http:listener doc:name="Listener" doc:id="c16d6ef3-4601-4260-b82f-37f35540fdd3" config-ref="HTTP_Listener_config" path="/sync-mule-transaction"/>
+		<ee:transform doc:name="Transform Message" doc:id="5b07e4f5-12bb-4ed2-941f-599789e5e04f">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/xml
+---
+{
+	BAPI_SALESORDER_CREATEFROMDAT2: {
+		"import": {
+			ORDER_HEADER_IN: {
+				DOC_TYPE: "TA",
+				SALES_ORG: "3000",
+				DISTR_CHAN: "10",
+				DIVISION: "00"
+			},
+			ORDER_HEADER_INX: {
+				DOC_TYPE: "X",
+				SALES_ORG: "X",
+				DISTR_CHAN: "X",
+				DIVISION: "X"
+			}
+		},
+		tables: {
+			ORDER_ITEMS_IN: {
+				row: {
+					ITM_NUMBER: "000010",
+					MATERIAL: "000000000050066128" as Number as String {format: "000000000000000000"},
+					PLANT: "3000",
+					TARGET_QTY: "1"
+				}
+			},
+			ORDER_ITEMS_INX: {
+				row: {
+					ITM_NUMBER: "000010",
+					MATERIAL: "X",
+					PLANT: "X",
+					TARGET_QTY: "X"
+				}
+			},
+			ORDER_PARTNERS: {
+				row: {
+					PARTN_ROLE: "WE",
+					PARTN_NUMB: "0000000448"
+				}
+			},
+			ORDER_SCHEDULES_IN: {
+				row: {
+					ITM_NUMBER: "000010",
+					SCHED_LINE: "0001",
+					REQ_QTY: "1"
+				}
+			},
+			ORDER_SCHEDULES_INX: {
+				row: {
+					ITM_NUMBER: "000010",
+					SCHED_LINE: "0001",
+					REQ_QTY: "X"
+				}
+			}
+		}
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<try doc:name="Try" doc:id="a5e37154-87b2-495a-9576-509d21d2d234" transactionalAction="ALWAYS_BEGIN">
+			<sap:sync-rfc doc:name="Synchronous Remote Function Call" doc:id="8af8b804-57d2-4b44-a0d2-7a50d7018573" config-ref="SAP_Config" key="BAPI_SALESORDER_CREATEFROMDAT2"/>
+			<error-handler>
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="144141a8-7941-41f3-837b-40a2e25905be">
+					<logger level="INFO" doc:name="Logger" doc:id="50a3d4c1-1a01-4a8b-ac9d-cdb354ec8ddb" message="Bapi Error" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<logger level="INFO" doc:name="Logger" doc:id="36097fa1-0a5d-44fc-9432-b0ef048a85c7" message="#[payload.BAPI_SALESORDER_CREATEFROMDAT2.export.SALESDOCUMENT]"/>
+	</flow>
+	<flow name="async-rfc" doc:id="ba757987-1e8c-47d5-8168-23043948ae8f" >
+		<http:listener doc:name="Listener" doc:id="ee6d3bf1-3474-4d38-80f9-2651f374d876" config-ref="HTTP_Listener_config" path="/async-rfc"/>
+		<sap:create-transaction-id doc:name="Start SAP transaction" doc:id="3bfd77a6-3397-45cb-b9c6-6450f3f010c8" config-ref="SAP_Config"/>
+		<set-variable value="#[payload]" doc:name="Set Variable" doc:id="a20de9fb-61ec-4d90-8da7-fee910da7d49" variableName="createdTransactionId"/>
+		<ee:transform doc:name="Transform Message" doc:id="7c000a34-c035-470b-8ff3-546e8156ece4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/xml
+---
+{
+	BAPI_BANK_GETLIST: {
+		"import": {
+			BANK_CTRY: "US",
+			MAX_ROWS: 0
+		}
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<sap:async-rfc doc:name="Asynchronous Remote Function Call" doc:id="a45ec861-be1b-4c16-8d3e-ef83dab24cea" config-ref="SAP_Config" key='#["BAPI_BANK_GETLIST"]' transactionId="#[vars.createdTransactionId]"/>
+		<sap:confirm-transaction-id doc:name="Confirm transaction" doc:id="939e882d-9416-40c0-8b5d-85871e264aa6" config-ref="SAP_Config" transactionId="#[vars.createdTransactionId]"/>
+	</flow>
+</mule>
 ----
 
 == See Also
