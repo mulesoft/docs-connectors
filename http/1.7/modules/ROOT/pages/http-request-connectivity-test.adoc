@@ -1,0 +1,107 @@
+= HTTP Requester Config Connectivity Testing
+:page-aliases: connectors::http/http-request-connectivity-test.adoc
+
+The Anypoint Connector for HTTP (HTTP Connector) Request operation enables you to consume an external HTTP service by adding a `<http:request>` operation to your flow.
+
+To use an `<http:request>` operation, you must set a request global configuration with a connection provider:
+[source,xml,linenums]
+----
+<http:request-config name="requestConfigWithoutTestConnection">
+  <http:request-connection protocol="HTTP" host="localhost" port="80" />
+</http:request-config>
+----
+
+
+== Minimal Connectivity Testing Configuration
+
+Since HTTP Connector v1.7.0, that connection provider supports connectivity testing. For reference about connectivity testing, please read TODO: ADD A REFERENCE TO CONN TEST
+
+In order to configure connectivity testing in the `<http:request-connection>` without depending on a `<http:request>` operation, you have to add a tag like this:
+[source,xml,linenums]
+----
+<http:request-config name="requestConfigWithOnlyPath">
+  <http:request-connection host="localhost" port="80" >
+    <http:connectivity-test requestPath="/thePath" />
+  </http:request-connection>
+</http:request-config>
+----
+
+At this point, you are able to use the Studio `Test Connection...` button in the Studio UI, and it will trigger a request to the URL `http://localhost:80/thePath`.
+If a connection could be established, a request could be sent, a response is received, and the response status code is in the range 0..399, the test connection is considered successful. Otherwise, it's considered failed.
+
+
+== Full Connectivity Testing Configuration
+
+The only required parameter for the `<http:connectivity-test>` is the `requestPath`, but there are a bunch of parameters to configure it:
+[source,xml,linenums]
+----
+<http:connectivity-test requestPath="/{pathUriParam}" requestMethod="POST"
+                        responseTimeout="30" responseTimeoutUnit="SECONDS"
+                        followRedirects="true">
+  <http:request-body>
+    <![CDATA[The Body]]>
+  </http:request-body>
+  <http:request-headers>
+    <http:request-header key="Key" value="Value1" />
+    <http:request-header key="Key" value="Value2" />
+  </http:request-headers>
+  <http:request-query-params>
+    <http:query-param key="Key1" value="Value1" />
+    <http:query-param key="Key2" value="Value2" />
+  </http:request-query-params>
+  <http:request-uri-params>
+    <http:uri-param key="pathUriParam" value="testPath" />
+  </http:request-uri-params>
+  <http:response-validator>
+    <http:success-status-code-validator values="200" />
+  </http:response-validator>
+</http:connectivity-test>
+----
+
+Again, if you use the `Test Connection...` button the connector will send a POST request to `http://localhost:80/testPath?Key1=Value1&Key2=Value2`, it will wait 30 seconds for a response, and it will follow redirects if needed. Notice that the headers both have the same name, it’s allowed. In this case, the test connection will be successful only if the response status code is a 200.
+
+
+== Expression Response Validator
+
+You can specify a response validator with a custom DW expression:
+[source,xml,linenums]
+----
+<http:request-config name="cfg">
+  <http:request-connection host="localhost" port="80" >
+    <http:connectivity-test requestPath="/testPath" >
+      <http:response-validator>
+        <http:expression-response-validator expression="#[
+          attributes.statusCode == 200 and
+          attributes.reasonPhrase == '' and
+          attributes.headers['content-length'] == '0' and
+          payload as String == '']" />
+      </http:response-validator>
+    </http:connectivity-test>
+  </http:request-connection>
+</http:request-config>
+----
+
+[NOTE]
+The available bindings in that expression are the *payload* and the *attributes*.
+This Response Validator can be also used in the `<http:request>` operation. However, in that context it also applies that the only available bindings in that expression are the *payload* and the *attributes* from the response.
+
+== Basic and Digest Authentication
+
+If your destination service requires authentication, you can configure basic or digest authentication in the `<http:connectivity-test>`:
+[source,xml,linenums]
+----
+<http:request-config name="basicConfig">
+  <http:request-connection host="localhost" port="${httpPort}">
+    <http:authentication>
+      <http:basic-authentication username="user" password="password" />
+    </http:authentication>
+    <http:connectivity-test requestPath="/basic" />
+  </http:request-connection>
+</http:request-config>
+----
+
+
+== See Also
+
+* xref:http-request-ref.adoc[Configure HTTP Request Operation]
+* xref:http-documentation.adoc[HTTP Connector Reference]
