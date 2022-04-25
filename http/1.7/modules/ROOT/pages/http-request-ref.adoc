@@ -85,6 +85,107 @@ In the *Configuration XML* editor, the `host`, `port`, `path`, `trust-store`, an
 </flow>
 ----
 
+== Configure HTTP Request Connectivity Testing
+:page-aliases: connectors::http/http-request-connectivity-test.adoc
+
+The HTTP *Request* operation requires a global request configuration with a connection provider. Since HTTP Connector version 1.7.0, the connection provider supports connectivity testing.
+
+=== Configure Minimal Connectivity Testing
+
+To configure connectivity testing in the request global configuration without depending on the *Request* operation, add the `<http:connectivity-test>` and `requestPath` parameters in the `<http:request-connection>` tag as follows:
+
+[source,xml,linenums]
+----
+<http:request-config name="requestConfigWithOnlyPath">
+  <http:request-connection host="localhost" port="80" >
+    <http:connectivity-test requestPath="/thePath" />
+  </http:request-connection>
+</http:request-config>
+----
+
+After you configure the connectivity testing, you can test the connection in Studio:
+
+. Navigate to the *Global Elements* tab.
+. Select *HTTP Request configuration (Configuration)*.
+. Click *Edit* to open the global configuration window.
+. Click *Test connection...* to trigger a request to the URL `http://localhost:80/thePath`.
+
+If a connection is established, a request is sent, and a response is received. The test connection is successful if the response status code is in the range of 0..399. Otherwise, the test connection failed.
+
+
+=== Configure Full Connectivity Testing
+
+The connectivity testing `<http:connectivity-test>` requires only the `requestPath` parameter, though you can also configure additional parameters, as follows:
+
+[source,xml,linenums]
+----
+<http:connectivity-test requestPath="/{pathUriParam}" requestMethod="POST"
+                        responseTimeout="30" responseTimeoutUnit="SECONDS"
+                        followRedirects="true">
+  <http:request-body>
+    <![CDATA[The Body]]>
+  </http:request-body>
+  <http:request-headers>
+    <http:request-header key="Key" value="Value1" />
+    <http:request-header key="Key" value="Value2" />
+  </http:request-headers>
+  <http:request-query-params>
+    <http:query-param key="Key1" value="Value1" />
+    <http:query-param key="Key2" value="Value2" />
+  </http:request-query-params>
+  <http:request-uri-params>
+    <http:uri-param key="pathUriParam" value="testPath" />
+  </http:request-uri-params>
+  <http:response-validator>
+    <http:success-status-code-validator values="200" />
+  </http:response-validator>
+</http:connectivity-test>
+----
+
+In the previous example, if you press the `Test Connection...` button in the global configuration window, HTTP Connector sends a POST request to `http://localhost:80/testPath?Key1=Value1&Key2=Value2`.
+The connector waits 30 seconds for a response and follows redirects if needed. Notice that both headers `key` have the same name, as it’s allowed. For this example, the test connection is successful only if the response status code is 200.
+
+
+=== Configure Response Validator Expression for Connectivity Testing
+
+You can configure a response validator `<http:response-validator>` with a custom DataWeave expression for the `<http:connectivity-test>`, as follows:
+
+[source,xml,linenums]
+----
+<http:request-config name="cfg">
+  <http:request-connection host="localhost" port="80" >
+    <http:connectivity-test requestPath="/testPath" >
+      <http:response-validator>
+        <http:expression-response-validator expression="#[
+          attributes.statusCode == 200 and
+          attributes.reasonPhrase == '' and
+          attributes.headers['content-length'] == '0' and
+          payload as String == '']" />
+      </http:response-validator>
+    </http:connectivity-test>
+  </http:request-connection>
+</http:request-config>
+----
+
+[NOTE]
+The available bindings in the previous expression are the *payload* and the *attributes*. You can also use the previous response validator configuration in the HTTP *Request* operation. However, in that context it also applies that the only available bindings in that expression are the *payload* and the *attributes* from the response.
+
+=== Configure Basic and Digest Authentication for Connectivity Testing
+
+If your destination service requires authentication, you can configure basic or digest authentication in the `<http:connectivity-test>`, as follows:
+
+[source,xml,linenums]
+----
+<http:request-config name="basicConfig">
+  <http:request-connection host="localhost" port="${httpPort}">
+    <http:authentication>
+      <http:basic-authentication username="user" password="password" />
+    </http:authentication>
+    <http:connectivity-test requestPath="/basic" />
+  </http:request-connection>
+</http:request-config>
+----
+
 == Configure HTTP Request and Response Size Limits
 
 By default, Mule defines maximum values for the HTTP request size, response size, and request/response header size. However, you can change these values by modifying the following properties in the `wrapper.conf` file:
