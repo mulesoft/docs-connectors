@@ -1,11 +1,19 @@
-= Insert large file's content into table Examples - Mule 4
-:page-aliases: connectors::db/db-connector-insert-large-clob.adoc
+= Inserting Large File Content into a Table Examples - Mule 4
 
-Anypoint Connector for Database (Database Connector) supports the *Insert* operation of character large objects (CLOBs) into tables.
+Anypoint Connector for Database (Database Connector) *Insert* operation supports the insertion of character large objects (CLOBs) into tables. The following example illustrates how to read a large file's content and insert it into a table that supports the type of the content.
 
-In the following example, you read a large file's content and insert it into a table that supports that type.
+To accomplish this example, you must: +
 
-The following SQL statement creates the table:
+* Create the table
+* Create the Mule application
+* Run and test the application with curl commands
+
+image::database-insert-large-clobs.png[Example Mule app flow in Studio canvas]
+
+== Create the TABLE
+
+Use your desired SQL client tool to run an `.sql` script with the following SQL statement to create the table:
+
 [source,sql,linenums]
 ----
 CREATE TABLE AWESOMECLOBDATA(
@@ -13,50 +21,98 @@ CREATE TABLE AWESOMECLOBDATA(
     clob_data CLOB
 );
 ----
+== Create the Mule Application
 
-== Configure the Read Operation in Studio
+Follow these steps to create the Mule application:
 
-To read the file properly, define the following configuration:
-[source,xml,linenums]
----
-<file:config name="File_Config">
-    <file:connection workingDir="/dir/containing/file/"/>
-</file:config>
----
+. In Studio, drag an HTTP *Listener* source to the canvas.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure an HTTP global connection.
+. Configure the HTTP global connection and click *OK*.
+. Set *Path* to `/read-insert`.
+. Drag a *Logger* componenent to the right of the HTTP *Listener* source.
+. Set *Message* to `Starting LARGE CLOB reading`.
+. Drag the File Connector *Read* operation to the right of the *Logger* component.
+. In the *General* tab of the operation configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to access the global element configuration fields.
+. Set *Working Directory* to `/dir/containing/file/` in order to read the file properly.
+. Click *OK*.
+. Set *File Path* to `awesomeFile.json`.
+. In the *MIME Type* tab, set *MIME Type* to `application/octet-stream`.
+. Drag another *Logger* component to the right of the *Read* operation.
+. Set *Display Name* to `LARGE CLOB's content on flow`.
+. Drag a Database Connector *Insert* operation to the right of the second *Logger* component.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a database global connection.
+. Configure the database connection and click *OK*.
+. Set *SQL Query Text* to `INSERT INTO AWESOMECLOBDATA (clob_data) VALUES (:payload)`. +
+The SQL text inserts a new record with the file's content in the table.
+. Set *Input Parameters* to the expression:
+```
+{
+	payload: payload
+}
+```
+[start=20]
+. Drag another *Logger* component to the right of the *Insert* operation.
+. Set *Display Name*  to `LARGE CLOB's content inserted`.
+. Set *Message* to the expression `payload`.
+. Save and run your Mule application.
+. Test the app by using the following curl command in your terminal: `curl localhost:8081/read-insert`. +
 
-And configure the *Read* operation like this:
-[source,xml,linenums]
----
-<file:read config-ref="File_Config" path="awesomeFile.json" outputMimeType="application/octet-stream"/>
----
+=== Application MIME Type
 
-=== On application/octet-stream MIME Type
-This type converts the contents of the file to `binary` format allowing the proper handover of data from the *Read* operation to the *Insert* operation.
+The `application/octet-stream` MIME type converts the content of the file to binary format enabling the proper flow of data from the *Read* operation to the *Insert* operation.
 
-If, for example, `text/plain` is used as MIME Type then an OOM error would arise since the DW block (on the Input Parameters from the *Insert* operation) will try to convert to text the whole data-stream from the file before delivering the data to the operation itself.
+For example, if you use `text/plain` MIME type, then an out of memory (OOM) error can arise. This can occur because the DataWeave block, defined in the *Input Parameters* field from the *Insert* operation, tries to convert to text the entire data-stream from the file before delivering the data to the operation itself.
 
-Finally, the `application/json` MIME Type can also be used but when referencing the payload use `payload.^raw` on the *Insert* operation.
+You can also use the `application/json` MIME type. Though, to reference the payload use `payload.^raw` in the *Insert* operation.
 
-== Configure the Insert Operation in Studio
+== XML for Mule Application
 
-Given that the table `AWESOMECLOBDATA` is already created and there is a Database Connector connection configuration named `dbConfig`, you can configure the *Insert* operation that inserts a new record with the file's content in the table:
-
-. In your Studio flow, select the *Insert* operation.
-. In the XML editor, the `<db:insert>` configuration looks like this:
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
 
 [source,xml,linenums]
 ----
-<db:insert config-ref="dbConfig">
-    <db:sql>
-        <![CDATA[INSERT INTO AWESOMECLOBDATA (clob_data) VALUES (:payload)]]></db:sql>
-    <db:input-parameters ><![CDATA[#[{
-                                        payload: payload
-                            }]]]>
-    </db:input-parameters>
-</db:insert>
-----
+<?xml version="1.0" encoding="UTF-8"?>
 
-The `id` parameter is not passed in the query because it is an auto-increment key that is generated automatically by the database.
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<http:listener-config name="HTTP_Listener_config"  >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<file:config name="File_Config" >
+		<file:connection workingDir="/dir/containing/file/" />
+	</file:config>
+
+	<db:config name="dbConfig"  >
+		<db:oracle-connection host="127.0.0.1" user="sys as sysdba" password="password" serviceName="orcl"/>
+	</db:config>
+
+	<flow name="read-insert-large-clob-file"  >
+		<http:listener doc:name="/read-insert"  config-ref="HTTP_Listener_config" path="/read-insert" />
+
+		<logger level="INFO" message="Starting LARGE CLOB reading" />
+
+		<file:read config-ref="File_Config" path='awesomeFile.json' outputMimeType="application/octet-stream" />
+
+		<logger level="INFO" doc:name="LARGE CLOB's content on flow" />
+
+		<db:insert doc:name="Insert LARGE CLOB" config-ref="dbConfig">
+			      <db:sql><![CDATA[INSERT INTO AWESOMECLOBDATA (clob_data) VALUES (:payload)]]></db:sql>
+					<db:input-parameters><![CDATA[#[{
+	payload: payload
+}]]]></db:input-parameters>
+		        </db:insert>
+
+		<logger level="INFO" message="#[payload]" />
+	</flow>
+</mule>
+----
 
 == See Also
 
