@@ -1,5 +1,5 @@
 = AS2 Connector 6.3 Examples - Mule 4
-:page-aliases: connectors::as2/AS2-connector-examples.adoc
+:page-aliases: connectors::as2/as2-connector-examples.adoc
 
 The following examples show how to configure send and receive messages with receipts in Anypoint Connector for AS2 (AS2 Connector):
 
@@ -104,8 +104,78 @@ This example shows you how to configure an *As 2 listener* source to receive MDN
 
 The following example shows how to send MDNs to multiple partners. This example contains two flows:
 
-* The first flow listens for AS2 messages from the configured partners and notifies the Partner Manager organization when it receives a message.
-* The second flow sends an MDN to a partner in response to a received message.
+* The first flow listens for AS2 messages on path `/forward-as2` and forwards them to `/forward-van/as2-receive`.
+* The second flow sends
+
+=== Listening for AS2 Messages
+
+The following flow listens for AS2 messages:
+
+image::as2-connector-example-send-mdn-2.png[Flow for receiving and forwarding AS2 messages]
+
+The XML for this example is:
+
+[source,xml,linenums]
+----
+
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:as2-mule4="http://www.mulesoft.org/schema/mule/as2-mule4" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/as2-mule4 http://www.mulesoft.org/schema/mule/as2-mule4/current/mule-as2-mule4.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="35d8e9ef-c8f9-4364-aa90-957de030b9b4" basePath="b2b" >
+		<http:listener-connection protocol="HTTPS" host="0.0.0.0" port="${https.port}" >
+			<tls:context >
+				<tls:key-store type="jks" path="rootca.jks" alias="rootca" keyPassword="test" password="test" />
+			</tls:context>
+		</http:listener-connection>
+	</http:listener-config>
+
+	<configuration-properties doc:name="Configuration properties" doc:id="b0baf25d-17ef-4d10-bb24-2c5b25e6289c" file="app.properties" />
+	<as2-mule4:listener-config name="AS2_Connector_Listener_ForwardVAN" doc:name="AS2 Connector Listener config" doc:id="59fd60b5-92f4-4532-9b03-41be1e8c27bc" httpListenerConfig="HTTP_Listener_config" securityLevel="SIGNED_ENCRYPTED" >
+		<as2-mule4:self-config as2Name="forward-van" x509Alias="forward-van" email="support@forward-van.com" />
+		<as2-mule4:partner-config as2Name="myth-as2" x509Alias="myth-as2" email="support@mythical.com" />
+		<as2-mule4:key-store-config keystorePassword="test" keystorePath="as2/forward-van.p12" privateKeyPassword="test" />
+	</as2-mule4:listener-config>
+	<as2-mule4:send-config name="AS2_Connector_Send_config" doc:name="AS2 Connector Send config" doc:id="6628b7a2-0577-4d96-aa48-fcd5ff57b1ea" >
+		<as2-mule4:connection partnerURL="#[vars.as2URL]" >
+			<tls:context >
+				<tls:trust-store insecure="true" />
+			</tls:context>
+		</as2-mule4:connection>
+		<as2-mule4:self-config as2Name="#[vars.as2Sender]" x509Alias="#[vars.as2Sender]" email="support@forward-van.com" />
+		<as2-mule4:partner-config as2Name="#[vars.as2Receiver]" x509Alias="#[vars.as2Receiver]" email="support@mythical.com"/>
+		<as2-mule4:requester-config subject="EDI" messageIntegrityCheckAlgorithm="SHA256" mdnMessageIntegrityCheckAlgorithm="SHA256" encryptionAlgorithm="DES_EDE3" requestReceipt="SIGNED_REQUIRED"/>
+		<as2-mule4:keystore-config keystorePassword="test" keystorePath="as2/forward-van.p12" privateKeyPassword="test" />
+	</as2-mule4:send-config>
+	<flow name="forward-van-as2-simulatorFlow" doc:id="7908ee11-bda5-40b9-a3bc-53bcea5cc96c" >
+		<as2-mule4:as2-listener doc:name="Forward VAN AS2 Listener" doc:id="39f3e8e1-c75f-489f-b148-509d4638c1d6" config-ref="AS2_Connector_Listener_ForwardVAN" path="/forward-van/as2-receive"/>
+		<logger level="INFO" doc:name="Logger" doc:id="5f8dcd82-64c4-4188-9197-f0237e7e35d2" message="Received AS2 message from Mythical's Partner Manager"/>
+		<logger level="INFO" doc:name="IDOC Payload from Mythical to Forward VAN" doc:id="d4499996-9c51-4080-8494-9da219a7ff31" message="#[payload]"/>
+	</flow>
+	<flow name="forward-van-as2-simulatorFlow1" doc:id="3662b755-a22e-467d-9f5b-bd2b0d860d3e" >
+		<http:listener doc:name="/forward-van/as2-send" doc:id="934e0e83-fc10-4e41-b247-23bc767c7c8c" config-ref="HTTP_Listener_config" path="/forward-van/as2-send"/>
+		<logger level="INFO" doc:name="Logger" doc:id="2a716fae-3f38-477d-8c81-c35d808355d5" message="Forward VAN is sending IDOC to Mythical via AS2"/>
+		<set-variable value="#[attributes.headers.'as2-URL']" doc:name="as2URL" doc:id="b6db3530-841d-4f8b-87c1-4c1499e72b7d" variableName="as2URL"/>
+		<set-variable value="#[attributes.headers.'as2-from']" doc:name="as2Sender" doc:id="213e69bd-999b-4af4-a23e-3af410e4e616" variableName="as2Sender"/>
+		<set-variable value="#[attributes.headers.'as2-to']" doc:name="as2Receiver" doc:id="2d08bfe8-d50e-4c7a-9f6a-90c35d978184" variableName="as2Receiver"/>
+		<as2-mule4:send-with-sync-mdn doc:name="Send with Sync MDN" doc:id="d103b4df-589e-45d3-afe7-bf791e56410b" config-ref="AS2_Connector_Send_config" outputMimeType="application/EDI-X12">
+			<as2-mule4:custom-headers ><![CDATA[#[output application/java
+---
+{
+	"PLANT-CODE" : "ABC-12345"
+}]]]></as2-mule4:custom-headers>
+		</as2-mule4:send-with-sync-mdn>
+		<logger level="INFO" doc:name="Logger" doc:id="c23c22fc-200e-4aa5-b126-63a14609b23a" message="#[output application/json --- attributes]"/>
+		<set-payload value="#[output application/json --- attributes.as2MdnAttributes]" doc:name="Set Payload" doc:id="7ce67919-7116-4013-9c35-aa268081643c" />
+	</flow>
+</mule>
+----
 
 === Listening
 
@@ -144,6 +214,8 @@ http://www.mulesoft.org/schema/mule/as2-mule4 http://www.mulesoft.org/schema/mul
 ----
 
 ==
+
+
 
 == See Also
 
