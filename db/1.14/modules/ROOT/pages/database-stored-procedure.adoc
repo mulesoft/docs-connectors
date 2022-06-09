@@ -16,9 +16,9 @@ Even though all JDBC drivers must comply with the JDBC specification format, som
 
 `call procedureName(:param1, :param2, ..., :paramN)`
 
-=== Passing Parameters to Stored Procedures
+=== Passing Parameters to Stored Procedures by Ordinal Position
 
-When passing parameters to a stored procedure:
+When passing parameters to a stored procedure by ordinal position:
 
 * Place all the parameters the store procedure contains, even optional parameters with default values.
 * Put the parameters in the same order as they were defined in the stored procedure.
@@ -36,21 +36,72 @@ The following example illustrates an Oracle database that was initialized when c
         PRIMARY KEY(employee_id)
     );
 
-
     CREATE PROCEDURE createEmployee(e_name VARCHAR2, e_age NUMBER, e_birth_date DATE) AS
     BEGIN
         INSERT INTO SYSTEM.employees(employee_name, employee_age, employee_birthday) VALUES(e_name, e_age, e_birth_date);
     END;
 ----
 
-Because Database Connector does not support named parameters in callable statements, attempting to match parameters by name does not work, for example:
-
-`{ call createEmployee(e_age => :age, e_birth_date => :date, e_name => :name) }`
-
 You must provide the parameters in the appropriate order, for example:
 
 `{ call createEmployee(:name, :age, :date) }`.
 
+=== Passing Parameters to Stored Procedures by Parameters Name
+
+When passing parameters to a stored procedure by its parameter names use the following syntax:
+
+`{ call createEmployee(e_age => :age, e_birth_date => :date, e_name => :name) }`
+
+=== Use Parameter Default Values with Parameters Name
+
+Suppose a stored procedure with the following definition:
+
+[source,xml,linenums]
+---
+    CREATE PROCEDURE createEmployeeDefault(e_name VARCHAR2, e_age NUMBER DEFAULT 21, e_birth_date DATE) AS
+    BEGIN
+        INSERT INTO SYSTEM.employees(employee_name, employee_age, employee_birthday) VALUES(e_name, e_age, e_birth_date);
+    END;
+---
+
+To make use of the default value for any parameter use the Named Parameters syntax and omit the desired parameter as follows:
+
+`{ call createEmployee(e_name => :name, e_birth_date => :date) }`
+
+=== Use Overloaded Stored Procedures with Parameters Name
+
+Suppose a package and its body with the following definitions:
+
+[source,xml,linenums]
+---
+    CREATE OR REPLACE PACKAGE PACKAGE1
+        AS
+            PROCEDURE searchFor (l_name IN VARCHAR2);
+            PROCEDURE searchFor (id_test IN INT);
+        END PACKAGE1;
+
+    CREATE OR REPLACE PACKAGE BODY PACKAGE1
+        AS
+            PROCEDURE SEARCHFOR (l_name IN VARCHAR2)
+                AS
+                    BEGIN
+                        INSERT INTO PERSONS VALUES (0, l_name);
+                    END;
+            PROCEDURE SEARCHFOR (id_test IN INT)
+                AS
+                    BEGIN
+                        INSERT INTO PERSONS VALUES (id_test, 'SomeRandomName');
+                    END;
+        END PACKAGE1;
+---
+
+To make use of each procedure use the Named Parameters syntax to execute the desired procedure by its parameter names as follows:
+
+`{ call PACKAGE1.SEARCHFOR(ID_TEST => :parameter) }`
+
+or
+
+`{ call PACKAGE1.SEARCHFOR(L_NAME => :parameter) }`
 
 == Use Dates on Stored Procedures
 
