@@ -189,6 +189,74 @@ These properties avoid any trouble if, for instance, you need to set up Oracle .
 For more information about how to set system properties, refer to the xref:mule-runtime::mule-app-properties-system.adoc[system properties] documentation.
 
 
+== Troubleshoot Stored Procedure Operation With Named Parameters
+
+When using the Stored Procedure Operation and the Named Parameters binding feature the next exceptions are expected for the following scenarios.
+
+Suppose the following Stored Procedure definition for them:
+
+[source,xml,linenums]
+---
+	CREATE PROCEDURE SP_DEMO(PARAMETERA VARCHAR2, PARAMETERB VARCHAR2, PARAMETERC NUMBER)
+		IS
+		BEGIN
+			INSERT INTO TABLE_DEMO_DEFAULT_VALUE (PARAMETER_A, PARAMETER_B, PARAMETER_C)
+			VALUES (PARAMETERA, PARAMETERB, PARAMETERC);
+		END;
+---
+
+=== Mixing Named and Ordinal Parameter Bindings
+
+Suppose the following Stored Procedure execution, using both Named and Ordinal parameter bindings:
+
+[source,xml,linenums]
+----
+	<db:stored-procedure config-ref="Database_Config">
+		<db:sql><![CDATA[call SP_DEMO(PARAMETERB => :parameterb, PARAMETERC=> :parameterc, :parametera)]]></db:sql>
+		<db:input-parameters><![CDATA[#[{parametera: 'HELLO', parameterb: 'A', parameterc: 123456}]]]></db:input-parameters>
+	</db:stored-procedure>
+----
+
+The following exception is expected:
+
+[source,xml,linenums]
+----
+	Root Exception stack trace:
+	org.mule.runtime.api.exception.MuleRuntimeException: Could not resolve query: call SP_DEMO(PARAMETERB => :parameterb, PARAMETERC=> :parameterc, :parametera).Error: org.mule.db.commons.internal.parser.QueryTemplateParsingException: Invalid Stored Procedure expression: Ordinal binding and Named binding cannot be combined
+----
+
+=== Using a JDBC Driver that does not support Named Parameters Binding
+
+Suppose the JDBC Driver that's being used does not support the Named Paramters binding feature, the following exception is expected:
+
+[source,xml,linenums]
+----
+	Root Exception stack trace:
+	org.mule.runtime.api.exception.MuleRuntimeException: Could not resolve query: call SP_DEMO_WITH_OUT(PARAMETERB => :parameterb, PARAMETERD=> :parameterOUT, PARAMETERC=> :parameterc, PARAMETERA =>:parametera).
+	Error: java.lang.UnsupportedOperationException: UnCoolVendor JDBC driver does not support Named Parameters. Change driver or use Ordinal binding.
+----
+
+=== Misspelling the Named Parameter
+
+Suppose the following Stored Procedure execution, referencing incorrectly the PARAMETERB as PARAMETERW:
+
+[source,xml,linenums]
+----
+	<db:stored-procedure config-ref="Database_Config">
+		<db:sql><![CDATA[call SP_DEMO(PARAMETERW => :parameterb, PARAMETERC=> :parameterc, PARAMETERA => :parametera)]]></db:sql>
+		<db:input-parameters><![CDATA[#[{parametera: 'HELLO', parameterb: 'A', parameterc: 123456}]]]></db:input-parameters>
+	</db:stored-procedure>
+----
+
+The following exception is expected:
+
+[source,xml,linenums]
+----
+	WARN  2022-06-10 10:34:07,242 [[MuleRuntime].uber.12: [demo-oracle-named-parameters].demo-oracle-named-parametersFlow.BLOCKING @3edcfb2f] [processor: demo-oracle-named-parametersFlow/processors/0; event: 003956e0-e8c2-11ec-a50c-38f9d32d3e8b] org.mule.db.commons.internal.resolver.param.StoredProcedureParamTypeResolver: Could not find the following query parameters [parameterb]. When using Named Parameters this could be a misspelled Named Parameter.
+	Root Exception stack trace:
+	org.mule.runtime.api.exception.MuleRuntimeException: Could not resolve query: call SP_DEMO(PARAMETERW => :parameterb, PARAMETERC=> :parameterc, PARAMETERA => :parametera). Error: java.lang.NullPointerException
+----
+
 == Understand Common Throws
 
 Here is a list of common throws messages and how to interpret them.
