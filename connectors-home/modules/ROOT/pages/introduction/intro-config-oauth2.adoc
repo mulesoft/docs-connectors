@@ -1,0 +1,185 @@
+= Configure OAuth2 for connectors
+
+Many services allow you to use an OAuth2 authentication scheme to improve security when interacting with their APIs. Many connectors support configuring a standard OAuth2 setup.
+
+== How it works
+
+To configure an OAuth2 flow for a connector, it is useful to know how the flow works. For the sake brevity, we will only provide a top level explanation, but you are encouraged to read up on OAuth2 details from the many resources on the web.
+
+=== The Flow
+
+Mulesoft connectors use the "Authorization Code" grant flow for their OAuth2 dance. This usually happens in a couple of steps. You can consult the <<configuration-reference>> for explanation of the parameters mentioned in this guide.
+
+==== Step 1
+The user uses their web browser to navigate to the path specified in the `Authorize path` parameter. for example if you're running the connector on localhost and your path is set to "/authorize" with port 8080, you'd navigate to http://localhost:8080/authorize. This will begin the OAuth dance flow
+
+==== Step 2
+The user will be redirected to the `Authorization url` of the OAuth Provider. The provider authorization url has to be reachable from the user's browser. Here the parameters `Scopes`, `Resource Owner Id` abd `Callback path` are also provided to the OAuth Provider. For the OAuth Provider to accept the authorization request the follow must be true:
+
+- the full callback path must be registered with the OAuth provider
+- The provided scopes are supported
+- The resource owner ID (if provided) must be registered with the OAuth Provider
+
+In the example from Step 1, the proper callback URL to register with your OAuth Provider would be http://localhost:8080/callback.
+
+==== Step 3
+The user is prompted to input his username, password and/or any other credentials that the OAuth Provider accepts like 2FA requests and so on. If the User is successfully authenticated the OAuth Provider might ask the user to allow the application access to his account. This would typically only happen on first use.
+
+==== Step 4
+Once the OAuth Provider authenticated the user and authorized access to the connector, the users web browser will be redirected to the callback URL that is registered with the OAuth Provider. For example http://localhost:8080/callback. It is crucial here, that the user running the flow has access to that server and endpoint otherwise the authorization approval won't reach the connector. Using "localhost" is ok for testing locally, but it's not usable for production environment and cloud deployment.
+
+For example if your connector application was running on http://my.server.com then you'd need to specify the `External callback url` parameter with value "http://my.server.com/callback" (this URL would also have to be registered with the OAuth provider then.)
+
+==== Step 5
+Once the users browser reaches the /callback URL successfully, an Authorization code handed over to the connector which can then be automatically exchanged for an Access Token using the url configured in the `Access Token url` parameter. This token will be long living and automatically refreshed by the connector indefinitely (if allowed by the OAuth provider)
+
+The Connector is now fully authorized and ready to start using any service which accepts its new Access Token issues by the OAuth Provider.
+
+[[configuration-reference]]
+=== Configuration parameters
+These are the configuration parameters typically available for Connector OAuth2 configuration. This table serves as a reference for this guide
+
+*OAuth Authorization Code:*
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Consumer Key | String | The client name registered with the OAuth Provider | | yes
+| Consumer Secret | String | The secret belonging to the client in OAuth Provider| | yes
+| Authorization URL | String | The URL belonging to the OAuth Provider where the user will be redirected to, to provide his user credentials. Typically, this URL ends with /authorize | | yes
+| Access Token Url | String | The URL belonging to the OAuth Provider where the application will later exchange an Authorization Code for a Token| | yes
+| Scopes | String | A Space separated list of scopes that the application will request from the OAuth Provider | offline_access | no
+| Resource owner ID | String | ID of the owners user/account who is authorizing the connector to access his resources || no
+|===
+
+*OAuth Callback Config:*
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Callback path | String | The path on *your* server where the users browser will be redirected in case of a successful authorization with the OAuth provider. Typically, /callback. This configuration will use your HTTP Listener setup to build the callback path. e.g.: http://0.0.0.0:{port}/callback. | | yes
+| Authorize path | String | The path on *your* server where the user can begin the OAuth Dance flow. typically, /authorize | | yes
+| External Callback Url | String | A full, publicly accessible URL on *your* server where the users browser will be redirected in case of a successful authorization with the OAuth provider. This parameter allows you to override the "Callback path" parameter above when talking to the OAuth Provider. e.g.: http://my.server.com/callback | | no
+|===
+
+== Connector OAuth2 Configuration Example
+
+=== Requirements
+To follow this guide, you will need access to the following:
+
+- OAuth2 provider (Okta, Azure AD, Google, PingFederate...)
+- Anypoint Studio
+- Any connector with OAuth2 support
+
+=== Setting up the provider
+For this example we will be using the GMail connector, so to get started we can get our Google OAuth setup for any account we hold using the Google Cloud Console.
+
+NOTE: If you didn't do this before, you will have to create a new project and enable the "GMail API" in the "Enabled APIs & Services" menu section.
+
+You will need to add a new client to Google OAuth 2.0, this will be your connector application. Navigate to `APIs & Services > Credentials > Create Credentials > OAuth Client ID`
+
+Here you can create a new "Web Application", name it "OAuthDemoApp" and add the following URL to the "Authorized redirect URIs": "http://127.0.0.1:8080/callback"
+
+Click "Create" and copy the new Client ID and Client Secret somewhere safe for now, we will need it later. Click "OK" and now we're all set on the Identity Provider side.
+
+=== Setting up the connector
+Add into your pom.xml
+```
+<dependency>
+    <groupId>com.mulesoft.connectors</groupId>
+    <artifactId>mule4-gmail-connector</artifactId>
+    <version>1.0.5</version>
+    <classifier>mule-plugin</classifier>
+</dependency>
+```
+
+Now we can create a new Gmail Connector Connection. Here we are going to need our Client ID and Client Secret from the previous step. We are going to put in our Client ID and Client Secret as our "Consumer Key" and "Consumer Secret" respectively.
+
+NOTE: The GMail connector already comes with the Authorization URL, Access Token URL and Scopes pre-filled, so you don't need to do anything here, but if you're setting up a different connector that uses a third party Identity Provider like Okta or Ping, you will need to use their respective Authorization and Access Token URLs here as well as any required scopes.
+
+We can leave the Resource Owner ID field empty.
+
+image::intro-config-oauth2-gmail-config.png[GMail Connector Configuration]
+
+Now we can configure our Callback configuration. We will need a HTTP Listener configuration for that, so go ahead and create a new HTTP Listener config. Set the protocol as HTTP, Host to "localhost" and port as "8080".
+
+image::intro-config-oauth2-gmail-http-lisenter.png[]
+The XML for this Listener would look like this:
+```
+<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="localhost" port="8080" />
+</http:listener-config>
+```
+
+We can select this listener in our GMail Connection Configuration. Then set the "Callback path" as "callback" and "Authorize path" as "authorize". We can leave the external callback url empty.
+
+image::intro-config-oauth2-gmail-callback.png[]
+
+The XML would look something like this:
+```
+<gmail:config name="Gmail_Connector_Config" >
+    <gmail:oauth2c-connection >
+        <gmail:oauth-authorization-code consumerKey="YOUR_CLIENT_ID" consumerSecret="YOUR_CLIENT_SECRET" />
+        <gmail:oauth-callback-config listenerConfig="HTTP_Listener_config" callbackPath="callback" authorizePath="authorize"/>
+    </gmail:oauth2c-connection>
+</gmail:config>
+```
+
+Now run the application and we're done.
+
+=== OAuth Dance
+It is time to perform the OAuth dance and authorize our application to access our GMail account via the Connector.
+First, we will navigate in a browser to our Authorize Path, in this example it would be "http://localhost:8080/authorize". If everything is configured correctly this step will take us to a Google Authentication screen where we select our user account and give permission to the app to access our account. Google will show us a long list of permissions that it requires you to approve. For example:
+
+image::intro-config-oauth2-gmail-permissions.png[]
+
+NOTE: These permissions are dependent on the "Scopes" parameter we configured in our GMail Connection Configuration. It's ok to accept the defaults in this case, but if you wanted to limit the access to application you would remove the unwanted scopes here. For example, you could remove the "https://www.googleapis.com/auth/gmail.send" scope to disallow the connector from sending new emails from your account. However, this would also render parts of the connector dysfunctional, like "Send Message" or "Send Draft" operations.
+
+Once you click "Allow", you will be redirected to "http://127.0.0.1:8080/callback". This is the exact Redirect URI that we configured in the Identity Provider and that is open in the connector configuration. If everything worked well, you should now see the text "Successfully retrieved access token" in the browser, and you can close it now. The Connector is now fully authorized and ready to use the account.
+
+You won't need to authorize again unless you restart Anypoint Studio or the Access Token expires. Tokens are automatically refreshed as long as the refresh token flow is enabled in your Identity Provider, Google supports this automatically and so your tokens should be refreshed indefinitely as needed.
+
+NOTE: If you want your authorization to persist over restarts, you can configure an object store in the GMail Connection Configuration.
+
+=== Testing
+Now that we have a functional and authorized connector setup, we can try retrieving some of our emails. Try creating a simple flow with a HTTP Listener listening on the path "/messages" and drag the "List Messages" Operation into the flow. Here the only required field is the "User id" which is the users email address that you want to access (given the email is part of your setup, useful for corporate email servers with multiple users registered under one company account for example). You can specify as "me" to retrieve emails from your main account directly. We can also set the max results to a lower number if we desire.
+
+The example flow could looks like this in XML:
+```
+<flow name="oauthFlow" >
+    <http:listener config-ref="HTTP_Listener_config" path="/messages"/>
+    <gmail:gmailusersmessageslist config-ref="Gmail_Connector_Config" userIdUriParam="me" maxResultsQueryParam="5"/>
+</flow>
+```
+
+now restart the project and try navigating to "http://localhost:8080/messages", you should see a JSON formatted list of message IDs and Thread IDs. You could retrieve the details of these messages or threads using the "Get Message" or "Get Thread" operations.
+
+=== Full Example
+your-project.xml:
+```
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:gmail="http://www.mulesoft.org/schema/mule/gmail" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/gmail http://www.mulesoft.org/schema/mule/gmail/current/mule-gmail.xsd">
+	<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="localhost" port="8080" />
+	</http:listener-config>
+	<gmail:config name="Gmail_Connector_Config">
+		<gmail:oauth2c-connection >
+			<gmail:oauth-authorization-code consumerKey="300484156412-lnrscnoef6d4tbla0itv4b7pej0dpr3j.apps.googleusercontent.com" consumerSecret="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" scopes="https://mail.google.com/ https://www.googleapis.com/auth/gmail.addons.current.action.compose https://www.googleapis.com/auth/gmail.addons.current.message.action https://www.googleapis.com/auth/gmail.addons.current.message.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.insert https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.readonly"/>
+			<gmail:oauth-callback-config listenerConfig="HTTP_Listener_config" callbackPath="callback" authorizePath="authorize"/>
+		</gmail:oauth2c-connection>
+	</gmail:config>
+
+	<flow name="oauthFlow" >
+		<http:listener config-ref="HTTP_Listener_config" path="/messages"/>
+		<gmail:gmailusersmessageslist config-ref="Gmail_Connector_Config" userIdUriParam="me" maxResultsQueryParam="5"/>
+	</flow>
+</mule>
+```
+
+== See Also
+
+* xref:connectors-home::intro-config-oauth2-cloudhub.adoc[Configuring OAuth on CloudHub].
+* https://help.mulesoft.com[MuleSoft Help Center]
