@@ -16,7 +16,6 @@ The *Requester Config* field automatically populates `HTTP_Request_configuration
 
 In Studio, configuring custom HTTP transport looks like this:
 
-.Configure Custom HTTP Transport
 image::web-service-consumer-configure-transport.png[Configure Custom HTTP Transport]
 
 In the *Configuration XML* tab, the reference of the HTTP Requester configuration `<http:request-config name="basic-auth">` is under the Web Service Consumer configuration `<wsc:custom-transport-configuration>`:
@@ -68,7 +67,6 @@ The following example illustrates how you might configure a username token secur
 
 In Studio, configuring web service security looks like this:
 
-.Configure Web Service Security
 image::web-service-consumer-configure-wsecurity.png[Configure Web Service Security]
 
 In the *Configuration XML* tab, configuring Web Service Security looks like this:
@@ -82,6 +80,120 @@ In the *Configuration XML* tab, configuring Web Service Security looks like this
         </wsc:web-service-security>
     </wsc:connection>
 </wsc:config>
+----
+
+== Configure WSC:EMPTY_RESPONSE Error
+
+When mandatory fields are missing from the response (Illegal Empty Response), you can configure the *Error Handler* component to throw the `WSC:EMPTY_RESPONSE` error for the Web Service Consumer Connector.
+
+. In Studio, select the *On Error Continue* component of the Error handling section.
+. Set *Type* to *WSC:EMPTY_RESPONSE*.
+
+image::web-service-consumer-emptyresponse.png[WSC:EMPTY_RESPONSE selected for Type field]
+
+In the *Configuration XML* tab, the configuration looks like this:
+[source,xml,linenums]
+----
+<flow name="WSC-Example">
+  <scheduler>
+    <scheduling-strategy >
+      <fixed-frequency />
+    </scheduling-strategy>
+  </scheduler>
+  <set-variable value="test" variableName="variableSample"/>
+  <ee:transform>
+    <ee:message >
+      <ee:set-payload ><![CDATA[ %dw 2.0
+output application/xml
+ns con http://service.soap.service.mule.org/
+---
+con#attachOperation: {
+    text: vars.variableSample
+}]]></ee:set-payload>
+    </ee:message>
+  </ee:transform>
+  <wsc:consume config-ref="Web_Service_Consumer_Config" operation="attachOperation">
+    <wsc:message-customizations forceXMLProlog="true"/>
+  </wsc:consume>
+    <error-handler >
+      <on-error-continue enableNotifications="true" logException="true" type="WSC:EMPTY_RESPONSE">
+      <logger level="INFO" message="The response was empty." />
+      </on-error-continue>
+    </error-handler>
+</flow>
+----
+
+== Read Attributes in a Failure Scenario
+
+The following example shows how to configure the Web Service Consumer Connector to read SOAP attributes or additional transport data attributes in a failure scenario.
+
+. In Studio, drag a *Scheduler* source to your flow.
+. Drag a *Set variable* component alongside the *Scheduler* source.
+. Set *Name* to `variableSample` and *Value* to `test`.
+. Drag a *Transform Message* component alongside the *Set Variable* component.
+. In the Datasense output view, add the following DataWeave expression:
+
+[source,dataweave,linenums]
+----
+ %dw 2.0
+output application/xml
+ns con http://service.soap.service.mule.org/
+---
+con#attachOperation: {
+    text: vars.variableSample
+}
+----
+
+[start=6]
+. Drag the Web Service Consumer Connector *Consume* operation alongside the *Transform Message* component.
+. Set a *Connector configuration* for the connector.
+. Set *Operation* to `attachOperation`.
+. Drag an *On Error Continue* component to the Error handling section of your flow.
+. Set *Type* to `WSC:BAD_RESPONSE`.
+. Drag a *Logger* component into the *On Error Continue* component.
+. Set *Message* to the expression `#[error.additionalData.statusCode]` to read SOAP attributes or additional transport data.
+
+In the *Configuration XML* tab, the configuration looks like this:
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc" xmlns:compression="http://www.mulesoft.org/schema/mule/compression"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/compression http://www.mulesoft.org/schema/mule/compression/current/mule-compression.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd">
+	<flow name="WSC-Example">
+  <scheduler>
+    <scheduling-strategy >
+      <fixed-frequency />
+    </scheduling-strategy>
+  </scheduler>
+  <set-variable value="test" variableName="variableSample"/>
+  <ee:transform>
+    <ee:message >
+      <ee:set-payload ><![CDATA[ %dw 2.0
+output application/xml
+ns con http://service.soap.service.mule.org/
+---
+con#attachOperation: {
+    text: vars.variableSample
+}]]></ee:set-payload>
+    </ee:message>
+  </ee:transform>
+  <wsc:consume config-ref="Web_Service_Consumer_Config" operation="attachOperation">
+    <wsc:message-customizations forceXMLProlog="true"/>
+  </wsc:consume>
+    <error-handler >
+      <on-error-continue enableNotifications="true" logException="true" type="WSC:BAD_RESPONSE">
+      <logger level="INFO" message="#[error.additionalData.statusCode]" />
+      </on-error-continue>
+    </error-handler>
+</flow>
+	</flow>
+</mule>
 ----
 
 
