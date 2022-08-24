@@ -808,14 +808,28 @@ http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/cu
 	<flow name="queryFlow">
 		<http:listener doc:name="Listener"
 					   config-ref="HTTP_Listener_config" path="/query" />
-		<bigquery:query doc:name="Query"
-						config-ref="BigQuery__Configuration">
-			<bigquery:query-values-content><![CDATA[#[%dw 2.0
+		<bigquery:query doc:name="Run Query create schema" config-ref="BigQuery__Configuration" responseTimeout="300" responseTimeoutUnit="SECONDS" >
+			<bigquery:query-values-content ><![CDATA[#[%dw 2.0
 output application/json
 ---
 payload]]]></bigquery:query-values-content>
 		</bigquery:query>
-		<logger level="INFO" doc:name="Logger"/>
+		<foreach doc:name="For Each" >
+			<ee:transform doc:name="Transform Message">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var resultt = read(payload."output","application/json")
+---
+((resultt.f) map ((item, index) -> 
+        {(payload.attributes.tableSchema.fields[index].name as String) : item.v}
+    ))
+    reduce ((item, accumulator) -> accumulator ++ item)
+]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" message="#[payload]"/>
+		</foreach>
 	</flow>
 </mule>
 ----
