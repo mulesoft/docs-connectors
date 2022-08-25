@@ -740,7 +740,35 @@ payload
 ----
 |===
 
-* *Logger* +
+* *For Each* +
+Iterates through multiple components
++
+Enter the following values:
++
+[%header,cols="30s,70a"]
+|===
+|Field |Value
+|Counter Variable Name| `counter`
+|Batch Size| `1`
+|Root Message Variable Name| `rootMessage`
+|===
+
+** *Transform Message* +
+Outputs the results of the *Query* operation in JSON format
++
+----
+%dw 2.0
+output application/json
+var resultt = read(payload."output","application/json")
+---
+((resultt.f) map ((item, index) ->
+        {(payload.attributes.tableSchema.fields[index].name as String) : item.v}
+    ))
+    reduce ((item, accumulator) -> accumulator ++ item)
+
+----
+
+** *Logger* +
 Shows the HTTP response from the *Query* operation
 
 image::query.png[Studio Flow for the Query operation]
@@ -752,25 +780,24 @@ Paste this code into the Studio XML editor to quickly load the flow for this exa
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
-
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+<mule xmlns:google-drive="http://www.mulesoft.org/schema/mule/google-drive"
+	  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
 	  xmlns:os="http://www.mulesoft.org/schema/mule/os"
 	  xmlns:http="http://www.mulesoft.org/schema/mule/http"
 	  xmlns:bigquery="http://www.mulesoft.org/schema/mule/bigquery"
 	  xmlns="http://www.mulesoft.org/schema/mule/core"
 	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	  xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
-	  xsi:schemaLocation="
+	  xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties" xsi:schemaLocation="
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 http://www.mulesoft.org/schema/mule/bigquery http://www.mulesoft.org/schema/mule/bigquery/current/mule-bigquery.xsd
 http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
 http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
-		http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+		http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd
+http://www.mulesoft.org/schema/mule/google-drive http://www.mulesoft.org/schema/mule/google-drive/current/mule-google-drive.xsd">
 	<secure-properties:config name="Secure_Properties_Config_demo" doc:name="Secure Properties Config"  file="mule-artifact.properties" key="mulesoft" >
 		<secure-properties:encrypt algorithm="Blowfish" />
 	</secure-properties:config>
-
 	<configuration-properties
 			file="mule-artifact.properties" />
 	<http:request-config
@@ -808,14 +835,28 @@ http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/cu
 	<flow name="queryFlow">
 		<http:listener doc:name="Listener"
 					   config-ref="HTTP_Listener_config" path="/query" />
-		<bigquery:query doc:name="Query"
-						config-ref="BigQuery__Configuration">
-			<bigquery:query-values-content><![CDATA[#[%dw 2.0
+		<bigquery:query doc:name="Run Query create schema" config-ref="BigQuery__Configuration" responseTimeout="300" responseTimeoutUnit="SECONDS" >
+			<bigquery:query-values-content ><![CDATA[#[%dw 2.0
 output application/json
 ---
 payload]]]></bigquery:query-values-content>
 		</bigquery:query>
-		<logger level="INFO" doc:name="Logger"/>
+		<foreach doc:name="For Each" >
+			<ee:transform doc:name="Transform Message">
+				<ee:message>
+					<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var resultt = read(payload."output","application/json")
+---
+((resultt.f) map ((item, index) ->
+        {(payload.attributes.tableSchema.fields[index].name as String) : item.v}
+    ))
+    reduce ((item, accumulator) -> accumulator ++ item)
+]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+			<logger level="INFO" doc:name="Logger" message="#[payload]"/>
+		</foreach>
 	</flow>
 </mule>
 ----
