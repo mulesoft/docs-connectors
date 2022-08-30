@@ -1,0 +1,152 @@
+= Archiving and Extracting Files
+
+The Compression module provides the *Archive* operation that enables you to compress a set of entries into a new archive file and the *Extract* operation that enables you to decompress content that represents an archive file. 
+
+
+== Configure Archive Operation
+
+Given an input stream payload, the *Archive* operation enables you to compress all the payload entries into a new archive file in the Zip format. The operation receives a map that identifies the values to compress. Then, the operation receives each entry, which is placed inside the compressed archive file with the entry name you provide in a DataWeave expression.
+
+. In Studio, drag the *Archive* operation to your flow.
+. Set *Entries* to a DataWeave script defining each name of the entry to compress as a key and the content of that entry as its value, for example:
++
+[source,dataweave, linenums]
+----
+{
+         summary.pdf: vars.summary,
+         'details/result_001.pdf': vars.file1
+         'details/result_002.pdf': vars.file2
+       }
+----
+
+
+image::compression-archive-operation.png[Compression Archive operation configuration]
+
+In the *Configuration XML* editor, the configuration looks like this:
+
+[source, xml, linenums]
+----
+<compression:archive>
+   <compression:entries>
+    #[
+       {
+         summary.pdf: vars.summary,
+         'details/result_001.pdf': vars.file1
+         'details/result_002.pdf': vars.file2
+       }
+     ]
+   </compression:entries>
+   <compression:archiver>
+       <compression:zip-archiver/>
+   </compression:archiver>
+</compression:archive>
+----
+
+The resulting archive contains three entries:`summary.pdf`, located at the root level and `result_001.pdf` and `result_002.pdf`, located in the `details` directory.
+
+[source]
+----
++- content.zip
+|  \- summary.pdf
+|  \+ details
+   |  \- result_001.pdf
+   |  \- result_002.pdf
+
+----
+
+Note that the slash `/` in the name of an entry, for example, `details/result_001.pdf`, indicates a directory separation. All names are introspected to create directories inside the archive.
+
+[NOTE]
+If you create the input to the *Archive* operation using a DataWeave expression, the DataWeave expression must output an object used to build the Java map object. Define unique keys to add the entire object to the archive.
+
+== Configure ZIP64 Archiver Strategy
+
+An archiver strategy compresses multiple entries into an archive. The Zip archiver strategy declares that the content must be compressed using the Zip format. In Studio, the *Archiver* field is set by default. To archive files and byte arrays greater than 4 GB, select the *Force ZIP64* field.
+
+. In Studio, select the *Archive* operation from your flow.
+. Set the *Entries* field to the following expression, for example:
++
+[source,DataWeave]
+----
+output application/java
+---
+(0 to sizeOf(payload) - 1) as Array
+reduce (index, acc={}) ->
+acc ++ { (payload[index].attributes.fileName): payload[index].payload}
+----
+
+[start=3]
+. Select *Force ZIP64*.
+
+image::compression-zip64-archiver.png[Force ZIP64 field selected]
+
+In the *Configuration XML* editor, the `zip-archiver` and `forceZip64` configuration look like this:
+
+[source, xml]
+----
+<compression:archive doc:name="Archive">
+<compression:entries>
+<![CDATA[#[output application/java
+---
+(0 to sizeOf(payload) - 1) as Array
+reduce (index, acc={}) ->
+acc ++ { (payload[index].attributes.fileName): payload[index].payload}]]]>
+</compression:entries>
+<compression:archiver>
+<compression:zip-archiver forceZip64="true"/>
+</compression:archiver>
+</compression:archive>
+----
+
+== Configure Extract Operation
+
+The *Extract* operation enables you to decompress content that represents an archive in some compression format. The entries of the archive file are returned as objects, each accessible by its entry name.
+
+. In Studio, select the *Extract* operation from your flow.
+. Set the *Compressed* field to `vars.archive`.
+
+image::compression-extract-operation.png[Compression Extract operation configuration]
+
+In the *Configuration XML* editor, the configuration looks like this:
+
+[source, xml, linenums]
+----
+<compression:extract>
+    <compression:compressed>#[vars.archive]</compression:compressed>
+    <compression:extractor>
+        <compression:zip-extractor/>
+    </compression:extractor>
+</compression:extract>
+----
+
+Now, assume that you decompress an archive with three entries that contain the following structure:
+
+[source]
+----
++- Archive
+|  \- summary.pdf
+|  \+ details
+   |  \- result_001.pdf
+   |  \- result_002.pdf
+----
+
+In this case, you can access the extracted contents of the entries using:
+`payload['summary.pdf']` or `payload.details['result_001.pdf']`
+
+== Configure Zip Extractor Strategy
+
+An extractor strategy decompresses an archive with multiple entries that are compressed in a particular format.
+The Zip archive strategy declares that the content must be extracted with the Zip format. In Studio, the *Extractor* field is set by default.
+
+image::compression-zip64-archiver.png[Force ZIP64 field selected]
+
+In the *Configuration XML* editor, the configuration looks like this:
+
+[source, xml]
+----
+<compression:zip-archiver/>
+----
+
+== See Also
+* xref:compression-documentation.adoc[Compression Module Reference]
+* https://help.mulesoft.com[MuleSoft Help Center]
