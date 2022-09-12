@@ -1,0 +1,162 @@
+= Sending an AS2 Request - Mule 4
+:page-aliases: connectors::as2/as2-connector-sending-messages.adoc
+
+The following example illustrates how to configure the *Send with Sync MDN* and *Send with Async MDN* (AS2 Connector) operation to start sending messages to your trading partners. In this example, we will use an HTTP Listener source to trigger the Send operation. To accomplish this example, you must create the Mule app, configure an AS2 Send and HTTP global element, run, and test the app with curl commands/postman.
+
+The following screenshot shows the Anypoint Studio app flows for this example:
+
+image::as2-send-sync-flow.png[AS2 Send Sync Flow]
+image::as2-send-async-flow.png[AS2 Send Async Flow]
+
+== Create the Mule Application
+
+To create the Mule flow:
+
+. In the *Mule Palette* view, select the HTTP *Listener* source and drag it on to the canvas. +
+The source initiates the flow by listening for incoming HTTP message attributes.
+. On the HTTP *Listener* configuration screen, optionally change the value of the *Display Name* field.
+. Set the *Path* field to `/sendSyncFlow` to receive the messages in this endpoint.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the HTTP *Listener* in the app.
+. On the *General* tab, you should configure the HTTP Listener global element with the fields:
+
+* *Host* +
+`All Interfaces [0.0.0.0] (default)`
+* *Port* +
+`8082`
+[start=6]
+. Click *OK*.
+
+image::as2-http-client-config.png[HTTP Listener global config]
+image::as2-send-sync-listener.png[HTTP Listener component]
+[start=7]
+. Drag the AS2 *Send with Sync MDN* to the right of the HTTP listener
+. Click the plus sign (*+*) next to the *Connector configuration* to configure a global element for the AS2 Send operation.
+. On the *General* tab, you should first configure the connection, specifying the Partner URL, in this case we will use the endpoint of our xref:as2-connector-receiving-messages.adoc[AS2 Listener example]
+* *Partner URL* +
+`http://localhost:8081/as2-receive`
+
+image::as2-send-sync-config-connection.png[AS2 Send global element General tab - Connection]
+
+[start=10]
+. On the same *General* tab, you should specify the self and partner credentials. +
+. For the *Self config* you will configure the following fields:
+* *AS2 Partner Name* +
+`partnerb`
+* *x509 Alias* +
+`partnerb`
+* *email* +
+`support@partnerb.com`
+. For the *Partner config* you will configure the following fields:
+* *AS2 Partner Name* +
+`partnera`
+* *x509 Alias* +
+`partnera`
+* *email* +
+`support@partnera.com`
+
+image::as2-send-sync-config-partners.png[AS2 Send global element Partners]
+
+[start=13]
+. Optionally configure the *Requester Config* with the algorithms to use
+. Finally, you should specify the keystore that has the certificates and keys, which will be included in this example.
+
+* *Keystore Password* +
+`test`
+* *Keystore Path* +
+`as2/partnerb.p12`
+* *Private Key Password* +
+`test`
+
+image::as2-send-sync-config-keystore.png[AS2 Send global element Keystore]
+[start=15]
+. Save your Mule app.
+. Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*.
+. Ensure that the console messages state that the application started correctly by looking at the message `Mule is up and kicking`.
+. You can now send AS2 requests to the endpoint configured.
+. If you have the xref:as2-connector-receiving-messages.adoc[AS2 Listener example] running, you can see the message sent by the AS2 Send.
+
+
+=== Send with Async MDN
+The *Send with Async MDN* operation is very similar to the *Send with Sync MDN* the only difference is that in the Async one, the field *Receipt delivery url* must be configured. We will use the endpoint of the xref:as2-connector-receiving-receipts.adoc[AS2 MDN Listener example]: +
+`http://localhost:8082/receiveMDN`
+
+[NOTE]
+The field *Receipt delivery url* only works for the *Send with Async MDN* and can be configured either globally in the Send configuration or in the *Send with Async MDN* operation directly.
+
+
+== XML for the Send with Sync MDN example
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:as2-mule4="http://www.mulesoft.org/schema/mule/as2-mule4" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/as2-mule4 http://www.mulesoft.org/schema/mule/as2-mule4/current/mule-as2-mule4.xsd">
+	<http:listener-config name="HTTP_Client_Config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8082" />
+	</http:listener-config>
+	<as2-mule4:send-config name="AS2_Client_Send_Sync" doc:name="AS2 Connector Send config" >
+		<as2-mule4:connection partnerURL="http://localhost:8081/as2-receive" />
+		<as2-mule4:self-config as2Name="partnerb" x509Alias="partnerb" email="support@partnerb.com" />
+		<as2-mule4:partner-config as2Name="partnera" x509Alias="partnera" email="support@partnera.com" />
+		<as2-mule4:requester-config messageIntegrityCheckAlgorithm="SHA512" mdnMessageIntegrityCheckAlgorithm="SHA512" encryptionAlgorithm="DES_EDE3" requestReceipt="SIGNED_REQUIRED" />
+		<as2-mule4:keystore-config keystorePassword="test" keystorePath="as2/partnerb.p12" privateKeyPassword="test" />
+	</as2-mule4:send-config>
+	<flow name="SendSyncFlow" >
+		<http:listener doc:name="/sendSyncFlow" config-ref="HTTP_Client_Config" path="/sendSyncFlow" />
+		<as2-mule4:send-with-sync-mdn doc:name="Send with Sync MDN" config-ref="AS2_Client_Send_Async"/>
+		<logger level="INFO" doc:name="Message Sent and MDN Received!" message="Message Sent and MDN Received!" />
+	</flow>
+</mule>
+
+
+----
+
+== XML for the Send with Async MDN example
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:as2-mule4="http://www.mulesoft.org/schema/mule/as2-mule4"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/as2-mule4 http://www.mulesoft.org/schema/mule/as2-mule4/current/mule-as2-mule4.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<http:listener-config name="HTTP_Client_Config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8082" />
+	</http:listener-config>
+	<as2-mule4:send-config name="AS2_Client_Send_Async" doc:name="AS2 Connector Send config" >
+		<as2-mule4:connection partnerURL="http://localhost:8081/as2-receive" />
+		<as2-mule4:self-config as2Name="partnerb" x509Alias="partnerb" email="support@partnerb.com" />
+		<as2-mule4:partner-config as2Name="partnera" x509Alias="partnera" email="support@partnera.com" />
+		<as2-mule4:requester-config messageIntegrityCheckAlgorithm="SHA512" mdnMessageIntegrityCheckAlgorithm="SHA512" encryptionAlgorithm="DES_EDE3" requestReceipt="SIGNED_REQUIRED" receiptDeliveryURL="http://localhost:8082/receiveMDN" />
+		<as2-mule4:keystore-config keystorePassword="test" keystorePath="as2/partnerb.p12" privateKeyPassword="test" />
+	</as2-mule4:send-config>
+	<flow name="SendAsyncFlow" >
+		<http:listener doc:name="/sendAsyncFlow" config-ref="HTTP_Client_Config" path="/sendAsyncFlow"/>
+		<as2-mule4:send-with-async-mdn doc:name="Send with Async MDN" config-ref="AS2_Client_Send_Async"/>
+		<logger level="INFO" doc:name="Message Sent!" message="Message Sent!"/>
+	</flow>
+</mule>
+
+
+----
+
+== See Also
+
+* xref:as2-connector-examples.adoc[AS2 Connector Examples]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
+
+Example Files:
+
+// Insert Link for example keystore
+* https://insertlink.com[partnerb.p12]
