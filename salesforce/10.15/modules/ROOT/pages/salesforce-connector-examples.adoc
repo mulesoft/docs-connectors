@@ -17,7 +17,7 @@ This example shows how to configure Salesforce Connector to create a new Salesfo
 * The second flow creates a new Salesforce account based on information in the HTML input form.
 * The third flow queries new accounts by name and writes new account data to a CSV file.
 
-// three images
+image::accept-and-transform-data-flows.png[Accept and transform data flows]
 
 === Configure the First Flow
 
@@ -257,11 +257,139 @@ payload map {
 
 Add the *Write* operation to write the new account data to a CSV file:
 
+. From the *Mule Palette* view, select *File* and drag the *Write* operation to the right of *Transform Message*.
+. In the properties window, click *+* next to the *Connector configuration* field to add a global element.
+. Configure the global element depending on the connection, for example:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Working Directory | If *Connection* is selected, the directory to consider the root of every relative path used with this connector. If not provided, it defaults to the value of the `user.home` system property. If that system property is not set, then the connector fails to initialize.
+|===
++
+The following image shows an example of the *Write* configuration of the global element:
++
+image::write-config.png[Write global element configuration window]
++
+. In the properties window, configure the following fields:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the connector operation.
+|Connector configuration |Global configuration you just created.
+|Path |`/account`
+|Content |`payload`
+|===
++
+The following image shows an example of the *Write* configuration in the properties window:
++
+image::write-properties-window.png[Write properties window configuration]
 
+=== XML for This Example
 
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
 
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
 
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+  xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core
+  http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+  http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/ee/core
+  http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/salesforce
+  http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+  http://www.mulesoft.org/schema/mule/file
+  http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+  <configuration-properties file="mule-app.properties"/>
+  <http:listener-config name="HTTP_Listener_config"
+   doc:name="HTTP Listener config" >
+  <http:listener-connection host="localhost" port="8081" />
+  </http:listener-config>
+  <salesforce:sfdc-config name="Salesforce_Sfdc_config"
+   doc:name="Salesforce SFDC config">
+    <salesforce:basic-connection
+    username="${salesforce.username}"
+    password="${salesforce.password}"
+    securityToken="${salesforce.securityToken}" />
+  </salesforce:sfdc-config>
+  <file:config name="File_Config" doc:name="File Config" doc:id="a62aaa19-2bab-4717-8758-ec09caec2a51" >
+		<file:connection />
+	</file:config>
+	<flow name="crud_app_template">
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/" doc:name="Listener" />
+    <parse-template location="form.html" doc:name="Parse Template"  />
+  </flow>
+  <flow name="create_accountFlow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/createAccount" doc:name="Listener"  />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
 
+  Name: payload.Name,
+  AccountNumber: payload.AccountNumber,
+  BillingCity: payload.BillingCity
+}]]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:create doc:name="Create" type="Account"
+     config-ref="Salesforce_Sfdc_config"/>
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map {
+  id:$.id,
+  errors:$.errors,
+  success:$.success
+
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+  <flow name="query_accountFlow" >
+    <salesforce:new-object-listener objectType="Account" doc:name="On New Object" doc:id="8b5dec5e-31a2-4b78-9188-b681891898be" config-ref="Salesforce_Sfdc_config">
+			<scheduling-strategy >
+				<fixed-frequency />
+			</scheduling-strategy>
+		</salesforce:new-object-listener>
+		<salesforce:query-result-list doc:name="Query result list" doc:id="79da7485-339c-4ab6-956a-0684210b2ded" config-ref="Salesforce_Sfdc_config"/>
+		<salesforce:query-result-stream-by-id doc:name="Query result stream by id" doc:id="bdf16fc8-017f-439b-b1fc-3bff23d881d8" config-ref="Salesforce_Sfdc_config"/>
+    <ee:transform doc:name="Transform Message"  >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map {
+    AccountNumber:$.AccountNumber,
+    BillingAddress:$.BillingAddress,
+    Id:$.Id,
+    Name:$.Name
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+		<file:write doc:name="Write" doc:id="83f39edd-bc18-4738-92c0-d3c427108ac4" config-ref="File_Config" path="/account"/>
+  </flow>
+</mule>
+----
 
 [[parentchild]]
 == Create or Update an Object in a Parent-Child Relationship
