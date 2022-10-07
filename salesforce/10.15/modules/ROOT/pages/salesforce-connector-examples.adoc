@@ -5,6 +5,7 @@ The following examples show several Mule flows for Salesforce Connector:
 
 * <<parentchild>>
 * <<delete-accounts>>
+* <<find-duplicate-accounts>>
 
 [[parentchild]]
 == Create or Update an Object in a Parent-Child Relationship
@@ -322,6 +323,178 @@ payload map {
   </flow>
 </mule>
 ----
+
+[[find-duplicate-accounts]]
+== Find Duplicate Accounts
+
+This example shows how to use Salesforce Connector to find duplicate Salesforce accounts.
+
+image::find-duplicates-accounts-flow.png[Find Duplicate Accounts flow]
+
+=== Configure the Flow
+
+Creating the flow involves configuring a *Listener* component, a *Transform Message* component, a *Find duplicates* operation, and a second *Transform Message* component.
+
+==== Configure the HTTP Listener
+
+Configure the *Listener* component to initiate a Mule flow when a call is made to the `/findDuplicates` path:
+
+. Create a new Mule project in Studio.
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* component to the canvas.
+. In the properties window, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. In the properties window, set the *Path* field value to `/findDuplicates`.
+
+==== Add the First Transform Message Component
+
+Add the first *Transform Message* component to convert the values from the HTTP input form to Java format so they can be used as input to the *Delete* operation:
+
+. From the *Mule Palette* view, select *Core* and drag a *Transform Message* component to the right of *Listener*.
+. In the properties window, overlay the brackets in the *Output* section with this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+[
+  payload
+]
+----
+
+==== Add the Find Duplicates Operation
+
+Add the *Find duplicates* operation to find duplicate Salesforce accounts:
+
+. From the *Mule Palette* view, select *Salesforce* and drag the *Find duplicates* operation to the right of *Transform Message*.
+. In the properties window, click *+* next to the *Connector configuration* field to add a global element.
+. Configure the global element depending on the connection.
++
+The following image shows an example of the *Find duplicates* configuration of the global element:
++
+image::find-duplicates-global-config.png[Find Duplicates global element configuration window]
++
+. In the properties window, configure the following fields:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the connector operation.
+|Connector configuration |Global configuration you just created.
+|Type |`Account`
+|Criteria |`payload`
+|===
++
+The following image shows an example of the *Find duplicates* configuration in the properties window:
++
+image::find-duplicates-properties-window.png[Find Duplicates properties window configuration]
+
+==== Add the Second Transform Message Component
+
+Add the second *Transform Message* component to convert the values from Java format to JSON format:
+
+. From the *Mule Palette* view, select *Core* and drag a *Transform Message* component to the right of *Find duplicates*.
+. In the properties window, overlay the brackets in the *Output* section with this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+  success: payload.success,
+  duplicateResults: {
+    (payload.duplicateResults map {
+      matchRecords: $.matchResults
+    }
+    )
+  },
+  duplicateRuleEntityType: payload.duplicateRuleEntityType,
+  duplicateRule: payload.duplicateRule,
+  allowSave: payload.allowSave,
+  errorMessage: payload.errorMessage
+}
+----
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+  xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core
+  http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+  http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/ee/core
+  http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/salesforce
+  http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+  http://www.mulesoft.org/schema/mule/file
+  http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+  <configuration-properties file="mule-app.properties"/>
+  <http:listener-config name="HTTP_Listener_config"
+   doc:name="HTTP Listener config" >
+  <http:listener-connection host="localhost" port="8081" />
+  </http:listener-config>
+  <salesforce:sfdc-config name="Salesforce_Sfdc_config"
+   doc:name="Salesforce SFDC config">
+    <salesforce:basic-connection
+    username="${salesforce.username}"
+    password="${salesforce.password}"
+    securityToken="${salesforce.securityToken}" />
+  </salesforce:sfdc-config>
+  <flow name="find_duplicates_for_account_flow" >
+    <http:listener config-ref="HTTP_Listener_config"
+     path="/findDuplicates" doc:name="Listener" />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[
+  payload
+]]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+    <salesforce:find-duplicates config-ref="Salesforce_Sfdc_config"
+     type="Account"
+    doc:name="Find duplicates" />
+    <ee:transform doc:name="Transform Message" >
+      <ee:message >
+        <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+  success: payload.success,
+  duplicateResults: {
+    (payload.duplicateResults map {
+      matchRecords: $.matchResults
+    }
+    )
+  },
+  duplicateRuleEntityType: payload.duplicateRuleEntityType,
+  duplicateRule: payload.duplicateRule,
+  allowSave: payload.allowSave,
+  errorMessage: payload.errorMessage
+}]]></ee:set-payload>
+      </ee:message>
+    </ee:transform>
+  </flow>
+</mule>
+----
+
 
 
 
