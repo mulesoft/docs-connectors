@@ -1,6 +1,183 @@
 = Salesforce Connector 10.15 Examples - Mule 4
 :page-aliases: connectors::salesforce/salesforce-connector-examples.adoc
 
+The following examples show several Mule flows for Salesforce Connector:
+
+* <<parentchild>>
+
+[[parentchild]]
+== Create or Update an Object in a Parent-Child Relationship
+
+This example shows how to create the object relationship structure in Salesforce needed to perform an upsert using Salesforce Connector.
+
+// image
+
+=== Configure the Flow
+
+A Salesforce object can have standard or custom relationships between objects. The relationships between objects are usually one-to-many (parent-child) relationships, but can be any link between two objects residing in Salesforce.
+
+The example uses two custom Salesforce object types that have a parent-child relationship:
+
+* `Plane__c`, the parent object that must exist in Salesforce
+* `Component__c`, the object to upsert using Salesforce Connector
+
+The relationship between the two custom objects is represented by a `Plane__r` field whose value is an object with two fields:
+
+* The `type` field, which has the referenced object type name as its value.
++
+In this example, the value of `type` is `Plane_c`.
++
+* A field that identifies the instance of the parent object to reference.
++
+In this example, the `Name` field references the `Cobra` instance of `Plane__c`.
+
+When you upsert `Component__c`, the POJO sent as input to Salesforce Connector looks like this:
+
+[source,linenums]
+ ----
+ [{
+ 	// Component__c's fields ...
+ 	Plane__r: {
+ 		"type": "Plane__c",
+ 		"Name": "Cobra"
+ 	}
+ }]
+----
+
+Creating the flow involves configuring a *Listener* component, a *Transform Message* component, an *Upsert* operation, and a second *Transform Message* component.
+
+==== Configure the HTTP Listener
+
+Configure the *Listener* component to initiate a Mule flow when a call is made to the `/` path:
+
+. Create a new Mule project in Studio.
+. From the *Mule Palette* view, select *HTTP* and drag the *Listener* component to the canvas.
+. In the properties window, click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. In the properties window, set the *Path* field value to `/`.
+
+==== Add the First Transform Message Component
+
+Add the first *Transform Message* component to convert the values from the HTTP input form to Java format so they can be used as input to the *Upsert* operation:
+
+. From the *Mule Palette* view, select *Core* and drag a *Transform Message* component to the right of *Listener*.
+. In the properties window, overlay the brackets in the *Output* section with this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+[{
+	Name: "NewPlaneComponent",
+	Plane__r: {
+		"type": "Plane__c",
+		"Name": "Cobra"
+	}
+}]
+----
+
+==== Add the Upsert Operation
+
+Add the *Upsert* operation to create and update the object:
+
+. From the *Mule Palette* view, select *Salesforce* and drag the *Upsert* operation to the right of *Transform Message*.
+. In the properties window, click *+* next to the *Connector configuration* field to add a global element.
+. Configure the global element depending on the connection.
++
+The following image shows an example of the Upsert configuration of the global element:
++
+image::upsert-global-config.png[Upsert global element configuration window]
++
+. In the properties window, configure the following fields:
++
+[%header%autowidth.spread]
+|===
+|Field |Value
+|Display Name |Name for the connector operation.
+|Connector configuration |Global configuration you just created.
+|Object type |`Component_c`
+|External id field name |`Id`
+|Records |`payload`
+|===
++
+The following image shows an example of the *Upsert* configuration in the properties window:
++
+image::upsert-properties-window.png[Upsert properties window configuration]
+
+==== Add the Second Transform Message Component
+
+Add the second *Transform Message* component to convert the values from Java to JSON:
+
+. From the *Mule Palette* view, select *Core* and drag a *Transform Message* component to the right of *Upsert*.
+. In the properties window, overlay the brackets in the *Output* section with this DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+  http://www.mulesoft.org/schema/mule/http
+  http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/ee/core
+  http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+  http://www.mulesoft.org/schema/mule/salesforce
+  http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="4c035a4e-77bc-4deb-ba9e-9cb2a7ba3c44" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="936529ce-271b-49ac-be36-ca6a2b3d62ea" >
+		<salesforce:basic-connection username="user" password="pass" securityToken="token" />
+	</salesforce:sfdc-config>
+	<flow name="Copy_of_idp-policy-benefitsFlow" doc:id="44a544bf-f94e-4d3d-827d-0882f4771df5" >
+		<http:listener doc:name="Listener" doc:id="39aed35b-0147-49f1-a258-26f0cabc854b" config-ref="HTTP_Listener_config" path="/" />
+		<ee:transform doc:name="Transform Message" doc:id="82fe7e7d-43f3-433a-bc08-6a0ffb78275e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+	Name: "NewPlaneComponent",
+	Plane__r: {
+		"type": "Plane__c",
+		"Name": "Cobra"
+	}
+}]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<salesforce:upsert objectType="Component__c" doc:name="Upsert" doc:id="0c3ca1fa-8ea1-4a99-b9b8-68f9db14d99f" config-ref="Salesforce_Config" externalIdFieldName="Id"/>
+		<ee:transform doc:name="Transform Message" doc:id="e98409ad-e6cc-4d33-872a-f5e11cf7b869" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+
+
+
+
 [[accandtrans]]
 == Accept and Transform Data
 
