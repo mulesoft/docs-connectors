@@ -1,1 +1,286 @@
 = Azure Key Vault Connector 1.0 Examples - Mule 4
+
+The following examples show several Mule flows for Azure Key Vault Connector:
+
+*
+
+== Before You Begin
+
+* Java 8 or 11
+* Anypoint Studio 7.5 and later
+* Mule runtime engine (Mule) 4.3.0 and later
+* DataWeave
+* Access to an Azure Key Vault instance
+
+== Configure a Connection
+
+To secure connections, you must specify the connection field
+values. To do this:
+
+* <<create-config-file, Create a configuration file for a connection.>>
+* <<configure-conn, Configure the connection global elements.>>
+* <<configure-global, Configure a global element for the properties file.>>
+
+[[create-config-file]]
+=== Create a Configuration File for a Connection
+
+Create a configuration file that includes properties for a connection:
+
+. Create a file named `mule-app.properties` in the `/src/main/resources/` folder.
+. In the `mule-app.properties` file, create a set of properties for the connection,
+similar to the ones that follow, replacing the bracketed text (including the brackets)
+with the correct values for your configuration:
++
+----
+azure.keyVault.tenantId=<tenant ID>
+azure.keyVault.clientId=<client ID>
+azure.keyVault.clientSecret=<client secret>
+azure.keyVault.vaultName=<vault name>
+
+azure.keyVault.secret=<secret>
+azure.keyVault.key=<key>
+azure.keyVault.certificate=<certificate>
+
+your-directory=<your directory>
+----
+
+For more information about creating a properties file, refer to xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+[[configure-conn]]
+=== Configure the Connection Global Elements
+
+Configure global elements for connection:
+
+. Create a new Mule project.
+. In the *Mule Palette* view, click *Search in Exchange* and enter `Azure Key Vault`.
+. Add *Azure Key Vault Connector* to the *Selected modules* section and click *Finish*.
+. Click the *Global Elements* tab and click *Create*.
+. Select *Connector Configuration > Azure Key Vault Config* and click *OK*.
+. Enter the values to configure the Connection authentication type.
+. Click the *Test Connection* button to ensure there is connectivity with the Azure Key Vault API. A successful message should pop up.
+. Click *OK*.
+
+[[configure-global]]
+=== Configure a Global Element for the Properties File
+
+Configure a global element for the `mule-app.properties` file so that Mule knows
+where to find it:
+
+. Click the *Global Elements* tab and click *Create*.
+. In the *Choose Global Type* dialog, select *Configuration properties* and click *OK*.
+. In the *File* field, enter `mule.app.properties`.
+. Click *OK*.
+
+[[encrypt-and-decrypt-a-secret]]
+== Encrypt and Decrypt a Secret
+
+This Mule flow retrieves a secret, encrypts and then decrypts the secret using the key provided in the configuration file, and logs the whole process.
+
+This example uses the following components:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Get Secret* +
+Retrieves a secret
+* *Logger* +
+Logs the secret value
+* *Encrypt Message* +
+Encrypts a message
+* *Logger* +
+Encrypts the log in base64
+* *Decrypt Message* +
+Decrypts a message
+* *Transform Message* +
+Transforms the message using the algorithm
+* *Logger* +
+Decrypts the log
+
+image::encrypt-decrypt.png[Studio flow for the Encrypt and Decrypt a Secret flow]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns:azure-key-vault="http://www.mulesoft.org/schema/mule/azure-key-vault" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-key-vault http://www.mulesoft.org/schema/mule/azure-key-vault/current/mule-azure-key-vault.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+
+	<configuration-properties file="mule-app.properties" doc:name="Configuration properties"/>
+	<azure-key-vault:config name="Azure_Key_Vault_Config" doc:name="Azure Key Vault Config" >
+		<azure-key-vault:connection clientId="${azure.keyVault.clientId}" tenantId="${azure.keyVault.tenantId}" clientSecret="${azure.keyVault.clientSecret}" vaultName="${azure.keyVault.vaultName}" >
+			<azure-key-vault:crypto-client-config />
+		</azure-key-vault:connection>
+	</azure-key-vault:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="daa0beda-3e51-4965-9adf-3a328d38623e" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="e2650ca2-1343-41ae-a330-f67b3569362d" >
+		<file:connection workingDir="${your-directory}" />
+	</file:config>
+	<flow name="EncryptDecryptFlow" doc:id="90e8e344-f5b5-4dae-a4e2-2e419e02b8c0" >
+		<http:listener doc:name="Listener" doc:id="f6ad0772-95b6-44e6-827e-0ea009b2eac6" config-ref="HTTP_Listener_config" path="/encryptDecrypt" />
+		<azure-key-vault:get-secret doc:name="Get Secret" doc:id="b8e3d495-266e-4944-9af3-c485023c732b" config-ref="Azure_Key_Vault_Config" name="${azure.keyVault.secret}"/>
+		<logger level="INFO" doc:name="Log secret value" doc:id="2693df8f-57a9-49fb-b1f9-58767037d206" message="#[%dw 2.0&#10;output application/json&#10;---&#10;payload.value]" />
+		<azure-key-vault:encrypt-message algorithm="RSA_OAEP" doc:name="Encrypt Message" doc:id="e5d88934-b4d2-45b3-9df6-df529d43ab2c" config-ref="Azure_Key_Vault_Config" keyName="${azure.keyVault.key}" >
+			<azure-key-vault:message ><![CDATA[#[payload.value]]]></azure-key-vault:message>
+		</azure-key-vault:encrypt-message>
+		<logger level="INFO" doc:name="Log encrypetd in base 64" doc:id="d628751a-9125-429d-b3c2-0ab3d2cbdf1a" message="#[%dw 2.0&#10;import * from dw::core::Binaries&#10;output text/plain&#10;---&#10;toBase64(payload.data)]" />
+		<azure-key-vault:decrypt-message algorithm="RSA_OAEP" doc:name="Decrypt Message" doc:id="96a8e168-4989-4b56-be15-5e5494ce8292" config-ref="Azure_Key_Vault_Config" keyName="${azure.keyVault.key}" >
+			<azure-key-vault:message ><![CDATA[#[payload.data]]]></azure-key-vault:message>
+		</azure-key-vault:decrypt-message>
+		<ee:transform doc:name="Transform Message" doc:id="0848025d-900b-4e7f-a236-ff06089ca82c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	algorithm: payload.encryptionAlgorithm,
+	value: payload.data
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Log decrypted" doc:id="020e8473-f80f-4356-8b06-8304a8650eaf" message="#[payload]" />
+	</flow>
+</mule>
+----
+
+[[retrieve-and-save-a-certificate]]
+== Retrieve and Save a Certificate
+
+This Mule flow retrieves a certificate and saves the certificate into a file.
+
+This example uses the following components:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Get Certificate* +
+Retrieves a certificate
+* *Write* +
+Writes the content into the file
+* *Transform Message* +
+Outputs the success message that says the certificate is saved into a file
+
+image::retrieve-save.png[Studio flow for the Retrieve and Save a Certificate flow]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns:azure-key-vault="http://www.mulesoft.org/schema/mule/azure-key-vault" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-key-vault http://www.mulesoft.org/schema/mule/azure-key-vault/current/mule-azure-key-vault.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+
+	<configuration-properties file="mule-app.properties" doc:name="Configuration properties"/>
+	<azure-key-vault:config name="Azure_Key_Vault_Config" doc:name="Azure Key Vault Config" >
+		<azure-key-vault:connection clientId="${azure.keyVault.clientId}" tenantId="${azure.keyVault.tenantId}" clientSecret="${azure.keyVault.clientSecret}" vaultName="${azure.keyVault.vaultName}" >
+			<azure-key-vault:crypto-client-config />
+		</azure-key-vault:connection>
+	</azure-key-vault:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="daa0beda-3e51-4965-9adf-3a328d38623e" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="e2650ca2-1343-41ae-a330-f67b3569362d" >
+		<file:connection workingDir="${your-directory}" />
+	</file:config>
+  <flow name="GetCertificateAndSaveIntoFileFlow" doc:id="fc506299-1d81-4a24-ba9f-c05945406c78" >
+  <http:listener doc:name="Listener" doc:id="460dab77-913a-46a0-9b71-b1efc6053699" config-ref="HTTP_Listener_config" path="/getCertificate" />
+  <azure-key-vault:get-certificate doc:name="Get Certificate" doc:id="f2d1eacf-f017-413b-9dfb-0871b975ade8" config-ref="Azure_Key_Vault_Config" name="${azure.keyVault.certificate}" />
+  <file:write doc:id="c2b81872-03c4-4590-bda4-a6b8cd585347" config-ref="File_Config" path="auth_certificate.cer" doc:name="Write" >
+    <file:content ><![CDATA[#[payload.certificate]]]></file:content>
+  </file:write>
+  <ee:transform doc:name="Transform Message" doc:id="ff4ecd1d-7154-4d08-9adc-b66f77e78f29" >
+    <ee:message >
+      <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+message: "file created"
+}]]></ee:set-payload>
+    </ee:message>
+  </ee:transform>
+</flow>
+</mule>
+----
+
+[[retrieve-a-secret-and-its-metadata]]
+== Retrieve a Secret and Its Metadata
+
+This Mule flow retrieves a secret and its metadata.
+
+This example uses the following components:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Get secret metadata* +
+Retrieves the metadata of the secret
+* *Transform Message* +
+Transforms metadata to JSON
+* *Logger* +
+Logs the message
+
+image::retrieve-secret.png[Studio flow for the Retrieve a Secret and Its Metadata flow]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns:azure-key-vault="http://www.mulesoft.org/schema/mule/azure-key-vault" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-key-vault http://www.mulesoft.org/schema/mule/azure-key-vault/current/mule-azure-key-vault.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+
+	<configuration-properties file="mule-app.properties" doc:name="Configuration properties"/>
+	<azure-key-vault:config name="Azure_Key_Vault_Config" doc:name="Azure Key Vault Config" >
+		<azure-key-vault:connection clientId="${azure.keyVault.clientId}" tenantId="${azure.keyVault.tenantId}" clientSecret="${azure.keyVault.clientSecret}" vaultName="${azure.keyVault.vaultName}" >
+			<azure-key-vault:crypto-client-config />
+		</azure-key-vault:connection>
+	</azure-key-vault:config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="daa0beda-3e51-4965-9adf-3a328d38623e" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="e2650ca2-1343-41ae-a330-f67b3569362d" >
+		<file:connection workingDir="${your-directory}" />
+	</file:config>
+  <flow name="UseSecretAsAuthenticationTokenFlow" doc:id="809ade24-8404-4c73-bd7a-6ec3b74f7423" >
+  <http:listener doc:name="Listener" doc:id="403a1ae3-cdb3-4ce7-8ff7-a8cba2ad21e6" config-ref="HTTP_Listener_config" path="/getSecretMetadata" />
+  <azure-key-vault:get-secret doc:name="Get secret metadata" doc:id="003da980-2b2e-428a-86b4-b8598937cbb3" config-ref="Azure_Key_Vault_Config" name="${azure.keyVault.secret}" />
+  <ee:transform doc:name="Transform Metadata to JSON" doc:id="24b0285e-ee74-43dc-a46b-376d3b8f19b8" >
+    <ee:message >
+      <ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+    </ee:message>
+  </ee:transform>
+  <logger level="INFO" doc:name="" doc:id="91bf36b7-f4c4-4cdf-b827-55a2bec8a3ce" message="#[payload]" />
+</flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
