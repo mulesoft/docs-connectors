@@ -1,0 +1,170 @@
+= List Files Using the FTP Connector Example - Mule 4
+:page-aliases: connectors::ftp/ftp-list.adoc
+
+Anypoint Connector for FTP (FTP Connector) provides a *List* operation that returns a list of messages representing files or folders in the directory path:
+
+* The path you define in the *Directory path* field can be absolute, or it can be relative to a working directory.
+* By default, the operation does not read or list files or folders within any subfolders of the directory path.
+* To list files or folders within any subfolders, set the *Recursive* field to *TRUE*.
+
+== Configure the List Operation in Studio
+
+To add and configure the *List* operation in Studio, follow these steps:
+
+. In the *Mule Palette* view, search for `ftp` and select the *List* operation.
+. Drag the *List* operation onto the Studio canvas.
+. In the *General* tab of the operation configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to access the global element configuration fields.
+. Specify the connection information and click *OK*.
+. In the *General* tab, set *Directory path* to `~/dropFolder` to set the path of the file to list.
+
+image::ftp-list-operation-1.png[List operation configuration in Studio]
+
+In the *Configuration XML* editor, the `<ftp:list>` configuration looks like this:
+[source,xml,linenums]
+----
+<ftp:list doc:name="List" config-ref="FTP_Config" directoryPath="~/dropFolder"/>
+----
+
+The following XML example lists the folder contents of messages in the directory path without the subfolder contents. Note that the path can be absolute, or it can be relative to a working directory set in the File configuration. The *For Each* and *Choice* components manage each directory in the list differently from the way they manage each file:
+
+[source,xml,linenums]
+----
+<flow name="list">
+  <ftp:list directoryPath="~/dropFolder" />
+  <foreach>
+    <choice>
+      <when expression="#[attributes.directory]">
+        <flow-ref name="processDirectory" />
+      </when>
+      <otherwise>
+        <logger message="Found file #[attributes.path] which content is #[payload]" />
+      </otherwise>
+    </choice>
+  </foreach>
+</flow>
+----
+
+== Poll a Directory
+
+
+Because Mule 4 doesn't have a polling message source, you can combine a *Scheduler* source with the SFTP *List* operation to poll a directory to look for new files to process. +
+
+In the following poll directory example, a flow lists the contents of a folder once per second. The flow then processes the files one by one, deleting each file after it is processed because there is a *Delete* operation in the *For Each* component.
+
+[source,xml,linenums]
+----
+<flow name="poll">
+  <scheduler>
+      <scheduling-strategy>
+          <fixed-frequency frequency="1000"/>
+      </scheduling-strategy>
+  </scheduler>
+  <ftp:list directoryPath="~/dropFolder" />
+  <foreach>
+<flow-ref name="processFile" />
+<ftp:delete path="#[attributes.path]" />
+</foreach>
+</flow>
+----
+
+== Match Filter
+
+When listing files, use the *File Matching Rules* field, which accepts files that match the specified criteria. This field defines the possible attributes to either accept or reject a file.
+These attributes are optional and ignored if you do not provide values for them. Use an `AND` operator to combine individual attributes.
+
+
+To configure the field in Studio, set the *File Matching Rules* field to *Edit inline* and complete the desired attributes:
+
+* *Timestamp since* +
+Files created before this date are rejected. Any timezone specification in this value is ignored and the Mule server’s time zone is used instead.
+* *Timestamp until* +
+Files created after this date are rejected. Any timezone specification in this value is ignored and the Mule server’s time zone is used instead.
+* *Not updated in the last* +
+Minimum time that should pass since a file was last updated to not be rejected. This attribute works in tandem with *Time unit*.
+* *Updated in the last* +
+Maximum time that should pass from when a file was last updated to not be rejected. This attribute works in tandem with *Time unit*.
+* *Time unit* +
+A *Not updated in the last* attributes. Defaults to `MILLISECONDS`.
+* *Filename pattern* +
+Similar to the current filename pattern filter but more powerful. Glob expressions (default) and regex are supported. You can select which one to use by setting a prefix, for example, `glob:*.{java, js}` or `regex:[0-9]test.csv`.
+* *Path pattern* +
+Same as *Filename pattern* but applies over the entire file path rather than just a filename.
+* *Directories* +
+Match only if the file is a directory.
+* *Regular files* +
+Match only if the file is a regular file.
+* *Sym links*` +
+Match only if the file is a symbolic link.
+* *Min size* +
+Inclusive lower boundary for the file size, expressed in bytes.
+* *Max size* +
+Inclusive upper boundary for the file size, expressed in bytes.
+
+The following screenshot shows the *File Matching Rules* configuration in Studio:
+
+.File Matching Rules field configuration
+image::ftp-list-operation-2.png[File Matching Rules field configuration]
+
+In the *Configuration XML* editor, the configuration looks like this:
+[source,xml,linenums]
+----
+<ftp:matcher
+  timestampSince="2019-06-03T13:21:58+00:00"
+  timestampUntil="2019-06-03T13:21:58+00:00"
+  timeUnit="MICROSECONDS"
+  filenamePattern="a?*.{htm,html,pdf}"
+  pathPattern="a?*.{htm,html,pdf}"
+  directories="REQUIRE"
+  regularFiles="REQUIRE"
+  symLinks="REQUIRE"
+  maxSize="1024"/>
+----
+
+=== External File System Matcher
+
+FTP Connector enables you to use an external file system matcher. Configure the matcher as case sensitive or insensitive in the *Case sensitive* field.
+
+In the *Configuration XML* editor, the `caseSensitive` configuration looks like this:
+[source,xml,linenums]
+----
+<ftp:list doc:name="List" config-ref="FTP_Config" directoryPath="/upload">
+	    <ftp:matcher filenamePattern="*.txt" caseSensitive="true"/>
+	</ftp:list>
+----
+
+=== Top-Level, Reusable Matcher
+
+You can use the file matcher as either a named top-level element that enables reuse or as an inner element that is proprietary to a particular component.
+
+The following example shows a top-level reusable matcher:
+
+[source,xml,linenums]
+----
+<ftp:matcher name="smallFileMatcher" maxSize="100" />
+  <flow name="smallFiles">
+  <ftp:list path="~/smallfiles" matcher="smallFileMatcher" />
+  ...
+</flow>
+----
+
+=== Inner Nonreusable Matcher
+
+The following example shows an inner nonreusable matcher:
+
+[source,xml,linenums]
+----
+<flow name="smallFiles">
+  <ftp:list path="~/smallfiles" matcher="smallFileMatcher">
+    <ftp:matcher maxSize="100" />
+  </ftp:list>
+  ...
+</flow>
+----
+
+//== STREAMING INCLUDE in File, FTP, and SFTP Connector docs
+include::partial$common-streaming.adoc[]
+
+== See Also
+
+* xref:ftp-examples.adoc[FTP Connector Examples]
+* https://help.mulesoft.com[MuleSoft Help Center]
