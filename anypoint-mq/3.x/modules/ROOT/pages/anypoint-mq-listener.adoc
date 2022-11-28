@@ -168,10 +168,27 @@ When the external service is not available, every attempt to process a message r
 
 The circuit breaker capability that the Subscriber source provides is bound to the error handling mechanism provided by Mule. It uses the error notification mechanism to count errors related to an external service, which is known as a circuit failure. You can bind any error to a circuit failure. For example, you can bind `HTTP:TIMEOUT`, `FTP:SERVICE_NOT_AVAILABLE`, or even a custom error from your app, such as `ORG:EXTERNAL_ERROR`.
 
-If a Mule flow finishes its execution with an error, the Subscriber source checks if the error is one of `onErrorTypes` that indicates an external service error, and counts consecutive occurrences until `errorsThreshold` is reached. When `errorsThreshold` is reached, the circuit trips and stops polling for new messages the duration specified by `tripTimeout`. Messages are consumed again on the next poll after the tripTimeout elapses.
+If a Mule flow finishes its execution with an error, the Subscriber source checks if the error is one of the `onErrorTypes` that indicates an external service error, and counts consecutive occurrences until `errorsThreshold` is reached.
+
+When `errorsThreshold` is reached, the circuit trips and remains open for the duration specified by `tripTimeout`.
+While the circuit is open, all polled or consumed messages are not acknowledged (NACK)
+and Anypoint MQ halts any future operations (poll, ACK, NACK, and Publish) until `tripTimeout` elapses.
+
+After `tripTimeout` elapses, the circuit breaker transitions to a new <<circuit-breaker-states,state>>.
+If the new state is *Closed*, clients can consume messages on the next poll.
+
+The behavior varies depending on whether you deploy the app to CloudHub with a single worker or multiple workers:
+
+Single worker::
+The worker processes messages individually from the queue and opens the circuit breaker when the number of errors reaches the value of `errorsThreshold`.
+Multiple workers::
+Each worker has an associated circuit breaker and tracks the values of `errorsThreshold` and `tripTimeout` individually.
+Each worker processes messages individually from the queue and opens the circuit breaker when the number of errors reaches the value of `errorsThreshold` set on the worker.
+
 
 By default, the circuit breaking feature is disabled.
 
+[[circuit-breaker-states]]
 === Circuit Breaker States
 
 The circuit breaker has three states: Closed, Open, and Half Open. The behavior of the app changes based on the current state. See the https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker[Microsoft Circuit Breaker pattern] for more information.
