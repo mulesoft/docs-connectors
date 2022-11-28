@@ -1,0 +1,859 @@
+= IBM CTG Connector 2.3 Examples - Mule 4
+
+The following examples show several Mule flows for IBM CTG Connector:
+
+* <<invoke-a-commarea-program>>
+* <<invoke-a-channel-program>>
+* <<invoke-a-commarea-or-channel-program-inside-a-transactional-scope>>
+* <<use-multiple-containers>>
+
+== Before You Begin
+
+* Java 8 or 11
+* Anypoint Studio 7.x
+* Mule runtime engine (Mule) 4.x
+* DataWeave
+* Access to an IBM CTG system 9.1 or 9.2
+* IBM SDK 9.1 or 9.2
+
+== Configure a Connection
+
+To secure connections, you must specify the connection field values. To do this:
+
+* <<create-config-file, Create a configuration file for a connection.>>
+* <<configure-conn, Configure the connection global elements.>>
+* <<configure-global, Configure a global element for the properties file.>>
+
+[[create-config-file]]
+=== Create a Configuration File for a Connection
+
+Create a configuration file that includes properties for a connection:
+
+. Create a file named `mule-app.properties` in the `/src/main/resources/` folder.
+. In the `mule-app.properties` file, create a set of properties for the connection,
+similar to the ones that follow, replacing the bracketed text (including the brackets)
+with the correct values for your configuration:
++
+----
+ibm.host=<hostname>
+ibm.port=<port number>
+ibm.serverName=<server name>
+ibm.username=<username> (optional)
+ibm.password=<password> (optional)
+ibm.keystoreLocation=<location of the keystore containing the certificates required for an SSL connection> (optional)
+ibm.keystorePassword=<password required to access the keystore for an SSL connection> (optional)
+----
++
+This may vary depending on the selected connection configuration.
+
+For more information about creating a properties file, refer to xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+[[configure-conn]]
+=== Configure the Connection Global Elements
+
+Configure global elements for connection:
+
+. Create a new Mule project.
+. In the *Mule Palette* view, click *Search in Exchange* and enter `ibm ctg`.
+. Add *IBM CICS Transaction Gateway Connector* to the *Selected modules* section and click *Finish*.
+. Click the *Global Elements* tab and click *Create*.
+. Select *Connector Configuration > IBM CTG Config* and click *OK*.
+. Enter the values to configure *Connection*.
+. Click the *Test Connection* button to ensure there is connectivity with the IBM CTG API. A successful message should pop up.
+. Click *OK*.
+
+[[configure-global]]
+=== Configure a Global Element for the Properties File
+
+Configure a global element for the `mule-app.properties` file so that Mule knows
+where to find it:
+
+. Click the *Global Elements* tab and click *Create*.
+. In the *Choose Global Type* dialog, select *Configuration properties* and click *OK*.
+. In the *File* field, enter `mule.app.properties`.
+. Click *OK*.
+
+[[invoke-a-commarea-program]]
+== Invoke a COMMAREA Program
+
+This application calls EC01, a COMMAREA-based program that outputs the current datetime in a formatted EBCDIC string.
+
+image::ibm-ctg-commarea-program.png[CTG COMMAREA flow]
+
+. Create a new Mule Project in Anypoint Studio and fill in the IBM CTG credentials in `src/main/resources/mule-app.properties`.
++
+[source,text,linenums]
+----
+ctg.host=<HOST>
+ctg.port=<PORT>
+ctg.serverName=<SERVER_NAME>
+ctg.username=<USERNAME>
+ctg.password=<PASSWORD>
+----
++
+. Drag an HTTP Listener operation onto the canvas, leave the default values for Host and Port, and set the Path to `/test/ec01`.
++
+. Drag an IBM CTG operation onto the canvas and add a new Global Element to configure a standard (non-SSL) client.
++
+[%header,cols="30s,70a"]
+|===
+|Parameter|Value
+|Host|`${ctg.host}`
+|Port|`${ctg.port}`
+|Server Name|`${ctg.serverName}`
+|Username|`${ctg.username}`
+|Password|`${ctg.password}`
+|===
++
+NOTE: Click *Test Connection* to confirm that Mule can connect with the IBM CTG instance. If the client is successful, click OK to save the configuration. Otherwise, review or correct any invalid parameters and test again.
++
+. Double-click the IBM CTG component, select the *Execute* operation and configure the following parameters:
++
+[%header,cols="30s,70a"]
+|===
+|Parameter|Value
+|Content Reference | `#[payload]`
+|Request Reference | `#[flowVars.commareaRequest]`
+|===
++
+. Add a Transform Message between the HTTP and the IBM CTG operation.
++
+The connector does not provide dynamic or static metadata, but allows users to define custom types using the Metadata Type tool.
++
+.. Define the input metadata for Add Custom Metadata using the ec01-type.ffd schema file:
++
+[source,dataweave,linenums]
+----
+form: COPYBOOK
+id: 'DFHCOMMAREA'
+values:
+- { name: 'LK-DATE-OUT', type: String, length: 8 }
+- { name: 'LK-SPACE-OUT', type: String, length: 1 }
+- { name: 'LK-TIME-OUT', type: String, length: 8 }
+- { name: 'LK-LOWVAL-OUT', type: String, length: 1 }
+----
++
+.. Map the fields in the DataWeave transformer.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output text/plain schemaPath = "ec01-type.ffd", segmentIdent = "DFHCOMMAREA"
+---
+[{
+    LK-DATE-OUT: "",
+    LK-SPACE-OUT: "",
+    LK-TIME-OUT: "",
+    LK-LOWVAL-OUT: ""
+}]
+----
++
+.. Create a flow variable named `commareaRequest` and configure the following fields, as described in <<loadjavametadata>>:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+
+{
+	channel: "EC03",
+	encoding: "US-ASCII",
+	errorContainer: "OUTPUTMESSAGE",
+	programName: "EC03",
+	requestContainer: "INPUTDATA",
+	responseContainer: "CICSDATETIME",
+	tpnName: "CSMI"
+} as Object {
+	class : "org.mule.modules.ibmctg.internal.model.ChannelRequest"
+}
+----
++
+See <<loadjavametadata>> for how to obtain metadata for the CommareaRequest.
++
+. Add a Transform Message after the IBM CTG to extract the results in a JSON format.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	date: payload
+}
+----
++
+. Add a Logger at the end of the flow.
+. Save the changes and deploy the Mule Application. Open a browser and make a request to `+http://localhost:8081/ec01+`. The result should be similar to:
++
+[source,json,linenums]
+----
+{
+    date: "08/01/2019 13:41:17"
+}
+----
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:bti="http://www.mulesoft.org/schema/mule/ee/bti"
+	xmlns:ibmctg="http://www.mulesoft.org/schema/mule/ibmctg"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/bti
+http://www.mulesoft.org/schema/mule/ee/bti/current/mule-bti-ee.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core
+http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ibmctg
+http://www.mulesoft.org/schema/mule/ibmctg/current/mule-ibmctg.xsd">
+	<configuration-properties file="automation-credentials.properties"/>
+	<http:listener-config
+		name="HTTP_Listener_config"
+		doc:name="HTTP Listener config"
+		basePath="/" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<bti:transaction-manager />
+	<ibmctg:config name="IBMCTG_Config" doc:name="IBMCTG Config">
+		<ibmctg:connection host="${config.host}"
+		port="${config.port}"
+		serverName="${config.serverName}"
+		username="${config.username}"
+		password="${config.password}" />
+	</ibmctg:config>
+	<flow name="ibmdemoFlow">
+		<http:listener doc:name="/ec01"
+			config-ref="HTTP_Listener_config"
+			path="/ec01"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/flatfile schemaPath = "ec01-type.ffd", segmentIdent = "DFHCOMMAREA"
+---
+[{
+	"LK-DATE-OUT": "",
+	"LK-SPACE-OUT": "",
+	"LK-TIME-OUT": "",
+	"LK-LOWVAL-OUT": ""
+}]]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="request" ><![CDATA[%dw 2.0
+
+output application/java
+---
+{
+	commareaLength: 18,
+	encoding: "IBM037",
+	programName: "EC01",
+	replyLength: 18,
+	tpnName: "CSMI"
+} as Object {
+	class : "org.mule.modules.ibmctg.internal.model.CommareaRequest"
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ibmctg:execute-using-commarea doc:name="Execute using commarea"
+		commareaRequestType="#[vars.request]" config-ref="IBMCTG_Config"/>
+		<ee:transform doc:name="Transform Message">
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	date:payload
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+[[invoke-a-channel-program]]
+== Invoke a Channel Program
+
+This application calls EC03, a channel-based program that takes an input data container and returns three containers:
+
+* A data and time container
+* The length of the input data, use channels, and containers in a CICS program
+* An output container that contains a copy of the input data, or an error message
+
+image::ibm-ctg-invoke-channel-program.png[Channel Program]
+
+. Perform steps 1 to 3 from the previous example and set the HTTP path to `/ec03`.
+. Double-click the IBM CTG operation, select the Execute operation, and configure the following parameters:
++
+[%header,cols="30s,70a"]
+|===
+|Parameter|Value
+|Content Reference | `#[payload]`
+|Request Reference | `#[flowVars.request]`
+|===
++
+. Add a Transform Message between the HTTP and the IBM CTG operation.
+. Define the input metadata according to <<addcustommetadata>> using the schema file ec03-type.ffd:
++
+[source,dataweave,linenums]
+----
+form: COPYBOOK
+id: 'DFHCOMMAREA'
+values:
+- { name: 'CICS-DATE-TM', type: String, length: 8 }
+----
++
+. Map the fields in the DataWeave transformer.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output text/plain schemaPath = "ec03-type.ffd", segmentIdent = "DFHCOMMAREA"
+---
+[{
+	CICS-DATE-TM: ""
+}]
+----
++
+. Create a flowVar variable named `request` and configure the following fields, as described in <<loadjavametadata>>:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	channel: "EC03",
+	encoding: "US-ASCII",
+	errorContainer: "OUTPUTMESSAGE",
+	programName: "EC03",
+	requestContainer: "INPUTDATA",
+	responseContainer: "CICSDATETIME",
+	tpnName: "CSMI"
+} as Object {
+	class : "org.mule.modules.ibmctg.internal.model.ChannelRequest"
+}
+----
++
+. Add a Transform Messager after the IBM CTG operation to convert the result into a readable format.
+. Add a Logger at the end of the flow.
+. Save the changes and deploy the Mule app.
+. Open a browser and make a request to `+http://localhost:8081/ec03+`.
++
+The result should be similar to:
++
+[source,json,linenums]
+----
+{
+   cics-date-time: "08/01/2019 13:57:25"
+}
+----
+
+[[addcustommetadata]]
+=== Add Custom Metadata
+
+The IBM CTG Connector does not provide dynamic or static metadata out of the box, but it enables users to define custom types using the Metadata Type tool. Define input and output metadata as follows:
+
+. Place a schema file under `src/main/resources` directory, normally in `.ffd` format.
++
+Note: These schema files must be supplied by the user. They can be obtained from COBOL copybooks, which are included in the CICS installation.
++
+. Go to the Metadata tab of the connector operation and click *Add metadata*.
+* Select Input:Payload and click *Edit* to open the Metadata Editor:
++
+image::ibm-ctg-add-metadata.png[Metadata Editor]
++
+. Click *Add* to create a new type and provide and ID for it, that is, ec03-in-type for the program EC03 input data.
+. Select type Copybook, select Schema, and provide the location of the schema file.
+. From the list of available data segments drop-down menu that appears, choose the one you need and click *Select* to save the configuration.
+. Drag a DataWeave transformer in front of the IBM CTG component in the flow.
++
+Metadata fields become available to build the mapping.
++
+image::ibm-ctg-transform-metadata.png[Metadata fields]
++
+Having a metadata definition is not required to use IBM CTG Connector, but it is essential to improve the usability of the connector. See xref:studio::create-metadata-class-task.adoc[Create Metadata].
+
+[[loadjavametadata]]
+==== Load Java Metadata
+
+In DataWeave, click *Define Metadata* to open the Metadata window.
+
+. Click *Add* and provide an ID, such as `CommareaRequest`.
+. Select type Java and then select a Java object in the Data Structure table.
+. Search the class CommareaRequest or the fully qualified name `org.mule.modules.ibmctg.internal.model.CommareaRequest`, and click *OK*.
+. Click *Select* to save the configuration.
+. Perform the same steps to load metadata for the ChannelRequest type.
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:bti="http://www.mulesoft.org/schema/mule/ee/bti"
+	xmlns:ibmctg="http://www.mulesoft.org/schema/mule/ibmctg"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/bti
+http://www.mulesoft.org/schema/mule/ee/bti/current/mule-bti-ee.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core
+http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ibmctg
+http://www.mulesoft.org/schema/mule/ibmctg/current/mule-ibmctg.xsd">
+	<configuration-properties file="automation-credentials.properties"/>
+	<http:listener-config
+		name="HTTP_Listener_config"
+		doc:name="HTTP Listener config"
+		basePath="/" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<bti:transaction-manager />
+	<ibmctg:config name="IBMCTG_Config" doc:name="IBMCTG Config">
+		<ibmctg:connection host="${config.host}"
+		port="${config.port}"
+		serverName="${config.serverName}"
+		username="${config.username}"
+		password="${config.password}" />
+	</ibmctg:config>
+  <flow name="ibmdemoFlow2">
+		<http:listener doc:name="/ec02" config-ref="HTTP_Listener_config" path="/ec02"/>
+		<try doc:name="Try" transactionalAction="ALWAYS_BEGIN" transactionType="XA">
+			<ee:transform doc:name="Transform Message">
+				<ee:message>
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/flatfile schemaPath = "ec02-type.ffd" , segmentIdent = "DFHCOMMAREA"
+---
+[{
+	"LK-COUNT": "000001234TH RUN OF EC02"
+}]]]></ee:set-payload>
+				</ee:message>
+				<ee:variables >
+					<ee:set-variable variableName="request" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	commareaLength: 40,
+	encoding: "IBM037",
+	programName: "EC02",
+	replyLength: 40,
+	tpnName: "CSMI"
+} as Object {
+	class : "org.mule.modules.ibmctg.internal.model.CommareaRequest"
+}]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<ibmctg:execute-using-commarea doc:name="Execute using commarea"
+			config-ref="IBMCTG_Config" commareaRequestType="#[vars.request]"/>
+			<ee:transform doc:name="Transform Message">
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	count:payload
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+		</try>
+	</flow>
+</mule>
+----
+
+[[invoke-a-commarea-or-channel-program-inside-a-transactional-scope]]
+== Invoke a COMMAREA or Channel Program Inside a Transactional Scope
+
+This application calls EC02, a COMMAREA-based program that returns a simple run counter.
+
+image::ibm-ctg-use-case-2.png[Use case flow in Studio]
+
+. Perform steps 1 to 3 from the previous example and set the HTTP path to `/test/ec02`.
+. In the Global Elements tab, add a new Bitronix Transaction Manager without further configurations.
+. Drag a Transactional element next to the HTTP and configure according to the table below:
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Type |`XA Transaction`
+|Action | `BEGIN_OR_JOIN`
+|===
++
+. Double-click the IBM CTG component, select the operation Execute using COMMAREA and configure the following parameters:
++
+[%header%autowidth.spread]
+|===
+|Parameter|Value
+|Content Reference | `#[payload]`
+|Request Reference | `#[flowVars.request]`
+|===
++
+. Add a Transform Message between the HTTP and the IBM CTG components. The connector does not provide dynamic/static metadata but allows users to define custom types using the Metadata Type tool.
+. Define the input metadata according to <<addcustommetadata>> using the schema file ec02-type.ffd:
++
+[source,dataweave,linenums]
+----
+form: COPYBOOK
+id: 'DFHCOMMAREA'
+values:
+- { name: 'LK-COUNT', type: String, length: 40 }
+----
++
+. Map the fields in the DataWeave transformer.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+%output text/plain schemaPath = "ec02-type.ffd" , segmentIdent = "DFHCOMMAREA"
+---
+[{
+	LK-COUNT: "000001234TH RUN OF EC02"
+}]
+----
++
+. Create a flowVar named `request` and configure the following fields, as described in <<loadjavametadata>>:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	commareaLength: 40,
+	encoding: "IBM037",
+	programName: "EC02",
+	replyLength: 40,
+	tpnName: "CSMI"
+} as Object {
+	class : "org.mule.modules.ibmctg.internal.model.CommareaRequest"
+}
+----
++
+. Add a Transform Message after the IBM CTG to extract the results in a JSON format.
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+{
+	count: payload
+}
+----
++
+. Add a Logger at the end of the flow.
+. Save the changes and deploy the Mule app.
+. Open a browser and make a request to `+http://localhost:8081/ec02+`. The result should be similar to:
++
+[source,json,linenums]
+----
+{
+    count: "1st RUN OF EC02"
+}
+----
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:bti="http://www.mulesoft.org/schema/mule/ee/bti"
+	xmlns:ibmctg="http://www.mulesoft.org/schema/mule/ibmctg"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/bti
+http://www.mulesoft.org/schema/mule/ee/bti/current/mule-bti-ee.xsd
+http://www.mulesoft.org/schema/mule/core
+http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http
+http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core
+http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ibmctg
+http://www.mulesoft.org/schema/mule/ibmctg/current/mule-ibmctg.xsd">
+	<configuration-properties file="automation-credentials.properties"/>
+	<http:listener-config
+		name="HTTP_Listener_config"
+		doc:name="HTTP Listener config"
+		basePath="/" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<bti:transaction-manager />
+	<ibmctg:config name="IBMCTG_Config" doc:name="IBMCTG Config">
+		<ibmctg:connection host="${config.host}"
+		port="${config.port}"
+		serverName="${config.serverName}"
+		username="${config.username}"
+		password="${config.password}" />
+	</ibmctg:config>
+  <flow name="ibmdemoFlow1">
+		<http:listener doc:name="/ec03" config-ref="HTTP_Listener_config" path="/ec03"/>
+		<try doc:name="Try" transactionalAction="ALWAYS_BEGIN" transactionType="XA">
+			<ee:transform doc:name="Transform Message">
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/flatfile
+schemaPath = "ec03-type.ffd" , segmentIdent = "DFHCOMMAREA"
+---
+[{
+	"CICS-DATE-TM": null
+}]]]></ee:set-payload>
+				</ee:message>
+				<ee:variables >
+					<ee:set-variable variableName="request" ><![CDATA[%dw 2.0
+
+output application/java
+---
+{
+	channel: "EC03",
+	encoding: "US-ASCII",
+	errorContainer: "OUTPUTMESSAGE",
+	programName: "EC03",
+	requestContainer: "INPUTDATA",
+	responseContainer: "CICSDATETIME",
+	tpnName: "CSMI"
+} as Object {
+	class : "org.mule.modules.ibmctg.internal.model.ChannelRequest"
+}]]></ee:set-variable>
+				</ee:variables>
+			</ee:transform>
+			<ibmctg:execute doc:name="Execute" channelRequest="#[vars.request]"
+			config-ref="IBMCTG_Config"/>
+			<ee:transform doc:name="Transform Message">
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"cics-date-time":payload
+}
+]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+		</try>
+	</flow>
+</mule>
+----
+
+[[use-multiple-containers]]
+== Use Multiple Containers
+
+This Mule flow shows how to use multiple containers. This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Transform Message* +
+Sets the first content request and outputs the data as a flat file
++
+----
+%dw 2.0
+output application/flatfile schemaPath = "ec03-type.ffd", segmentIdent = "DFHCOMMAREA", encoding="cp037"
+---
+[{
+	"CICS-DATE-TM": ""
+}]
+----
++
+* *Transform Message* +
+Sets the second content request and outputs the data as a flat file
++
+----
+%dw 2.0
+output application/flatfile schemaPath = "ec03-type.ffd", segmentIdent = "DFHCOMMAREA", encoding="cp037"
+---
+[{
+	"CICS-DATE-TM": ""
+}]
+----
++
+* *Transform Message* +
+Sets multiple channels and content requests and outputs the data in JSON
++
+----
+%dw 2.0
+output application/json
+---
+[
+	{
+		channelRequest : 	{
+			channel: "EC03",
+			encoding: "US-ASCII",
+			errorContainer: "OUTPUTMESSAGE",
+			programName: "EC03",
+			requestContainer: "INPUTDATA",
+			responseContainer: "CICSDATETIME",
+			tpnName: "CSMI"
+		},
+		content : vars.request1.^raw
+	},
+	{
+		channelRequest : 	{
+			channel: "EC03",
+			encoding: "US-ASCII",
+			errorContainer: "OUTPUTMESSAGE",
+			programName: "EC03",
+			requestContainer: "INPUTDATA",
+			responseContainer: "CICSDATETIME",
+			tpnName: "CSMI"
+		},
+		content : vars.request2.^raw
+	}
+]
+----
++
+* *Execute with multiple channels* +
+Calls a remote CICS program sending data encapsulated in channels and containers, enabling users to transfer more than 32 KB in a single request
++
+Enter the following values:
++
+[%header,cols="30s,70a"]
+|===
+|Field |Value
+|Object type | `List`
+|Connector Configuration | `IBMCTG_Config`
+|Channel and contents| `payload`
+|===
+* *Transform Message* +
+Outputs the data in JSON
++
+----
+%dw 2.0
+output application/json
+---
+{
+	"cics-date-time":payload
+}
+----
++
+* *Logger* +
+Performs logging
+
+image::ibm-ctg-multiple-container.png[Studio Flow for using multiple containers in IBM CTG Connector]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:bti="http://www.mulesoft.org/schema/mule/ee/bti"
+	xmlns:ibmctg="http://www.mulesoft.org/schema/mule/ibmctg" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/bti http://www.mulesoft.org/schema/mule/ee/bti/current/mule-bti-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ibmctg http://www.mulesoft.org/schema/mule/ibmctg/current/mule-ibmctg.xsd">
+	<configuration-properties file="mule-app.properties"/>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="de838cd2-71c3-41b3-9fbd-be6f671921dc" basePath="/" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<bti:transaction-manager />
+	<ibmctg:config name="IBMCTG_Config" doc:name="IBMCTG Config" doc:id="1435fcc3-4b97-496e-8552-58a339dce96f" >
+		<ibmctg:connection host="${config.host}" port="${config.port}" serverName="${config.serverName}" username="${config.username}" password="${config.password}" />
+	</ibmctg:config>
+	<flow name="multi_channel_testFlow" doc:id="a79bd0f2-e659-4778-96b1-fdcbf86166eb" >
+		<http:listener doc:name="Listener" doc:id="594a7d30-b82f-4899-a212-0fc8897b414a" config-ref="HTTP_Listener_config" path="/multi"/>
+		<ee:transform doc:name="Set Content Request I" doc:id="f3ebec71-8cb5-41f0-a993-bd68a963ac63" >
+			<ee:variables >
+				<ee:set-variable variableName="request1" ><![CDATA[%dw 2.0
+output application/flatfile schemaPath = "ec03-type.ffd", segmentIdent = "DFHCOMMAREA", encoding="cp037"
+---
+[{
+	"CICS-DATE-TM": ""
+}]]]></ee:set-variable>
+			</ee:variables>
+
+		</ee:transform>
+		<ee:transform doc:name="Set Content Request II" doc:id="1362b85a-a36c-4fa1-bc28-96266bc416c5">
+			<ee:variables>
+				<ee:set-variable variableName="request2" ><![CDATA[%dw 2.0
+output application/flatfile schemaPath = "ec03-type.ffd", segmentIdent = "DFHCOMMAREA", encoding="cp037"
+---
+[{
+	"CICS-DATE-TM": ""
+}]]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<ee:transform doc:name="Set Multiple Channels And Contents Request" doc:id="4157b44c-ac57-40a6-8ced-c5e165a1035c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[
+	{
+		channelRequest : 	{
+			channel: "EC03",
+			encoding: "US-ASCII",
+			errorContainer: "OUTPUTMESSAGE",
+			programName: "EC03",
+			requestContainer: "INPUTDATA",
+			responseContainer: "CICSDATETIME",
+			tpnName: "CSMI"
+		},
+		content : vars.request1.^raw
+	},
+	{
+		channelRequest : 	{
+			channel: "EC03",
+			encoding: "US-ASCII",
+			errorContainer: "OUTPUTMESSAGE",
+			programName: "EC03",
+			requestContainer: "INPUTDATA",
+			responseContainer: "CICSDATETIME",
+			tpnName: "CSMI"
+		},
+		content : vars.request2.^raw
+	}
+]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ibmctg:execute-with-multiple-channels doc:name="Execute with multiple channels" doc:id="1913f9b3-95b2-4e83-8028-ea934d1a59ae" config-ref="IBMCTG_Config" />
+		<ee:transform doc:name="Transform Message" doc:id="31f774bb-a848-42c6-a1ea-efb44612ca03" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"cics-date-time":payload
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="dff20a20-43a0-401f-8c20-7d480062fe64" message="#[payload]"/>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
