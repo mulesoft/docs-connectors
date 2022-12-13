@@ -138,6 +138,55 @@ Because every parsing error during the configuration is not shown during design-
 * If you do not add the WSDL as a resource in the application's *src/main/resources* folder in Studio, check for a correct connection to the server hosting the WSDL. +
 Sometimes you need to add custom HTTP settings, such as OAuth settings or user/password settings, to access an HTTP server in an HTTP security layer. See xref:web-service-consumer-config-topics.adoc[Setting a Custom HTTP Transport Configuration.]
 
+== Troubleshooting Must Understand Error
+
+If your Mule Web Service Consumer app throws the error `WSC:CANNOT_DISPATCH`, and the third-party server returns in the HTTP response the `<faultcode>soap:MustUnderstand</faultcode>` as the exception for the connector caused error, this indicates that the Web Service Consumer connector configuration has the Security setting *Must Understand* field set to the default value of `true`.
+
+To avoid this issue, set the *Must understand* field to `false`. The default value of this attribute to `true` is on the connector side, but on the SOAP protocol side the implicit value for the *Must Understand* attribute is `false` when is not present.
+If you do not explicitly need to use the *Must Understand* attribute for SOAP request, set the value to `false`.
+
+image::wsc-must-understand.png[Web Service Consumer configuration setting Must Understand value to false]
+
+The returned HTTP response might come with a compressed or uncompressed payload body for you to check the `<faultcode>soap:MustUnderstand</faultcode>` exception.
+If the HTTP response header `Content-Encoding` is `gzip`, it indicates that the payload body is compressed, for example, review the following HTTP response where you can see compressed characters such as �RMo�0�W���:
+
+[source,XML,linenums]
+----
+HTTP/1.1 500 Internal Server Error
+X-OPNET-Transaction-Trace: a2_ba571488-537c-4839-94a9-48f3f08fadf3
+Content-Encoding: gzip
+Content-Type: multipart/related; type="application/xop+xml"; boundary="uuid:83b066a2-fb96-4abf-a687-dd178a5b3e29"; start="<root.message@cxf.apache.org>"; start-info="text/xml"
+Content-Length: 363
+X-Cnection: close
+Date: Wed, 23 Nov 2022 13:41:25 GMT
+Connection: close
+Set-Cookie: dc=dcs; Path=/; Version=1; Secure; Httponly; Max-Age=900
+Strict-Transport-Security: max-age=31536000
+
+�???????�RMo�0�W���N!�c-�M�:i��֞�1�&(h�_h���v���l?[�iJ��4X,`��t��sHs�pɥ�,C�Og8]�GOZYT��#u]��R+����=Vk�`�f�{��Y��x[+�]�0�(G÷*ӲT�����]$������?"�!ksj�
+��9$��x��:ڪ/�t��5Q���+��#!�ɏ@��z��} pH^r��e7�/�T6���r�09�o
+ٽ�hȂ����g%Y�&Ine�@��}������@%q�_�,}�i�E0g���`֘�v�n�|�~K��}�?dJ[֜;k-���`+ף������^�����Y9E??
+----
+
+To decompress the payload body of the response, your Mule app must catch the thrown error using an *Error Handler* component, and then use the Compression Module *Decompress* operation to decompress the response.
+
+In Studio, navigate to the *Decompress* operation configuration screen, and set the *Compressed* field to the following expression to read compressed payload and catch the exception: `error.exception.errorMessage.typedAttributes.value.headers.`
+
+image::wsc-decompress.png[Compressed field set with expression value]
+
+Subsequently, you can use a *Logger* component in your Mule app to log the entire payload body with the exception, for example, the following logs show the decompressed payload SOAP body with `<faultcode>soap:MustUnderstand</faultcode>`:
+
+[source,XML,linenums]
+----
+INFO  2022-11-23 14:57:05,247 [[MuleRuntime].uber.05: [ri-uhip-integration-esb-1095brequesttransmitterservice2_11-02-20221].BulkRequestTransmitter:\soapkit-config.BLOCKING @3f46eb07] [processor: BulkRequestTransmitter:\soapkit-config/processors/4/errorHandler/0/processors/2; event: 58ed0ad0-6b57-11ed-b9ce-147ddaa4cf6c] org.mule.runtime.core.internal.processor.LoggerMessageProcessor: --uuid:223e386d-3093-4df4-b5f9-9cb3b9a493a2
+Content-Type: application/xop+xml; charset=UTF-8; type="text/xml"
+Content-Transfer-Encoding: binary
+Content-ID: <root.message@cxf.apache.org>
+
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><soap:Fault><faultcode>soap:MustUnderstand</faultcode><faultstring>MustUnderstand headers: [{http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd}Security] are not understood.</faultstring></soap:Fault></soap:Body></soap:Envelope>
+--uuid:223e386d-3093-4df4-b5f9-9cb3b9a493a2--
+----
+
 
 [[common-throws]]
 == Understand Common Throws
