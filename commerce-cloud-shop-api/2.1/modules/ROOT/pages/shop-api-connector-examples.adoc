@@ -5,7 +5,24 @@ Commerce Cloud B2C Shop Connector supports two different types of configuration.
 This example uses the Customer Auth Connection Provider configuration.
 After successful execution of the Get Customer operation we get the customer result.
 
-The use case requires you to follow these steps:
+To get an access token, you can use *Authenticate Customer* and *Get Access Token* (if you are using B2C Shop Connector 2.1 and later) or you can use *Authorize Customer*.
+
+*Authenticate Customer* and *Get Access Token*
+
+[start = 1]
+. Create a new Mule application in Anypoint Studio, configuring port 8081 as HTTP Listener and the path, for example, `/login`. 
+. Before you can use *Authenticate Customer*, you must prepare a redirect URI for handling the redirect from SLAS that contains the shopper USID and authorization code. The redirect URI must be publicly accessible, so you must use a tool such as webhook.site or ngrok to expose a localhost endpoint externally.
+. Drag the *Authenticate Customer* operation from the Mule palette to the flow.
+. For registered users, you must register the token using the code from *Authenticate Customer* callback response. Create a new HTTP Listener on port 8081 with the path `/register`.
+. Drag the *Get Access Token* operation from the Mule palette to the flow with the path `/register`.
+. Obtain the required parameters for the *Authenticate Customer* and *Get Access Token* operations from Postman.
+. For both of the operations, select the Commerce Cloud B2C Shop Connector Shopper Token Config from B2C Shop Connector and configure the required values or add a new configuration by clicking the green plus (+) symbol.
+. After entering all the required parameters, save the Mule project.
+. Run the project as a Mule application by right-clicking the project name in *Package Explorer* and selecting *Run As > Mule Application*.
+. Navigate to `\http://localhost:8081/auth`, open Postman, and check the response. You should see an empty body in Postman with the status 200, which means a callback request is sent to the redirect URI.
+. Retrieve the code query parameter from the callback request. This step differs based on how you handle the OAuth2 callback.
+. Use the code in the second request to construct a new request to *Get Access Token*.
+. Navigate to `\http://localhost:8081/register`, open Postman, and check the response. After a successful call, retrieve the access and refresh token to use in other SCAPI calls. 	Provide this JWT token from Postman as an authorization header parameter to perform operations.
 
 *Authorize Customer*
 
@@ -75,6 +92,79 @@ image::shop-connector-customer-auth-config.jpg[]
 . Navigate to http://localhost:8081/customer/shopper-customers/{version}/organizations/{organizationId}/customers/{customerId}, open Postman, pass xref:Authorize Customer[Shopper JWT Token] from header and check the response.
 
 . You should see the customer details in the output.
+
+== XML for Authenticate Customer and Get Access Token
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+# guest_flow.xml
+
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:commerce-cloud-shopper-api="http://www.mulesoft.org/schema/mule/commerce-cloud-shopper-api" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/commerce-cloud-shopper-api http://www.mulesoft.org/schema/mule/commerce-cloud-shopper-api/current/mule-commerce-cloud-shopper-api.xsd">
+	<flow name="get-guest-access-tokenFlow" doc:id="708f66c3-d761-4151-8ba1-ae5c67d34fab" >
+		<http:listener doc:name="Listener" doc:id="701eda50-679c-4e9e-91bb-3f576b8f878b" config-ref="HTTP_Listener_config" path="/login" />
+		<commerce-cloud-shopper-api:create-shopper-auth-organizations-oauth2-token-by-version-organization-id doc:name="Get Access Token" doc:id="9e26b4e3-57d9-4428-bbb6-f8c66855ea1c" config-ref="Commerce_Cloud_B2C_Shop_Connector_Shopper_token_config" version="${shopper.version}" organizationId="${shopper.orgId}" authorization="${shopper.clientAuthHeader}" >
+			<commerce-cloud-shopper-api:custom-query-params ><![CDATA[#[output application/java
+---
+{
+	"grant_type" : "client_credentials",
+	"channel_id" : "${shopper.siteId}"
+}]]]></commerce-cloud-shopper-api:custom-query-params>
+			<commerce-cloud-shopper-api:custom-headers ><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/x-www-form-urlencoded"
+}]]]></commerce-cloud-shopper-api:custom-headers>
+		</commerce-cloud-shopper-api:create-shopper-auth-organizations-oauth2-token-by-version-organization-id>
+	</flow>
+</mule>
+----
+
+[source,xml,linenums]
+----
+# registered_flow.xml
+
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:commerce-cloud-shopper-api="http://www.mulesoft.org/schema/mule/commerce-cloud-shopper-api" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/commerce-cloud-shopper-api http://www.mulesoft.org/schema/mule/commerce-cloud-shopper-api/current/mule-commerce-cloud-shopper-api.xsd">
+	<flow name="login" doc:id="f7f75d0e-fb56-4d42-b329-8e04b9cff3fa" >
+		<http:listener doc:name="Listener" doc:id="5ecd86a9-800e-4773-966d-55333d7ae026" config-ref="HTTP_Listener_config" path="/login" responseStreamingMode="ALWAYS" />
+		<commerce-cloud-shopper-api:create-shopper-auth-organizations-oauth2-login-by-version-organization-id doc:name="Authenticate Customer" doc:id="cf3ff6ff-b2ae-48e7-b5f6-e6b8de6476df" config-ref="Commerce_Cloud_B2C_Shop_Connector_Shopper_token_config" version="${shopper.version}" organizationId="${shopper.orgId}" authorization="#[attributes.headers.Authorization]" streamingType="ALWAYS" />
+	</flow>
+	<flow name="register-user-access-token-flow" doc:id="021f4f75-3916-4399-a346-b7a1a6da0881" >
+		<http:listener doc:name="Listener" doc:id="642be5c6-bbed-4ab8-8deb-2f0c96ce8784" config-ref="HTTP_Listener_config" path="/register" />
+		<commerce-cloud-shopper-api:create-shopper-auth-organizations-oauth2-token-by-version-organization-id doc:name="Get Access Token" doc:id="36aaa585-793e-4437-9653-ddf84f3c558d" config-ref="Commerce_Cloud_B2C_Shop_Connector_Shopper_token_config" version="${shopper.version}" organizationId="${shopper.orgId}" >
+			<commerce-cloud-shopper-api:custom-headers ><![CDATA[#[output application/java
+---
+{
+	"Content-Type" : "application/x-www-form-urlencoded"
+}]]]></commerce-cloud-shopper-api:custom-headers>
+		</commerce-cloud-shopper-api:create-shopper-auth-organizations-oauth2-token-by-version-organization-id>
+	</flow>
+</mule>
+----
+
+== Steps for Authenticate Customer and Get Access Token
+
+[start = 1]
+. Create new Mule application.
+. Click the Configuration XML tab at the base of the canvas.
+. Copy and paste the above code.
+. Save the project.
+. Run the project as a Mule application by right-clicking the project name in Package Explorer and selecting Run As > Mule Application.
+. Navigate to http://localhost:8081/customer/shopper-customers/{version}/organizations/{organizationId}/customers/actions/login, open Postman, and check the response.
+. You should see the JWT token in the response header. Provide this JWT token from Postman as an authorization header parameter to perform operations.
 
 == XML for Authorize Customer
 
