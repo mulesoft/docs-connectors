@@ -1,0 +1,125 @@
+= Web Service Consumer - Example 2
+
+The following example lists an inventory of t-shirts and Web Service Consumer Connector returns if there is an error such as `BAD_RESPONSE` or `EMPTY_RESPONSE`.
+
+image::wsc-example-2.png[Web Service Consumer Example flow in Studio canvas]
+
+== XML for Consuming a Web Service
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<mule xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit-soap="http://www.mulesoft.org/schema/mule/apikit-soap" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/apikit-soap http://www.mulesoft.org/schema/mule/apikit-soap/current/mule-apikit-soap.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd">
+    <http:listener-config name="api-httpListenerConfig">
+        <http:listener-connection host="0.0.0.0" port="8081"/>
+    </http:listener-config>
+    	<http:listener-config name="HTTP_Listener_config1" doc:name="HTTP Listener config"  basePath="/" >
+		<http:listener-connection host="0.0.0.0" port="8082" />
+	</http:listener-config>
+		<wsc:config name="Web_Service_Consumer_Config" doc:name="Web Service Consumer Config"  >
+		<wsc:connection wsdlLocation="http://localhost:8081/TshirtService/TshirtServicePort?wsdl" service="TshirtService" port="TshirtServicePort" address="#['http://localhost:8081/TshirtService/TshirtServicePort?result=' ++ attributes.queryParams.result]" >
+			<wsc:custom-transport-configuration >
+				<wsc:default-http-transport-configuration timeout="60000" />
+			</wsc:custom-transport-configuration>
+			<wsc:web-service-security actor="http://schemas.xmlsoap.org/soap/actor/next" />
+		</wsc:connection>
+	</wsc:config>
+    <apikit-soap:config httpStatusVarName="httpStatus" name="soapkit-config" port="TshirtServicePort" service="TshirtService" wsdlLocation="tshirt2 (1).wsdl"/>
+    <flow name="api-main">
+        <http:listener config-ref="api-httpListenerConfig" path="/TshirtService/TshirtServicePort">
+            <http:response statusCode="#[attributes.additionalTransportData.statusCode default 200]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[attributes.protocolHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[attributes.additionalTransportData.statusCode default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[attributes.protocolHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit-soap:router config-ref="soapkit-config">
+            <apikit-soap:message>#[payload]</apikit-soap:message>
+            <apikit-soap:attributes>#[
+              %dw 2.0
+              output application/java
+              ---
+              {
+                  headers: attributes.headers,
+                  method: attributes.method,
+                  queryString: attributes.queryString
+            }]</apikit-soap:attributes>
+        </apikit-soap:router>
+    </flow>
+    <flow name="ListInventory:\soapkit-config">
+		<choice doc:name="Choice" doc:id="c632fc13-961d-470d-be98-b48b71e6c262">
+			<when expression="#[(payload.headers[0].choice default '') == 'empty']">
+				<set-payload value="#[output application/xml --- readUrl('classpath://soap_empty.xml', 'application/xml')]" doc:name="Set Payload"  />
+			</when>
+			<otherwise>
+				<ee:transform doc:name="Transform Message" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+ns ms http://mulesoft.org/tshirt-service
+---
+{
+    body: {
+        ms#ListInventoryResponse: 
+        	{
+			ms#inventory: [
+				{
+			    ms#productCode: "4aa458e4f00d017021bbb509d700f008",
+        		ms#size: "S",
+        		ms#description: "Mens Summit Road T-Shirt",
+        		ms#count: 100        		
+        		},
+	        	{
+        		ms#productCode: "d8a63dea402e11edb8780242ac120002",
+        		ms#size: "M",
+        		ms#description: "Japanese Car EJ Engine Blueprint Illustration T-shirt",
+        		ms#count: 200        		
+        		}
+        	]
+        	}
+        } write "application/xml"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+    </flow>
+	<flow name="mule-http-listener-api" >
+		<http:listener doc:name="Listener" config-ref="HTTP_Listener_config1" path="/api" responseStreamingMode="NEVER" />
+		<set-variable value="#[attributes.queryParams.result default '']" doc:name="Set Variable"  variableName="choice"/>
+		<set-payload value="#[output application/xml --- readUrl('classpath://request.xml', 'application/xml')]" doc:name="Set Payload"  />
+		<flow-ref doc:name="Flow Reference"  name="consume-Flow" />
+		<logger level="INFO" doc:name="Logger" message="#[payload]" />
+	</flow>
+	<flow name="consume-Flow" >
+		<wsc:consume operation="ListInventory" config-ref="Web_Service_Consumer_Config" doc:name="Consume" >
+			<wsc:message>
+				<wsc:headers ><![CDATA[#[%dw 2.0
+output application/xml
+---
+headers : {
+	choice: vars.choice
+	
+}]]]></wsc:headers>
+			</wsc:message>
+		</wsc:consume>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue"  type="WSC:BAD_RESPONSE" >
+				<choice doc:name="Choice" >
+					<when expression='#[error.exception.additionalTransportData["statusCode"] as String == "200"]' >
+						<logger level="INFO" doc:name="Logger" message='#["Empty Response with HTTP status code: " ++ error.exception.additionalTransportData["statusCode"] as String]' />
+					</when>
+					<otherwise >
+						<raise-error doc:name="Raise error" type="WSC:EMPTY_RESPONSE_NOT_200" description="HTTP Status is not 200" />
+					</otherwise>
+				</choice>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>
+----
