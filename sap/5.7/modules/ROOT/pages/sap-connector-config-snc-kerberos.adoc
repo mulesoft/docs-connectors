@@ -7,15 +7,17 @@ Configure an SAP Secure Network Communication (SNC) with Kerberos to take advant
 To configure an SAP SNC with Kerberos, you must have access to:
 
 * The SAP GUI application. To install this client, Java must already be installed on your machine. Then, download the installer for your OS from SAP.
-* The SAPCAR utility and SAP Cryptographic Library, which you can download from the SAP Support Portal, if you are an S-user
 * An SAP ECC instance that can use SNC system variables
 * The following transactions:
 ** `STRUST` (Trust Manager)
 ** `SM30` (Table Maintenance)
+** `SNC1` (Generate SNC name for user)
+** `SU01` (User Maintenance)
+** `SM59` (RFC Destinations)
 
-== Configure the Client Environment
+== Configure Active Directory
 
-Configure the system variables that depend on the operating system you are using, and generate the personal security environment (PSE):
+Create a new Service Principal Name (SPN) according to the operating system you are using and export the keytab:
 
 . Create a server user `adminsap` in the Active Directory.
 . Check *Password never expires* and uncheck *Use DES encryption types for this account*.
@@ -26,7 +28,11 @@ Configure the system variables that depend on the operating system you are using
 . Export the keytab for this SPN from the Active Directory.
 +
 `ktpass -princ SAPService/sapdev@SSODOMAIN.LAB-mapuser DOMAINSHORT\sidadm -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL -mapop set -pass <*password*> -out <SID>aes.keytab`
-+
+
+== Configure the SAP Server
+
+Adjust the domain and the KDC in the operating system of the SAP Server to set up Kerberos, and add the parameters and the library that authorize you to use SNC:
+
 . Configure the `krb5.conf` file using the KDC address and the realm information (SSODOMAIN.LAB).
 . Import the key to the `etc` directory.
 +
@@ -49,12 +55,7 @@ Configure the system variables that depend on the operating system you are using
 . Set up automatic renewal for the Kerberos TGT.
 +
 `crontab –e 01 0,6,12,18 * * * /usr/bin/kinit -R SAPService/sapdev@SSODOMAIN.LAB`
-
-
-== Configure the SAP Server
-
-Configure parameters and the tables that authorize you to use SNC with Kerberos with your distinguished name: 
-
++
 . Go to `/usr/lib64/libgssapi_krb5.so.2` and configure the parameters for SNC with Kerberos and then restart SAP.
 * `snc/permit_insecure_start = 1`
 * `snc/data_protection/use = 3`
@@ -68,13 +69,8 @@ Configure parameters and the tables that authorize you to use SNC with Kerberos 
 * `snc/enable = 1`
 * `snc/identity/as = p:SAPService/sapdev@SSODOMAIN.LAB`
 * `login/password_change_for_SSO = 0`
-. Copy the `gsskrb5.dll` file to the `%windir%\system32` directory and add the `SNC_LIB` variable with the `%windir%\system32\gsskrb5.dll.` value.
-. Edit the `landscape.xml` file in the SAP Logon.
-+
-`<Service type=”SAPGUI” uuid=”xxxxxxxxxxxxxxxx” name=”SID-Dev” systemid=”SID” msid=”xxxxxxxxxxxxxxxxxxxx” mode=”1″ server=”hostname:3200″ sncop=”9″ sapcpg=”1100″ dcpg=”2″ sncname=”p:SAPService/sapdev@SSODOMAIN.LAB”/>`
-+
-. Add `adminsap` as a user in SAP and set the SNC name.
-. Add the SPN name to an RFC destination in SAP.
+. Create `adminsap` as a user in SAP and set the SNC name using the transaction `SU01`.
+. For the RFC destination, use the transaction `SM59`. In the tab logon and security, enable the SNC option and add the SPN name as a partner.
 
 == Configure SAP Connector
 
