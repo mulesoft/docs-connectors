@@ -21,21 +21,56 @@ Create a new Service Principal Name (SPN) according to the operating system you 
 
 If you are using Windows, follow these steps:
 
-. Create a server user `adminsap` in Active Directory.
+. Create a service user `adminsap` in Active Directory.
 . Check *Password never expires* and uncheck *Use DES encryption types for this account*.
 . Create a Service Principal Name (SPN) `SAPService/sapdev@SSODOMAIN.LAB` for this user in Active Directory.
 +
 `setspn -A SAPService/sapdev@SSODOMAIN.LAB DOMAIN_SHORT\sidadm`
 +
-. Export the keytab for this SPN from Active Directory.
+. Export the keytab for this SPN from Active Directory. The password is the password to set for the keytab and the SID is the file name of the keytab.
 +
-`ktpass -princ SAPService/sapdev@SSODOMAIN.LAB-mapuser DOMAINSHORT\sidadm -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL -mapop set -pass <*password*> -out <SID>aes.keytab`
+`ktpass -princ SAPService/sapdev@SSODOMAIN.LAB -mapuser DOMAINSHORT\sidadm -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL -mapop set -pass <*password*> -out <SID>aes.keytab`
 
 == Configure the SAP Server
 
 Adjust the domain and the KDC in the operating system of the SAP Server to set up Kerberos, and add the parameters and the library that authorize you to use SNC:
 
-. Configure the `krb5.conf` file using the KDC address and the realm information (SSODOMAIN.LAB).
+. Configure the `krb5.conf` file using the KDC address and the realm information (SSODOMAIN.LAB). The `krb5.conf` file is created by default in the `etc` directory. 
++
+[source,xml,linenums]
+====
+[libdefaults]
+    # "dns_canonicalize_hostname" and "rdns" are better set to false for improved security.
+    # If set to true, the canonicalization mechanism performed by Kerberos client may
+    # allow service impersonification, the consequence is similar to conducting TLS certificate
+    # verification without checking host name.
+    # If left unspecified, the two parameters will have default value true, which is less secure.
+    dns_canonicalize_hostname = false
+    rdns = false
+#       default_realm = EXAMPLE.COM
+        default_realm = DOMAIN.LOCAL
+[realms]
+#       EXAMPLE.COM = {
+#                kdc = kerberos.example.com
+#               admin_server = kerberos.example.com
+#       }
+DOMAIN.LOCAL = {
+                kdc = DC.DOMAIN.LOCAL
+               admin_server = dc.DOMAIN.local
+       }
+[domain_realm]
+  .domain.local = DOMAIN.LOCAL
+   domain.local = DOMAIN.LOCAL
+
+[logging]
+    kdc = FILE:/var/log/krb5/krb5kdc.log
+    admin_server = FILE:/var/log/krb5/kadmind.log
+    default = SYSLOG:NOTICE:DAEMON
+
+[libdefaults]
+    default_ccache_name = FILE:/tmp/krb5cc_%{uid}
+====
++
 . Import the key to the `etc` directory.
 +
 `ktutil`
@@ -58,7 +93,7 @@ Adjust the domain and the KDC in the operating system of the SAP Server to set u
 +
 `crontab –e 01 0,6,12,18 * * * /usr/bin/kinit -R SAPService/sapdev@SSODOMAIN.LAB`
 +
-. Go to `/usr/lib64/libgssapi_krb5.so.2` and configure the parameters for SNC with Kerberos and then restart SAP.
+. Go to the GSS-API library in `/usr/lib64/libgssapi_krb5.so.2` and configure the parameters for SNC with Kerberos in the Default Profile and then restart SAP.
 * `snc/permit_insecure_start = 1`
 * `snc/data_protection/use = 3`
 * `snc/data_protection/max = 3`
@@ -67,7 +102,7 @@ Adjust the domain and the KDC in the operating system of the SAP Server to set u
 * `snc/accept_insecure_rfc = 1`
 * `snc/accept_insecure_cpic = 1`
 * `snc/accept_insecure_gui = 1`
-* `snc/gssapi_lib = /usr/lib64/libgssapi_krb5.so.2`
+* `snc/gssapi_lib = /usr/lib64/libgssapi_krb5.so.2 (when deploying to CloudHub) or /usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2.2 (when deploying to CloudHub 2.0, Runtime Fabric, and Ubuntu)`
 * `snc/enable = 1`
 * `snc/identity/as = p:SAPService/sapdev@SSODOMAIN.LAB`
 * `login/password_change_for_SSO = 0`
@@ -94,7 +129,7 @@ Path to the `krb5.conf` file using the KDC address and the realm information (SS
 Path to the keytab for the SPN from Active Directory.
 ** *GSS Library Path*
 +
-Static value `/usr/lib64/libgssapi_krb5.so.2.2` when deploying to CloudHub.
+Static value `/usr/lib64/libgssapi_krb5.so.2.2` when deploying to CloudHub or static value `/usr/lib/x86_64-linux-gnu/libgssapi_krb5.so.2.2` when deploying to CloudHub 2.0, Runtime Fabric, and Ubuntu.
 ** *Principal*
 +
 Service user name from Active Directory, in this example `adminsap`.
