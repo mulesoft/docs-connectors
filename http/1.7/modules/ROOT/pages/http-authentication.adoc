@@ -7,6 +7,7 @@ The Anypoint Connector for HTTP (HTTP Connector) *Request* operation supports co
 * <<digest-authentication,Digest Authentication>>
 * <<ntlm-authentication,NTLM Authentication>>
 * <<oauth2-grant-authentication,OAuth2 Authorization Code Grant Type Authentication>>
+* <<oauth2-grant-authentication-connected-apps,OAuth2 Authorization Code Grant Type Authentication Using Connected Apps>>
 * <<oauth2-client-authentication,OAuth2 Client Credentials Grant Type Authentication>>
 
 If the target HTTP service of your request requires that you authenticate, provide the necessary credentials in the HTTP *Request* operation global configuration element. Mule runtime engine (Mule) uses the credentials you configured in the authorization header of the HTTP request.
@@ -699,6 +700,229 @@ In the *Configuration XML* editor, the `tls:context`, `tls:trust-store` and `tls
     </tls:context>
 ----
 
+[[oauth2-grant-authentication-connected-apps]]
+== Configure OAuth2 Authorization Code Grant Type Authentication Using Connected Apps
+:page-aliases: connectors::http/http-configure-authorization-code-for-requester.adoc
+
+You can configure the OAuth2 authorization code grant type authentication using the xref:access-management::connected-apps-developers.adoc[Connected Apps] feature.  
+
+The following example shows how to configure the OAuth2 authorization code grant type authentication for the HTTP *Request* operation by creating a Mule app to access a protected resource in the resource server. See xref:mule-runtime::authorization-grant-types.adoc[OAuth Authorization Grant Types]. The example covers how to:
+
+. Create the Mule app.
+. Add redirection to local authorization URL.
+. Add OAuth authentication.
+. Add the connected app.
+. Add the token URL.
+. Run the Mule app.
+
+[NOTE]
+This example requires you to have access to an Anypoint Platform account with organization administrator permission and familiarity with xref:mule-runtime::configuring-properties.adoc[Configuring Properties].
+
+Before you create the Mule app, review the following steps for getting OAuth access token and returning token for data:
+
+. The user submits an HTTP request in the Mule app.
+. The Mule app forwards the request to the protected resource in the Anypoint organization server.
+. The Anypoint organization server rejects the request because the Mule app doesn't have a token.
+. The Mule app redirects the user to the URL that corresponds to the authorization server, indicating where to call the Mule app back when the authorization code is available.
+. The user authenticates itself to the authorization server.
+. The authorization server returns an authorization code back to the redirect URI.
+. The Mule app calls the authorization server again and provides the authorization code to obtain an access token (stored in an object store).
+. The Mule app tries to access the protected resource again, providing a valid access token.
+. The Anypoint organization server validates the token and delivers the protected resource after successful authentication. 
++
+Note that the user does not see the token. The Mule app sees only an authorization code, not customer credentials. 
+
+=== Create the Mule App
+
+When you create a Mule app, the flow tries to access a protected resource in the Anypoint organization server with no authentication configured:
+
+[source,xml,linenums]
+----
+<http:listener-config name="listenerConfig">
+  <http:listener-connection host="0.0.0.0" port="8070" />
+</http:listener-config>
+
+<http:request-config name="requestConfig">
+  <http:request-connection protocol="HTTPS" host="${host}" port="${port}" />
+</http:request-config>
+
+<flow name="authCodeFlow">
+  <http:listener config-ref="listenerConfig" path="/test" />
+  <http:request method="GET" config-ref="requestConfig" path="${resource}" />
+</flow>
+----
+
+The Mule app consists of an HTTP *Listener* source and an HTTP *Request* operation. If the `host`, `port`, and `resource` properties in your YAML file aren't set to an accessible resource, Anypoint Platform fails with a 401 status code because it expects to obtain the access token in the request:
+
+[source,YAML,linenums]
+----
+host: "anypoint.mulesoft.com"
+port: "443"
+resource: "/apiplatform/repository/v2/organizations/<your-org-id>/environments"
+----
+
+=== Add Redirection to Local Authorization URL
+
+The app uses credentials to identify itself to the authentication server. In your XML file, add the redirection to the authorization URL:
+
+[source,xml,linenums]
+----
+<http:listener-config name="listenerConfig">
+  <http:listener-connection host="0.0.0.0" port="8070" />
+</http:listener-config>
+
+<configuration-properties file="local-config.yaml" />
+
+<http:request-config name="requestConfig">
+  <http:request-connection protocol="HTTPS" host="${host}" port="${port}" />
+</http:request-config>
+
+<flow name="authCodeFlow">
+  <http:listener config-ref="listenerConfig" path="/test" >
+    <http:response statusCode="#[vars.redirectStatus default '200']" >
+      <http:headers>
+        #[vars.redirectLocationHeaders default {}]
+      </http:headers>
+    </http:response>
+  </http:listener>
+ 
+ <http:request method="GET" config-ref="requestConfig" path="${resource}" />
+  <error-handler>
+    <on-error-continue type="MULE:SECURITY" >
+      <set-variable
+        variableName="redirectLocationHeaders" 
+        value="#[{'Location': '${local.authorization.url}'}]" />
+      <set-variable variableName="redirectStatus" value="302" />
+    </on-error-continue>
+  </error-handler>
+</flow>
+----
+
+Add the same redirection to your YAML file:
+
+[source,YAML,linenums]
+----
+host: "anypoint.mulesoft.com"
+port: "443"
+resource: "/apiplatform/repository/v2/organizations/<your-org-id>/environments"
+local.authorization.url: "http://localhost:8070/authorize"
+----
+
+=== Add OAuth Authentication
+
+An OAuth dance mechanism starts when the authentication is added to the HTTP request connection. This authentication creates an endpoint in the `localAuthorizationUrl` that redirects you to the `authorizationUrl` parameter used to configure the authorization server location. In the following example, the location is `https://anypoint.mulesoft.com/accounts/api/v2/oauth2/authorize`.
+This example uses dynamic configuration represented by the use of an expression in the `resourceOwnerId` parameter. See xref:mule-sdk::static-dynamic-configs.adoc[Dynamic Configurations].
+After `</http:listener-config>` and before `<flow name="authCodeFlow">`, add the following statement to enable the OAuth authorization code:
+
+[source,xml,linenums]
+----
+<oauth:token-manager-config name="tokenManagerConfig"/>
+
+<http:request-config name="requestConfig">
+  <http:request-connection protocol="HTTPS" host="${host}" port="${port}" >
+    <http:authentication>
+      <oauth:authorization-code-grant-type
+        localCallbackConfig="listenerConfig"  
+        localCallbackConfigPath="${local.callback.path}" 
+        localAuthorizationUrl="${local.authorization.url}"         
+        authorizationUrl="${authorization.url}"
+        clientId="${connected.app.client.id}"
+        clientSecret="${connected.app.client.secret}"
+        scopes="full"
+        tokenUrl="${token.url}"
+        tokenManager="tokenManagerConfig" 
+        externalCallbackUrl="${external.callback.url}" 
+        refreshTokenWhen="#[attributes.statusCode == 401]" 
+        localAuthorizationUrlResourceOwnerId="#['yourAnypointEmail']" 
+        resourceOwnerId="#['yourAnypointEmail']" />
+    </http:authentication>
+  </http:request-connection>
+</http:request-config>
+----
+
+Add the same redirection to your YAML file:
+
+[source,YAML,linenums]
+----
+host: "anypoint.mulesoft.com"
+port: "443"
+resource: "/apiplatform/repository/v2/organizations/<your-org-id>/environments"
+local.authorization.url: "http://localhost:8070/authorize"
+authorization.url: “https://anypoint.mulesoft.com/accounts/api/v2/oauth2/authorize”
+connected.app.client.id: “???”
+connected.app.client.secret: “???”
+local.callback.path: “???”
+external.callback.url: “???”
+token.url: “???”
+----
+
+=== Add the Connected App
+
+The Connected Apps feature enables you to delegate access to applications that use APIs to interact with Anypoint Platform. This feature supports OAuth 2.0.  See xref:access-management::connected-apps-developers.adoc[Connected Apps]. To create a Connected App in the Anypoint Platform:
+
+. In Anypoint Platform > *Access Management* > select *Connected Apps*.
+. Click *Create app*.
+. Set a name for your app.
+. Set *Type* to *App acts on behalf of a user*.
+. Set *Grant Type* to *Authorization Code*.
+. Set *Website URL* to a website you choose.
+. Set *Redirect URIs* to your Mule app. You are configuring the `external.callback.url`.
+. In *Scopes*, set *General* to *Full Access*.
+. Click *Save*.
++
+A new connected app appears. Anypoint Platform assigns a client ID and client secret.
+. Use the *Copy Id* and *Copy Secret* buttons to update the properties YAML file:
++
+[source,YAML,linenums]
+----
+host: "anypoint.mulesoft.com"
+port: "443"
+resource: "/apiplatform/repository/v2/organizations/<your-org-id>/environments"
+local.authorization.url: "http://localhost:8070/authorize"
+authorization.url: “https://anypoint.mulesoft.com/accounts/api/v2/oauth2/authorize”
+connected.app.client.id: “pasteWhatYouCopiedWithCopyIdButton”
+connected.app.client.secret: “pasteWhatYouCopiedWithCopySecretButton”
+local.callback.path: “/callback”
+external.callback.url: “http://localhost:8070/callback”
+token.url: “???”
+----
+
+=== Add the Token URL
+
+To complete the process, add the `token.url` property. After the Mule app obtains the authorization code (through the authorization callback URL), OAuth requests an access token from `token.url`.   
+
+[source,YAML,linenums]
+----
+host: "anypoint.mulesoft.com"
+port: "443"
+resource: "/apiplatform/repository/v2/organizations/<your-org-id>/environments"
+local.authorization.url: "http://localhost:8070/authorize"
+authorization.url: “https://anypoint.mulesoft.com/accounts/api/v2/oauth2/authorize”
+connected.app.client.id: “pasteWhatYouCopiedWithCopyIdButton”
+connected.app.client.secret: “pasteWhatYouCopiedWithCopySecretButton”
+local.callback.path: “/callback”
+external.callback.url: “http://localhost:8070/callback”
+token.url: “https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token”
+----
+
+=== Run the Mule App
+
+To run the Mule app and get the authorization code, follow these steps:
+
+. In your browser, enter the URL for the flow `http://localhost:8070/test`.
++
+Anypoint Platform prompts you to log in. 
+. Log in to Anypoint Platform using your credentials. 
++
+Anypoint Platform prompts you to authorize access to your account. The connected app now acts on your behalf.
+. Click *Grant access to*.
++ 
+The authorization code is sent to the `http://localhost:8070/callback` endpoint and the Mule app retrieves a token from `https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token`.
++
+`Successfully retrieved access token` appears as body text in the browser you used to initiate the OAuth2 dance.
+. To access the protected resource, enter the flow's URL in a browser again `http://localhost:8070/test`.
++ 
+The app processes the request using the retrieved token.
 
 [[oauth2-client-authentication]]
 == Configure OAuth2 Client Credentials Grant Type Authentication
