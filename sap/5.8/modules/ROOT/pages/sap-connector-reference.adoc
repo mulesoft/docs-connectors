@@ -1,0 +1,797 @@
+= SAP Connector 5.8 Reference - Mule 4
+:page-aliases: connectors::sap/sap-connector-reference.adoc
+
+Anypoint Connector for SAP (SAP Connector) enables the integration of data to and from external systems based on SAP NetWeaver.
+
+[NOTE]
+Starting with version 5.0, SAP Connector also supports connecting to an on-premises instance of SAP S/4HANA.
+
+== Limitations
+
+* For SAP Connector versions 5.4.0 and earlier, multiple servers deployed on the same Mule runtime engine with the same PROGRAM_ID, GATEWAY_SERVICE, and GATEWAY_HOST cannot be created by the JCo library. If you attempt to create two servers with the same PROGRAM_ID, GATEWAY_SERVICE, and GATEWAY_HOST, only one server is created. To work around this, you can use two different Mule runtime engines or use the same PROGRAM_ID with two different GATEWAY_HOSTs.
+* SAP Connector does not support Bitronix Transaction Manager.
+* The *Document Listener* and *Function Listener* sources do not support Mule transactions. Although the *Transactional action* and *Transaction type* parameters (on the *Advanced tab*) are available for both sources, the transactional feature is not implemented.
+* The reconnection strategy on SAP Listeners (*Document Listener* and *Function Listener*) relies exclusively on the JCo library, which means that the Mule reconnection mechanism has no impact on reconnections.
+* The JCO Server that runs in the background manages the reconnection when there is a connection issue. The JCo RFC provider recognizes a communication error between the Java server and the ABAP gateway and attempts to reconnect. If the first reconnection fails, the next reconnection attempt occurs after waiting for one second. If the reconnection fails again, the reconnection wait time doubles from one second to two seconds, until eventually it reaches the default maximum waiting period of 3600 seconds, or one hour. Set the maximum reconnection timeout using the `-Djco.server.max_startup_delay=<reconnect delay in seconds>` JMV parameter.
+
+[[sap]]
+== Configuration
+
+Default Configuration for SAP Connector.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+|Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Connection a| * <<sap_certificate, Certificate>>
+* <<sap_kerberos, Kerberos>>
+* <<sap_simple-connection-provider, Simple Connection Provider>>
+ | Connection types for this configuration. | | x
+| Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Default Idocument Version a| String |  Default IDoc version. |  `0` |
+| Disable Jco Internal Cache a| Boolean |  Flag that indicates whether to use the JCo internal cache. Set this flag to `true` to use the SAP JCo internal cache. By default, JCo stores the metadata after the first call and populates that template in the following calls. This flag applies to both functions and sources. |  `false` |
+| Evaluate Response Flag a| Boolean |  Flag that indicates if an error response throws an exception or enables the user to handle it as another result. This flag is an exception or logging mechanism used to specify whether a message throws an exception (E) or is treated as a result with a warning (W).
+
+If you set the flag to `true` and an exception (E) message is returned, an exception is thrown with that message.
+
+If you set the flag to `true` and a warning (W) message is returned, a warning message is logged. |  `false` |
+| Log Trace Flag a| Boolean |  Flag that indicates whether to log the trace on the Mule server. Set this flag to `true` to log a trace. |  `false` |
+| Use SAP Format a| Boolean |  Determines whether to support the Mule 3 format for returning SAP values. Used in the `JCoToBusinessObjectParser` class when parsing a `JCoField`. Use the SAP default format only when working with BAPIFunctions over sRFC.
+
+* `true`
++
+Values are returned as strings with the original SAP format.
+
+* `false`
++
+Original values are converted to the corresponding Java objects, serialized, and returned.
+|  `false` |
+| Use SAP Format On Function Listener a| Boolean | Determines whether to support the Mule 3 format for returning SAP values. Used to parse a `JCoField`. Use the SAP default format only when working with the BAPI function listener.
+
+* `true`
++
+Values are returned as strings with the original SAP format.
+
+* `false`
++
+Original values are converted to the corresponding Java objects, serialized, and returned.
+| `false` |
+|===
+
+[[sap_certificate]]
+=== Certificate Connection Type
+
+Relies on an X509 certificate to authenticate the user.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| SAP system number a| String |  Two-digit system number (sysnr) of the SAP system. |  | x
+| SAP client ID a| String |  Three-digit client number. Leading zeros are preserved if they appear in the number. |  | x
+| Destination Name a| String |  Identifier of the destination generated by this connector. If none is set, a random value is created. |  |
+| Login language a| String |  Language code used by the connector. The language determines the code page used for communicating between the SAP adapter and the application server. |  `EN` |
+| Extended Properties a| Object |  Used to pass in all the database server-specific connection parameters. |  |
+| X.509 Certificate a| String |  Path to the X.509 certificate. This is required when the connector is working as a client. |  |
+| Application server host a| String |  Host of the SAP application server. |  |
+| Message server configuration a| <<MessageServer>> |  Configuration for message server usage. |  |
+| Enable RFC tracing on server a| Boolean |  Enables or disables RFC trace on the server. |  `false` |
+| Enable CPIC tracing on server a| Enumeration, one of:
+
+** INHERIT
+** NO_TRACING
+** LEVEL_1
+** LEVEL_2
+** LEVEL_3 |  Enables or disables CPIC trace on the server. |  |
+| Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+|===
+
+[[sap_kerberos]]
+=== Kerberos Connection Type
+
+Implements the Kerberos protocol to authenticate and authorize the user.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| SAP system number a| String |  Two-digit system number (sysnr) of the SAP system. |  | x
+| SAP client ID a| String |  Three-digit client number. Leading zeros are preserved if they appear in the number. |  | x
+| Destination Name a| String |  Identifier of the destination generated by this connector. If none is set, a random value is created. |  |
+| Login language a| String |  Language code used by the connector. The language determines the code page used for communicating between the SAP adapter and the application server. |  `EN` |
+| Extended Properties a| Object |  Used to pass in all the database server-specific connection parameters. |  |
+| Application server host a| String |  Host of the SAP application server. |  |
+| Message server configuration a| <<MessageServer>> |  Configuration for message server usage. |  |
+| Enable RFC tracing on server a| Boolean |  Enables or disables RFC trace on the server. |  `false` |
+| Enable CPIC tracing on server a| Enumeration, one of:
+
+** INHERIT
+** NO_TRACING
+** LEVEL_1
+** LEVEL_2
+** LEVEL_3 |  Enables or disables CPIC trace on the server. |  |
+| Kerberos Config File Path a| String |  Path to the krb5.conf file. |  | x
+| Keytab File Path a| String |  Path to the keytab file. |  | x
+| GSS Library Path a| String |  Path to the gss library. |  | x
+| Principal a| String | Principal that the connector uses to log in to SAP. |  | x
+| Client SNC Partner Name a| String | The `jco.client.snc_partnername` property. |  | x
+| Client SNC My Name a| String |  The `jco.client.snc_myname` property. |  | x
+| Server SNC Partner Name a| String |  The `jco.server.snc_partnername` property. |  | 
+| Server SNC My Name a| String |  The `jco.server.snc_myname` property. |  | 
+| Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+|===
+
+[[sap_simple-connection-provider]]
+=== Simple Connection Provider Connection Type
+
+Connects using a username and password.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| SAP system number a| String |  Two-digit system number (sysnr) of the SAP system. |  | x
+| SAP client ID a| String |  Three-digit client number. Leading zeros are preserved if they appear in the number. |  | x
+| Destination Name a| String |  Identifier of the destination generated by this connector. If none is set, a random value is created. |  |
+| Login language a| String |  Language code used by the connector. The language determines the code page used for communicating between the SAP adapter and the application server. |  `EN` |
+| Extended Properties a| Object |  Used to pass in all the database server-specific connection parameters. |  |
+| Username a| String |  Username the connector uses to log in to SAP. |  | x
+| Password a| String |  Password associated with the login username. |  | x
+| Application server host a| String |  Host of the SAP application server. |  |
+| Message server configuration a| <<MessageServer>> |  Configuration for message server usage. |  |
+| Enable RFC tracing on server a| Boolean |  Enables or disables RFC trace on the server. |  `false` |
+| Enable CPIC tracing on server a| Enumeration, one of:
+
+** INHERIT
+** NO_TRACING
+** LEVEL_1
+** LEVEL_2
+** LEVEL_3 |  Enables or disables CPIC trace on the server. |  |
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+|===
+
+== Sources
+
+* <<document-listener>>
+* <<function-listener>>
+
+[[document-listener]]
+=== Document Listener
+`<sap:document-listener>`
+
+Listens for incoming IDocs.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Gateway Host a| String |  Name of the host running the gateway server. This is the name of the host running the gateway handler. SAP Gateway is a development framework used to connect non-SAP applications to SAP applications. You can configure the SAP Gateway host to be the trusted system using an RFC destination.|  | x
+| Gateway Service a| String |  Either the name or service port for the gateway service of the SAP system. |  | x
+| Program ID a| String |  SAP system program ID that is registered on the gateway. Must be unique for the given gateway. |  | x
+| Connection Count a| Number | Number of connections to register on the gateway. If there is more than one connection, handler requests are processed in parallel. For example, if two connections are set, this creates two handler workers or threads that handle requests in parallel, almost like having two sources start together. |  `1` |
+| Idoc Type Filter Regex a| String |  Expression to filter all incoming IDocs by type. |  |
+| Idoc Type Extension Filter Regex a| String |  Expression to filter all incoming IDocs by type extension. |  | 
+| Message server host a| String |  Host of the message server. |  |
+| Message server port a| String |  Message server name or port number.|  |
+| System ID a| String |  System ID of the system the message server belongs to. |  |
+| Group a| String |  Logon group defined in ABAP that identifies a set of application servers. |  |
+| Update interval a| String |  How often the message server fetches the list of application servers. |  |
+| IDoc Render Options a| <<IDocRenderParameterGroup>> | IDoc rendering options. | |
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_BEGIN
+** NONE | Type of beginning action that sources take regarding transactions. |  `NONE` |
+| Transaction Type a| Enumeration, one of:
+
+** LOCAL
+** XA |  Type of transaction to create. Availability depends on Mule version. |  `LOCAL` |
+| Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior.  |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<SapAttributes>>
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+[[function-listener]]
+=== Function Listener
+`<sap:function-listener>`
+
+Listens for incoming BAPI functions.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Gateway Host a| String |  Name of the host running the gateway server. This is the name of the host running the gateway handler. SAP Gateway is a development framework used to connect non-SAP applications to SAP applications. You can configure the SAP Gateway host to be the trusted system using an RFC destination.|  | x
+| Gateway Service a| String |  Either the name or service port for the gateway service of the SAP system. |  | x
+| Program ID a| String |  SAP system program ID that is registered on the gateway. Must be unique for the given gateway. |  | x
+| Connection Count a| Number | Number of connections to register on the gateway. If there is more than one connection, handler requests are processed in parallel. For example, if two connections are set, this creates two handler workers or threads that handle requests in parallel, almost like having two sources start together. |  `1` |
+| Targeted Function a| String |  Name of the function to receive. Filters the incoming BAPI functions by their names. |  |
+| Message server host a| String |  Host of the message server. |  |
+| Message server port a| String |  Message server name or port number.|  |
+| System ID a| String |  System ID of the system the message server belongs to. |  |
+| Group a| String |  Logon group defined in ABAP that identifies a set of application servers. |  |
+| Update interval a| String |  How often the message server fetches the list of application servers. |  |
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_BEGIN
+** NONE | Type of beginning action that sources take regarding transactions. |  `NONE` |
+| Transaction Type a| Enumeration, one of:
+
+** LOCAL
+** XA |  Type of transaction to create. Availability depends on Mule version. |  `LOCAL` |
+| Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior.  |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+| Response a| Binary | Source response.
+
+[NOTE]
+SAP 5.6 and later supports updating a specific row in a table when a response is sent back to SAP after *Function Listener* is triggered. To update a specific row, add the `INDEX_ROW_UPDATE` parameter to the payload with the index of the row you want to update.
+
+|  `#[payload]` |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<SapAttributes>>
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+== Operations
+
+* <<asyncRfc>>
+* <<confirmTransactionId>>
+* <<getFunction>>
+* <<retrieveIdoc>>
+* <<send>>
+* <<startsaptransaction>>
+* <<syncRfc>>
+
+[[asyncRfc]]
+=== Asynchronous Remote Function Call
+`<sap:async-rfc>`
+
+Executes a BAPIFunction over a queued Remote Function Call (qRFC).
+
+A qRFC is an extension of a transactional RFC (tRFC) that ensures that individual steps are processed in sequence. This guarantees that multiple logical unit of work (LUW) transactions are processed in the order specified by the application.
+
+tRFC can be serialized using inbound and outbound queues, hence the name queued RFC. qRFC is best used as an extension of tRFC to define a processing sequence. Use qRFC to guarantee that several transactions are processed in a predefined order.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Function Name a| String |  Name of the function to execute. |  | x
+| Content a| Binary |  BAPIFunction to execute. |  `#[payload]` |
+| Transaction Id a| String |  ID that identifies an RFC so that the RFC runs only once. |  | x
+| Queue Name a| String |  Name of the queue on which the RFC executes. This applies for qRFC since each tRFC call that is processed is given a queue name by the application. A queue name and version are required for each qRFC transaction. |  |
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_JOIN
+** JOIN_IF_POSSIBLE
+** NOT_SUPPORTED |  Type of joining action that operations take regarding transactions. |  `JOIN_IF_POSSIBLE` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+==== Throws
+* SAP:CONNECTIVITY
+* SAP:INVALID_CACHE
+* SAP:INVALID_INPUT
+* SAP:METADATA_UNAVAILABLE
+* SAP:NOT_FOUND
+* SAP:NOT_SUPPORTED
+* SAP:PARSING
+* SAP:RETRY_EXHAUSTED
+* SAP:SYSTEM_BUSY
+* SAP:TIMEOUT
+
+
+[[confirmTransactionId]]
+=== Confirm Transaction
+`<sap:confirm-transaction-id>`
+
+Confirms to the server that a transaction is successful.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Transaction ID (TID) a| String |  ID of the transaction to confirm. |  | x
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_JOIN
+** JOIN_IF_POSSIBLE
+** NOT_SUPPORTED |  Type of joining action that operations take regarding transactions. |  `JOIN_IF_POSSIBLE` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+==== Throws
+* SAP:CONNECTIVITY
+* SAP:RETRY_EXHAUSTED
+
+[[getFunction]]
+=== Get Function
+`<sap:get-function>`
+
+Retrieves a BAPIFunction based on its name.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Function Name a| String |  Name of the function to retrieve. |  | x
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_JOIN
+** JOIN_IF_POSSIBLE
+** NOT_SUPPORTED |  Type of joining action that operations take regarding transactions. |  `JOIN_IF_POSSIBLE` |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  `#[payload]` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+==== Throws
+* SAP:CONNECTIVITY
+* SAP:INVALID_CACHE
+* SAP:INVALID_INPUT
+* SAP:METADATA_UNAVAILABLE
+* SAP:NOT_FOUND
+* SAP:NOT_SUPPORTED
+* SAP:PARSING
+* SAP:RETRY_EXHAUSTED
+* SAP:SYSTEM_BUSY
+* SAP:TIMEOUT
+
+[[retrieveIdoc]]
+=== Retrieve IDoc
+`<sap:retrieve-idoc>`
+
+Retrieves an IDoc based on its key.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| IDoc Name a| String |  Key that contains the required information to retrieve the IDoc. |  | x
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_JOIN
+** JOIN_IF_POSSIBLE
+** NOT_SUPPORTED |  Type of joining action that operations take regarding transactions. |  `JOIN_IF_POSSIBLE` |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  `#[payload]` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+==== Throws
+* SAP:CONNECTIVITY
+* SAP:INVALID_CACHE
+* SAP:INVALID_INPUT
+* SAP:METADATA_UNAVAILABLE
+* SAP:NOT_FOUND
+* SAP:NOT_SUPPORTED
+* SAP:PARSING
+* SAP:RETRY_EXHAUSTED
+* SAP:SYSTEM_BUSY
+* SAP:TIMEOUT
+
+[[send]]
+=== Send IDoc
+`<sap:send>`
+
+Sends an IDoc to SAP over an RFC. An RFC can be one of two types for IDocs:
+
+* Transactional (tRFC)
++
+A special form of asynchronous Remote Function Call (aRFC). tRFC ensures transaction-like handling of processing steps that were originally handled autonomously. tRFC is an asynchronous communication method that executes the called function module in the RFC server only once, even if the data is sent multiple times due to a network issue. The remote system does not need to be available at the time the RFC client program is executing a tRFC. The tRFC component stores the called RFC function,  along with the corresponding data, in the SAP database under a unique transaction ID (TID). tRFC is similar to aRFC since it does not wait at the target system (similar to a registered post). If the system is not available, the data is written into aRFC tables with a transaction ID (SM58) that is chosen by the scheduler RSARFCSE and runs every 60 seconds. tRFC is best used as an extension of asynchronous RFC secure communication between systems.
+
+* Queued (qRFC)
++
+An extension of tRFC. qRFC ensures that individual steps are processed in sequence. Use qRFC to guarantee that multiple LUWs (Logical Unit of Work transactions) are processed in the order specified by the application. tRFC can be serialized using inbound and outbound queues, hence the name queued RFC (qRFC). qRFC is best used as an extension of tRFC to define a processing sequence. Implement qRFC if you want to guarantee that several transactions are processed in a predefined order.
+
+Both tRFC and qRFC have a TID handler.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| IDoc Name a| String |  Name of the IDoc to execute. |  | x
+| Content a| Binary |  IDoc to execute. |  `#[payload]` |
+| Version a| String |  Version on the IDoc. |  |
+| Transaction Id a| String |  ID that identifies an RFC so that the RFC runs only once. |  |
+| Queue Name a| String |  Name of the queue on which the RFC executes. This applies for qRFC since each tRFC call that is processed is given a queue name by the application. A queue name and version are required for each qRFC transaction. |  |
+| IDoc Parsing Options a| <<IDocParseParameterGroup>> | IDoc parsing options. | |
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_JOIN
+** JOIN_IF_POSSIBLE
+** NOT_SUPPORTED |  Type of joining action that operations take regarding transactions. |  `JOIN_IF_POSSIBLE` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+==== Throws
+* SAP:CONNECTIVITY
+* SAP:INVALID_CACHE
+* SAP:INVALID_INPUT
+* SAP:METADATA_UNAVAILABLE
+* SAP:NOT_FOUND
+* SAP:NOT_SUPPORTED
+* SAP:PARSING
+* SAP:RETRY_EXHAUSTED
+* SAP:SYSTEM_BUSY
+* SAP:TIMEOUT
+
+[[startsaptransaction]]
+=== Start SAP Transaction
+`<sap:create-transaction-id>`
+
+Creates a transaction ID to use as part of future calls.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_JOIN
+** JOIN_IF_POSSIBLE
+** NOT_SUPPORTED |  Type of joining action that operations take regarding transactions. |  `JOIN_IF_POSSIBLE` |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  `#[payload]` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+==== Throws
+* SAP:CONNECTIVITY
+* SAP:INVALID_CACHE
+* SAP:INVALID_INPUT
+* SAP:METADATA_UNAVAILABLE
+* SAP:NOT_FOUND
+* SAP:NOT_SUPPORTED
+* SAP:PARSING
+* SAP:RETRY_EXHAUSTED
+* SAP:SYSTEM_BUSY
+* SAP:TIMEOUT
+
+
+[[syncRfc]]
+=== Synchronous Remote Function Call
+`<sap:sync-rfc>`
+
+Executes a BAPIFunction over a synchronous Remote Function Call (sRFC). sRFC requires both the systems (client and server) to be available at the time of communication or data transfer. sRFC is the most common type and is used when a result is required immediately after the execution of sRFC. sRFC is a means of communication between systems where acknowledgments are required.
+
+The resources of the source system wait at the target system and ensure that they deliver the message or data with ACKD. The data is consistent and reliable for communication. If the target system is not available, the source system resources wait until the target system is available. This can lead to the processes of the source system going into Sleep/RFC/CPIC mode at the target systems, which blocks these resources. Use sRFC for communication between systems, and communication between an SAP web application server and an SAP GUI.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Function Name a| String |  Name of the function to execute. |  | x
+| Content a| Binary |  BAPIFunction to execute. |  `#[payload]` |
+| Encoding a| String |  Canonical name of the encoding. Refer to https://docs.oracle.com/javase/8/docs/technotes/guides/intl/encoding.doc.html[Oracle's supported encodings]. |  |
+| Transactional Action a| Enumeration, one of:
+
+** ALWAYS_JOIN
+** JOIN_IF_POSSIBLE
+** NOT_SUPPORTED |  Type of joining action that operations take regarding transactions. |  `JOIN_IF_POSSIBLE` |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  `#[payload]` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+|===
+
+==== Associated Configurations
+* <<sap>>
+
+==== Throws
+* SAP:CONNECTIVITY
+* SAP:INVALID_CACHE
+* SAP:INVALID_INPUT
+* SAP:METADATA_UNAVAILABLE
+* SAP:NOT_FOUND
+* SAP:NOT_SUPPORTED
+* SAP:PARSING
+* SAP:RETRY_EXHAUSTED
+* SAP:SYSTEM_BUSY
+* SAP:TIMEOUT
+
+== Object Types
+
+* <<ExpirationPolicy>>
+* <<IDocParseParameterGroup>>
+* <<IDocRenderParameterGroup>>
+* <<MessageServer>>
+* <<reconnect>>
+* <<reconnect-forever>>
+* <<Reconnection>>
+* <<RedeliveryPolicy>>
+* <<repeatable-file-store-stream>>
+* <<repeatable-in-memory-stream>>
+* <<SapAttributes>>
+
+[[ExpirationPolicy]]
+=== Expiration Policy
+
+Configures an expiration policy strategy.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Idle Time a| Number | Configures the maximum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+| Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Max Idle Time* field. |  |
+|===
+
+[[IDocParseParameterGroup]]
+=== IDoc Parse Parameter Group
+
+IDoc parsing options.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Parse With Field Value Checking a| Boolean | Indicates whether to enable the field value checking mechanism in accordance with the respective IDoc field metadata when parsing. | `false` |
+| Parse Ignore Unknown Fields a| Boolean | Indicates whether to ignore unknown fields when parsing, for example, when parsing with older IDoc metadata. | `false` |
+| Parse Ignore Invalid Char Errors a| Boolean | Indicates whether to ignore character range check errors in accordance with the declared XML specification version when parsing.
+When using this option, invalid characters within field values are accepted, although the XML document to parse might contain characters that are not in the valid character range. | `false` |
+| Parse Without Field Data Type Checking a| Boolean | Indicates whether to disable the field data type checking mechanism in accordance with the respective IDoc field metadata when parsing.
+{sp} +
+{sp} +
+[WARNING]
+====
+Use this option with care.
+
+Sending IDocs with illegal field contents that violate the field's defined datatype can cause ABAP system dumps and result in unrecognized partial loss of data when processed in an AS ABAP system.
+====
+
+| `false` |
+
+| Parse Refuse Unknown XML Version a| Boolean | Indicates whether to refuse XML documents that declare an unknown XML specification version, for example, a potential future XML specification version 1.2 or 2.0. | `false` |
+| Parse Refuse XML Version10 a| Boolean | Indicates whether to refuse XML documents that don't use XML specification version 1.0 or that don't contain an XML declaration header. | `false` |
+| Parse Refuse XML Version11 a| Boolean | Indicates whether to refuse XML documents that use XML specification version 1.1. | `false` |
+| Parse Accept Only Xml Version10 a| Boolean | Indicates whether to accept only XML documents that use XML specification version 1.0 or that don't contain an XML declaration header. | `false` |
+| Parse Accept Only Xml Version11 a| Boolean | Indicates whether to accept only XML documents that use XML specification version 1.1 or that don't contain an XML declaration header. | `false` |
+| Parse Accept Only Xml Version10 To11 a| Boolean | Indicates whether to accept only XML documents that use XML specification version 1.0 or 1.1 or that don't contain an XML declaration header. | `false` |
+|===
+
+[[IDocRenderParameterGroup]]
+=== IDoc Render Parameter Group
+
+IDoc rendering options.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Render IDoc Empty Tags a| Boolean | Indicates whether to include all empty tags in the resulting XML document. | `false` |
+| Render IDoc Ignore Invalid Char Errors a| Boolean | Indicates whether to ignore character range check errors in accordance with the used XML specification version. | `false` |
+| Render IDoc Ignore Tag Escape Errors a| Boolean | Indicates whether to ignore escape character errors within XML tags in accordance with the used IDocXML format | `false` |
+| Render IDoc Omit Xml Declaration a| Boolean | Indicates whether to omit the XML declaration section in the resulting XML document. | `false` |
+| Render IDoc Optional Encoding Decl a| Boolean | Indicates whether to write an optional XML encoding declaration attribute into the resulting XML document. | `false` |
+| Render IDoc Substitute Invalid Chars a| Boolean | Indicates whether to substitute invalid characters within IDoc field values with the number sign `#` (`U+0023`). | `false` |
+| Render IDoc With CR a| Boolean | Indicates whether to insert `CR` (Carriage Return) characters into the resulting XML document. | `false` |
+| Render IDoc With CRLF a| Boolean | Indicates whether to insert `CR+LF` (Carriage Return and Line Feed) characters into the resulting XML document. | `false` |
+| Render IDoc With LF a| Boolean | Indicates whether to insert `LF` (Line Feed) characters into the resulting XML document. | `false` |
+| Render IDoc With Tabs And CR a| Boolean | Indicates whether to insert `TAB` and `CR` (Tab and Carriage Return) characters into the resulting XML document. | `false` |
+| Render IDoc With Tabs And CRLF a| Boolean | Indicates whether to insert `TAB` and `CR+LF` (Tab, Carriage Return and Line Feed) characters into the resulting XML document. | `false` |
+| Render IDoc With Tabs And LF a| Boolean | Indicates whether to insert `TAB` and `LF` (Tab and Line Feed) characters into the resulting XML document. | `false` |
+| Render IDoc Xml10 a| Boolean | Indicates whether to create an XML document compliant with XML specification version 1.0. | `false` |
+| Render IDoc Xml11 a| Boolean | Indicates whether to create an XML document compliant with XML specification version 1.1. | `false` |
+|===
+
+[[MessageServer]]
+=== Message Server
+
+You can configure a message server with multiple gateways that can be passed to the *Document Listener* source to distribute the load and improve performance. For more information, refer to xref:sap-connector-examples.adoc#configure-multiple-gateways[Configure Multiple Gateways].
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Host a| String | Host of the message server. |  | x
+| System Id a| String | System ID of the SAP system. |  | x
+| Port a| Number | Port with which the connector logs into the message server. |  |
+| Group a| String | Group of SAP application servers. |  |
+| Router a| String | SAP router string to use for a system protected by a firewall. |  |
+|===
+
+[[reconnect]]
+=== Reconnect
+
+Configures a standard reconnection strategy, which specifies how often to reconnect and how many reconnection attempts the connector source or operation can make.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency a| Number | How often to attempt to reconnect, in milliseconds. |  |
+| Count a| Number | How many reconnection attempts the Mule app can make. |  |
+|===
+
+[[reconnect-forever]]
+=== Reconnect Forever
+
+Configures a forever reconnection strategy by which the connector source or operation attempts to reconnect at a specified frequency for as long as the Mule app runs.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency a| Number | How often to attempt to reconnect, in milliseconds. |  |
+|===
+
+[[Reconnection]]
+=== Reconnection
+
+Configures a reconnection strategy for an operation.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Fails Deployment a| Boolean | What to do if, when an app is deployed, a connectivity test does not pass after exhausting the associated reconnection strategy:
+
+* `true`
++
+Allow the deployment to fail.
+
+* `false`
++
+Ignore the results of the connectivity test. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> | Reconnection strategy to use. |  |
+|===
+
+[[RedeliveryPolicy]]
+=== Redelivery Policy
+
+Configures the redelivery policy for executing requests that generate errors. You can add a redelivery policy to any source in a flow.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Redelivery Count a| Number | Maximum number of times that a redelivered request can be processed unsuccessfully before returning a REDELIVERY_EXHAUSTED error. |  |
+| Use Secure Hash a| Boolean | Whether to use a secure hash algorithm to identify a redelivered message. |  |
+| Message Digest Algorithm a| String | Secure hashing algorithm to use if the *Use Secure Hash* field is `true`. If the payload of the message is a Java object, Mule ignores this value and returns the value that the payload’s `hashCode()` returned. |  |
+| Id Expression a| String | One or more expressions that determine when a message was redelivered. This property can be set only if the *Use Secure Hash* field is `false`. |  |
+| Object Store a| Object Store | Configures the object store that stores the redelivery counter for each message. |  |
+|===
+
+[[repeatable-file-store-stream]]
+=== Repeatable File Store Stream
+
+Configures the repeatable file-store streaming strategy by which Mule keeps a portion of the stream content in memory. If the stream content is larger than the configured buffer size, Mule backs up the buffer's content to disk and then clears the memory.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| In Memory Size a| Number | Maximum amount of memory that the stream can use for data. If the amount of memory exceeds this value, Mule buffers the content to disk. To optimize performance:
+
+* Configure a larger buffer size to avoid the number of times Mule needs to write the buffer on disk. This increases performance, but it also limits the number of concurrent requests your application can process, because it requires additional memory.
+
+* Configure a smaller buffer size to decrease memory load at the expense of response time. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *In Memory Size* field. |  |
+|===
+
+[[repeatable-in-memory-stream]]
+=== Repeatable In Memory Stream
+
+Configures the in-memory streaming strategy by which the request fails if the data exceeds the MAX buffer size. Always run performance tests to find the optimal buffer size for your specific use case.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Initial Buffer Size a| Number | Initial amount of memory to allocate to the data stream. If the streamed data exceeds this value, the buffer expands by *Buffer Size Increment*, with an upper limit of *Max In Memory Size value*. |  |
+| Buffer Size Increment a| Number | Amount by which the buffer size expands if it exceeds its initial size. Setting a value of `0` or lower specifies that the buffer can't expand. |  |
+| Max Buffer Size a| Number | The maximum amount of memory to use. If more than that is used then a STREAM_MAXIMUM_SIZE_EXCEEDED error is raised. A value lower than or equal to zero means no limit. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *Initial Buffer Size*, *Buffer Size Increment*, and *Buffer Unit* fields. |  |
+|===
+
+[[SapAttributes]]
+=== SAP Attributes
+
+Attributes for SAP payload.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Transaction Id a| String |Transaction ID value.  |  |
+|===
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
