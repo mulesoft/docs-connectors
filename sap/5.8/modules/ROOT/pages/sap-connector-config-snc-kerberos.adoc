@@ -1,0 +1,151 @@
+= Configuring an SAP Secure Network Communication Connection with Kerberos
+
+Configure an SAP Secure Network Communication (SNC) with Kerberos to take advantage of security features such as secure data communication between the SAP system client and server, application-level end-to-end security, and the ability to change security products without impacting your SAP business applications. To enable SNC with Kerberos, configure the client environment, the SAP server, and Anypoint Connector for SAP (SAP Connector). 
+
+NOTE: SAP does not provide support for third-party solutions.
+
+== Before You Begin
+
+To configure an SAP SNC with Kerberos, you must have access to:
+
+* The SAP GUI application
++
+To install this client, Java must already be installed on your machine. Then, download the installer for your operating system from SAP.
+* An SAP ECC instance that can use SNC system variables
+* The following transactions:
+** `STRUST` (Trust Manager)
+** `SM30` (Table Maintenance)
+** `SNC1` (Generate SNC name for user)
+** `SU01` (User Maintenance)
+** `SM59` (RFC Destinations)
+
+== Configure Active Directory
+
+To configure Active Directory, create a new Service Principal Name (SPN) according to the operating system you are using and export the keytab.
+
+If you are using Windows, follow these steps:
+
+. Create a service user `adminsap` in Active Directory.
+. Select *Password never expires* and deselect *Use DES encryption types for this account*.
+. Create a Service Principal Name (SPN) `SAPService/sapdev@SSODOMAIN.LAB` for the `adminsap` user in Active Directory.
++
+`setspn -A SAPService/sapdev@SSODOMAIN.LAB DOMAIN_SHORT\sidadm`
++
+. Run the following command to export the keytab for this SPN from Active Directory. The password is the password to set for the keytab and the SID is the file name of the keytab.
++
+`ktpass -princ SAPService/sapdev@SSODOMAIN.LAB -mapuser DOMAINSHORT\sidadm -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL -mapop set -pass <*password*> -out <SID>aes.keytab`
+
+== Configure the SAP Server
+
+To configure the SAP server, change the domain and the KDC in the operating system of the SAP server to set up Kerberos and add the parameters and the library that authorize you to use SNC:
+
+. Configure the `krb5.conf` file using the KDC address and the realm information (SSODOMAIN.LAB). The `krb5.conf` file is created by default in the `etc` directory. 
++
+----
+[libdefaults]
+    # "dns_canonicalize_hostname" and "rdns" are better set to false for improved security.
+    # If set to true, the canonicalization mechanism performed by Kerberos client may
+    # allow service impersonification, the consequence is similar to conducting TLS certificate
+    # verification without checking host name.
+    # If left unspecified, the two parameters will have default value true, which is less secure.
+    dns_canonicalize_hostname = false
+    rdns = false
+    #   default_realm = EXAMPLE.COM
+        default_realm = DOMAIN.LOCAL
+        
+[realms]
+    #       EXAMPLE.COM = {
+    #                kdc = kerberos.example.com
+    #               admin_server = kerberos.example.com
+    #       }
+DOMAIN.LOCAL = {
+                kdc = DC.DOMAIN.LOCAL
+               admin_server = dc.DOMAIN.local
+       }
+[domain_realm]
+  .domain.local = DOMAIN.LOCAL
+   domain.local = DOMAIN.LOCAL
+
+[logging]
+    kdc = FILE:/var/log/krb5/krb5kdc.log
+    admin_server = FILE:/var/log/krb5/kadmind.log
+    default = SYSLOG:NOTICE:DAEMON
+
+[libdefaults]
+    default_ccache_name = FILE:/tmp/krb5cc_%{uid}
+----
++
+. Run the following commands to import the key to the `etc` directory:
++
+`ktutil`
++
+`wkt /etc/krb5.keytab`
++
+`q`
++
+. Obtain a Kerberos Ticket Granting Ticket (TGT):
++
+`kinit -V SAPService/sapdev@SSODOMAIN.LAB`
++
+. Run the following commands to change the permissions for the keytab:
++
+`chgrp sapsys /etc/krb5.keytab`
++
+`chmod 640 /etc/krb5.keytab`
++
+. Set up automatic renewal for the Kerberos TGT:
++
+`crontab –e 01 0,6,12,18 * * * /usr/bin/kinit -R SAPService/sapdev@SSODOMAIN.LAB`
++
+. Locate the GSS-API library on the SAP server (in this example, it is under the `/usr/lib64/libgssapi_krb5.so.2` path), configure the parameters for SNC with Kerberos in the default profile, and then restart SAP.
+* `snc/permit_insecure_start = 1`
+* `snc/data_protection/use = 3`
+* `snc/data_protection/max = 3`
+* `snc/data_protection/min = 1`
+* `snc/accept_insecure_r3int_rfc = 1`
+* `snc/accept_insecure_rfc = 1`
+* `snc/accept_insecure_cpic = 1`
+* `snc/accept_insecure_gui = 1`
+* `snc/gssapi_lib = /usr/lib64/libgssapi_krb5.so.2`
+* `snc/enable = 1`
+* `snc/identity/as = p:SAPService/sapdev@SSODOMAIN.LAB`
+* `login/password_change_for_SSO = 0`
+. Create `adminsap` as a user in SAP and set the SNC name using the transaction `SU01`.
+. For the RFC destination, use the transaction `SM59`. On the *Logon and Security* tab, enable the SNC option and add the SPN name as a partner.
+
+== Configure SAP Connector
+
+To configure SAP Connector, enable SNC with Kerberos:
+
+. Access Anypoint Studio.
+. Select *SAP* in the Studio canvas.
+. Click the plus sign (+) next to the *Connector configuration* field to access the global element configuration fields.
+. Configure the Kerberos connection:
+.. In the *Connection* field, select `Kerberos`.
+.. On the *General* tab, configure these fields:
+** *SAP system number* 
+** *SAP client ID*
+** *Kerberos Config File Path*
++
+Path to the `krb5.conf` file using the KDC address and the realm information (SSODOMAIN.LAB)
+** *Keytab File Path*
++
+Path to the keytab for the SPN from Active Directory
+** *GSS Library Path*
++
+Static value `/usr/lib64/libgssapi_krb5.so.2.2` when using CloudHub. 
+** *Principal*
++
+Service user name from Active Directory, in this example `adminsap`
+** *Client SNC Partner Name*
++
+SPN name from Active Directory, in this example `p:SAPService/sapdev@SSODOMAIN.LAB`
+** *Client SNC My Name*
++
+Service user name from Active Directory, in this example `p:adminsap`
+.. On the *Advanced* tab, configure the extended properties.
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
