@@ -2,19 +2,45 @@
 
 The following examples show several Mule flows for Azure Event Hubs Connector:
 
-* <<send-single-event>>
-* <<retrieve-event>>
-* <<send-batch-events>>
+* <<publish-single-event>>
+* <<publish-bulk-event>>
 
-== Prerequisites
+== Before You Begin
 
 * Java 8 or 11
 * Anypoint Studio 7.5 and later
 * Mule runtime engine (Mule) 4.3.0 and later
 * DataWeave
 
+[[create-config-file]]
+== Create a Configuration File for a Connection
 
-[[send-single-event]]
+Create a configuration file that includes properties for a connection:
+
+. Create a file named `mule-app.properties` in the `/src/main/resources/` folder.
+. In the `mule-app.properties` file, create a set of properties for the connection,
+similar to the ones that follow, replacing the bracketed text (including the brackets)
+with the correct values for your configuration:
++
+----
+config.namespace = <namespace>
+	config.eventHuName = <eventHuName>
+	ad-config.tenantId = <tenantId>
+	ad-config.clientId = <clientId>
+	ad-config.ClientSecret = <ClientSecret>
+	
+	sas-config.sharedAccessKeyName = <sharedAccessKeyName> 
+	sas-config.sharedAccessKey = <sharedAccessKey>
+	
+	bs-config.containerName = <containerName>
+	bs-config.accountName = <accountName>
+	bs-config.accountKey = <accountKey>
+----
+
+For more information about creating a properties file, refer to xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+
+[[publish-single-event]]
 == Send a Single Event
 
 This Mule flow sends a single event to an Event Hub. The result is displayed on the console.
@@ -23,12 +49,14 @@ This example uses the following operations:
 
 * *HTTP Listener* +
 Accepts data from HTTP requests
-* *Transform Message* +
-Outputs a String body and a random integer in Java
 * *Send a single event* +
 Sends a single event
 * *Logger* +
 Shows the HTTP response from the *Send a single event* operation
+* *Eventhub listener* +
+Reads events from an event hub in a namespace.
+
+image::aeh-example-1.png[Studio flow for the Send a Single Event flow]
 
 === XML for This Example
 
@@ -37,39 +65,60 @@ Paste this code into the Studio XML editor to quickly load the flow for this exa
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
-      xmlns:azure-event-hubs-messaging="http://www.mulesoft.org/schema/mule/azure-event-hubs" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
-      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xsi:schemaLocation="
-		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
-		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns:azure-event-hub-management-connector="http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector" xmlns:azure-eventhubs="http://www.mulesoft.org/schema/mule/azure-eventhubs" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/azure-eventhubs http://www.mulesoft.org/schema/mule/azure-eventhubs/current/mule-azure-eventhubs.xsd
+http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector/current/mule-azure-event-hub-management-connector.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/azure-event-hubs http://www.mulesoft.org/schema/mule/azure-event-hubs/current/mule-azure-event-hubs.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
-	<configuration-properties doc:name="Configuration properties"  file="mule-app.properties" />
-    <azure-event-hubs-messaging:config name="config" doc:name="Azure Event Hubs Messaging Config" doc:id="b1b57e8b-51b2-45ce-889f-90b1a5bb5773" >
-		<azure-event-hubs-messaging:connection namespace="${sas-config.namespace}" sharedAccessKeyName="${sas-config.sharedAccessKeyName}" sharedAccessKey="${sas-config.sharedAccessKey}" />
-	</azure-event-hubs-messaging:config>
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="e036784b-2130-4ddd-84e9-da282b4e9953" >
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+	
+	
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	
+	<http:listener-config name="HTTP_config" doc:name="HTTP Listener config"  >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-	<flow name="send-single-event-demo-flow" doc:id="8c564cb4-e0f7-498a-a4d3-c2ee61d9ff97" >
-		<http:listener doc:name="Listener" doc:id="48e0616c-588d-457b-8bfe-46749cda8fbd" path="/send" config-ref="HTTP_Listener_config"/>
-		<ee:transform doc:name="Event" doc:id="7d47a208-f08e-40f1-8a0c-738f0ea66251" >
-			<ee:message />
-			<ee:variables >
-				<ee:set-variable variableName="message" ><![CDATA[%dw 2.0
-output application/java
----
-"A STRING BODY " ++ randomInt(99)]]></ee:set-variable>
-			</ee:variables>
-		</ee:transform>
-		<azure-event-hubs-messaging:send-event eventHub="eventForSend" doc:name="Send a single event" doc:id="6256ec3e-fb52-4f19-8c06-ca36eff3afaf" config-ref="config" partitionId="3">
-			<azure-event-hubs-messaging:event-data ><![CDATA[#[vars.message]]]></azure-event-hubs-messaging:event-data>
-		</azure-event-hubs-messaging:send-event>
-		<logger level="INFO" doc:name="Logger" doc:id="36171050-05f4-425a-92a9-ffca7ef62789" />
+		
+	<azure-eventhubs:azure-eventhubs-config name="ActiveDirectory" doc:name="Azure Event Hubs Connector Azure Event Hubs" >
+		<azure-eventhubs:active-directory-authentication-connection namespace="${config.namespace}" eventHubName="${config.eventHubName}">
+		
+	<azure-eventhubs:token-credential-properties tenantId="${ad-config.tenantId}" clientId="${ad-config.clientId}" clientSecret="${ad-config.clientSecret}" />
+			<azure-eventhubs:checkpoint-store-type>
+				<azure-eventhubs:azure-blob-storage-sas-authentication containerName="${bs-config.containerName}" accountName="${bs-config.accountName}" accountKey="${bs-config.accountKey}" />
+			</azure-eventhubs:checkpoint-store-type>
+		</azure-eventhubs:active-directory-authentication-connection>
+	</azure-eventhubs:azure-eventhubs-config>
+	
+		<flow name="publish-single-event"  >
+		<http:listener doc:name="events"  config-ref="HTTP_Listener_config" path="/events" allowedMethods="GET"/>
+		<azure-eventhubs:publish doc:name="Send a single event"  config-ref="ActiveDirectory">
+		    <azure-eventhubs:event ><![CDATA[#[{
+            "body":"event to send",
+            "metadata": {
+                "param1": "param 1",
+            "param2": "param 2",
+            }
+            }]]]>
+                </azure-eventhubs:event>
+		</azure-eventhubs:publish>
+		<logger level="INFO" doc:name="Logger" message="messagePublished"/>
 	</flow>
+
+	
+	<flow name="EventHubListner" >
+		<azure-eventhubs:eventhub-listener doc:name="Eventhub listener"  config-ref="ActiveDirectory" checkpointFrequency="1" consumerGroup="consumer-group-1 "/>
+		<logger level="INFO" doc:name="Logger" message="Message Received on Event Hub!" />
+	</flow>	
 </mule>
 ----
 
@@ -80,78 +129,8 @@ output application/java
 . From a web browser, test the application by entering `http://localhost:8081/send`.
 
 
-[[retrieve-event]]
-== Retrieve an Event
-
-This Mule flow retrieves an event from an Event Hub. You can update the message retention in the *Days* attribute. The result is displayed on the console.
-
-This example uses the following operations:
-
-* *HTTP Listener* +
-Accepts data from HTTP requests
-* *Transform Message* +
-Outputs a String body and a random integer in Java
-* *Send a single event* +
-Sends a single event
-* *Retrieve event* +
-Retrieves an event from a specific event hub, consumer group, and partition
-* *Logger* +
-Shows the HTTP response from the *Send a single event* operation and the *Retrieve event* operation
-
-
-=== XML for This Example
-
-Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
-
-[source,xml,linenums]
-----
-<?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
-      xmlns:azure-event-hubs-messaging="http://www.mulesoft.org/schema/mule/azure-event-hubs-messaging" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
-      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xsi:schemaLocation="
-		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
-		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
-http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/azure-event-hubs-messaging http://www.mulesoft.org/schema/mule/azure-event-hubs-messaging/current/mule-azure-event-hubs-messaging.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
-	<configuration-properties doc:name="Configuration properties" doc:id="acddcfe5-9f1d-42a6-a0d1-6dba5b820be1" file="mule-app.properties" />
-    <azure-event-hubs-messaging:config name="config" doc:name="Azure Event Hubs Messaging Config" doc:id="b1b57e8b-51b2-45ce-889f-90b1a5bb5773" >
-		<azure-event-hubs-messaging:connection namespace="${sas-config.namespace}" sharedAccessKeyName="${sas-config.sharedAccessKeyName}" sharedAccessKey="${sas-config.sharedAccessKey}" />
-	</azure-event-hubs-messaging:config>
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="e036784b-2130-4ddd-84e9-da282b4e9953" >
-		<http:listener-connection host="0.0.0.0" port="8081" />
-	</http:listener-config>
-  <flow name="retrieve-event-demo-flow" doc:id="d0543470-daf8-4207-a7c0-492a9f359386" >
-		<http:listener doc:name="Listener" doc:id="208a2e8e-ac68-4d82-8545-c472c14dbb15" config-ref="HTTP_Listener_config" path="/retrieve"/>
-		<ee:transform doc:name="Transform Message" doc:id="550cec4d-78ed-4f4f-9772-0a94b9310819" >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output application/java
----
-"A STRING BODY " ++ randomInt(99)]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
-		<azure-event-hubs-messaging:send-event doc:name="Send a single event" doc:id="e0b12de6-6ffb-4673-802c-318c078a2cd4" config-ref="config" eventHub="testhub1222" partitionId="3">
-			<azure-event-hubs-messaging:event-data ><![CDATA[#[vars.message]]]></azure-event-hubs-messaging:event-data>
-		</azure-event-hubs-messaging:send-event>
-		<azure-event-hubs-messaging:retrieve-event doc:name="Retrieve event" doc:id="dba7f829-d3af-47b5-8a5c-2a20fedcba14" config-ref="config" eventHub="testhub1222" consumerGroup="testgroup" partitionId="3"/>
-		<logger level="INFO" doc:name="Logger" doc:id="de8c0ada-9aa8-4a76-a9b2-380dcb738573" />
-	</flow>
-</mule>
-----
-
-
-=== Steps for Running This Example
-
-. Verify that your connector is configured.
-. Save the project.
-. From a web browser, test the application by entering `http://localhost:8081/retrieve`.
-
-
-[[send-batch-events]]
-== Send a Batch of Events
+[[publish-batch-event]]
+== Publish a Batch of Events and Listen with Partition Listener
 
 This Mule flow sends multiple events simultaneously to an Event Hub. The result is displayed on the console.
 
@@ -159,12 +138,14 @@ This example uses the following operations:
 
 * *HTTP Listener* +
 Accepts data from HTTP requests
-* *Transform Message* +
-Outputs multiple event bodies in Java
-* *Send a batch of events* +
+* *Publish in bulk* +
 Sends a batch of events
 * *Logger* +
 Shows the HTTP response from the *Send a batch of events* operation
+* *Partition listener* +
+Reads events from a specific event hub partition in a namespace
+
+image::aeh-example-2.png[Studio flow for the Publish s batch of Events flow]
 
 === XML for This Example
 
@@ -173,48 +154,56 @@ Paste this code into the Studio XML editor to quickly load the flow for this exa
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
-<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
-      xmlns:azure-event-hubs-messaging="http://www.mulesoft.org/schema/mule/azure-event-hubs-messaging" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
-      xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xsi:schemaLocation="
-		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
-		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns:azure-event-hub-management-connector="http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector" xmlns:azure-eventhubs="http://www.mulesoft.org/schema/mule/azure-eventhubs" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/azure-eventhubs http://www.mulesoft.org/schema/mule/azure-eventhubs/current/mule-azure-eventhubs.xsd
+http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector/current/mule-azure-event-hub-management-connector.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
 http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/azure-event-hubs-messaging http://www.mulesoft.org/schema/mule/azure-event-hubs-messaging/current/mule-azure-event-hubs-messaging.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
-	<configuration-properties doc:name="Configuration properties" doc:id="acddcfe5-9f1d-42a6-a0d1-6dba5b820be1" file="mule-app.properties" />
-    <azure-event-hubs-messaging:config name="config" doc:name="Azure Event Hubs Messaging Config" doc:id="b1b57e8b-51b2-45ce-889f-90b1a5bb5773" >
-		<azure-event-hubs-messaging:connection namespace="${sas-config.namespace}" sharedAccessKeyName="${sas-config.sharedAccessKeyName}" sharedAccessKey="${sas-config.sharedAccessKey}" />
-	</azure-event-hubs-messaging:config>
-	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="e036784b-2130-4ddd-84e9-da282b4e9953" >
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+	
+	
+	<http:listener-config name="HTTP_config_" doc:name="HTTP Listener config"  >
 		<http:listener-connection host="0.0.0.0" port="8081" />
 	</http:listener-config>
-  <flow name="send-batch-events-demo-flow" doc:id="13a1c759-f4b1-4ce4-8ad3-c27a13148b00" >
-		<http:listener doc:name="Listener" doc:id="9306efae-c142-4620-af3b-ef1d93b4d626" config-ref="HTTP_Listener_config" path="/send_batch"/>
-		<ee:transform doc:name="Transform Message" doc:id="7037cad4-75b1-49ff-b369-b4e5626616f2" >
-			<ee:message >
-			</ee:message>
-			<ee:variables >
-				<ee:set-variable variableName="messages" ><![CDATA[%dw 2.0
-output application/java
----
-[{
-	body: "EVENT BODY 1" as Binary
-},
-{
-	body: "EVENT BODY 2" as Binary
-},
-{
-	body: "EVENT BODY 3" as Binary
-}]]]></ee:set-variable>
-			</ee:variables>
-		</ee:transform>
-		<azure-event-hubs-messaging:send-events-batch doc:name="Send a batch of events" doc:id="7c45753e-1350-44e2-bb47-41ea4e2851aa" config-ref="config" eventHub="testhub1222" partitionId="3">
-			<azure-event-hubs-messaging:events-data ><![CDATA[#[vars.messages]]]></azure-event-hubs-messaging:events-data>
-		</azure-event-hubs-messaging:send-events-batch>
-		<logger level="INFO" doc:name="Logger" doc:id="8240ea89-c2ca-4f86-aa60-eaf3dde6f30c" />
+		
+	<azure-eventhubs:azure-eventhubs-config name="SAS" doc:name="Azure Event Hubs Connector Azure Event Hubs" >
+		<azure-eventhubs:sas-authentication-connection namespace="${config.namespace}" sharedAccessKeyName="${sas-config.sharedAccessKey}" sharedAccessKey="${sas-config.sharedAccessKeyName}" eventHubName="${config.eventHuName}" >
+		</azure-eventhubs:sas-authentication-connection>
+	</azure-eventhubs:azure-eventhubs-config>
+	
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	
+		<flow name="Partition-Listener" >
+		<azure-eventhubs:partition-listener doc:name="Partition listener"  config-ref="SAS" partitionId="1">
+			<azure-eventhubs:event-position-type >
+				<azure-eventhubs:latest />
+			</azure-eventhubs:event-position-type>
+		</azure-eventhubs:partition-listener>
+		<logger level="INFO" doc:name="Logger" message='Message received in partition'/>
 	</flow>
+	<flow name="Publish-in-Bulk" >
+		<http:listener doc:name="events"  config-ref="HTTP_Listener_config" path="/bulk" allowedMethods="GET" />
+		<azure-eventhubs:bulk-publish doc:name="Publish in bulk"  config-ref="SAS" maxBatchSizeInBytes="2" partitionId="1">
+			<azure-eventhubs:events ><![CDATA[#[[{
+	"body": "body event1"
+},
+{
+	"body": "body event2"
+}]]]]></azure-eventhubs:events>
+		</azure-eventhubs:bulk-publish>
+		<logger level="INFO" doc:name="Logger" message='A Batch  of messages published' />
+	</flow>
+
 </mule>
 ----
 
