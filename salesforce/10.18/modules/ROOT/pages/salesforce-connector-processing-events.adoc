@@ -72,6 +72,44 @@ If the application stops and restarts, or if a connection issue triggers a recon
 To persist data so that the app continues processing events when restarted, create a persistent object store, as described in xref:mule-runtime::creating-and-managing-a-cluster-manually.adoc[Create and Manage a Cluster Manually].
 * If you use multiple workers when running the app in CloudHub, all of the workers receive and process the events.
 
+=== Replay Sources Field Configurations
+
+Learn how to handle the priority in the replay sources field setup by using different configurations:
+
+* *Replay failed events if any or resume from last replay id*
++
+If enabled, this field overwrites anything selected in the *Replay option* field and anything entered in the *Replay id* field. 
++
+The *Replay failed events if any or resume from last replay id* field checks the Object Store for failed event IDs or last known successfully processed event IDs. If there are failed events, processing starts with the lowest failed event, thus receiving all events from `lowestFailedEventId` until now. For example, if `FailedEventIdInObjectStore` is `10` and `LastSuccessfullyProcessedEventIdInObjectStore` is `15`, processing starts with 10 and the streaming client receives events 10 through 15 and consumes the quota. However, these events are not reprocessed by the flow and are filtered by the connector.
++
+If there are no failed event IDs stored, then processing starts with the highest known replay ID. If there is nothing saved in the Object Store, then the *Replay option* field is used.
+
+* *ReplayOption.ALL*
++
+Subscribes with `-2`. The user receives all events available in Salesforce.
+
+* *ReplayOption.ONLY_NEW* 
++
+Subscribes with `-1`. The user receives the events created after the connector subscribes.
+
+* *ReplayOption.FROM_REPLAY_ID*
++
+Subscribes with what the user enters in the *Replay id* field.
+
+* *ReplayOption.FROM_LAST_REPLAY_ID*
++
+Checks the Object Store for the highest received event ID. It doesn't matter whether the event is processed successfully. This option avoids quota consumption compared to the *Replay failed events if any or resume from last replay id* field, which starts the source with a failed event ID that is lower than the highest processed event ID.
+
+* *Cache events in memory*
++
+If enabled, when the application starts, the connector subscribes from a replay ID. The Salesforce API pushes all events that start with the replay ID that is used to subscribe, thus consuming quota.
++
+If there are many available events and the Mule app processes them slowly, it can take a while to process all of them.
++
+With this option enabled, the events pushed by the API are stored in memory and are consumed sequentially in the order they are received.
++
+If there is a connection issue or the token expires and the connector must resubscribe, the events would be lost without this configuration and the quota would be consumed.
+
 == Multiple Flows That Use the Same Source
 
 If you have two or more flows that use a source that listens to events on the same channel or topic, the events are consumed two or more times from your user quota. To avoid this, consider implementing that logic in a single flow instead.
