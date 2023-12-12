@@ -25,15 +25,15 @@ To configure Active Directory, create a new Service Principal Name (SPN) accordi
 
 If you are using Windows, follow these steps:
 
-. Create a service user `adminsap` in Active Directory.
+. Create a service user `sidadm` in Active Directory.
 . Select *Password never expires* and deselect *Use DES encryption types for this account*.
-. Create a Service Principal Name (SPN) `SAPService/sapdev@SSODOMAIN.LAB` for the `adminsap` user in Active Directory.
+. Create a Service Principal Name (SPN) `SAPService/sapdev@SSODOMAIN.LAB` for the `sidadm` user in Active Directory.
 +
 `setspn -A SAPService/sapdev@SSODOMAIN.LAB DOMAIN_SHORT\sidadm`
 +
 . Run the following command to export the keytab for this SPN from Active Directory. The password is the password to set for the keytab and the SID is the file name of the keytab.
 +
-`ktpass -princ SAPService/sapdev@SSODOMAIN.LAB -mapuser DOMAINSHORT\sidadm -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL -mapop set -pass <*password*> -out <SID>aes.keytab`
+`ktpass -princ SAPService/sapdev@SSODOMAIN.LAB -mapuser DOMAIN_SHORT\sidadm -crypto AES256-SHA1 -ptype KRB5_NT_PRINCIPAL -mapop set -pass <*password*> -out <SID>aes.keytab`
 
 == Configure the SAP Server
 
@@ -51,20 +51,20 @@ To configure the SAP server, change the domain and the KDC in the operating syst
     dns_canonicalize_hostname = false
     rdns = false
     #   default_realm = EXAMPLE.COM
-        default_realm = DOMAIN.LOCAL
+        default_realm = SSODOMAIN.LAB
         
 [realms]
     #       EXAMPLE.COM = {
     #                kdc = kerberos.example.com
     #               admin_server = kerberos.example.com
     #       }
-DOMAIN.LOCAL = {
-                kdc = DC.DOMAIN.LOCAL
-               admin_server = dc.DOMAIN.local
+SSODOMAIN.LAB = {
+                kdc = DC.SSODOMAIN.LAB
+               admin_server = dc.SSODOMAIN.LAB
        }
 [domain_realm]
-  .domain.local = DOMAIN.LOCAL
-   domain.local = DOMAIN.LOCAL
+  .ssodomain.lab = SSODOMAIN.LAB
+   ssodomain.lab = SSODOMAIN.LAB
 
 [logging]
     kdc = FILE:/var/log/krb5/krb5kdc.log
@@ -110,7 +110,7 @@ DOMAIN.LOCAL = {
 * `snc/enable = 1`
 * `snc/identity/as = p:SAPService/sapdev@SSODOMAIN.LAB`
 * `login/password_change_for_SSO = 0`
-. Create `adminsap` as a user in SAP and set the SNC name using the transaction `SU01`.
+. Create `sidadm` as a user in SAP and set the SNC name using the transaction `SU01`.
 . For the RFC destination, use the transaction `SM59`. On the *Logon and Security* tab, enable the SNC option and add the SPN name as a partner.
 
 == Configure SAP Connector
@@ -125,6 +125,7 @@ To configure SAP Connector, enable SNC with Kerberos:
 .. On the *General* tab, configure these fields:
 ** *SAP system number* 
 ** *SAP client ID*
+** *Application server host* 
 ** *Kerberos Config File Path*
 +
 Path to the `krb5.conf` file using the KDC address and the realm information (SSODOMAIN.LAB)
@@ -132,7 +133,7 @@ Path to the `krb5.conf` file using the KDC address and the realm information (SS
 +
 Path to the keytab for the SPN from Active Directory.
 +
-The keytab must contain only the entry for the *Principal* (`adminsap`). If you use an existing keytab, you must remove the existing entry first. To remove the existing entry, run the following command:
+The keytab must contain only the entry for the *Principal* (`sidadm`). If you use an existing keytab, you must remove the existing entry first. To remove the existing entry, run the following command:
 +
 `ktutil -k <replace_with_keytab_name>.keytab remove -p <replace_with_principal_name>@<replace_with_domain>`
 +
@@ -145,14 +146,48 @@ To create a new keytab, run the following command:
 Static value `/usr/lib64/libgssapi_krb5.so.2.2` when using CloudHub
 ** *Principal*
 +
-Service user name from Active Directory, in this example `adminsap`
+Service user name from Active Directory, in this example `sidadm`
 ** *Client SNC Partner Name*
 +
 SPN name from Active Directory, in this example `p:SAPService/sapdev@SSODOMAIN.LAB`
 ** *Client SNC My Name*
 +
-Service user name from Active Directory, in this example `p:adminsap`
-.. On the *Advanced* tab, configure the extended properties.
+Service user name from Active Directory, in this example `p:sidadm`
+.. On the *Advanced* tab, you do not need to change the extended properties because the Kerberos configuration already sets them.
+
+=== SAP Extended Properties for Kerberos
+
+The following tables show the default values for the SAP extended properties for Kerberos.
+
+The connector sets the following common extended properties:
+
+[%header,cols="50a,50"]
+|===
+|Property |Default Value
+|jco.server.snc_mode| `1`
+|jco.server.snc_qop| `3`
+|===
+
+The connector sets the following extended properties for operations:
+
+[%header,cols="50a,50"]
+|===
+|Property a|Default Value
+|jco.client.user| The *Principal* set under *Kerberos Parameters for Operations* in the *General* tab
+|jco.client.snc_lib| The path from *GSS Library Path* set under *Kerberos Common Parameters* in the *General* tab
+|jco.client.snc_myname| The *Client SNC My Name* set under *Kerberos Parameters for Operations* in the *General* tab
+|jco.client.snc_partnername| The *Client SNC Partner Name* set under *Kerberos Parameters for Operations* in the *General* tab
+|===
+
+The connector sets the following extended properties for sources:
+
+[%header,cols="50a,50"]
+|===
+|Property |Default Value
+|jco.server.snc_lib| The path from *GSS Library Path* set under *Kerberos Common Parameters* in the *General* tab
+|jco.server.snc_myname| The *Server SNC My Name* set under *Kerberos Parameters for Sources* in the *General* tab
+|jco.server.snc_partnername| The *Server SNC Partner Name* set under *Kerberos Parameters for Sources* in the *General* tab
+|===
 
 == See Also
 
