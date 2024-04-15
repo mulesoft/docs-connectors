@@ -1,0 +1,996 @@
+= AS2 Connector 6.7 Reference - Mule 4
+:page-aliases: connectors::as2/as2-connector-reference.adoc
+
+Anypoint Connector for AS2 (AS2 Connector) enables trading partners to transmit and receive AS2 messages that contain EDI-X12, EDIFACT, XML, or binary payloads.
+
+== Configurations
+---
+[[ListenerConfig]]
+=== Listener Config
+
+==== General Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+|Name | String | The name for this configuration. Connectors reference the configuration with this name. | | x
+| Connection a| <<ListenerConfig_async-mdn-connection-provider, Async Mdn Connection>>
+| The connection types for this configuration. | | x
+| HTTP Listener a| String | Reference to global HTTP Listener definition for our service endpoint used by partner for both action and signal messages. |  | x
+| Security Requirement Level a| Enumeration, one of:
+
+** SIGNED
+** ENCRYPTED
+** SIGNED_ENCRYPTED
+
+| The security level required for any AS2 Listener using this configuration for all incoming messages. An error MDN response results if the security requirement is not met. |  |
+| Keystore Password a| String |  The password of the provided keystore. |  | x
+| Keystore Path a| String |  The Absolute or relative path to the keystore containing certificates and private keys for self (this application) and the partner. |  | x
+| Private Key Password a| String |  Private key password, if the private key to use for signing the MDN is password protected. |  |
+| Validate certificate expiration date a| Boolean |  If enabled, the connector can't receive or send messages if the certificate is expired. | false |
+| Warning before (days) a| Number | The number of days before the certificate expiration date when the connector sends a warning message that the certificate is about to expire. 
+For example, if the value of this field is `3`, then the connector sends a warning message three days before the certificate expiration date. 
+{sp} +
+{sp} +
+This field applies only when the value of this field is greater than `0` and the *Validate certificate expiration date* field is enabled. | 30 |
+|===
+
+==== Partners Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Inbound Request Authentication
+a| <<AS2BasicAuthentication>> |  Authentication method to use for verifying the incoming HTTP request when using dedicated mode.
+
+Do not select this field if you are using shared mode or you will receive an error.|  |
+| Self config - AS2 Partner Name a| String |  AS2 system identifier used for AS2-From and AS2-To headers. |  | x
+| Self config - x509 Alias a| String |  Certificate, private key alias, or both in the keystore. Required if using signing or encryption. |  |
+| Self config - email|String | Email address used as the HTTP `From` header when sending AS2 messages. | |x
+| Use different Alias for MDN Signature| Boolean| (Applies to the *AS2 Listener* source) Use the alias specified in *Alias For MDN Signature* to use a different keystore entry for the MDN signature.| true|
+| Alias For MDN Signature|String| (Applies to the *AS2 Listener* source) Alias to use for the MDN signature if using a different alias for the MDN signature than for decryption. This field takes effect when *Use different Alias for MDN Signature* is `true`.||
+| Private Key Password a| String |  Private key password, if the private key to use for signing the MDN is password protected. |  |
+| Self config - Listener Mode a| Enumeration, one of:
+
+* Dedicated mode
+* Shared mode
+a|
+* Dedicated mode
++
+Enables you to configure a single AS2 listener endpoint to receive messages from one partner only.
++
+If you select *Dedicated mode*, check *Partner config* (mandatory) and configure the partner using the Dedicated mode fields in this table.
++
+* Shared Mode
++
+Enables you to configure a single AS2 listener endpoint to receive messages from multiple partners.
++
+If you select *Shared mode*, uncheck *Partner config* (mandatory) and configure each partner using the Shared mode fields in this table. | Dedicated mode | x
+| Dedicated mode - Partner Config - AS2 Partner Name a| String |  AS2 system identifier used for AS2-From and AS2-To headers. |  | x
+| Dedicated mode - Partner Config - x509 Alias a| String |  Certificate, private key alias, or both in the keystore. Required if using signing or encryption. |  |
+| Dedicated mode - Partner Config - email a| String |  Email address used as the HTTP `From` header when sending AS2 messages. |  | x
+|Shared mode - Partners |  Enumeration, one of:
+
+* Expression
+* Inline
+| Indicates whether to add partner information by using an expression or by entering values inline.| Expression | x
+| Shared mode - Partners - AS2 Partner Name a| String |  AS2 system identifier used for AS2-From and AS2-To headers. |  | x
+| Shared mode - Partners - x509 Alias a| String |  Certificate, private key alias, or both in the keystore. Required if using signing or encryption. |  |
+| Shared mode - Partners - email a| String |  Email address used as the HTTP `From` header when sending an AS2 message. |  | x
+| Shared mode - Inbound Request Authentication a| <<AS2BasicAuthentication>> |  Authentication method to use for verifying the incoming HTTP request. |  |
+|===
+
+[[listener-config-advanced]]
+==== Advanced Parameters
+
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Check for duplicate messages | a| Checks for duplicate messages:
+
+* If selected, the connector checks to see if a new received message is duplicated, as determined by comparing the following values in the new message to those in existing messages:
++
+** Sender (from the AS2-From field)
+** Receiver (from the AS2-To field)
+** Message ID (from the Message-Id field)
+
++
+If all three values match an existing message, the connector rejects the duplicate message. If selected, you must:
+
+** Reference a global object store in the *Object Store* field. This object store will store the existing messages.
+** Add the object store dependency to your project by adding the *ObjectStore* component to the Studio canvas or adding it to the `pom.xml`, as follows:
++
+----
+<dependency>
+  <groupId>org.mule.connectors</groupId>
+  <artifactId>mule-objectstore-connector</artifactId>
+  <version>_latest-version_</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
++
+For the latest object store version, see the xref:release-notes::connector/object-store-connector-release-notes-mule-4.adoc[Object Store Connector Release Notes].
+{sp}+
+{sp}+
+If the MDN mode is `AUTO`, use the Idempotent Message Validator instead of the *Check for duplicate messages* field to check for duplicate messages. If the MDN mode is `IMMEDIATE`, the validator does not work. Therefore, in this circumstance, you must use the *Check for duplicate messages* field to check for duplicate messages. For more information, see xref:mule-runtime::idempotent-message-validator.adoc[Idempotent Message Validator].
+{sp}+
+{sp}+
+** If deselected, the connector accepts duplicate messages.
+| false |
+| Object Store |Object Store | Object store where the connector stores new messages. This field is mandatory if the *Check for duplicate messages* field is selected.
+{sp} +
+{sp} +
+For information about setting field values for this object store, see the xref:connectors::object-store/object-store-connector-reference.adoc[Object Store Connector Reference]. 
+{sp} +
+{sp} +
+You might experience limitations that are specific to the object store implementation you are using (Anypoint Object Store V2 (OSv2), CloudHub Object Store V1 (OSv1), or Mule Object Store), so configure the object store to suit your needs.
+For more information, see https://help.mulesoft.com/s/article/The-Different-Types-of-Object-Stores-Explained[The Different Types of Object Stores Explained.] | |
+| Expiration policy | <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. This does not mean that the platform expires the instance at the exact moment that it becomes eligible. Mule purges the instances as appropriate. |  |
+|===
+
+==== Connection Types
+[[ListenerConfig_async-mdn-connection-provider]]
+===== Async MDN Connection Provider
+
+====== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Use Persistent Connections a| Boolean |  If false, each connection is closed after the first request completes. |  false |
+| Connection Timeout a| Number |  How long the connector waits before timing out when establishing a connection to the remote service. This value is qualified by the *Connection Timeout Units* field.|  30 |
+| Connection Timeout Units a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  A time unit that qualifies the value of the *Connection Timeout* field. |  SECONDS|
+| Max Connections a| Number |  The maximum number of outbound connections to keep open at the same time. By default, the number of connections is unlimited. |  -1 |
+| Connection Idle Timeout a| Number |  A timeout for how long a connection can remain idle before it is closed. The value of this attribute is only used when persistent connections are enabled. This value is qualified by the *Connection Idle Timeout Units* field. |  30 |
+| Connection Idle Timeout Units a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  A time unit that qualifies the value of the *Connection Idle Timeout* field. |  MINUTES |
+| Retry Interval a| Number | The interval between each retry, in seconds. | 60 |
+| Retry Count a| Number | The number of retries. A value of `0` means no retries.) | 0 |
+| Proxy Config a| One of:
+
+* <<proxy>>
+* <<ntlm-proxy>> |  Reusable configuration element for outbound connections through a proxy. A proxy element must define a host name and a port attributes, and optionally can define a username and password. |  |
+| TLS Configuration a| <<Tls>> |  Reference to a TLS config element. This enables HTTPS for this configuration. |  |
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, the deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+|===
+
+
+==== Associated Sources
+* <<as2-listener>>
+
+---
+[[MDNListenerConfig]]
+=== MDN Listener Config
+
+==== General Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+|Name | String | The name for this configuration. Connectors reference the configuration with this name. | | x
+| HTTP Listener a| String |  Reference to global HTTP Listener definition for our service endpoint used by a partner for both action and signal messages. |  | x
+| Keystore Password a| String |  The password of the provided keystore. |  | x
+| Keystore Path a| String |  The Absolute or relative path to the keystore containing certificates and private keys for self(this application) and the partner. |  | x
+| Private Key Password a| String |  Private key password, if the private key to use for signing the MDN is password protected. |  |
+| Validate certificate expiration date a| Boolean |  If enabled, the connector can't receive or send messages if the certificate is expired. | false |
+| Warning before (days) a| Number | The number of days before the certificate expiration date when the connector sends a warning message that the certificate is about to expire. For example, if the value of this field is `3`, then the connector sends a warning message three days before the certificate expiration date. 
+{sp} +
+{sp} +
+This field applies only when the value of this field is greater than `0` and the *Validate certificate expiration date* field is enabled. | 30 |
+|===
+
+==== Advanced Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Expiration policy | <<ExpirationPolicy>> |Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. This does not mean that the platform expires the instance at the exact moment that it becomes eligible. Mule purges the instances as appropriate. | |
+|===
+
+==== Partners Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Self config - AS2 Partner Name a| String |  AS2 system identifier used for AS2-From and AS2-To headers. |  | x
+| Self config - x509 Alias a| String |  Certificate, private key alias, or both in the keystore. Required if using signing or encryption. |  |
+| Self config - email a| String |  Email address used as the HTTP `From` header when sending 12 messages. |  | x
+
+| MDN Listener Mode a| Enumeration, one of:
+
+* Mdn dedicated mode
+* Mdn shared mode
+a|
+* Mdn dedicated mode
++
+Enables you to configure a single AS2 listener endpoint to receive MDNs from one partner only.
++
+If you select *Mdn dedicated mode*, check *Partner config* (mandatory) and configure the partner using the Mdn dedicated mode fields in this table.
++
+* Mdn shared mode
++
+Enables you to configure a single AS2 listener endpoint to receive MDNs from multiple partners.
++
+If you select *Mdn shared mode*, uncheck *Partner config* (mandatory) and configure each partner using the Mdn shared mode fields in this table. |  | x
+| Mdn dedicated mode - Partner Config - AS2 Partner Name a| String |  AS2 system identifier used for AS2-From and AS2-To headers. |  | x
+| Mdn dedicated mode - Partner Config - x509 Alias a| String |  Certificate, private key alias, or both in the keystore. Required if using signing or encryption. | Dedicated mode|
+| Mdn dedicated mode - Partner Config - email a| String |  Email address used as the HTTP `From` header when sending MDNs. |  | x
+| Mdn shared mode - Partners - AS2 Partner Name a| String |  AS2 system identifier used for AS2-From and AS2-To headers. |  | x
+| Mdn shared mode - Partners - x509 Alias a| String |  Certificate, private key alias, or both in the keystore. Required if using signing or encryption. |  |
+| Mdn shared mode - Partners - email a| String |  Email address used as the HTTP `From` header when sending MDNs. |  | x
+|===
+
+==== Associated Sources
+* <<as2-mdn-listener>>
+
+---
+[[send-config]]
+=== Send Config
+
+This class represents an extension configuration, values set in this class are commonly used across multiple operations since they represent something core from the extension.
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+|Name | String | The name for this configuration. Connectors reference the configuration with this name. | | x
+| Connection a| <<send-config_connection, Outbound Connection Config>>
+| The connection types for this configuration. | | x
+| Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. This does not mean that the platform expires the instance at the exact moment that it becomes eligible. Mule purges the instances as appropriate. |  |
+| General - Transfer Mode Configuration a| Enumeration, one of:
+
+** Chunked transfer mode
+** Identity transfer mode
+** Threshold transfer mode a|  The transfer mode applied when sending information:
+
+* Chunked transfer mode
++
+Sends the headers without the Content-Length property and modifies the message body to transfer it as a series of chunks.
++
+* Identity transfer mode
++
+Sends the headers with the Content-Length property and sends the whole message body.
++
+* Threshold transfer mode
++
+Sends the headers and message body according to the specified threshold.
++
+** If the message body is less than or equal to the threshold, the connector uses the Identity transfer mode option.
+** If the message body is greater than the threshold, the connector uses the Chunked transfer mode option.
+| Chunked transfer mode
+|
+| Threshold
+| Number
+| Threshold used when the General - Transfer Mode Configuration field is set to `Threshold transfer mode`.
+| 64
+|
+| Threshold Unit
+a| Enumeration, one of:
+
+* Byte
+* GB
+* KB
+| Unit associated with the Threshold field.
+|KB
+|
+| General - Propagate Content Transfer Encoding a| Boolean |  Indicates whether to propagate the content transfer encoding on the AS2 message sent to the partner:
+
+* True: The main content transfer encoding is propagated to every MIME part of the resulting message.
+* False: Signed and encrypted MIME parts are encoded with Base64. |  False |
+| General - Custom Message ID a| String |  Enables the specification of a custom AS2 Message ID |  |
+| Partner Config - AS2 Partner Name a| String |  AS2 system identifier (used for AS2-From and AS2-To headers)|  | x
+| Partner Config - x509 Alias a| String |  Certificate, private key alias, or both in the keystore (required if using signing or encryption) |  |
+| Partner Config - email a| String |  Email address used as HTTP `From` header when sending |  | x
+| MDN Partner Config - Use different Alias for MDN Signature| Boolean| (Applies to the *Send with Sync Mdn* operation) Use the alias specified in *Alias For MDN Signature* as the alias for MDN signature validation.| true|
+| MDN Partner Config - Alias For MDN Signature|String| (Applies to the *Send with Sync Mdn* operation) Alias to use for MDN signature validation if using a different alias for MDN signature validation than for encryption. This field takes effect when *Use different Alias for MDN Signature* is `true`.||
+| Self config - AS2 Partner Name a| String |  AS2 system identifier (used for AS2-From and AS2-To headers) |  | x
+| Self config - x509 Alias a| String |  Certificate, private key alias or both in keystore (required if using signing or encryption) |  |
+| Self config - email a| String |  Email address used as HTTP `From` header when sending |  | x
+| Subject a| String |  Free form text for MIME Subject header |  |
+| MIC Signature Algorithm a| Enumeration, one of:
+
+** MD5
+** SHA1
+** SHA224
+** SHA256
+** SHA384
+** SHA512
+** UNSIGNED |  Algorithm to use when setting the message integrity check value. |  UNSIGNED |
+| MDN MIC Signature Algorithm a| Enumeration, one of:
+
+** MD5
+** SHA1
+** SHA224
+** SHA256
+** SHA384
+** SHA512
+** UNSIGNED |  Request partner to respond with a signed MDN using this algorithm for calculating MIC |  UNSIGNED |
+| Encryption Algorithm a| Enumeration, one of:
+
+** DES
+** DES_EDE3
+** RC2
+** AES128_CBC
+** AES192_CBC
+** AES256_CBC
+** AES128_CCM
+** AES192_CCM
+** AES256_CCM
+** AES128_GCM
+** AES192_GCM
+** AES256_GCM
+** AES256_WRAP
+** CAST5
+** UNENCRYPTED |  The Algorithm to use when encrypting the message to be sent |  UNENCRYPTED |
+| Content Transfer Encoding a| Enumeration, one of:
+
+** BASE64
+** QUOTED_PRINTABLE
+** SEVEN_BIT
+** EIGHT_BIT
+** BINARY |  The encoding to use on the content of AS2 message being sent. |  BINARY |
+| Request A Receipt a| Enumeration, one of:
+
+** NONE
+** UNSIGNED
+** SIGNED_OPTIONAL
+** SIGNED_REQUIRED |  How the connector behaves based on the received receipts. |  UNSIGNED |
+| Compression Type a| Enumeration, one of:
+
+** NONE
+** ZLIB |  The Compression type to use |  NONE |
+| Receipt Delivery URL a| String |  The asynchronous MDN delivery address to which the MDN is returned. This should be the fully formed URL to the *As 2 mdn listener* source, for example, `+https://example.com/mdn+`.
+{sp} +
+{sp} +
+If a flow uses the *Send With Async MDN* operation, then either this field or the *Receipt Delivery URL* field associated with that operation is required. If both fields have values, the value for the operation overrides the value for the global configuration.|  |
+| Keystore Password a| String |  The password of the provided keystore. |  | x
+| Keystore Path a| String |  The Absolute or relative path to the keystore containing certificates and private keys for self(this application) and the partner. |  | x
+| Private Key Password a| String |  Private key password, if the private key to use for signing the MDN is password protected. |  |
+| Validate certificate expiration date a| Boolean |  If enabled, the connector can't receive or send messages if the certificate is expired. | false |
+| Warning before (days) a| Number | The number of days before the certificate expiration date when the connector sends a warning message that the certificate is about to expire. For example, if the value of this field is `3`, then the connector sends a warning message three days before the certificate expiration date. 
+{sp} +
+{sp} +
+This field applies only when the value of this field is greater than `0` and the *Validate certificate expiration date* field is enabled. | 30 |
+|===
+
+==== Connection Types
+[[send-config_connection]]
+===== Outbound Connection Config
+
+
+====== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Use Persistent Connections a| Boolean |  If false, each connection is closed after the first request completes. |  false |
+| Connection Timeout a| Number |  How long the connector waits before timing out when establishing a connection to the remote service. This value is qualified by the *Connection Timeout Units* field. |  30 |
+| Connection Timeout Units a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  A time unit that qualifies the value of the *Connection Timeout* field. |  SECONDS |
+| Max Connections a| Number |  The maximum number of outbound connections to keep open at the same time. By default the number of connections is unlimited. |  -1 |
+| Connection Idle Timeout a| Number |  A timeout for how long a connection can remain idle before it is closed.
+The value of this attribute is only used when persistent connections are enabled. This value is qualified by the value of the *Connection Idle Timeout Units* field. |  30 |
+| Connection Idle Timeout Units a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  A time unit that qualifies the value of the *Connection Idle Timeout* field. |  MINUTES |
+| Proxy Config a| One of:
+
+* <<proxy>>
+* <<ntlm-proxy>> |  Reusable configuration element for outbound connections through a proxy. A proxy element must define a host name and a port attributes, and optionally can define a username and a password. |  |
+| Partner URL a| String |  Service endpoint URL to the partner. |  | x
+| Outbound Request Authentication a| HttpRequestAuthentication |  Authentication method to use for the HTTP request. |  |
+| TLS Configuration a| <<Tls>> |  Reference to a TLS config element. This enables HTTPS for this configuration. |  |
+| Reconnection a| <<Reconnection>> | When the application is deployed, a connectivity test is performed on all connectors. If set to true, the deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+|===
+
+== Sources
+
+* <<as2-listener>>
+* <<as2-mdn-listener>>
+* <<non-repudiation-listener>>
+
+[[as2-listener]]
+=== As2 Listener
+`<as2-mule4:as2-listener>`
+
+
+Represents a listener for AS2 sender requests.
+
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | The name of the configuration to use. | | x
+| Path a| String |  This path is appended to any path set in the listener configuration. |  / |
+| Connection Timeout a| Number |  An override for the timeout for establishing connections to the remote service as milliseconds. The default of 0 means this value is not used to override the configuration. |  0 |
+| Non repudiation flow ref a| String |  The name of the configured flow that contains the *Non repudiation listener* source. |  |
+| Mdn mode a| Enumeration, one of:
+
+** AUTO
+** IMMEDIATE 
+a|  MDN deliver mode: 
+
+* AUTO: Sends an MDN at the end of the flow.
+* IMMEDIATE: Sends an MDN when the source receives a message. | IMMEDIATE |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Primary Node Only a| Boolean |  Whether to execute this source on only the primary node when running in a cluster. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. The default is to use repeatable streams. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<AS2ListenerAttributes>>
+|===
+
+==== For Configurations
+* <<ListenerConfig>>
+
+
+
+[[as2-mdn-listener]]
+=== As2 Mdn Listener
+`<as2-mule4:as2-mdn-listener>`
+
+
+Listens for AS2 requests and automatically sends an MDN back to the receipt URL provided in the transmission when a request is received.
+
+[NOTE]
+====
+ If the receipt URL is inaccessible, the inbound AS2 message is not processed.
+====
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | The name of the configuration to use. | | x
+| Path a| String |  This path is appended to any path set in the listener configuration. |  / |
+| Non repudiation flow ref a| String |  The name of the configured flow that contains the *Non repudiation listener* source. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Primary Node Only a| Boolean |  Whether to execute this source on only the primary node when running in a cluster. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. The default is to use repeatable streams. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<AS2MdnAttributes>>
+|===
+
+==== For Configurations
+* <<MDNListenerConfig>>
+
+
+[[non-repudiation-listener]]
+=== Non repudiation listener
+`<as2-mule4:non-repudiation-listener>`
+
+Receives a signed copy of a receipt or a message for persistent non-repudiation storage. 
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Display Name | String | The name of this configuration. Connectors reference the configuration with this name. | | x
+| Mime Type a| String |  The MIME type of the payload passed to this flow. |  |
+| Encoding a| String |  The encoding of the payload passed to this flow. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>> 
+* Non repeatable stream| Configures how Mule processes streams. The default is to use repeatable streams.| |
+| Primary Node Only | Boolean | Whether to execute this source on only the primary node when running in a cluster. | | |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<AS2ListenerAttributes>>
+|Attributes Type a| <<AS2MdnAttributes>>
+|===
+
+=== For Configurations
+
+None.
+
+== Operations
+
+* <<sendWithAsyncMdn>>
+* <<sendWithSyncMdn>>
+
+[[sendWithAsyncMdn]]
+=== Send With Async Mdn
+`<as2-mule4:send-with-async-mdn>`
+
+Performs the send async request using the configuration, client, and AS2 requester parameters, and completes the callback accordingly.
+
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | The name of the configuration to use. | | x
+| General - Custom Message ID a| String |  Enables the specification of a custom AS2 Message ID. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. The default is to use repeatable streams. |  |
+| AS2 MIME Type a| String |  The content type of the Document being sent via AS2 (for example, `application/EDI-X12`). There are no restrictions on the content-type that are supported. |  `#[payload.^mimeType]` |
+| Content Stream a| Binary |  The content InputStream to be sent. |  `#[payload]` |
+| Content Description a| String |  Content MIME part content description |  |
+| File Name a| String |  Filename of the content stream. If not set, the content is transferred without a filename. |  |
+| Request Receipt a| Enumeration, one of:
+
+** NONE
+** UNSIGNED
+** SIGNED_OPTIONAL
+** SIGNED_REQUIRED a|  How the connector behaves based on the received receipts:
+
+* NONE: No receipt is expected. 
+* SIGNED_OPTIONAL: Receipt can be signed or unsigned.
+* SIGNED_REQUIRED: Expects a signed receipt. The application fails if the receipt is unsigned. 
+* UNSIGNED: Expects an unsigned receipt. |  |
+| Require Processed a| Boolean |  Requires a processed response in the MDN to continue the flow. An error occurs if the response is unprocessed.|  true |
+| Connection Timeout a| Number |  Override for the timeout for establishing connections to the remote service as milliseconds. The default of 0 means this value is not used to override the configuration. |  0 |
+| Non repudiation flow ref a| String |  Name of the configured flow that contains the *Non repudiation listener* source. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field.|  `#[payload]` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+| Custom headers | String a|  Enables you to add custom keys to include in outbound AS2 messages. For each key to include, enter values for these name-value pairs:
+
+* Name
++
+Name of the key to send to outbound AS2 messages, formatted as `Name:key-name`
++
+* Value
++
+Content of the key to send to outbound AS2 messages, formatted as `Value:key-value`|  |
+| Receipt Delivery URL a| String | The asynchronous MDN delivery address to which the MDN is returned. This should be the fully formed URL to the *As 2 mdn listener* source, for example, `+https://example.com/mdn+`. 
+{sp} +
+{sp} +
+If a flow uses the *Send With Async MDN* operation, then either this field or the *Receipt Delivery URL* field associated with that operation is required. If both fields have values, the value for the operation overrides the value for the global configuration.| |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<AS2SendAttributes>>
+|===
+
+=== For Configurations
+* <<send-config>>
+
+==== Throws
+* AS2-MULE4:CONFIGURATION
+* AS2-MULE4:UNAUTHORIZED
+* AS2-MULE4:CONNECTIVITY
+* AS2-MULE4:RETRY_EXHAUSTED
+
+
+[[sendWithSyncMdn]]
+=== Send With Sync Mdn
+`<as2-mule4:send-with-sync-mdn>`
+
+Performs the send sync request using the configuration, client, and AS2 requester parameters, and completes the callback accordingly.
+
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | The name of the configuration to use. | | x
+| General - Custom Message ID a| String |  Enables the specification of a custom AS2 Message ID. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* non-repeatable-stream |  Configures how Mule processes streams. The default is to use repeatable streams.|  |
+| AS2 MIME Type a| String |  The content type of the Document being sent via AS2 (for example, application/EDI-X12). There are no restrictions on the content-type that are supported. |  `#[payload.^mimeType]` |
+| Content Stream a| Binary |  The content InputStream to be sent. |  `#[payload]` |
+| Content Description a| String |  Content MIME part content description |  |
+| File Name a| String |  Filename of the content stream. If not set, the content is transferred without a filename. |  |
+
+| Request Receipt a| Enumeration, one of:
+
+** NONE
+** UNSIGNED
+** SIGNED_OPTIONAL
+** SIGNED_REQUIRED a|  How the connector behaves based on the received receipts:
+
+* NONE: No receipt is expected. 
+* SIGNED_OPTIONAL: Receipt can be signed or unsigned.
+* SIGNED_REQUIRED: Expects a signed receipt. The application fails if the receipt is unsigned. 
+* UNSIGNED: Expects an unsigned receipt. |  |
+| Require Processed a| Boolean |  Requires a processed response in the MDN to continue the flow. An error occurs if the response is unprocessed.|  true |
+| Require Processed a| Boolean |  Require Processed response in the MDN to continue the flow (otherwise there is an error) |  true |
+| Connection Timeout a| Number |  An override for the timeout for establishing connections to the remote service as milliseconds. The default of 0 means this value is not used to override the configuration. |  0 |
+| Non repudiation flow ref a| String |  The name of the configured flow that contains the *Non repudiation listener* source. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  `#[payload]` |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+| Custom headers | String a|  Enables you to add custom keys to include in outbound AS2 messages. For each key to include, enter values for these name-value pairs:
+
+* Name
++
+Name of the key to send to outbound AS2 messages, formatted as `Name:key-name`
++
+* Value
++
+Content of the key to send to outbound AS2 messages, formatted as `Value:key-value`|  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<AS2SendAttributes>>
+|===
+
+=== For Configurations
+* <<send-config>>
+
+==== Throws
+* AS2-MULE4:CONFIGURATION
+* AS2-MULE4:MIME_PARSE
+* AS2-MULE4:UNAUTHORIZED
+* AS2-MULE4:CONNECTIVITY
+* AS2-MULE4:SIGNATURE_VERIFY
+* AS2-MULE4:RETRY_EXHAUSTED
+
+== Types
+
+[[AS2BasicAuthentication]]
+=== AS2 Basic Authentication
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Username a| String | Username to authenticate. |  | x
+| Password a| String | Password of user to authenticate. |  | x
+|===
+
+[[AS2ListenerAttributes]]
+=== AS2 Listener Attributes
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| As2 Message Id a| String | AS2 unique message ID from receiver to sender. |  | x
+| filename a| String | Received filename. |  | x
+| Mime Type a| String | MIME type, for example, `application/xml`.|  | x
+| From Name a| String | AS2 Receiver name. |  | x
+| Headers a| Object | AS2 HTTP headers that elaborate the message format. |  | x
+| Mdn Delivery Status a| Enumeration, one of:
+
+** NONE
+** SUCCESS
+** FAILURE | AS2 message validation status |  | x
+| To Name a| String | AS2 Sender name |  | x
+|===
+
+[[AS2MdnAttributes]]
+=== AS2 Mdn Attributes
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| As2 Message Id a| String | AS2 unique message ID from receiver to sender. |  | x
+| Disposition Content a| Object | AS2 processed MDN report as headers. |  | x
+| From Name a| String | AS2 Receiver name |  | x
+| Headers a| Object | AS2 HTTP headers that elaborate the message format. |  | x
+| Mdn Alg a| Enumeration, one of:
+
+** MD5
+** SHA1
+** SHA224
+** SHA256
+** SHA384
+** SHA512
+** UNSIGNED | AS2 message integrity check algorithm used |  | x
+| Mdn Mic a| String | AS2 message integrity check hashcode |  | x
+| Mdn Processed a| Boolean | AS2 message validation status | false |
+| Original AS2 Message Id a| String | AS2 Message ID received |  | x
+| Report Text a| String | MDN report text |  | x
+| To Name a| String | AS2 Sender name |  | x
+|===
+
+[[AS2SendAttributes]]
+=== AS2 Send Attributes
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| As2 Mdn Attributes a| <<AS2MdnAttributes>> | AS2 returned MDN attribute group |  | x
+| As2 Message Id a| String | AS2 unique message ID from receiver to sender |  | x
+| From Name a| String | AS2 receiver name |  | x
+| Headers a| Object | AS2 HTTP headers that elaborate the message format |  | x
+| Msg MIC a| String | AS2 message integrity check hashcode |  | x
+| Msg MIC Alg a| String | AS2 message integrity check algorithm used |  | x
+| To Name a| String | AS2 sender name |  | x
+|===
+
+[[crl-file]]
+=== Crl File
+
+Specifies the location of the certification revocation list (CRL) file.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the CRL file. |  |
+|===
+
+[[custom-ocsp-responder]]
+=== Custom Ocsp Responder
+
+Configures a custom OCSP responder for certification revocation checks.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Url a| String | URL of the OCSP responder. |  |
+| Cert Alias a| String | Alias of the signing certificate for the OCSP response. If specified, the alias must be in the truststore.|  |
+|===
+
+[[ExpirationPolicy]]
+=== Expiration Policy
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Idle Time a| Number | Configures the maximum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+| Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | A time unit that qualifies the value of the *Max Idle Time* field.  |  |
+|===
+
+[[FailureStatusCodeValidator]]
+=== Failure Status Code Validator
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Values a| String | Comma-separated list of status codes that cause errors to be thrown. |  | x
+|===
+
+[[KeyStore]]
+=== KeyStore
+
+Configures the keystore for TLS.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the keystore. Mule resolves the path relative to the current classpath and file system. |  |
+| Type a| String | Type of keystore. |  |
+| Alias a| String | Alias of the key to use when the keystore contains multiple private keys. By default, Mule uses the first key in the file.|  |
+| Key Password a| String | Password used to protect the private key. |  |
+| Password a| String | Password used to protect the keystore. |  |
+| Algorithm a| String | Encryption algorithm that the keystore uses.|  |
+|===
+
+[[ntlm-proxy]]
+=== NTLM Proxy
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Ntlm Domain a| String | Domain of the NTLM proxy server. |  | x
+| Host a| String |Hostname or IP address of the NTLM proxy server.  |  | x
+| Port a| Number | Port of the NTLM proxy server. |  | x
+| Username a| String | Username to authenticate against the proxy server. |  |
+| Password a| String | Password to authenticate against the proxy server. |  |
+| Non Proxy Hosts a| String | NTLM hosts that the connector can access without using a proxy server.|  |
+|===
+
+[[proxy]]
+=== Proxy
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Host a| String | Hostname or IP address of the proxy server. |  | x
+| Port a| Number |  Port of the proxy server.|  | x
+| Username a| String | Username to authenticate against the proxy server. |  |
+| Password a| String | Password to authenticate against the proxy server. |  |
+| Non Proxy Hosts a| String |  Hosts that the connector can access without using a proxy server.|  |
+|===
+
+[[reconnect]]
+=== Reconnect
+
+Configures a standard reconnection strategy, which specifies how often to reconnect and how many reconnection attempts the connector source or operation can make.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency a| Number | How often to attempt to reconnect, in milliseconds. |  |
+| Reconnection Attempts a| Number | How many reconnection attempts to make. |  |
+| Blocking a| Boolean | If false, the reconnection strategy runs in a separate, non-blocking thread. | true |
+|===
+
+[[reconnect-forever]]
+=== Reconnect Forever
+
+Configures a forever reconnection strategy by which the connector source or operation attempts to reconnect at a specified frequency for as long as the Mule app runs.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency (ms) a| Number | How often to reconnect, in milliseconds |  |
+| Blocking a| Boolean | If false, the reconnection strategy runs in a separate, non-blocking thread. | true |
+|===
+
+[[Reconnection]]
+=== Reconnection
+
+Configures a reconnection strategy for an operation.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Fails Deployment a| Boolean a| What to do if, when an app is deployed, a connectivity test does not pass after exhausting the associated reconnection strategy:
+
+* true: Allow the deployment to fail.
+* false: Ignore the results of the connectivity test. |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> | The reconnection strategy to use. |  |
+|===
+
+[[RedeliveryPolicy]]
+=== Redelivery Policy
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Redelivery Count a| Number | The maximum number of times a message can be redelivered and processed unsuccessfully before triggering a process-failed message. |  |
+| Use Secure Hash a| Boolean | Whether to use a secure hash algorithm to identify a redelivered message. |  |
+| Message Digest Algorithm a| String | The secure hashing algorithm to use. If not set, the default is SHA-256. |  |
+| Id Expression a| String | Defines one or more expressions to use to determine when a message has been redelivered. This property can be set only if useSecureHash is false. |  |
+| Object Store a| Object Store | The object store where the redelivery counter for each message is stored. |  |
+|===
+
+[[repeatable-file-store-stream]]
+=== Repeatable File Store Stream
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| In Memory Size a| Number a| Maximum amount of memory that the stream can use for data. If the amount of memory exceeds this value, Mule buffers the content to disk. To optimize performance: 
+
+* Configure a larger buffer size to avoid the number of times Mule needs to write the buffer on disk.
++
+This increases performance, but it also limits the number of concurrent requests your application can process, because it requires additional memory.
+* Configure a smaller buffer size to decrease memory load at the expense of response time. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | The unit in which the value of *In Memory Size* is expressed |  |
+|===
+
+[[repeatable-in-memory-stream]]
+=== Repeatable In Memory Stream
+
+Configures the in-memory streaming strategy by which the request fails if the data exceeds the value of the *MAX Buffer Size* field. Always run performance tests to find the optimal buffer size for your specific use case.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Initial Buffer Size a| Number | Initial amount of memory to allocate to the data stream. If the streamed data exceeds this value, the buffer expands by *Buffer Size Increment*, with an upper limit of the *In Memory Size* value. |  |
+| Buffer Size Increment a| Number | This is by how much the buffer size expands if it exceeds its initial size. Setting a value of zero or lower means that the buffer should not expand, meaning that a STREAM_MAXIMUM_SIZE_EXCEEDED error is raised when the buffer gets full. |  |
+| Max Buffer Size a| Number | Maximum size of the buffer. If the buffer size exceeds this value, Mule raises a `STREAM_MAXIMUM_SIZE_EXCEEDED` error. A value of less than or equal to `0` means no limit.  |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *Initial Buffer Size*, *Buffer Size Increment*, and *Max Buffer Size* fields. |  |
+|===
+
+[[standard-revocation-check]]
+=== Standard Revocation Check
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Only End Entities a| Boolean | Only verify the last element of the certificate chain. |  |
+| Prefer Crls a| Boolean | Try CRL instead of OCSP first. |  |
+| No Failback a| Boolean | Do not use the secondary checking method, which is the method not specified in the *Prefer Crls* field. |  |
+| Soft Fail a| Boolean | Avoid verification failure when the revocation server cannot be reached or is busy. |  |
+|===
+
+[[SuccessStatusCodeValidator]]
+=== Success Status Code Validator
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Values a| String | Comma-separated list of status codes that indicate success. |  | x
+|===
+
+[[Tls]]
+=== TLS
+
+Configures TLS to provide secure communications for the Mule app.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Enabled Protocols a| String | Comma-separated list of protocols enabled for this context. |  |
+| Enabled Cipher Suites a| String | Comma-separated list of cipher suites enabled for this context. |  |
+| Trust Store a| <<TrustStore>> | Configures the TLS truststore. |  |
+| Key Store a| <<KeyStore>> | Configures the TLS keystore. |  |
+| Revocation Check a| * <<crl-file>>
+* <<custom-ocsp-responder>>
+* <<standard-revocation-check>>
+|Configures a revocation checking mechanism. |  |
+|===
+
+[[TrustStore]]
+=== Truststore
+
+Configures the truststore for TLS.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the truststore. Mule resolves the path relative to the current classpath and file system. |  |
+| Password a| String | Password used to protect the truststore. |  |
+| Type a| String | Type of truststore. |  |
+| Algorithm a| String | Encryption algorithm used by the truststore. |  |
+| Insecure a| Boolean | If `true`, Mule stops performing certificate validations. Setting this field to `true` can make connections vulnerable to attacks. |  |
+|===
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://www.mulesoft.com/exchange/com.mulesoft.connectors/mule-as2-connector/[AS2 Connector in Anypoint Exchange]
+* https://help.mulesoft.com[MuleSoft Help Center]

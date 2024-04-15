@@ -1,0 +1,324 @@
+= Validating Documents Against a JSON Schema with the JSON Module
+:page-aliases: connectors::json/json-schema-validation.adoc
+
+The JSON module *Validate schema* operation (`<json:validate-schema>`) validates that the input content is compliant with a given JSON schema.
+
+[NOTE]
+Supported schema versions are: Draft 3, Draft 4, Draft 6, Draft 7, Draft 2019-09 and Draft 2020-12. +
+The operation can encounter memory constraints when loading extensive JSON file.
+
+
+== Configure Validate Schema Operation in Studio
+
+The *Validate schema* operation looks for the input document at the message payload level. However, you can supply your own input as well. To validate your schema content, you only provide either schema or schema content, but not both. You can either upload your file in the *Schema* field, or manually add the direct schema text content in the *Schema content* field. The following example shows how to configure the operation in Anypoint Studio:
+
+. In your Studio flow, drag the File *Read* operation to the canvas.
+. Set *Path* to `document.json`. 
+. Set *Target* to `jsonDoc`.
+. Drag the *Validate schema* operation along side the *Read* operation.
+. Set *Schema* to `/schema/my-schema.json`.
+
+
+In the *Configuration XML* editor, the `<json:validate-schema>` configuration looks like this:
+
+[source,xml,linenums]
+----
+<flow name="process">
+    <file:read path="document.json" target="jsonDoc" />
+    <json:validate-schema schema="/schema/my-schema.json">
+    </json:module:validate-schema>
+</flow>
+----
+
+Note that you can use the *Validate schema* operation (`<json:validate-schema>`) inside a Validation module *All* operation (`<validation:all>`).
+
+=== Configure Schema Content
+
+In the following example, you configure the *Schema Content* field of the the *Validate schema* operation. Enter in this field the schema text content to validate. 
+
+[NOTE]
+To add your schema content, you only provide either schema or schema content, but not both. You can either upload your file in the *Schema* field, or manually add the direct schema text content in the *Schema content* field.
+
+
+. In Studio, select the *Validate Schema* operation from your flow.
+. In the *Schema Content* field, enter the schema content to validate, for example:
+
+[source,xml,linenums]
+----
+{
+   “$schema”: “http://json-schema.org/draft-04/schema#”,
+   “type”: “array”,
+   “items”: {
+    “type”: “object”,
+    “properties”: {
+     “a”: {
+      “type”: “string”,
+      “minLength”: 0,
+      “maxLength”: 255
+      },
+     “b”: {
+      “type”: “string”,
+      “minLength”: 0,
+      “maxLength”: 255
+     }
+    },
+    “not”: {“required”:[“c”]}
+   }
+  }
+----
+
+image::json-schema-content-1.png[Schema content field set to the schema content to validate]
+
+
+== Handling a Validation Error
+
+If the validation is successful, the flow continues to the next operation. If the validation fails, the Mule app returns a `JSON:SCHEMA_NOT_HONOURED` error. The validation can fail because of a number of reasons, such as the input JSON document does not adhere to its schema. The error description contains a JSON array of objects. Each of those objects contain information about each found error.
+
+For example, consider the following JSON input:
+
+.Invalid JSON
+[source,json,linenums]
+----
+[
+  {"a": "", "b": ""},
+  {"a": "", "b": ""},
+  {"a":""},
+  {"a": "", "b":""},
+  {"b": ""}
+]
+----
+
+Also, consider the following JSON schema:
+
+.JSON Schema
+[source,json,linenums]
+----
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "a": {
+        "type": "string",
+		"minLength": 1,
+		"maxLength": 255
+		},
+      "b": {
+        "type": "string",
+		"minLength": 1,
+		"maxLength": 255
+      }
+    },
+    "required": ["a", "b"]
+  }
+}
+----
+
+The input JSON is invalid because both `a` and `b` string attributes are required ("required": ["a", "b"]). Both string attributes need to be of at least one character long.
+
+JSON module provides a detailed error response that returns an array of validation errors. Additionally, if the validation fails, you can append the report to a file, by using the File *Write* operation as follows :
+
+[source,xml,linenums]
+----
+<flow name="validate">
+    <try>
+        <json:validate-schema schema="/schema/object-array-schema.json" />
+        <error-handler>
+            <on-error-propagate type="JSON:SCHEMA_NOT_HONOURED">
+                <file:write config-ref="file" path="errors/jsonSchemas.json" mode="APPEND">
+                    <file:content>#[error.errorMessage.payload]</file:content>
+                </file:write>
+            </on-error-propagate>
+        </error-handler>
+    </try>
+</flow>
+----
+
+The following JSON content shows the array of validation errors added to the report file:
+
+[source,json,linenums]
+----
+[ {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/a"
+  },
+  "instance" : {
+    "pointer" : "/0/a"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/b"
+  },
+  "instance" : {
+    "pointer" : "/0/b"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/a"
+  },
+  "instance" : {
+    "pointer" : "/1/a"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/b"
+  },
+  "instance" : {
+    "pointer" : "/1/b"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items"
+  },
+  "instance" : {
+    "pointer" : "/2"
+  },
+  "domain" : "validation",
+  "keyword" : "required",
+  "message" : "object has missing required properties ([\"b\"])",
+  "required" : [ "a", "b" ],
+  "missing" : [ "b" ]
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/a"
+  },
+  "instance" : {
+    "pointer" : "/2/a"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/a"
+  },
+  "instance" : {
+    "pointer" : "/3/a"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/b"
+  },
+  "instance" : {
+    "pointer" : "/3/b"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items"
+  },
+  "instance" : {
+    "pointer" : "/4"
+  },
+  "domain" : "validation",
+  "keyword" : "required",
+  "message" : "object has missing required properties ([\"a\"])",
+  "required" : [ "a", "b" ],
+  "missing" : [ "a" ]
+}, {
+  "level" : "error",
+  "schema" : {
+    "loadingURI" : "file:/schema/object-array-schema.json#",
+    "pointer" : "/items/properties/b"
+  },
+  "instance" : {
+    "pointer" : "/4/b"
+  },
+  "domain" : "validation",
+  "keyword" : "minLength",
+  "message" : "string \"\" is too short (length: 0, required minimum: 1)",
+  "value" : "",
+  "found" : 0,
+  "minLength" : 1
+} ]
+----
+
+== Schema Redirections
+
+Some JSON schemas might reference other schemas through a public URI. However, you might not want to fetch those schemas from the internet, mainly for performance and security reasons.
+
+The solution to that problem is to include all the main and referenced schemas in your application. However, this solution generates a new problem: You need to make the original schema point to your local schemas instead of the public ones.
+
+To help with this problem, the module has the concept of schema redirects, which lets you replace an external reference with a local one, without the need to modify the schema itself:
+
+[source,xml,linenums]
+----
+<flow name="process">
+    <json:validate-schema schema="/schema/my-schema.json">
+        <json:schema-redirects>
+            <json:schema-redirect from="http://mule.org/schemas/fstab.json" to="schema/fstab.json"/>
+        </json:schema-redirects>
+    </json:validate-schema>
+</flow>
+----
+
+The example above redirects the schema at `http://mule.org/schemas/fstab.json` with one shipped inside your application with the path `schema/fstab.json`
+
+== Additional Options
+
+The validator contains additional options, such as whether to allow duplicate keys or not, how to treat dereferencing, and so on.
+
+For complete details, see xref:json-reference.adoc[JSON Module Documentation Reference].
+
+
+
+== See Also
+
+* xref:index.adoc[JSON Module Overview]
