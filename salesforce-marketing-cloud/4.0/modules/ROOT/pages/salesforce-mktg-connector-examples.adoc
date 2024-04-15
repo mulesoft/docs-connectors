@@ -1,0 +1,297 @@
+= Salesforce Marketing Cloud Connector 4.0 Examples - Mule 4
+
+The following examples show several Mule flows for Salesforce Marketing Cloud Connector: 
+
+* <<create-list>>
+* <<retrieve-list>> 
+
+== Before You Begin
+
+* Java 8, 11, or 17
+* Anypoint Studio 7.5 and later
+* Mule runtime engine (Mule) 4.3.0 and later
+* DataWeave
+* OAuth credentials for Salesforce Marketing Cloud  
+
+== Configure a Connection
+
+To secure connections, you must specify the connection field values. To do this:
+
+* <<create-config-file, Create a configuration file for a connection.>>
+* <<configure-conn, Configure the connection global elements.>>
+* <<configure-global, Configure a global element for the properties file.>>
+
+[[create-config-file]]
+=== Create a Configuration File for a Connection
+
+Create a configuration file that includes properties for a connection:
+
+. Create a file named `mule-app.properties` in the `/src/main/resources/` folder.
+. In the `mule-app.properties` file, create a set of properties for the connection,
+similar to the ones that follow, replacing the bracketed text (including the brackets)
+with the correct values for your configuration:
++
+----
+config-with-oauth.clientId=<clientId used to initialize the connection>
+config-with-oauth.clientSecret=<clientSecret used to authenticate the user>
+config-with-oauth.soapEndpoint=<SOAP endpoint address>
+config-with-oauth.authEndpoint=<Authentication endpoint>
+----
++
+This may vary depending on the selected connection configuration.
+
+For more information about creating a properties file, refer to xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+[[configure-conn]]
+=== Configure the Connection Global Elements
+
+Configure global elements for connection:
+
+. Create a new Mule project.
+. In the *Mule Palette* view, click *Search in Exchange* and enter `Salesforce Marketing Cloud`.
+. Add *Salesforce Marketing Cloud Connector* to the *Selected modules* section and click *Finish*.
+. Click the *Global Elements* tab and click *Create*.
+. Select *Connector Configuration > Salesforce Marketing Cloud* and click *OK*.
+. Enter the values to configure either Basic Authentication or OAuth Client Credentials.
+. Click the *Test Connection* button to ensure there is connectivity with the Salesforce Marketing Cloud API. A successful message should pop up.
+. Click *OK*.
+. Open the HTTPS Listener config in *Global Element Configuration*.
+. Click the *TLS* tab and select TLS Configuration > Edit inline.
+. Specify the *Key Store Configuration* with the generated keystore details to enable HTTPS on this configuration.
+. Click *OK*.
+
+[[configure-global]]
+=== Configure a Global Element for the Properties File
+
+Configure a global element for the `mule-app.properties` file so that Mule knows
+where to find it:
+
+. Click the *Global Elements* tab and click *Create*.
+. In the *Choose Global Type* dialog, select *Configuration properties* and click *OK*.
+. In the *File* field, enter `mule.app.properties`.
+. Click *OK*.
+
+
+[[create-list]]
+== Create a List
+
+This Mule flow creates a list for storing subscribers.
+
+[NOTE]
+The default value for the List type is `Public`, which makes the list visible to all subscribers. After creating the list, note the list ID to use it in other operations. 
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Logger* +
+Shows the HTTP response from *HTTP Listener*
+* *Transform Message* +
+Outputs the data in Java
++
+----
+%dw 2.0
+output application/java
+---
+[{
+
+	ListClassification: payload.listClassification,
+	ListName: payload.listName,
+	"Type": payload.listType
+}]
+----
++
+* *Create entities* +
+Creates new objects on the Salesforce Marketing Cloud API web server
++
+Enter the following values:
++
+[%header,cols="30s,70a"]
+|===
+|Field |Value
+|Object type | `List`
+|Connector Configuration | `Salesforce_Marketing_Cloud_Sfdc_marketing_cloud_config`
+|Api objects| `payload`
+|===
+* *Transform Message* + 
+Outputs the data in JSON
++
+----
+output application/json
+---
+payload
+----
+
+image::salesforce-mktg-create-list.png[Studio Flow for the Create List operation]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sfdc-marketing-cloud="http://www.mulesoft.org/schema/mule/sfdc-marketing-cloud"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/sfdc-marketing-cloud http://www.mulesoft.org/schema/mule/sfdc-marketing-cloud/current/mule-sfdc-marketing-cloud.xsd">
+	
+	<configuration-properties file="mule-app.properties" />
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="2d500821-46be-4da2-a983-832ca1d829de" >
+		<http:listener-connection host="localhost" port="8081" />
+	</http:listener-config>
+
+	<sfdc-marketing-cloud:config name="Salesforce_Marketing_Cloud_Sfdc_marketing_cloud_config" doc:name="Salesforce Marketing Cloud Sfdc marketing cloud config" doc:id="8c951adc-306a-4212-a33f-4be4b19a0076" >
+		<sfdc-marketing-cloud:oauth-client-credentials-connection serviceUrl="${config-with-oauth-v2.serviceUrl}">
+			<sfdc-marketing-cloud:oauth-client-credentials clientId="${config-with-oauth-v2.clientId}"
+														   clientSecret="${config-with-oauth-v2.clientSecret}"
+														   tokenUrl="${config-with-oauth-v2.tokenUrl}" />
+		</sfdc-marketing-cloud:oauth-client-credentials-connection>
+	</sfdc-marketing-cloud:config>
+    
+    <flow name="salesforce-marketing-cloud-oauth-demo-create-list-flow">
+        <http:listener path="/create-list" doc:name="HTTP" config-ref="HTTP_Listener_config"/>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        <ee:transform doc:name="Transform Message" doc:id="fab54a8d-4f2d-45cf-9496-9d407bf5837f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+[{
+
+	ListClassification: payload.listClassification,
+	ListName: payload.listName,
+	"Type": payload.listType
+}]]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <sfdc-marketing-cloud:create config-ref="Salesforce_Marketing_Cloud_Sfdc_marketing_cloud_config" objectType="List" doc:name="Salesforce Marketing Cloud"/>
+        <ee:transform doc:name="Transform Message" doc:id="a61ae2f3-0821-4884-9a4c-2306071c7ec8" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>
+----
+
+
+[[retrieve-list]]
+== Retrieve a List
+
+This Mule flow retrieves the ID of a list to use in other operations.
+
+This example uses the following operations: 
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Logger* +
+Shows the HTTP response from *HTTP Listener*
+* *Transform Message* +
+Outputs the data in Java
++
+----
+%dw 2.0
+output application/java
+---
+{
+	query: "SELECT ID FROM List WHERE ListName ='" ++ payload.listName ++ "'"
+}
+----
++
+* *Retrieve entities* +
+Retrieves objects from the Salesforce Marketing Cloud API web server using an SQL query
++
+Enter the following values:
++
+[%header,cols="30s,70a"]
+|===
+|Field |Value
+|Connector Configuration | `Salesforce_Marketing_Cloud_Sfdc_marketing_cloud_config`
+|Query| `#[payload.query]`
+|===
+* *Transform Message* +
+Outputs the data in JSON format
++
+----
+%dw 2.0
+output application/json
+---
+payload
+----
+
+image::salesforce-mktg-retrieve-list.png[Studio Flow for the Retrieve List operation]
+
+=== XML for This Example
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sfdc-marketing-cloud="http://www.mulesoft.org/schema/mule/sfdc-marketing-cloud"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+  http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/sfdc-marketing-cloud http://www.mulesoft.org/schema/mule/sfdc-marketing-cloud/current/mule-sfdc-marketing-cloud.xsd">
+	
+	<configuration-properties file="mule-app.properties" />
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="651f3647-d4c9-4536-8d6b-bee43c422625" >
+		<http:listener-connection host="localhost" port="8081" />
+	</http:listener-config>
+
+	<sfdc-marketing-cloud:config name="Salesforce_Marketing_Cloud_Sfdc_marketing_cloud_config" doc:name="Salesforce Marketing Cloud Sfdc marketing cloud config" doc:id="7ef81352-ca1d-4134-bccb-b211a1951a60" >
+		<sfdc-marketing-cloud:oauth-client-credentials-connection serviceUrl="${config-with-oauth-v2.serviceUrl}">
+			<sfdc-marketing-cloud:oauth-client-credentials clientId="${config-with-oauth-v2.clientId}"
+														   clientSecret="${config-with-oauth-v2.clientSecret}"
+														   tokenUrl="${config-with-oauth-v2.tokenUrl}" />
+		</sfdc-marketing-cloud:oauth-client-credentials-connection>
+	</sfdc-marketing-cloud:config>
+    
+    <flow name="salesforce-marketing-cloud-oauth-demo-retrieve-list-flow">
+        <http:listener path="/retrieve-list" doc:name="HTTP" config-ref="HTTP_Listener_config"/>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+        <ee:transform doc:name="Transform Message" doc:id="fe31d1a8-d189-4fbd-b96f-99c2eac092e1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	query: "SELECT ID FROM List WHERE ListName ='" ++ payload.listName ++ "'"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <sfdc-marketing-cloud:retrieve doc:name="Salesforce Marketing Cloud" config-ref="Salesforce_Marketing_Cloud_Sfdc_marketing_cloud_config">
+			<sfdc-marketing-cloud:query>#[payload.query]</sfdc-marketing-cloud:query>
+		</sfdc-marketing-cloud:retrieve>
+        <ee:transform doc:name="Transform Message" doc:id="d05834f2-3d96-4e95-bd3b-48057d4ca34e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+        <logger message="#[payload]" level="INFO" doc:name="Logger"/>
+    </flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
