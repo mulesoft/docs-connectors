@@ -1,0 +1,155 @@
+= Configure Tracing Module Logging Variable Operations
+
+The Tracing module *Clear logging variables*, *Remove logging variable* and *Set logging variable* operations enable you to enhance your logs by adding, removing, and clearing variables from the logging context of a single Mule event.
+
+Mapped Diagnostic Context (MDC) enriches logging and improves tracking by providing more context or information in the logs for the current Mule event. By default, Mule logs two MDC entries: `processor`, which shows the location of the current event, and `event`, which shows the correlation ID of the event.
+
+== Before You Begin
+
+To use the Tracing module logging operations, complete the following tasks:
+
+* Add the module to your Mule project.
+* Change the pattern layouts in the `log4j.xml` file to `MDC`.
+
+== Add the Module to Your Mule Project
+
+Add Tracing module to your Mule project to automatically populate the XML code with the module's namespace and schema location and to add the required dependencies to the project's `pom.xml` file:
+
+. In the *Mule Palette* view, click *(X) Search in Exchange*.
+. In the *Add Dependencies to Project* window, type `tracing` in the search field.
+. Click *Tracing Module* in *Available modules*.
+. Click *Add*.
+. Click *Finish*.
+
+== Change the Pattern Layouts in the log4j.xml File
+
+This change instructs Mule to automatically add the MDC context, which includes the correlation ID and the processor path. To make the change, modify `log4j.xml` in your Mule app or within `/conf/log4j2.xml` in your Mule instance.
+
+Follow these steps to change the pattern layouts to MDC:
+
+. Open the `log4j.xml` file for editing.
+. Replace `[processor: %X{processorPath}; event: %X{correlationId}]` with `[%MDC]`.
+
+=== Example log4j.xml File Configurations
+
+.Example: Default log4j.xml file without MDC logging.
+----
+<PatternLayout pattern="%-5p %d [%t] [processor: %X{processorPath}; event: %X{correlationId}] %c: %m%n"/>
+----
+
+.Example: Updated log4j.xml file with MDC logging.
+----
+<PatternLayout pattern="%-5p %d [%t] [%MDC] %c: %m%n"/>
+----
+
+== Configure Tracing Module Operations in Studio
+
+To configure the logging variables operations, add any of the available operations *Clear logging variables*, *Remove logging variable* or *Set logging variables* to your Mule app flow and specify the corresponding attributes.
+
+In the following example, you configure the *Set logging variables* operation:
+
+. In the *Mule Palette* view of Studio, select *Tracing > Set logging variable*
+. Drag *Set logging variable* to your Mule app.
+. Set *Variable name* to `testVar`.
+. Set *Value* to `testValue`.
+
+image::tracing-module-set-logging-variable.png[Set logging variable operation configuration window]
+
+In the Configuration XML editor, the `<tracing:set-logging-variable>` configuration looks like this:
+
+[source,xml,linenums]
+----
+<flow name="exampleFlow">
+    ...
+    <tracing:set-logging-variable variableName="testVar" value="testValue" />
+    ...
+</flow>
+----
+
+After executing the flow, the output logs are:
+----
+INFO  2021-04-08 16:58:26,882 [[MuleRuntime].uber.15: [test-project-app].exampleFlow.CPU_LITE @18f679] [{correlationId=c85e16c0-98a4-11eb-bc34-cac765a2219b, processorPath=exampleFlow/processors/2, testVar=testValue}] org.mule.runtime.core.internal.processor.LoggerMessageProcessor: Example
+----
+
+The previous logging context example affects any output of a *Logger* component and any internal logging that Mule runtime engine produces.
+
+== Create a Set Logging Variable Mule App
+
+In the following example, you configure the *Set logging variable* operation to log variables based on the request payload and attributes:
+
+image::tracing-module-set-logging-variable-flow.png[Set logging variable flow in Studio canvas]
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. On the *Listener* configuration screen, set *Path* to `/order`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the HTTP listener in the app.
+. In the *Mule Palette* view, select *Tracing > Set logging variable*.
+. Drag *Set logging variable* to the right of HTTP Listener.
+. Set *Variable name* to `customerId`.
+. Set *Value* to `#[payload.customerId]` to log the customer ID sent in the request.
+. Drag another *Set logging variable* operation to the right of the first *Set logging variable* operation.
+. Set *Variable name* to `requestPath`.
+. Set *Value* to `'#["$(attributes.method):$(attributes.requestPath)"]'` to log the request path.
+. Drag a *Logger* component to the right of the second *Set logging variable* operation.
+. Set *Message* to `#[output application/json --- payload]` to log the request payload.
+. Save and run your Mule app.
+. Send the following curl command:
++
+[source,xml,linenums]
+----
+curl --location --request GET '0.0.0.0:8081/order' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "orderId": 548102842,
+    "customerId": "ARG-12934",
+    "items": [
+        "CP-123",
+        "CP-452"
+    ]
+}'
+----
+
+The output logs `customerId`, `requestPath`, and the request payload:
+
+[source,xml,linenums]
+----
+INFO  2021-04-09 11:14:38,409 [[MuleRuntime].uber.05: [tracing-module].tracing-moduleFlow.CPU_LITE @34a62707] [processor: tracing-moduleFlow/processors/2; event: eb2b2461-993d-11eb-8a64-4865ee1fd814] {correlationId=eb2b2461-993d-11eb-8a64-4865ee1fd814, customerId=ARG-12934, processorPath=tracing-moduleFlow/processors/2, requestPath=GET:/order} org.mule.runtime.core.internal.processor.LoggerMessageProcessor: {
+    "orderId": 548102842,
+    "customerId": "ARG-12934",
+    "items": [
+        "CP-123",
+        "CP-452"
+    ]
+}
+----
+
+=== XML for the Set Logging Variable Mule App
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json" xmlns:tracing="http://www.mulesoft.org/schema/mule/tracing"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tracing http://www.mulesoft.org/schema/mule/tracing/current/mule-tracing.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="2258f968-60ad-41d3-a1c1-5afeffd89297" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="tracingmodule2Flow" >
+		<http:listener  config-ref="HTTP_Listener_config" path="/order"/>
+		<tracing:set-logging-variable variableName="#[customerId]" value="#[payload.customerId]"/>
+		<tracing:set-logging-variable  variableName="requestPath" value='#["$(attributes.method):$(attributes.requestPath)"]'/>
+		<logger level="INFO" message="#[output application/json --- payload]"/>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:tracing-module-examples.adoc[Tracing Module Examples]
+* https://help.mulesoft.com[MuleSoft Help Center]
