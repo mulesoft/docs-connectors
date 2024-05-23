@@ -1,0 +1,1164 @@
+= Salesforce CDP Connector 1.1 Examples - Mule 4
+
+The following examples show how to integrate with the various Salesforce CDP API endpoints with Salesforce CDP Connector:
+
+* Streaming API Ingestion Flows include: +
+** <<Insert Data - Streaming API>> +
+Shows how to insert data via the streaming API to an object's endpoint.
+** <<Delete Data - Streaming API>> +
+Shows how to delete records via the streaming API for specific objects.
+* Bulk API Ingestion Flows include: +
+** <<Create Job - Bulk API>> +
+Shows how to create a bulk job, which is needed for uploading data to Salesforce CDP Ingestion API objects.
+** <<Upload Job Data - Bulk API>> +
+Shows how to upload data for inserting to or deleting from a Salesforce CDP Ingestion API object.
+** <<Close Job - Bulk API>> +
+Shows how to update the status of the specified job ID so that the job is closed and queued for processing.
+** <<Abort Job - Bulk API>> +
+Shows how to update the status of the specified job ID so that the job is aborted and not queued for processing.
+** <<Get Job - Bulk API>> +
+Shows how to retrieve current status of the specified job ID.
+** <<Delete Job - Bulk API>> +
+Shows how to delete or close the specified job ID, which deletes job data and metadata stored by Salesforce.
+* Query API Flows include: +
+** <<Query API>> +
+Shows how to query the Salesforce CDP data lake across data model, lake, unified, and linked objects.
+* Calculated Insights API Flows include: +
+** <<Insights - List Metadata API>> +
+Shows how to retrieve the metadata, including the dimensions and measures for all calculated insights.
+** <<Insights - Get Metadata API>> +
+Shows how to retrieve the metadata, including the dimensions and measures for a calculated insight.
+** <<Insights - Get Insights API>> +
+Shows how to query the calculated insights. Users can slice, dice, and filter by selecting different dimensions, measures, and filters.
+* Profile API Flows include: +
+** <<Profile - List Metadata API>> +
+Shows how to retrieve the metadata for all data model objects.
+** <<Profile - Get Metadata API>> +
+Shows how to retrieve the metadata for the requested data model object.
+** <<Profile - Search Records API>> +
+Shows how to retrieve data model object records based on search filters.
+** <<Profile - Search Records By ID API>> +
+Shows how to retrieve data model object records based on indexes and search filters.
+** <<Profile - Search Records With Child Records API>> +
+Shows how to retrieve data model object records and child object records based on indexes and search filters.
+** <<Profile - Search Records With Insight API>> +
+Shows how to retrieve data model object records and a computed view based on indexes and search filters.
+* Data Action API Flows include: +
+** <<Data Action Webhook>> +
+Shows how to run operations when a data action is triggered.
+
+
+== Insert Data - Streaming API
+
+This Mule flow shows how to insert data via the streaming API to an object's endpoint. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_insert_records.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the source and object name as the URI parameters.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Insert Objects* operation.
+* *Streaming Insert*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the source name, object name, and payload.
+** Calls the Salesforce API to insert the payload to that object's endpoint.
+
+image::Insert-flow.png[Salesforce CDP Insert Flow Diagram - (Listener - Logger - Insert Objects - Response Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/>
+	</sdc:sdc-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection audienceUrl="${server.audienceUrl}" username="${server.userName}" password="${server.password}" clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}"/>
+	</sdc:sdc-config>
+
+	<flow name="Insert-objectsFlow" >
+		<http:listener doc:name="POST /insert/{sourceApiName}/{objectName}" config-ref="HTTP_Listener_config" path="/insert/{sourceApiName}/{objectName}" allowedMethods="POST"/>
+		<logger level="INFO" doc:name="Request Logger" message="#[payload]"/>
+		<sdc:insert-objects doc:name="Streaming Insert" config-ref="Salesforce_CDP_OAuth_JWT_config" sourceNameUriParam="#[attributes.uriParams.sourceApiName]" objectNameUriParam="#[attributes.uriParams.objectName]"/>
+		<logger level="INFO" doc:name="Response Logger" />
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. Test the flow by sending a `POST` to `localhost:8081/{SOURCE_API_NAME}/{OBJECT_NAME}` with a JSON payload that matches your object's schema, for example:
++
+[source,json,linenums]
+----
+{
+    "data": [
+        {
+            "your_object_field_1": "value_1",
+            "your_object_field_2": "value_2",
+            "your_object_field_3": "value_3"
+        }
+    ]
+}
+----
+
+== Query API
+
+This Mule flow shows how to query data from CDP using a custom SOQL query. Refer to the https://developer.salesforce.com/docs/atlas.en-us.soql_sosl.meta/soql_sosl/sforce_api_calls_soql.htm[Salesforce SOQL docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the query in the payload.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Query* operation.
+* *Query*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the earlier SOQL query.
+** Calls the Salesforce API with the query and receives the result.
+
+image::query-flow.png[Salesforce CDP Query Flow Diagram - (Listener - Logger - Query - Response Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/>
+	</sdc:sdc-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection audienceUrl="${server.audienceUrl}" username="${server.userName}" password="${server.password}" clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}"/>
+	</sdc:sdc-config>
+
+	<flow name="query-objectsFlow" >
+		<http:listener doc:name="POST /query" config-ref="HTTP_Listener_config" path="/query" allowedMethods="POST"/>
+		<logger level="INFO" doc:name="Request Logger" message="#[payload]"/>
+		<sdc:query doc:name="Query" config-ref="Salesforce_CDP_OAuth_JWT_config"/>
+		<logger level="INFO" doc:name="Response Logger" message="#[payload]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. Test the flow by sending a `POST` to `localhost:8081/query` with SOQL query in the request body, for example:
++
+[source,json,linenums]
+----
+{
+    "sql": "SELECT ID FROM ACCOUNT LIMIT 1"
+}
+----
+
+== Delete Data - Streaming API
+
+This Mule flow shows how to delete data via the streaming API using an object's endpoint. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_delete_records.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP DELETE requests with the source api and object name as URI parameters and record IDs as query parameters.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Streaming Delete* operation.
+* *Streaming Delete*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the source api name, object name, and record IDs.
+** Calls the Salesforce API to delete the records from the query parameters using that object's endpoint.
+
+image::delete-flow.png[Salesforce CDP Delete Flow Diagram - (Listener - Logger - Delete Objects - Response Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+    <sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/>
+	</sdc:sdc-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection audienceUrl="${server.audienceUrl}" username="${server.userName}" password="${server.password}" clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}"/>
+	</sdc:sdc-config>
+
+	<flow name="delete-objectsFlow" >
+		<http:listener doc:name="DELETE /delete/{sourceApiName}/{objectName}" config-ref="HTTP_Listener_config" path="/delete/{sourceApiName}/{objectName}" allowedMethods="DELETE"/>
+		<logger level="INFO" doc:name="Request Logger" />
+		<sdc:delete-objects doc:name="Streaming - Delete Objects" config-ref="Salesforce_CDP_OAuth_JWT_config" idsQueryParams="#[output application/java&#10;---&#10;[attributes.queryParams.ids]]" sourceNameUriParam="#[attributes.uriParams.sourceApiName]" objectNameUriParam="#[attributes.uriParams.objectName]"/>
+		<logger level="INFO" doc:name="Response Logger" />
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. Test the flow by sending a `DELETE` to
+`localhost:8081/delete/{SOURCE_API_NAME}/{OBJECT_NAME}?ids={RECORD_ID1},{RECORD_ID2}`, for example:
++
+`localhost:8081/delete/My_SourceApi/My_Object?ids=1,2,3`
+
+
+== Create Job - Bulk API
+
+This Mule flow shows how to create a bulk job, which uploads data to a Salesforce CDP Ingestion API object. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_create_a_job.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the source api and object name as URI parameters and record IDs as query parameters.
+* *Logger* +
+Shows the HTTP request received from the *Listener*, then later shows the HTTP response from the *Create Job* operation.
+* Create Job:
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the source api name, object name, and job operation. You can find the job operations in the xref:salesforce-cdp-connector-reference.adoc[Reference] page.
+** Calls the Salesforce API to create the job and returns the response.
+
+image::create-job-bulk.png[Salesforce CDP Create Job Flow Diagram - (Listener - Create Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="CreateJob" >
+		<http:listener doc:name="Post /jobs/create" config-ref="HTTP_Listener_config" path="/jobs/create/{sourceApiName}/{objectName}/{operation}"/>
+		<sdc:create-bulk-job doc:name="Create Job" config-ref="Salesforce_CDP_OAuth_UsernamePassword_config" sourceNameUriParam="#[attributes.uriParams.sourceApiName]" objectNameUriParam="#[attributes.uriParams.objectName]" operationUriParam="#[attributes.uriParams.operation]"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. Test the flow by sending a `POST` to
+`localhost:8081/jobs/create/{SOURCE_API_NAME}/{OBJECT_NAME}/{OPERATION}`.
+
+== Upload Job Data - Bulk API
+
+This Mule flow shows how to upload data for inserting to or deleting from a Salesforce CDP Ingestion API object specified by the job ID. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_upload_job_data.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the job ID in the URI.
+* *CSV Reader* +
+Reads data from the CSV that is configured in the absolute file path.
+* *Set Payload* +
+Updates the payload with the CSV data for *Upload Job Data*.
+* *Upload Job Data* +
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the job ID from the HTTP request and CSV data that is now in the payload.
+** Uploads data from the CSV to the Salesforce CDP Ingestion API object, and eventually returns an HTTP response.
+* *Logger* +
+Shows the HTTP result from the *Upload Job Data* operation.
+
+image::upload-job-data-bulk.png[Salesforce CDP Upload Job Flow Diagram - (Listener - Read - Set Payload - Upload Job Data - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="UploadJobData" >
+        <http:listener doc:name="Upload Job Data Listener" config-ref="HTTP_Listener_config" path="/jobs/upload/{jobId}"/>
+        <file:read doc:name="CSV Reader" path="" target="content"/>
+        <set-payload value="#[vars.content]" doc:name="Set Payload" />
+        <sdc:upload-data-bulk-job doc:name="Upload Job Data" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]"/>
+        <logger level="INFO" doc:name="Logger" message="#[message]"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Enter a valid absolute file path to a CSV in the CSV Reader's *File Path* attribute.
+. Save the project.
+. <<Create Job - Bulk API, Create a job>> and copy its job ID.
+. Test the flow by sending a `POST` to
+`localhost:8081/jobs/upload/{JOB_ID}` using the job ID you copied earlier.
+
+== Close Job - Bulk API
+
+This Mule flow shows how to update the status of the specified job ID so that the job is closed. After a job is closed, it is queued for processing https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_close_or_abort_a_job.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP GET requests with the job ID as a URI parameter.
+* *Logger* +
+Shows the HTTP response from the *Close Job* operation.
+* *Close Job*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the specified job ID.
+** Calls the Salesforce API with the `UploadComplete` state, which completes that job and subsequently receives an HTTP response.
+
+image::close-job-bulk.png[Salesforce CDP Close Job Flow Diagram - (Listener - Close Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="CloseJob" >
+		<http:listener doc:name="Get /jobs/close/{jobId}" config-ref="HTTP_Listener_config" path="/jobs/close/{jobId}"/>
+		<sdc:update-bulk-operation-job doc:name="Close Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]" state="UploadComplete"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. Create a job and copy the resulting job ID.
+. Test the flow by sending a `GET` to
+`localhost:8081/jobs/close/{JOB_ID}` with the job ID you copied earlier.
+
+== Abort Job - Bulk API
+
+This Mule flow shows how to update the status of the specified job ID so that the job is aborted. After a job is aborted, it will not be queued for processing https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_close_or_abort_a_job.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP GET requests with the job ID as a URI parameter.
+* *Logger* +
+Shows the HTTP response from the *Abort Job* operation.
+* *Abort Job*:
++
+** Authenticates based on your choice between JWT or username and password.
+** Receives the job ID that was used as the URI parameter.
+** Calls the Salesforce API with the aborted state, aborts that job, and then receives an HTTP response.
+
+image::abort-job-bulk.png[Salesforce CDP Abort Job Flow Diagram - (Listener - Abort Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="AbortJob" >
+		<http:listener doc:name="Get /jobs/abort/{jobId}"  config-ref="HTTP_Listener_config" path="/jobs/abort/{jobId}"/>
+		<sdc:update-bulk-operation-job doc:name="Abort Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]" state="Aborted"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. <<Create Job - Bulk API, Create a job>> and copy the resulting job ID.
+. Test the flow by sending a `GET` to
+`localhost:8081/jobs/abort/{JOB_ID}` with the job ID that you previously copied.
+
+== Get Job - Bulk API
+
+This Mule flow shows how to retrieve the current status of the specified job ID. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_get_job_info.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP GET requests with the job ID included in the URI parameters.
+* *Logger* +
+Shows the HTTP response from the *Get Job* operation.
+* *Get Job*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the job ID from the URI parameters.
+** Calls the Salesforce API and returns the job status.
+
+image::get-job-bulk.png[Salesforce CDP Get Job Flow Diagram - (Listener - Get Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="GetJob" >
+		<http:listener doc:name="Get /jobs/get/{jobId}" config-ref="HTTP_Listener_config" path="/jobs/get/{jobId}"/>
+		<sdc:get-bulk-job doc:name="Get Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. <<Create Job - Bulk API, Create a job>> and copy the resulting job ID.
+. Test the flow by sending a `GET` to
+`localhost:8081/jobs/get/{JOB_ID}`, using the job ID you copied earlier.
+
+== Delete Job - Bulk API
+
+This Mule flow shows how to delete or close the specified job ID, which deletes job data and metadata that is stored by Salesforce.
+In order to delete a job, a job must have a state of `UploadComplete`, `JobComplete`, `Aborted`, or `Failed`. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_delete_a_job.htm[Salesforce API docs].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP DELETE requests with the job ID included in the URI parameters.
+* *Logger* +
+Shows the HTTP response from the *Delete Job* operation.
+* *Delete Job*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the job ID used in the URI parameters.
+** Calls the Salesforce API and deletes the job.
+
+image::delete-job-bulk.png[Salesforce CDP Delete Job Flow Diagram - (Listener - Delete Job - Logger)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="DeleteJob" >
+		<http:listener doc:name="Delete /jobs/delete/{jobId}" config-ref="HTTP_Listener_config" path="/jobs/delete/{jobId}"/>
+		<sdc:delete-bulk-job doc:name="Delete Job" config-ref="Salesforce_CDP_OAuth_JWT_config" idUriParam="#[attributes.uriParams.jobId]"/>
+		<logger level="INFO" doc:name="Logger" />
+	</flow>
+</mule>
+
+----
+=== Steps for Running This Example
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. <<Create Job - Bulk API, Create a job>> and copy the resulting job ID.
+. Use the job you copied to close the job (see <<Close Job - Bulk API>> flow).
+. Test the flow by sending a `DELETE` to
+`localhost:8081/jobs/delete/{JOB_ID}`, using the job ID that you copied earlier.
+
+
+== Insights - List Metadata API
+
+This Mule flow shows how to get the metadata, including the dimensions and filters for all calculated insights.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests.
+* *Insights - List Metadata*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Calls the Salesforce CDP API to return the metadata for all calculated insights.
+
+image::insights-list-metadata.png[Salesforce CDP Insights List Metadata Flow Diagram - (Listener - Insights List Metadata)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="List_Calculated_Insights_Metadata" >
+		<http:listener doc:name="GET /insight/metadata" allowedMethods="GET" path="/insight/metadata" config-ref="HTTP_Listener_config"/>
+		<sdc:get-all-calculated-insight-metadata doc:name="Insights - List Metadata"  config-ref="Salesforce_CDP_OAuth_JWT_config"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/insight/metadata`.
+
+== Insights - Get Metadata API
+
+This Mule flow shows how to retrieve the metadata, including the dimensions and filters for a calculated insight. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_insights_meta_ci_name.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the calculated insight name as the required URI parameter.
+* *Insights - Get Metadata*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the calculated insight name.
+** Calls the Salesforce CDP API to return the metadata for the requested calculated insight.
+
+image::insights-get-metadata.png[Salesforce CDP Insights Get Metadata Flow Diagram - (Listener - Insights Get Metadata)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="Get_Calculated_Insights_Metadata" >
+		<http:listener doc:name="GET /insight/metadata/{ci_name}" config-ref="HTTP_Listener_config" path="/insight/metadata/{ci_name}" allowedMethods="GET"/>
+		<sdc:get-calculated-insight-metadata doc:name="Insights - Get Metadata" config-ref="Salesforce_CDP_OAuth_JWT_config" ciNameUriParam="#[attributes.uriParams.ci_name]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/insight/metadata/{CALCULATED_INSIGHT_NAME}`.
+
+== Insights - Get Insights API
+
+This Mule flow shows how to query the calculated insights. Users can slice, dice, and filter by selecting different dimensions, measures, and filters. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_insights_ci_ci_name.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the calculated insight name as the required URI parameter and a combination of any optional query parameters.
+* *Insights - Get Insights*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the calculated insight name and any other optional URI parameters.
+** Calls the Salesforce CDP API to return the records of the requested calculated insight that match the query criteria.
+
+image::insights-get-insights.png[Salesforce CDP Insights Get Insights Flow Diagram - (Listener - Insights Get Insights)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="Get_Calculated_Insights" >
+		<http:listener doc:name="GET /insight/calculated-insights/{ci_name}" config-ref="HTTP_Listener_config" path="/insight/calculated-insights/{ci_name}" allowedMethods="GET"/>
+		<sdc:get-calculated-insight-with-filters-fields-and-limit doc:name="Insights - Get Insights" config-ref="Salesforce_CDP_OAuth_JWT_config" ciNameUriParam="#[attributes.uriParams.ci_name]" dimensionsQueryParam="#[attributes.queryParams.dimensions]" measuresQueryParam="#[attributes.queryParams.measures]" limitQueryParam="#[attributes.queryParams.limit]" offsetQueryParam="#[attributes.queryParams.offset]" filtersQueryParam="#[attributes.queryParams.filters]" orderbyQueryParam="#[attributes.queryParams.orderby]" timeGranularityQueryParam="#[attributes.queryParams.timeGranularity]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/insight/calculated-insights/{CALCULATED_INSIGHT_NAME}`.
+
+== Profile - List Metadata API
+
+This Mule flow shows how to retrieve the list of data model objects and their fields and category. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_profile_meta.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests.
+* *Profile - List Metadata*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Calls the Salesforce CDP API to return the list of data model objects and their fields and category.
+
+image::profile-list-metadata.png[Salesforce CDP Profile List Metadata Flow Diagram - (Listener - Profile List Metadata)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+    http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<flow name="Data_Action_Webhook" doc:id="3072197f-ee1f-4ed5-99d2-a9fa62230dbf" >
+		<sdc:webhook-listener doc:name="Data Action Webhook" doc:id="fe3a924a-ba94-447d-9d3c-df079fc01de2" config-ref="Salesforce_CDP_Sdc_webhook_config" path="${webhook.path}" signingKey="${webhook.signingKey}" signingAlgorithm="HmacSHA256"/>
+		<logger level="INFO" doc:name="Log Payload" doc:id="716538d3-7d06-4e9c-a4f7-b0d350b4dafe" message="#[output application/json --- payload]"/>
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="List_Profile_Metadata" >
+		<http:listener doc:name="GET /profile/metadata" allowedMethods="GET" path="/profile/metadata" config-ref="HTTP_Listener_config"/>
+		<sdc:get-meta-by-category doc:name="Profile - List Metadata" config-ref="Salesforce_CDP_OAuth_JWT_config"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/profile/metadata`.
+
+== Profile - Get Metadata API
+
+This Mule flow shows how to retrieve the metadata for a data model object. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_profile_meta_dmname.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the data model name as the required URI parameter.
+* *Profile - Get Metadata*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the data model name.
+** Calls the Salesforce CDP API to return the metadata for the requested data model object.
+
+image::profile-get-metadata.png[Salesforce CDP Profile Get Metadata Flow Diagram - (Listener - Profile Get Metadata)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="Get_Profile_Metadata" >
+		<http:listener doc:name="GET /profile/metadata/{dataModelName}" allowedMethods="GET" path="/profile/metadata/{dataModelName}" config-ref="HTTP_Listener_config"/>
+		<sdc:get-meta doc:name="Profile - Get Metadata" config-ref="Salesforce_CDP_OAuth_JWT_config" dataModelNameUriParam="#[attributes.uriParams.dataModelName]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/profile/metadata/{DATA_MODEL_NAME}`.
+
+== Profile - Search Records API
+
+This Mule flow shows how to retrieve data model object records based on search filters. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_profile_dmname.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the data model name as the required URI parameter, fields as the required query parameter, and a combination of any other query parameters.
+* *Profile - Search Records*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the data model name, fields and any optional query parameters.
+** Calls the Salesforce CDP API to return the data model object records based on search filters.
+
+image::profile-search-records.png[Salesforce CDP Profile Search Records Flow Diagram - (Listener - Profile Search Records)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="Search_Profile_Records" >
+		<http:listener doc:name="GET /profile/{dataModelName}" config-ref="HTTP_Listener_config" path="/profile/{dataModelName}"/>
+		<sdc:get-parent-with-filters doc:name="Profile - Search Records"  config-ref="Salesforce_CDP_OAuth_JWT_config" dataModelNameUriParam="#[attributes.uriParams.dataModelName]" orderbyQueryParam="#[attributes.queryParams.orderby]" filtersQueryParam="#[attributes.queryParams.filters]" fieldsQueryParam="#[attributes.queryParams.fields]" limitQueryParam="#[attributes.queryParams.limit]" offsetQueryParam="#[attributes.queryParams.offset]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/profile/{DATA_MODEL_NAME}?filters={FILTERS}`.
+
+== Profile - Search Records By ID API
+
+This Mule flow shows how to retrieve data model object records based on search indexes and filters. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_profile_dmname_id.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the data model name and ID as the required URI parameters, and a combination of any optional query parameters.
+* *Profile - Search Records By Id*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the data model name, ID, and any optional query parameters.
+** Calls the Salesforce CDP API to return the data model object records based on search indexes and filters.
+
+image::profile-search-records-by-id.png[Salesforce CDP Profile Search Records By Id Flow Diagram - (Listener - Profile Search Records By Id)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="Search_Profile_Records_By_Id" >
+		<http:listener doc:name="GET /profile/{dataModelName}/{Id}" config-ref="HTTP_Listener_config" path="/profile/{dataModelName}/{Id}"/>
+		<sdc:get-parent doc:name="Profile - Search Records By Id" config-ref="Salesforce_CDP_OAuth_JWT_config" dataModelNameUriParam="#[attributes.uriParams.dataModelName]" idUriParam="#[attributes.uriParams.Id]" searchKeyQueryParam="#[attributes.queryParams.searchKey]" fieldsQueryParam="#[attributes.queryParams.fields]" filtersQueryParam="#[attributes.queryParams.filters]" limitQueryParam="#[attributes.queryParams.limit]" orderbyQueryParam="#[attributes.queryParams.orderby]" offsetQueryParam="#[attributes.queryParams.offset]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/profile/{DATA_MODEL_NAME}/{Id}`.
+
+== Profile - Search Records With Child Records API
+
+This Mule flow shows how to retrieve data model object records along with child data model object records based on indexes and search filters. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_profile_dmname_id_child_dmname.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the data model name, child data model name, and ID as the required URI parameters, and a combination of any optional query parameters.
+* *Profile - Search Records With Child Records*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the data model name, child data model name, ID, and any optional query parameters.
+** Calls the Salesforce CDP API to return the data model object records along with child data model object records based on indexes and search filters.
+
+image::profile-search-records-with-child-records.png[Salesforce CDP Profile Search Records With Child Records Flow Diagram - (Listener - Profile Search Records With Child Records)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="Search_Profile_Records_With_Child_Records" >
+		<http:listener doc:name="Get /profile/{dataModelName}/{id}/{childDataModelName}" allowedMethods="GET" config-ref="HTTP_Listener_config" path="/profile/{dataModelName}/{id}/{childDataModelName}"/>
+		<sdc:get-parent-and-child doc:name="Profile - Search Records With Child Records" searchKeyQueryParam="#[attributes.queryParams.searchKey]" fieldsQueryParam="#[attributes.queryParams.fields]" limitQueryParam="#[attributes.queryParams.limit]" filtersQueryParam="#[attributes.queryParams.filters]" offsetQueryParam="#[attributes.queryParams.offset]" orderbyQueryParam="#[attributes.queryParams.orderby]" dataModelNameUriParam="#[attributes.uriParams.dataModelName]" idUriParam="#[attributes.uriParams.id]" childDataModelNameUriParam="#[attributes.uriParams.childDataModelName]" config-ref="Salesforce_CDP_OAuth_JWT_config"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/profile/{DATA_MODEL_NAME}/{Id}/{CHILD_DATA_MODEL_NAME}`.
+
+== Profile - Search Records With Insight API
+
+This Mule flow shows how to retrieve data model object records and a computed view based on indexes and search filters. Refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_profile_dmname_id_ci_ci_name.htm[Salesforce CDP API Developer Guide] for usage and further details.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the data model name, ID, and calculated insight name as the required URI parameters, and a combination of any optional query parameters.
+* *Profile - Search Records With Insight*
++
+** Authenticates based on your choice of either a JWT or a username and password.
+** Receives the data model name, ID, calculated insight name, and any optional query parameters.
+** Calls the Salesforce CDP API to return the data model object records and a computed view based on indexes and search filters.
+
+image::profile-search-records-with-insight.png[Salesforce CDP Profile Search Records With Insight Flow Diagram - (Listener - Profile Search Records With Insight)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<mule xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_JWT_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" audienceUrl="${server.audienceUrl}" keyAlias="${server.certificateAlias}" />
+	</sdc:sdc-config>
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	<sdc:sdc-config name="Salesforce_CDP_OAuth_UsernamePassword_config" doc:name="Salesforce CDP config" >
+		<sdc:oauth-user-pass-connection clientId="${server.consumerKey}" clientSecret="${server.consumerSecret}" username="${server.userName}" password="${server.password}" audienceUrl="${server.audienceUrl}" />
+	</sdc:sdc-config>
+	<flow name="Search_Profile_Records_With_Insight" >
+		<http:listener doc:name="GET /profile/{dataModelName}/{id}/calculated-insights/{ci_name}" allowedMethods="GET" config-ref="HTTP_Listener_config" path="/profile/{dataModelName}/{id}/calculated-insights/{ci_name}"/>
+		<sdc:get-computed-view-for-profile doc:name="Profile - Search Records With Insight" config-ref="Salesforce_CDP_OAuth_JWT_config" dataModelNameUriParam="#[attributes.uriParams.dataModelName]" idUriParam="#[attributes.uriParams.id]" ciNameUriParam="#[attributes.uriParams.ci_name]" searchKeyQueryParam="#[attributes.queryParams.searchKey]" dimensionsQueryParam="#[attributes.queryParams.dimensions]" measuresQueryParam="#[attributes.queryParams.measures]" limitQueryParam="#[attributes.queryParams.limit]" filtersQueryParam="#[attributes.queryParams.filters]" offsetQueryParam="#[attributes.queryParams.offset]" orderbyQueryParam="#[attributes.queryParams.orderby]" timeGranularityQueryParam="#[attributes.queryParams.timeGranularity]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. Test the flow by sending a `GET` to
+`localhost:8081/profile/{DATA_MODEL_NAME}/{Id}/calculated-insights/{CALCULATED_INSIGHT_NAME}`.
+
+
+== Data Action Webhook
+
+This Mule flow shows how to create a webhook that logs its payload when triggered by a Data Action. Refer to the https://help.salesforce.com/s/articleView?language=en_US&type=5&id=sf.c360_a_data_actions.htm[Salesforce Data Action docs].
+
+This example uses the following operations:
+
+* *Data Action Webhook* +
+Creates a webhook as the target of a Salesforce CDP Data Action.
+* *Logger* +
+Shows the payload sent to the Data Action Webhook.
+
+image::data-action-webhook.png[Salesforce CDP Data Action Webhook Flow Diagram - (CDP Data Action Webhook - Logger Log Payload)]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+    http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+	<flow name="Data_Action_Webhook" doc:id="3072197f-ee1f-4ed5-99d2-a9fa62230dbf" >
+		<sdc:webhook-listener doc:name="Data Action Webhook" doc:id="fe3a924a-ba94-447d-9d3c-df079fc01de2" config-ref="Salesforce_CDP_Sdc_webhook_config" path="${webhook.path}" signingKey="${webhook.signingKey}" signingAlgorithm="HmacSHA256"/>
+		<logger level="INFO" doc:name="Log Payload" doc:id="716538d3-7d06-4e9c-a4f7-b0d350b4dafe" message="#[output application/json --- payload]"/>
+	</flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify you have https://help.salesforce.com/s/articleView?id=sf.c360_a_create_streaming_insight.htm&type=5[created a Streaming Insight].
+. Verify you https://help.salesforce.com/s/articleView?id=sf.c360_a_data_actions.htm&type=5[created a Data Action Target] with an Action Target Type of `Webhook`.
+. Verify you https://help.salesforce.com/s/articleView?id=sf.c360_a_data_actions.htm&type=5[created a Data Action] that uses the Data Action Target and that runs on a condition against your streaming Calculated Insight.
+. Save the project.
+. xref:runtime-manager::deploying-to-cloudhub.adoc[Deploy to CloudHub.]
+. Point the data action target to your application URL. Your application URL will look like: `https://{{app-name}}.{{region}}.cloudhub.io/webhook`.
+. Test the flow by triggering the data action's condition, and observe the logged payload.
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
