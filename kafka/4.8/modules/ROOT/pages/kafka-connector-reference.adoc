@@ -1,4 +1,4 @@
-= Apache Kafka Connector 4.7 Reference - Mule 4
+= Apache Kafka Connector 4.8 Reference - Mule 4
 
 
 
@@ -23,6 +23,7 @@ Configuration for consumers for Apache Kafka Connector.
 |Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| * <<consumer-plaintext, Consumer Plaintext Connection>>
 * <<consumer-sasl-kerberos, Consumer Kerberos Connection>>
+* <<consumer-config_consumer-sasl-oauth-bearer-cc-connection, Consumer SASL/OAUTHBEARER - Client Credentials Connection>>
 * <<consumer-sasl-scram, Consumer SASL/SCRAM Connection>>
 * <<consumer-sasl-plain, Consumer SASL/PLAIN Connection>>
 * <<consumer-config_consumer-sasl-token-connection, Consumer SASL/TOKEN Connection>>
@@ -209,6 +210,7 @@ Each entry is resolved and expanded into a list of canonical names. | `USE_ALL_D
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Connection maximum idle time* field. |  `SECONDS` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> | Defines a TLS configuration used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. The default value is `PLAINTEXT` or `SASL_PLAINTEXT` for SASL authentication - kerberos/scram/plain. If the broker configures `SSL` as the protocol, then configure at least the keystore in the `tls:context` child element of the configuration and the connector automatically uses `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. | |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Topic Subscription Patterns a| Array of String |  List of subscription regular expressions to which to subscribe. Topics are automatically rebalanced between the topic consumers.|  |
@@ -382,6 +384,7 @@ Each entry is resolved and expanded into a list of canonical names. | `USE_ALL_D
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Connection maximum idle time* field. |  `SECONDS` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> | Defines a TLS configuration used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. The default value is `PLAINTEXT` or `SASL_PLAINTEXT` for SASL authentication - kerberos/scram/plain. If the broker configures `SSL` as the protocol, then configure at least the keystore in the `tls:context` child element of the configuration and the connector automatically uses `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. | |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Topic Subscription Patterns a| Array of String |  List of subscription regular expressions to which to subscribe. Topics are automatically rebalanced between the topic consumers.|  |
@@ -434,6 +437,217 @@ In a Windows environment, if a ticket cannot be retrieved from the file ticket c
 | Store key a| Boolean |  Set this option to `true` to store the principal's subject private credentials. |  `false` |
 | Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
 |===
+
+
+
+[[consumer-config_consumer-sasl-oauth-bearer-cc-connection]]
+===== Consumer SASL/OAUTHBEARER - Client Credentials Connection Type
+
+
+OAuth Bearer authentication is a mechanism for authenticating requests using bearer tokens, which are typically used to authenticate users and applications to access resources. Apache Kafka® supports OAuth Bearer authentication for establishing connections securely.
+
+
+====== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Bootstrap Server URLs a| Array of String |  The list of servers to bootstrap the connection with the Kafka cluster. This can be a partial list of the available servers. |  | x
+| Endpoint identification algorithm a| String |  The endpoint identification algorithm used by clients to validate server host name. The default value is an empty string, which means it is disabled. Clients including client connections created by the broker for inter-broker communication verify that the broker host name matches the host name in the brokers certificate. |  | 
+| Group ID a| String |  Default Group ID for all the Kafka Consumers that use this configuration. |  | 
+| Consumer Amount a| Number |  Determines the number of consumers the connection initially creates. |  1 | 
+| Maximum polling interval a| Number |  The maximum delay between invocations of poll() when using consumer group management. This places an upper bound on the amount of time that the consumer can be idle before fetching more records. If poll() is not called before the expiration of this timeout, then the consumer is considered failed and the group rebalances to reassign the partitions to another member. For consumers using a non-null `group.instance.id` which reaches this timeout, partitions are not immediately reassigned. Instead, the consumer stops sending heartbeats and partitions are reassigned after the expiration of `session.timeout.ms`. |  60 | 
+| Maximum Polling Interval Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for request timeout scalar. This parameter can be overridden at source level. |  SECONDS | 
+| Isolation Level a| Enumeration, one of:
+
+** READ_UNCOMMITTED
+** READ_COMMITTED |  Controls how to read messages that are written transactionally.
+
+* `READ_COMMITTED`
++
+`consumer.poll()` returns only committed transactional messages are returned.
+
+* `READ_UNCOMMITTED`
++
+`consumer.poll()` returns all messages, even transactional messages that were aborted.
+
+Non-transactional messages are returned unconditionally in either mode. Messages are always returned in offset order. Hence, in the `READ_COMMITTED` mode, `consumer.poll()` returns only messages up to the last stable offset (LSO), which is one less than the offset of the first open transaction.
+
+In particular, any messages appearing after messages belonging to ongoing transactions are withheld until the relevant transaction is completed. As a result, `READ_COMMITTED` consumers are not able to read up to the high watermark when there are in-flight transactions. Furthermore, when in `READ_COMMITTED`, the `seekToEnd` method returns the LSO. |  READ_UNCOMMITTED | 
+| Exclude internal topics a| Boolean | Whether internal topics matching a subscribed pattern is excluded from the subscription. It is always possible to explicitly subscribe to an internal topic. |  true | 
+| Auto offset reset a| Enumeration, one of:
+
+** EARLIEST
+** LATEST
+** ERROR |   Determines what to do when there is no initial offset in Kafka or if the current offset no longer exists on the server, for example, because the data was deleted.
+
+* EARLIEST
++
+Automatically reset the offset to the earliest offset.
+
+* LATEST
++
+Automatically reset the offset to the latest offset.
+
+* ERROR
++
+Throw an error if no previous offset is found for the consumer's group. |  `LATEST` | 
+| Retry Backoff Timeout a| Number |  The amount of time to wait before attempting to retry a failed request to a given topic partition. This avoids repeatedly sending requests in a tight loop under some failure scenarios. |  100 | 
+| Retry Backoff Timeout Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for the reconnect backoff timeout scalar. |  MILLISECONDS | 
+| Check CRC a| Boolean |  Automatically check the CRC32 of the records consumed. This ensures no on-the-wire or on-disk corruption to the messages occurred. This check adds some overhead, so it may be disabled in cases seeking extreme performance. |  true | 
+| Default receive buffer size a| Number |  The size of the TCP receive buffer (SO_RCVBUF) to use when reading data. If the value is -1, the OS default is used. You can override this field at the source level. |  64 | 
+| Default receive buffer size unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the receive buffer size scalar. You can override this field at the source level. |  KB | 
+| Default send buffer size a| Number | The size of the TCP send buffer (SO_SNDBUF) to use when sending data. If the value is -1, the OS default is used. You can override this field at the source level. |  128 | 
+| Default send buffer size unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the send buffer size scalar. This parameter can be overridden at source level. |  KB | 
+| Request Timeout a| Number |  The configuration controls the maximum amount of time the client waits for the response of a request. If the response is not received before the timeout elapses the client will resend the request if necessary or fail the request if retries are exhausted. This parameter can be overridden at source level. |  30 | 
+| Request Timeout Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for request timeout scalar. This parameter can be overridden at source level. |  SECONDS | 
+| Default record limit a| Number |  The maximum number of records returned on a poll call to the Kafka cluster. This parameter can be overridden at source level. |  500 | 
+| DNS Lookups a| Enumeration, one of:
+
+** DEFAULT
+** USE_ALL_DNS_IPS
+** RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY |  Controls how the client uses DNS lookups. If set to use_all_dns_ips then, when the lookup returns multiple IP addresses for a hostname, they will all be attempted to connect to before failing the connection. Applies to both bootstrap and advertised servers. If the value is resolve_canonical_bootstrap_servers_only each entry will be resolved and expanded into a list of canonical names. |  USE_ALL_DNS_IPS | 
+| Heartbeat interval a| Number |  The expected time between heartbeats to the consumer coordinator when using Kafka's group management facilities. Heartbeats are used to ensure that the consumer's session stays active and to facilitate rebalancing when new consumers join or leave the group. The value must be set lower than session.timeout.ms, but typically should be set no higher than 1/3 of that value. It can be adjusted even lower to control the expected time for normal rebalances. |  3 | 
+| Heartbeat Interval Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for fetch heartbeat interval time scalar. |  SECONDS | 
+| Session timeout a| Number |  The timeout used to detect consumer failures when using Kafka's group management facility. The consumer sends periodic heartbeats to indicate its liveness to the broker. If no heartbeats are received by the broker before the expiration of this session timeout, then the broker will remove this consumer from the group and initiate a rebalance. Note that the value must be in the allowable range as configured in the broker configuration by group.min.session.timeout.ms and group.max.session.timeout.ms. |  10 | 
+| Session timeout time unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for session timeout scalar. |  SECONDS | 
+| Connection maximum idle time a| Number |  Close idle connections after the number of milliseconds specified by this config. |  540 | 
+| Connection maximum idle time time unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for connections maximum idle time scalar. |  SECONDS | 
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
+| TLS Configuration a| <<Tls>> |  Defines a TLS configuration, which can be used from both the client and server sides to secure communication for the Mule app. The connector will automatically set the 'security.protocol' to use for communication. Valid values are PLAINTEXT / SSL / SASL_PLAINTEXT / SASL_SSL. Default value when no configuration has been provided is PLAINTEXT(or SASL_PLAINTEXT for SASL authentication - kerberos/scram/plain/token). If SSL was configured as protocol on the broker side then the user needs to configure at least the keystore in the 'tls:context' child element of this config and the connector will automatically use SSL(or SASL_SSL for SASL authentication) as 'security.protocol'. |  | 
+| Topic Subscription Patterns a| Array of String |  The list of subscription regular expressions to subscribe to. This topics will be automatically rebalanced between the amount of consumers of the topic. |  | 
+| Assignments a| Array of <<TopicPartition>> |  The list of topic-partition pairs to assign. Note that there will be no automatic rebalance of the consumers  |  | 
+| Default fetch minimum size a| Number |  The minimum amount of data the server should return for a fetch request. If insufficient data is available the request waits for that much data to accumulate before answering the request. The default setting of 1 byte means that fetch requests are answered as soon as a single byte of data is available or the fetch request times out waiting for data to arrive. Setting this to something greater than 1 will cause the server to wait for larger amounts of data to accumulate which can improve server throughput a bit at the cost of some additional latency. This parameter can be overridden at source level. |  1 | 
+| Fetch Minimum Size Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  |  BYTE | 
+| Default fetch maximum size a| Number |  The maximum amount of data the server should return for a fetch request. Records are fetched in batches by the consumer, and if the first record batch in the first non-empty partition of the fetch is larger than this value, the record batch will still be returned to ensure that the consumer can make progress. As such, this is not an absolute maximum. The maximum record batch size accepted by the broker is defined via message.max.bytes (broker config) or max.message.bytes (topic config). Note that the consumer performs multiple fetches in parallel. This parameter can be overridden at source level. |  1 | 
+| Default maximum fetch size unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the maximum partition fetch size scalar. This parameter can be overridden at source level. |  MB | 
+| Default maximum partition fetch size a| Number |  The maximum amount of data per-partition the server will return. Records are fetched in batches by the consumer. If the first record batch in the first non-empty partition of the fetch is larger than this limit, the batch will still be returned to ensure that the consumer can make progress. The maximum record batch size accepted by the broker is defined via message.max.bytes (broker config) or max.message.bytes (topic config). See fetch.max.bytes for limiting the consumer request size.This parameter can be overridden at source level. |  1 | 
+| Default maximum partition fetch unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the maximum partition fetch size scalar. This parameter can be overridden at source level. |  MB | 
+| Fetch Maximum Wait Timeout a| Number |  The maximum amount of time the server will block before answering the fetch request if there isn't sufficient data to immediately satisfy the requirement given by fetch.min.bytes. |  500 | 
+| Fetch Maximum Wait Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for fetch maximum wait timeout scalar. |  MILLISECONDS | 
+| Client ID Key a| String |  Specifies the configuration key used to define the OAuth client ID within the JAAS configuration. |  clientId | 
+| Client ID a| String |  The value for the Client ID which refers to the unique identifier assigned to the OAuth client, facilitating secure authentication and authorization processes. |  | x
+| Client Secret Key a| String |  Specifies the configuration key used to define the OAuth client secret within the JAAS configuration. |  clientSecret | 
+| Client Secret a| String |  The value for the client secret which refers to the confidential authentication credential assigned to the OAuth client. |  | x
+| OAuth Token Endpoint Key a| String |  Specifies the configuration key used to define the OAuth token endpoint within the JAAS configuration. |  sasl.oauthbearer.token.endpoint.url | 
+| OAuth Token Endpoint a| String |  Describes the URL where clients can request access tokens from the authentication server. |  | x
+| Scope Key a| String |  Specifies the configuration key used to define the OAuth scope within the JAAS configuration. |  scope | 
+| Scope a| String |  Defines the specific permissions and access rights granted to the client application by the authorization server. |  | 
+| Audience Key a| String |  Specifies the configuration key used to define the OAuth audience within the JAAS configuration. |  audience | 
+| Audience a| String |  Comma separated list of one or more target audiences for the access token. |  | 
+| Max Token Expiration Seconds a| Number |  Sets the maximum duration, in seconds, for which an access token remains valid. |  | 
+| Principal Name a| String |  Unique identifier associated with an authenticated user, often used for authorization decisions and resource access. |  | 
+| Credentials Placement a| Enumeration, one of:
+
+** BASIC_AUTHENTICATION_HEADER
+** BODY |  Defines whether to include client credentials in the basic authentication header or in the body of the authentication request. |  BASIC_AUTHENTICATION_HEADER | 
+| OAuth Module Required a| Boolean |  Indicates whether this login module must be successfully authenticated for Kafka clients to establish a connection using OAuth 2.0 bearer tokens. |  true | 
+| Include Accept Header a| Boolean |  Whether to include 'Accept-application/json' header in the authentication request. |  true | 
+| OAuth Extensions a| Object |  Represents a mapping of key-value pairs containing extensions for custom broker OAuth implementations. |  | 
+| Login Refresh Window Factor a| Number |  Time for which the login refresh thread waits until a certain portion of the credential's lifespan passes and attempts to refresh it. Acceptable values range from (0.5) 50% to (1.0) 100%, with a default of (0.8) 80% if unspecified. |  0.8 | 
+| Login Refresh Window Jitter a| Number |  The maximum random jitter added to the login refresh thread's sleep time relative to the credential's lifespan is between (0) 0% and (0.25) 25%, with a default of (0.05) 5% if unspecified. |  0.05 | 
+| Login Refresh Minimum Period a| Number |  The desired minimum time in seconds for the login refresh thread to wait before refreshing a credential. Legal values are between 0 and 900 (15 minutes). |  60 | 
+| Login Refresh Buffer a| Number |  The amount of buffer time in seconds before credential expiration to maintain when refreshing a credential. Legal values are between 0 and 3600 (1 hour). A default value of 300 (5 minutes) is used if no value is specified. |  300 | 
+| Use Persistent Connections a| Boolean |  Indicates whether to use persistent connections:
+
+* `true`
+
+Mule uses persistent connections.
+
+* `false`
+
+Mule closes the connection after the first request completes. |  true | 
+| Max Connections a| Number |  Maximum number of connections to open to the backend. HTTP requests are sent in parallel over multiple connections. Setting this value too high can impact latency and consume additional resources without increasing throughput. By default, the number of connections is unlimited. |  -1 | 
+| Connection Idle Timeout a| Number |  The number of milliseconds that a connection can remain idle before it is closed. The value of this attribute is only used when persistent connections are enabled. |  30000 | 
+| Stream Response a| Boolean |  Whether received responses should be streamed, meaning processing continues as soon as all headers are parsed and the body streamed as it arrives. When enabled, the response MUST be eventually read since depending on the configured buffer size it may not fit into memory and processing will stop until space is available. |  false | 
+| Response Buffer Size a| Number |  Size of the buffer that stores the HTTP response, in bytes. By default, the space is not limited. |  -1 | 
+| Client Socket Properties a| <<TcpClientSocketParams>> |  Encapsulates the configurable properties for TCP client socket connections. |  | 
+| Proxy Config Params a| <<ProxyConfigParams>> |  Configures a proxy for outbound connections. |  | 
+| Follow Redirects a| Boolean |  Specifies whether to follow redirects or not. |  false | 
+| Response Timeout a| Number |  Maximum time that the request element will block the execution of the flow waiting for the HTTP response. |  60000 | 
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy |  | 
+|===
+
 
 [[consumer-sasl-scram]]
 === Consumer SASL/SCRAM Connection Type
@@ -570,6 +784,7 @@ Each entry is resolved and expanded into a list of canonical names. | `USE_ALL_D
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Connection maximum idle time* field. |  `SECONDS` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> | Defines a TLS configuration used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. The default value is `PLAINTEXT` or `SASL_PLAINTEXT` for SASL authentication - kerberos/scram/plain. If the broker configures `SSL` as the protocol, then configure at least the keystore in the `tls:context` child element of the configuration and the connector automatically uses `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. | |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Topic Subscription Patterns a| Array of String |  List of subscription regular expressions to which to subscribe. Topics are automatically rebalanced between the topic consumers.|  |
@@ -749,6 +964,7 @@ Each entry is resolved and expanded into a list of canonical names. | `USE_ALL_D
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Connection maximum idle time* field. |  `SECONDS` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> | Defines a TLS configuration used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. The default value is `PLAINTEXT` or `SASL_PLAINTEXT` for SASL authentication - kerberos/scram/plain. If the broker configures `SSL` as the protocol, then configure at least the keystore in the `tls:context` child element of the configuration and the connector automatically uses `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. | |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Topic Subscription Patterns a| Array of String |  List of subscription regular expressions to which to subscribe. Topics are automatically rebalanced between the topic consumers.|  |
@@ -927,6 +1143,7 @@ Each entry is resolved and expanded into a list of canonical names. | `USE_ALL_D
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Connection maximum idle time* field. |  `SECONDS` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> | Defines a TLS configuration used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. The default value is `PLAINTEXT` or `SASL_PLAINTEXT` for SASL authentication - kerberos/scram/plain. If the broker configures `SSL` as the protocol, then configure at least the keystore in the `tls:context` child element of the configuration and the connector automatically uses `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. | |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Topic Subscription Patterns a| Array of String |  List of subscription regular expressions to which to subscribe. Topics are automatically rebalanced between the topic consumers.|  |
@@ -984,6 +1201,7 @@ Configuration for producers for Apache Kafka Connector.
 |Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| * <<producer-plaintext, Producer Plaintext Connection>>
 * <<producer-sasl-kerberos, Producer Kerberos Connection>>
+* <<producer-config_producer-sasl-oauth-bearer-cc-connection, Producer SASL/OAUTHBEARER - Client Credentials Connection>
 * <<producer-sasl-scram, Producer SASL/SCRAM Connection>>
 * <<producer-sasl-plain, Producer SASL/PLAIN Connection>>
 * <<producer-config_producer-sasl-token-connection, Producer SASL/TOKEN Connection>>
@@ -1140,6 +1358,7 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 ** DEFAULT
 ** ROUND_ROBIN
 ** UNIFORM_STICKY |  Controls the partitioning strategy. |  `DEFAULT` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> |  Defines a TLS configuration, used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. If the broker configures `SSL` as the protocol, configure the keystore in the `tls:context` child element of the configuration and the connector will automatically use `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. |  |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
@@ -1291,6 +1510,7 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 ** DEFAULT
 ** ROUND_ROBIN
 ** UNIFORM_STICKY |  Controls the partitioning strategy. |  `DEFAULT` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> |  Defines a TLS configuration, used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. If the broker configures `SSL` as the protocol, configure the keystore in the `tls:context` child element of the configuration and the connector will automatically use `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. |  |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Principal a| String |  Entity that is authenticated by a computer system or a network. Principals can be individual people, computers, services, or computational entities such as processes and threads. |  | x
@@ -1310,6 +1530,187 @@ In a Windows environment, if a ticket cannot be retrieved from the file ticket c
 | Store key a| Boolean |  Set this option to `true` to store the principal's subject private credentials. |  `false` |
 | Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
 |===
+
+[[producer-config_producer-sasl-oauth-bearer-cc-connection]]
+===== Producer SASL/OAUTHBEARER - Client Credentials Connection
+
+
+OAuth Bearer authentication is a mechanism for authenticating requests using bearer tokens, which are typically used to authenticate users and applications to access resources. Apache Kafka® supports OAuth Bearer authentication for establishing connections securely.
+
+
+====== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Bootstrap Server URLs a| Array of String |  The list of servers to bootstrap the connection with the kafka cluster. This can be a partial list of the available servers. |  | x
+| Endpoint identification algorithm a| String |  The endpoint identification algorithm used by clients to validate server host name. The default value is an empty string, which means it is disabled. Clients including client connections created by the broker for inter-broker communication verify that the broker host name matches the host name in the brokers certificate. |  | 
+| Batch size a| Number |  The producer attempts to batch records together into fewer requests whenever multiple records are being sent to the same partition. This helps performance on both the client and the server. This configuration controls the default batch size in bytes. No attempt will be made to batch records larger than this size. Requests sent to brokers will contain multiple batches, one for each partition with data available to be sent. A small batch size will make batching less common and may reduce throughput (a batch size of zero will disable batching entirely). A very large batch size may use memory a bit more wastefully as we will always allocate a buffer of the specified batch size in anticipation of additional records. |  16 | 
+| The batch size unit of measure. a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the batch size scalar. |  KB | 
+| Buffer size a| Number |  The total bytes of memory the producer can use to buffer records waiting to be sent to the server. If records are sent faster than they can be delivered to the server the producer will block for max.block.ms after which it will throw an exception. This setting should correspond roughly to the total memory the producer will use, but is not a hard bound since not all memory the producer uses is used for buffering. Some additional memory will be used for compression (if compression is enabled) as well as for maintaining in-flight requests. The default value in the Kafka docs is of 33554432 (32MB), but this should be capped to align with expected values for mule instances in cloudhub (v0.1 core) |  1000 | 
+| The buffer memory size unit of measure. a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the max request size scalar. |  KB | 
+| DNS lookups a| Enumeration, one of:
+
+** DEFAULT
+** USE_ALL_DNS_IPS
+** RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY |  Controls how the client uses DNS lookups. If set to use_all_dns_ips then, when the lookup returns multiple IP addresses for a hostname, they will all be attempted to connect to before failing the connection. Applies to both bootstrap and advertised servers. If the value is resolve_canonical_bootstrap_servers_only each entry will be resolved and expanded into a list of canonical names. |  USE_ALL_DNS_IPS | 
+| Compression type a| Enumeration, one of:
+
+** NONE
+** GZIP
+** SNAPPY
+** LZ4
+** ZSTD |  The compression type for all data generated by the producer. The default is none (i.e. no compression). Valid values are none, gzip, snappy, lz4, or zstd. Compression is of full batches of data, so the efficacy of batching will also impact the compression ratio (more batching means better compression). |  NONE | 
+| Connections maximum idle time a| Number |  Close idle connections after the value specified by this config. |  540 | 
+| Connections maximum idle time unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for the connections maximum idle scalar. |  SECONDS | 
+| Delivery timeout a| Number |  An upper bound on the time to report success or failure after a call to send() returns. This limits the total time that a record will be delayed prior to sending, the time to await acknowledgment from the broker (if expected), and the time allowed for retriable send failures. The producer may report failure to send a record earlier than this config if either an unrecoverable error is encountered, the retries have been exhausted, or the record is added to a batch which reached an earlier delivery expiration deadline. The value of this config should be greater than or equal to the sum of request.timeout.ms and linger.ms. |  120 | 
+| Delivery Timeout Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for the delivery timeout scalar. |  SECONDS | 
+| Enable idempotence a| Boolean |  When set to 'true', the producer will ensure that exactly one copy of each message is written in the stream. If 'false', producer retries due to broker failures, etc, may write duplicates of the retried message in the stream. Note that enabling idempotence requires max.in.flight.requests.per.connection to be less than or equal to 5, retries to be greater than 0 and acks must be 'all'. If these values are not explicitly set by the user, suitable values will be chosen. If incompatible values are set, a ConnectionException will be thrown |  false | 
+| Linger time  a| Number |  The producer groups together any records that arrive in between request transmissions into a single batched request. Normally this occurs only under load when records arrive faster than they can be sent out. However in some circumstances the client may want to reduce the number of requests even under moderate load. This setting accomplishes this by adding a small amount of artificial delay?that is, rather than immediately sending out a record the producer waits for up to the given delay to allow other records to be sent so that the sends can be batched together. This can be thought of as analogous to Nagle's algorithm in TCP. This setting gives the upper bound on the delay for batching: once we get batch.size worth of records for a partition it is sent immediately regardless of this setting, however if we have fewer than this many bytes accumulated for this partition we will 'linger' for the specified time waiting for more records to show up. This setting defaults to 0 (i.e. no delay). Setting linger.ms=5, for example, would have the effect of reducing the number of requests sent but would add up to 5ms of latency to records sent in the absence of load. |  0 | 
+| Linger Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for the linger time scalar. |  SECONDS | 
+| Maximum block time  a| Number |  The configuration controls how long KafkaProducer.send() and KafkaProducer.partitionsFor() will block.These methods can be blocked either because the buffer is full or metadata unavailable.Blocking in the user-supplied serializers or partitioner will not be counted against this timeout. |  60 | 
+| Maximum block time unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for the maximum block time scalar. |  SECONDS | 
+| Maximum in flight requests a| Number |  The maximum number of unacknowledged requests the client will send on a single connection before blocking. Note that if this setting is set to be greater than 1 and there are failed sends, there is a risk of message re-ordering due to retries (i.e., if retries are enabled). |  5 | 
+| Maximum request size a| Number |  The maximum size of a request in bytes. This setting will limit the number of record batches the producer will send in a single request to avoid sending huge requests. This is also effectively a cap on the maximum record batch size. Note that the server has its own cap on record batch size which may be different from this. |  1 | 
+| Maximum request size unit. a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the max request size scalar. |  MB | 
+| Producer acknowledge mode a| Enumeration, one of:
+
+** NONE
+** LEADER_ONLY
+** ALL |  The number of acknowledgments the producer requires the leader to have received before considering a request complete. This controls the durability of records that are sent |  NONE | 
+| Default receive buffer size a| Number |  The size of the TCP receive buffer (SO_RCVBUF) to use when reading data. If the value is -1, the OS default will be used. This parameter can be overridden at source level. |  64 | 
+| Default receive buffer size unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the receive buffer size scalar. This parameter can be overridden at source level. |  KB | 
+| Retries amount a| Number |  Setting a value greater than zero will cause the client to resend any record whose send fails with a potentially transient error. Note that this retry is no different than if the client resent the record upon receiving the error. Allowing retries without setting max.in.flight.requests.per.connection to 1 will potentially change the ordering of records because if two batches are sent to a single partition, and the first fails and is retried but the second succeeds, then the records in the second batch may appear first. Note additionally that produce requests will be failed before the number of retries has been exhausted if the timeout configured by delivery.timeout.ms expires first before successful acknowledgment. Users should generally prefer to leave this config unset and instead use delivery.timeout.ms to control retry behavior. |  1 | 
+| Retry Backoff Timeout Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for the retry backoff timeout time scalar. |  MILLISECONDS | 
+| Retry backoff timeout a| Number |  The amount of time to wait before attempting to retry a failed request to a given topic partition. This avoids repeatedly sending requests in a tight loop under some failure scenarios. |  100 | 
+| Default send buffer size a| Number |  The size of the TCP send buffer (SO_SNDBUF) to use when sending data. If the value is -1, the OS default will be used. This parameter can be overridden at source level. |  128 | 
+| Default send buffer size unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB |  The unit of measure for the send buffer size scalar. This parameter can be overridden at source level. |  KB | 
+| Default request timeout time unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Determines the time unit for the request timeout time scalar. |  SECONDS | 
+| Default request timeout a| Number |  The configuration controls the maximum amount of time the client waits for the response of a request. If the response is not received before the timeout elapses the client will resend the request if necessary or fail the request if retries are exhausted. This should be larger than replica.lag.time.max.ms (a broker configuration) to reduce the possibility of message duplication due to unnecessary producer retries. |  30 | 
+| Partitioner a| Enumeration, one of:
+
+** DEFAULT
+** ROUND_ROBIN
+** UNIFORM_STICKY |  The configuration controls which partitioning strategy is used when sending messages without providing a key or a partition. |  DEFAULT | 
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
+| TLS Configuration a| <<Tls>> |  Defines a TLS configuration, which can be used from both the client and server sides to secure communication for the Mule app. The connector will automatically set the 'security.protocol' to use for communication. Valid values are PLAINTEXT / SSL / SASL_PLAINTEXT / SASL_SSL. Default value when no configuration has been provided is PLAINTEXT(or SASL_PLAINTEXT for SASL authentication - kerberos/scram/plain/token). If SSL was configured as protocol on the broker side then the user needs to configure at least the keystore in the 'tls:context' child element of this config and the connector will automatically use SSL(or SASL_SSL for SASL authentication) as 'security.protocol'. |  | 
+| Client ID Key a| String |  Specifies the configuration key used to define the OAuth client ID within the JAAS configuration. |  clientId | 
+| Client ID a| String |  The value for the Client ID which refers to the unique identifier assigned to the OAuth client, facilitating secure authentication and authorization processes. |  | x
+| Client Secret Key a| String |  Specifies the configuration key used to define the OAuth client secret within the JAAS configuration. |  clientSecret | 
+| Client Secret a| String |  The value for the client secret which refers to the confidential authentication credential assigned to the OAuth client. |  | x
+| OAuth Token Endpoint Key a| String |  Specifies the configuration key used to define the OAuth token endpoint within the JAAS configuration. |  sasl.oauthbearer.token.endpoint.url | 
+| OAuth Token Endpoint a| String |  Describes the URL where clients can request access tokens from the authentication server. |  | x
+| Scope Key a| String |  Specifies the configuration key used to define the OAuth scope within the JAAS configuration. |  scope | 
+| Scope a| String |  Defines the specific permissions and access rights granted to the client application by the authorization server. |  | 
+| Audience Key a| String |  Specifies the configuration key used to define the OAuth audience within the JAAS configuration. |  audience | 
+| Audience a| String |  Comma separated list of one or more target audiences for the access token. |  | 
+| Max Token Expiration Seconds a| Number |  Sets the maximum duration, in seconds, for which an access token remains valid. |  | 
+| Principal Name a| String |  Unique identifier associated with an authenticated user, often used for authorization decisions and resource access. |  | 
+| Credentials Placement a| Enumeration, one of:
+
+** BASIC_AUTHENTICATION_HEADER
+** BODY |  Defines whether to include client credentials in the basic authentication header or in the body of the authentication request. |  BASIC_AUTHENTICATION_HEADER | 
+| OAuth Module Required a| Boolean |  Indicates whether this login module must be successfully authenticated for Kafka clients to establish a connection using OAuth 2.0 bearer tokens. |  true | 
+| Include Accept Header a| Boolean |  Whether to include 'Accept-application/json' header in the authentication request. |  true | 
+| OAuth Extensions a| Object |  Represents a mapping of key-value pairs containing extensions for custom broker OAuth implementations. |  | 
+| Login Refresh Window Factor a| Number |  Time for which the login refresh thread waits until a certain portion of the credential's lifespan passes and attempts to refresh it. Acceptable values range from (0.5) 50% to (1.0) 100%, with a default of (0.8) 80% if unspecified. |  0.8 | 
+| Login Refresh Window Jitter a| Number |  The maximum random jitter added to the login refresh thread's sleep time relative to the credential's lifespan is between (0) 0% and (0.25) 25%, with a default of (0.05) 5% if unspecified. |  0.05 | 
+| Login Refresh Minimum Period a| Number |  The desired minimum time in seconds for the login refresh thread to wait before refreshing a credential. Legal values are between 0 and 900 (15 minutes). |  60 | 
+| Login Refresh Buffer a| Number |  The amount of buffer time in seconds before credential expiration to maintain when refreshing a credential. Legal values are between 0 and 3600 (1 hour). A default value of 300 (5 minutes) is used if no value is specified. |  300 | 
+| Use Persistent Connections a| Boolean |  Indicates whether to use persistent connections:
+
+* `true`
+
+Mule uses persistent connections.
+
+* `false`
+
+Mule closes the connection after the first request completes. |  true | 
+| Max Connections a| Number |  Maximum number of connections to open to the backend. HTTP requests are sent in parallel over multiple connections. Setting this value too high can impact latency and consume additional resources without increasing throughput. By default, the number of connections is unlimited. |  -1 | 
+| Connection Idle Timeout a| Number |  The number of milliseconds that a connection can remain idle before it is closed. The value of this attribute is only used when persistent connections are enabled. |  30000 | 
+| Stream Response a| Boolean |  Whether received responses should be streamed, meaning processing continues as soon as all headers are parsed and the body streamed as it arrives. When enabled, the response MUST be eventually read since depending on the configured buffer size it may not fit into memory and processing will stop until space is available. |  false | 
+| Response Buffer Size a| Number |  Size of the buffer that stores the HTTP response, in bytes. By default, the space is not limited. |  -1 | 
+| Client Socket Properties a| <<TcpClientSocketParams>> |  Encapsulates the configurable properties for TCP client socket connections. |  | 
+| Proxy Config Params a| <<ProxyConfigParams>> |  Configures a proxy for outbound connections. |  | 
+| Follow Redirects a| Boolean |  Specifies whether to follow redirects or not. |  false | 
+| Response Timeout a| Number |  Maximum time that the request element will block the execution of the flow waiting for the HTTP response. |  60000 | 
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy |  | 
+|===
+
+
+
 
 [[producer-sasl-scram]]
 === Producer SASL/SCRAM Connection Type
@@ -1457,6 +1858,7 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 ** DEFAULT
 ** ROUND_ROBIN
 ** UNIFORM_STICKY |  Controls the partitioning strategy. |  `DEFAULT` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> |  Defines a TLS configuration, used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. If the broker configures `SSL` as the protocol, configure the keystore in the `tls:context` child element of the configuration and the connector will automatically use `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. |  |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Username | String | Username with which to login. |  | x
@@ -1614,6 +2016,7 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 ** DEFAULT
 ** ROUND_ROBIN
 ** UNIFORM_STICKY |  Controls the partitioning strategy. |  `DEFAULT` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> |  Defines a TLS configuration, used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. If the broker configures `SSL` as the protocol, configure the keystore in the `tls:context` child element of the configuration and the connector will automatically use `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. |  |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Username a| String |  Username with which to login. |  | x
@@ -1770,6 +2173,7 @@ This setting defaults to `0` (no delay). Setting `linger.ms=5`, for example, has
 ** DEFAULT
 ** ROUND_ROBIN
 ** UNIFORM_STICKY |  Controls the partitioning strategy. |  `DEFAULT` |
+| Additional Properties a| Object |  Additional properties used to configure pooling profile. |  | 
 | TLS Configuration a| <<Tls>> |  Defines a TLS configuration, used by both clients and server sides to secure the communication for the Mule app. The connector automatically sets the `security.protocol` to use for the communication. The valid values are `PLAINTEXT`, `SSL`, `SASL_PLAINTEXT`, or `SASL_SSL`. If the broker configures `SSL` as the protocol, configure the keystore in the `tls:context` child element of the configuration and the connector will automatically use `SSL` (or `SASL_SSL` for SASL authentication) as the `security.protocol`. |  |
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the brokers certificate. | |
 | Token ID a| String |  ID of the token. |  | x
