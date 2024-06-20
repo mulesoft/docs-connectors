@@ -1,0 +1,203 @@
+= Web Service Consumer Additional Configuration Information - Mule 4
+:page-aliases: connectors::web-service/web-service-consumer-configure.adoc
+
+Set additional configuration for Anypoint Connector for Web Service Consumer (Web Service Consumer Connector), such as custom HTTP Transport and Web Service Security both in Anypoint Studio and in the XML editor.
+
+== Configure Custom HTTP Transport
+
+By default, the connector uses a simple unprotected HTTP configuration to dispatch all outgoing SOAP messages. For cases where a more advanced HTTP configuration is required, you can parameterize the Web Service Consumer Connector with an HTTP Connector configuration to dispatch the messages.
+
+The following example illustrates how you might declare and reference an HTTP Requester configuration with HTTP Basic authentication in the *Transport Configuration* parameter of the Web Service Consumer Connector configuration to ensure that the connector dispatches each request:
+
+. In Studio, open the *Global Element Properties* window of the Web Service Consumer Connector.
+. On the *Transport* tab, for *Transport Configuration*, select `HTTP Transport Configuration`. +
+The *Requester Config* field automatically populates `HTTP_Request_configuration` only if you previously created the HTTP Request configuration.
+. Click *OK*
+
+In Studio, configuring custom HTTP transport looks like this:
+
+image::web-service-consumer-configure-transport.png[Configure Custom HTTP Transport]
+
+In the *Configuration XML* tab, the reference of the HTTP Requester configuration `<http:request-config name="HTTP_Request_configuration">` is under the Web Service Consumer configuration `<wsc:custom-transport-configuration>`:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_configuration">
+    <http:request-connection host="www.exampleplace.com" port="8182" protocol="HTTP">
+        <http:authentication>
+            <http:basic-authentication username="admin" password="textpassword"/>
+        </http:authentication>
+    </http:request-connection>
+</http:request-config>
+
+<wsc:config name="with-custom-transport">
+    <wsc:connection wsdlLocation="http://www.host.com?WSDL" service="Service" port="Port">
+        <wsc:custom-transport-configuration>
+            <wsc:http-transport-configuration requesterConfig="basic-auth"/>
+        </wsc:custom-transport-configuration>
+    </wsc:connection>
+</wsc:config>
+----
+
+
+
+== Configure Web Service Security
+
+The WS-Security protocol enables you to use various security token formats to enforce message integrity and confidentiality. This protocol uses XML Signature and XML Encryption to provide end-to-end security.
+
+WS-Security describes how to:
+
+* Sign SOAP messages to ensure integrity and provide nonrepudiation
+* Encrypt SOAP messages to ensure confidentiality
+* Attach security tokens to ascertain the sender's identity
+
+Web Service Consumer Connector supports the following mechanisms:
+
+* Timestamp
+* Signature or signature verification
+* Username
+* Encryption or decryption
+
+The following example illustrates how you might configure a username token security strategy as web service security for the connector:
+
+. In Studio, open the *Global Element Properties* window of the Web Service Consumer Connector.
+. On the *Security* tab, for *Username token security strategy*, select `Edit inline`.
+. Complete the *Username*, and *Password* fields, and set *Add nonce* and *Add created* fields to `true`.
+. Click *OK*.
+
+In Studio, configuring web service security looks like this:
+
+image::web-service-consumer-configure-wsecurity.png[Configure Web Service Security]
+
+In the *Configuration XML* tab, configuring Web Service Security looks like this:
+
+[source,xml,linenums]
+----
+<wsc:config name="with-custom-transport">
+    <wsc:connection wsdlLocation="http://www.host.com?WSDL" service="Service" port="Port">
+        <wsc:web-service-security>
+            <wsc:username-token-security-strategy username="admin" password="textPassword" addCreated="true" addNonce="true"/>
+        </wsc:web-service-security>
+    </wsc:connection>
+</wsc:config>
+----
+
+== Configure WSC:EMPTY_RESPONSE Error
+
+When mandatory fields are missing from the response (Illegal Empty Response), you can configure the *Error Handler* component to throw the `WSC:EMPTY_RESPONSE` error for the Web Service Consumer Connector.
+
+. In Studio, select the *On Error Continue* component of the Error handling section.
+. Set *Type* to *WSC:EMPTY_RESPONSE*.
+
+image::web-service-consumer-emptyresponse.png[WSC:EMPTY_RESPONSE selected for Type field]
+
+In the *Configuration XML* tab, the configuration looks like this:
+[source,xml,linenums]
+----
+<flow name="WSC-Example">
+  <scheduler>
+    <scheduling-strategy >
+      <fixed-frequency />
+    </scheduling-strategy>
+  </scheduler>
+  <set-variable value="test" variableName="variableSample"/>
+  <ee:transform>
+    <ee:message >
+      <ee:set-payload ><![CDATA[ %dw 2.0
+output application/xml
+ns con http://service.soap.service.mule.org/
+---
+con#attachOperation: {
+    text: vars.variableSample
+}]]></ee:set-payload>
+    </ee:message>
+  </ee:transform>
+  <wsc:consume config-ref="Web_Service_Consumer_Config" operation="attachOperation">
+    <wsc:message-customizations forceXMLProlog="true"/>
+  </wsc:consume>
+    <error-handler >
+      <on-error-continue enableNotifications="true" logException="true" type="WSC:EMPTY_RESPONSE">
+      <logger level="INFO" message="The response was empty." />
+      </on-error-continue>
+    </error-handler>
+</flow>
+----
+
+== Read Attributes in a Failure Scenario
+
+The following example shows how to configure the Web Service Consumer Connector to read SOAP attributes or additional transport data attributes in a failure scenario.
+
+. In Studio, drag a *Scheduler* source to your flow.
+. Drag a *Set variable* component alongside the *Scheduler* source.
+. Set *Name* to `variableSample` and *Value* to `test`.
+. Drag a *Transform Message* component alongside the *Set Variable* component.
+. In the Datasense output view, add the following DataWeave expression:
+
+[source,dataweave,linenums]
+----
+ %dw 2.0
+output application/xml
+ns con http://service.soap.service.mule.org/
+---
+con#attachOperation: {
+    text: vars.variableSample
+}
+----
+
+[start=6]
+. Drag the Web Service Consumer Connector *Consume* operation alongside the *Transform Message* component.
+. Set a *Connector configuration* for the connector.
+. Set *Operation* to `attachOperation`.
+. Drag an *On Error Continue* component to the Error handling section of your flow.
+. Set *Type* to `WSC:BAD_RESPONSE`.
+. Drag a *Logger* component into the *On Error Continue* component.
+. Set *Message* to the expression `#[error.additionalData.statusCode]` to read SOAP attributes or additional transport data.
+
+In the *Configuration XML* tab, the configuration looks like this:
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc" xmlns:compression="http://www.mulesoft.org/schema/mule/compression"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/compression http://www.mulesoft.org/schema/mule/compression/current/mule-compression.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd">
+	<flow name="WSC-Example">
+  <scheduler>
+    <scheduling-strategy >
+      <fixed-frequency />
+    </scheduling-strategy>
+  </scheduler>
+  <set-variable value="test" variableName="variableSample"/>
+  <ee:transform>
+    <ee:message >
+      <ee:set-payload ><![CDATA[ %dw 2.0
+output application/xml
+ns con http://service.soap.service.mule.org/
+---
+con#attachOperation: {
+    text: vars.variableSample
+}]]></ee:set-payload>
+    </ee:message>
+  </ee:transform>
+  <wsc:consume config-ref="Web_Service_Consumer_Config" operation="attachOperation">
+    <wsc:message-customizations forceXMLProlog="true"/>
+  </wsc:consume>
+    <error-handler >
+      <on-error-continue enableNotifications="true" logException="true" type="WSC:BAD_RESPONSE">
+      <logger level="INFO" message="#[error.additionalData.statusCode]" />
+      </on-error-continue>
+    </error-handler>
+</flow>
+	</flow>
+</mule>
+----
+
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
+* xref:web-service-consumer-reference.adoc[Web Service Consumer Connector Reference]
