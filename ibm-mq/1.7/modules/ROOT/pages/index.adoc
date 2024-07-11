@@ -1,0 +1,219 @@
+= IBM MQ Connector - Mule 4
+:page-aliases: connectors::ibm/ibm-mq-connector.adoc
+
+
+
+IBM MQ Connector v1.7
+
+Anypoint Connector for IBM MQ (IBM MQ Connector) enables an app to do messaging to a IBM MQ Broker
+using the IBM MQ JMS implementation.  The main features include:
+
+* Pub/Sub pattern support on any given destination.
+* Listen/Reply pattern support on any given destination.
+* Publish-Consume pattern support on any given destination, with fixed or temporary reply Queue.
+* Non-blocking publishing and consumption of messages.
+
+Release Notes: xref:release-notes::connector/connector-ibm-mq.adoc[IBM MQ Connector Release Notes] +
+Exchange: https://www.mulesoft.com/exchange/com.mulesoft.connectors/mule-ibm-mq-connector/[IBM MQ Connector]
+
+
+
+
+== Connection Mode
+
+When creating the IBM configuration, choose
+is the https://www.ibm.com/support/knowledgecenter/en/SSFKSJ_9.0.0/com.ibm.mq.dev.doc/q031720_.htm[IBM connection mode] to use.
+
+As of IBM MQ 8, there are only two available connection modes, *Client* and *Binding*.
+
+=== Client Connection Mode
+
+The client connection mode lets you connect to the IBM MQ Queue Manager running
+in the same system that is being run the Mule Application or in other system.
+In both cases the IBM MQ Connector will connect to the IBM MQ Queue Manager
+over TCP/IP.
+
+For this connection mode are available the following configurations:
+
+[%header%autowidth.spread]
+|===
+|Parameter |Required |Default Value |Description
+|Host |TRUE | | Host containing the IBM MQ Broker.
+|Port |FALSE |1414 |Queue manager listener port.
+|Queue Manager |FALSE | |The queue manager used when selecting a channel definition.
+|Channel |FALSE | |Name of the channel to connect to.
+|Connection Name List |FALSE | |Hosts to which the client attempts to reconnect after its connection is broken. +
+The connection name list is a comma separated list of host and IP port pairs. +
+*Example:* `0.0.0.0(1414),somehost.domain.com(1415)`
+|===
+
+.Client Connection Configuration on Studio
+image::ibm-mq-client-connection-mode.png[Client Connection]
+
+.Client Connection Configuration on XML
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+ <ibm-mq:connection >
+   <ibm-mq:connection-mode >
+	 	<ibm-mq:client host="0.0.0.0" port="1414" queueManager="QM1" channel="DEV.ADMIN.SVRCONN" />
+		</ibm-mq:connection-mode>
+	</ibm-mq:connection>
+</ibm-mq:config>
+----
+
+=== Binding Connection Mode
+
+The binding connection mode connects automatically to the IBM MQ broker
+running in the same system.
+
+The unique parameter that is optionally configurable is the Queue Manager to
+connect to. If the IBM MQ broker has a default Queue Manager, this configuration
+is not required.
+
+.Binding Connection Configuration on Studio
+image::ibm-mq-binding-connection-mode.png[Client Connection]
+
+.Binding Connection Configuration on XML
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+  <ibm-mq:connection >
+    <ibm-mq:connection-mode >
+      <ibm-mq:binding queueManager="QM1" />
+    </ibm-mq:connection-mode>
+  </ibm-mq:connection>
+</ibm-mq:config>
+----
+
+== Define Global Defaults
+
+The IBM MQ `config` allows you to define multiple parameters to use as
+a default while consuming or publishing messages. This way, you can define a
+global default behavior for all the operations associated with the config and
+override each parameter only in the operations that require a custom behavior.
+
+For example, we can define a default `selector` behavior when consuming a Message
+in any of the operations that are associated to this config, and also a default.
+
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+  <ibm-mq:connection/>
+  <ibm-mq:consumer-config selector="JMSType = `INVOICE`"/>
+  <ibm-mq:producer-config timeToLive="60000"/>
+</ibm-mq:config>
+----
+
+In this case, every consume or listener operation associated with this configuration
+uses the `selector` by default, while every time a publish or publish-consume occurs,
+the outgoing message has a TTL of 60 seconds.
+
+All of these properties can be overridden at operation level when required.
+To publish a message with a shorter TTL, use this example configuration that
+overrides the parameter:
+
+[source,xml]
+----
+<ibm-mq:publish config-ref="IBM_MQ_Config" timeToLive="10000"/>
+----
+
+== Select the JMS Spec
+
+The main common parameter is the JMS specification used to select between
+all the supported specifications, which are 2.0 and 1.1. This specification must be
+supported by the broker implementation associated to this connection, otherwise
+the connection fails.
+
+WARNING: Features available only in JMS 2.0 won't work with any other specification.
+
+== Provide Credentials For Authentication
+
+To establish an authenticated connection, you need to configure the username and password in the connection element:
+
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+	<ibm-mq:connection username="<username>" password="<password>" >
+		<ibm-mq:connection-mode >
+			<ibm-mq:client
+			host="0.0.0.0"
+			port="1414"
+			queueManager="QM1"
+			channel="DEV.ADMIN.SVRCONN" />
+		</ibm-mq:connection-mode>
+	</ibm-mq:connection>
+</ibm-mq:config>
+----
+
+== Configure Connections Caching
+
+To connect with a broker and execute the required operations, the JMS
+connector creates multiple sessions, consumers, and producers that can be cached
+and reused to increase the performance of the application. Because of
+this capability, the IBM MQ connector allows you to configure which caching strategy
+to use when creating new connections, caching by default both consumers and
+producers, and preserving as many instances as possible in memory at the same time.
+
+Customizing the cache configuration can be done directly in the connection declaration:
+
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+  <ibm-mq:connection>
+    <ibm-mq:caching-strategy>
+      <ibm-mq:default-caching sessionCacheSize="100" consumersCache="false" producersCache="true"/>
+    </ibm-mq:caching-strategy>
+  </ibm-mq:connection>
+</ibm-mq:config>
+----
+
+== Identify the Connection Client
+
+The client identifier associates a connection and its objects
+with a state maintained on behalf of the client by a provider, and it is *mandatory*
+for identifying an unshared durable subscription.
+
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+  <ibm-mq:connection clientId="${env.clientId}"/>
+</ibm-mq:config>
+----
+
+WARNING: By definition, the client state identified by a `clientId` can be "in use" by only one connection at a time.
+
+== Set Up the Connection Required Libraries
+
+*Important:* No matter what type of connection you are using, you always need to configure a library containing the JMS client implementation, since the connector is not bound to any particular implementation.
+
+=== IBM MQ External Libraries
+
+To use the IBM MQ Connector, configure the external IBM MQ library,
+The IBM MQ Client library must provide the `com.ibm.mq.jms.MQConnectionFactory` implementation.
+
+TIP: Use the IBM MQ Allclient library.
+
+For example, you can use:
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>com.ibm.mq</groupId>
+    <artifactId>com.ibm.mq.allclient</artifactId>
+    <version>9.0.5.0</version>
+</dependency>
+----
+
+
+== See Also
+
+* xref:ibm-mq-consume.adoc[Consume Messages]
+* xref:ibm-mq-publish.adoc[Publish Messages]
+* xref:ibm-mq-listener.adoc[Listen For New Messages]
+* xref:ibm-mq-publish-consume.adoc[Listen For A Reply]
+* xref:ibm-mq-ack.adoc[Handle Message Acknowledgement]
+* xref:ibm-mq-transactions.adoc[Handle Transactions in IBM MQ]
+* xref:ibm-mq-performance.adoc[Tune For Performance]
+* xref:ibm-mq-xml-ref.adoc[Connector Reference]
+* https://help.mulesoft.com[MuleSoft Help Center]

@@ -1,0 +1,250 @@
+= CloudHub Connector 1.2 - Mule 4
+:page-aliases: connectors::cloudhub/cloudhub-connector.adoc
+
+
+
+Anypoint Connector for CloudHub (CloudHub Connector) enables you to connect to the CloudHub API from your Mule application.
+
+For information about compatibility and fixed issues, see the xref:release-notes::connector/cloudhub-connector-release-notes-mule-4.adoc[CloudHub Connector Release Notes].
+
+
+== Create the CloudHub Configuration
+
+CloudHub Connector connections use the following authentication types:
+
+* Basic Authentication +
+Uses a username and password for authentication
+* OAuth Client Credentials +
+Delegates user authentication to the service hosting the user account
+
+The basic CloudHub configuration has the following properties:
+
+* Connection Provider +
+One of the authentication types (Basic Authentication or OAuth Client Credentials)
+* Credentials +
+Depending on the authentication type selected, you must specify your username and password or client ID and client secret.
+* Environment +
+The CloudHub environment to use. By default this is the environment defined as the default in Anypoint Platform.
+
+.CloudHub Configuration using Basic Authentication example:
+[source,xml,linenums]
+----
+<cloudhub:config name="CloudHub_Config_Basic_Auth" >
+  <cloudhub:connection username="${ch.username}" password="${ch.password}" />
+</cloudhub:config>
+----
+
+.CloudHub Configuration using OAuth Client Credentials Authentication example:
+[source,xml,linenums]
+----
+<cloudhub:config name="CloudHub_Config_OAuth_Client_Credentials" >
+  <cloudhub:oauth-client-credentials-connection clientId="${ch.clientId}" clientSecret="${ch.clientSecret}" />
+</cloudhub:config>
+----
+
+== POM File Information
+
+If you create your app outside of Anypoint Studio, update your POM file as follows:
+
+[source,xml,linenums]
+----
+<dependency>
+  <groupId>com.mulesoft.connectors</groupId>
+  <artifactId>mule-cloudhub-connector</artifactId>
+  <version>x.x.x</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+Replace `x.x.x` with the version that corresponds to the connector you are using.
+
+To obtain the most up-to-date `pom.xml` file information:
+
+. Go to https://www.mulesoft.com/exchange/[Anypoint Exchange].
+. In Exchange, click *Login* and supply your Anypoint Platform username and password.
+. In Exchange, search for `cloudhub`.
+. Click *Dependency Snippets*.
+
+== List Available Environments
+
+After the credentials are configured correctly, you can
+retrieve the available environments for easier configuration.
+
+image::cloudhub-environments-value-provider.gif[Available Environments]
+
+[NOTE]
+====
+The dropdown list will be populated with those environments belonging to the main business group of the configured credential's user.
+To use an environment from a child business group, that the same user has access to, manually specify its ID on either this field or corresponding XML attribute.
+====
+
+== Use the CloudHub Environment
+
+To specify the app deployment environment, use the <<environment.id-sysprop,`environment.id`>> system property.
+
+.Using the deployment environment
+[source,xml,linenums]
+----
+<cloudhub:config name="CloudHub_Config" >
+  <cloudhub:connection
+  username="${ch.username}"
+  password="${ch.password}"
+  environment="${environment.id}"/>
+</cloudhub:config>
+----
+
+[[creating-notifications]]
+== Creating a Notification
+
+To create a notification, the user must have the Runtime Manager `Read application` permission for the specified environment.
+
+For information about assigning permissions to users, see xref:access-management::users#granting-permissions-and-roles-to-users[Granting Permissions and Roles to Users].
+
+To create a notification, use the Create Notification operation.
+This operation requires the notification message and the associated domain.
+You can specify the domain using the <<domain-sysprop,`domain`>> system property.
+
+You can also configure:
+
+* *Custom properties*
++
+An open object to provide additional information about the created notification
+* *Priority*
++
+Specify the priority of the notification:
++
+** ERROR
+** INFO
+** WARN
+* Transaction ID
++
+The transaction ID associated with the created notification
+
+[source,xml,linenums]
+----
+<flow name="cloudhub-connector-flows" >
+  <cloudhub:create-notification domain="some-application-name" config-ref="CloudHub_Config"
+  transactionId="#[uuid()]" priority="WARN">
+   <cloudhub:message >
+     <![CDATA[#["Problem occurred trying to process customer data"]]]>
+   </cloudhub:message>
+   <cloudhub:custom-properties >
+     <![CDATA[#[output application/java
+---
+{
+ "customer-id" : "ASD-123",
+ "date" : now()
+}]]]></cloudhub:custom-properties>
+  </cloudhub:create-notification>
+ </flow>
+----
+
+.Configuring in Studio
+image::cloudhub-create-notification.png[Creating a Notification]
+
+[[listing-notifications]]
+== List Notifications
+
+To consume notifications, use the List Notifications operation.
+
+This operation requires only that you specify the domain from which to retrieve notifications.
+You can specify the domain using the <<domain-sysprop,`domain`>> system property.
+
+You can also configure:
+
+* Limit
++
+Specifies the number of notifications to retrieve (default `-1`, which indicates all available notifications)
+* Status
++
+Filters the notifications to retrieve as unread, read, or all (default `unread`, which retrieves only notifications marked as unread
+* Search
++
+Retrieves only notifications that contain the specified text
+
+[source,xml]
+----
+<cloudhub:list-notifications config-ref="CloudHub_Config" domain="some-application-name"/>
+----
+
+.Configuring in Studio
+image::cloudhub-list-notifications.png[Listing Notifications]
+
+This operation returns a list of notifications with the following structure:
+
+[[notification-object]]
+[source,yaml,linenums]
+----
+  Notification:
+    type: object
+    properties:
+      id: string
+      domain: string
+      priority?: string
+      read: boolean
+      readOn?: datetime
+      createdAt: datetime
+      href: string
+      properties: object
+----
+
+[[marking-notification]]
+== Mark a Notification as Read
+
+Use the Mark Notification operation to mark the notification as read.
+
+After a notification is consumed, mark a notification as read so that the next time notifications are read, only the unread ones are retrieved.
+
+The Mark Notification operation requires only the notification ID, which you can obtain from the `id` property of a <<notification-object,Notification object>>.
+
+.Example of marking notifications as read
+[source,xml,linenums]
+----
+<cloudhub:list-notifications config-ref="CloudHub_Config" domain="some-application-name"/>
+<foreach>
+  <cloudhub:mark-notification markAs="READ" config-ref="CloudHub_Config" notificationId="#[payload.id]"/>
+</foreach>
+----
+
+[[listing-applications]]
+== List Applications
+
+Using the connector, you can retrieve all available applications in the given environment. No configuration is required.
+
+[source,xml]
+----
+<cloudhub:list-applications config-ref="CloudHub_Config"/>
+----
+
+You can customize how information is retrieved to get less or more information about the applications.
+
+[[retrieving-app-info]]
+== Retrieve an Application
+
+The connector retrieves information about an application's deployment.
+The only required configuration is to specify the domain and the application name.
+You can specify the domain using the <<domain-sysprop,`domain`>> system property.
+
+[source,xml]
+----
+<cloudhub:get-application domain="some-application-name" config-ref="CloudHub_Config"/>
+----
+
+This operation returns all information about the application deployment.
+
+== Useful CloudHub System Properties
+
+[%header%autowidth.spread]
+|===
+|Name |Information |Usage
+|[[domain-sysprop]] Domain |The name of the domain where the application is deployed in CloudHub. | ${domain}
+|[[environment.id-sysprop]] Environment |The ID of the environment where the application is deployed. | ${environment.id}
+|===
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:connectors::introduction/intro-use-exchange.adoc[Use Exchange to Discover Connectors, Templates, and Examples]
+* xref:cloudhub-connector-ref.adoc[CloudHub Connector Reference]
+* https://www.mulesoft.com/exchange/com.mulesoft.connectors/mule-cloudhub-connector/[CloudHub Connector in Anypoint Exchange]
+* https://help.mulesoft.com[MuleSoft Help Center]

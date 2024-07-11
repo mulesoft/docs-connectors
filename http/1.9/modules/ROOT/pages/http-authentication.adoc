@@ -1,0 +1,979 @@
+= Configure HTTP Request Authentication - Mule 4
+:page-aliases: connectors::http/http-authentication.adoc
+
+The Anypoint Connector for HTTP (HTTP Connector) *Request* operation supports connecting a Mule client app to a service that requires any of the following types of authentication:
+
+* <<basic-authentication,Basic Authentication>>
+* <<digest-authentication,Digest Authentication>>
+* <<ntlm-authentication,NTLM Authentication>>
+* <<oauth2-grant-authentication,OAuth2 Authorization Code Grant Type Authentication>>
+* <<oauth2-client-authentication,OAuth2 Client Credentials Grant Type Authentication>>
+
+If the target HTTP service of your request requires that you authenticate, provide the necessary credentials in the HTTP *Request* operation global configuration element. Mule runtime engine (Mule) uses the credentials you configured in the authorization header of the HTTP request.
+
+You can also configure Transport Layer Security (TLS) to encrypt the OAuth credentials.
+
+To protect your API or Mule app from receiving requests from an unauthorized source, use an API Manager policy. Refer to the xref:api-manager::external-oauth-2.0-token-validation-policy.adoc[OAuth 2.0 Access Token Enforcement Using External Provider] documentation.
+
+[NOTE]
+In Anypoint Studio HTTP *Request* operation global configuration, do not use the *Expression* option for the *Authentication* field.
+
+[[http-xml-auth-setup]]
+== HTTP XML Authentication Setup
+
+XML values for HTTP Connector authentication:
+
+[%header%autowidth.spread]
+|===
+|Authentication Type | XML Value
+|Basic Authentication a|
+
+[source,xml,linenums]
+----
+<http:authentication >
+  <http:basic-authentication
+  username="UN" password="PW"/>
+</http:authentication>
+----
+|NTLM Authentication a|
+
+[source,xml,linenums]
+----
+<http:authentication >
+  <http:ntlm-authentication
+  domain="DM" workstation="WS"
+  username="UN" password="PW" />
+</http:authentication>
+----
+|Digest Authentication a|
+
+[source,xml,linenums]
+----
+<http:authentication >
+  <http:digest-authentication
+  username="UN" password="PW"/>
+</http:authentication>
+----
+
+|===
+
+In addition, adding an OAuth component's operation to the canvas in Studio automatically adds the following dependency to the project's `pom.xml` file:
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.mule.modules</groupId>
+    <artifactId>mule-oauth-module</artifactId>
+    <version>1.1.8</version>
+    <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+[[basic-authentication]]
+== Configure Basic Authentication
+
+The basic authentication method enables an HTTP user agent to provide a username and password when making an HTTP request.
+
+The following Mule app example illustrates how to configure basic authentication for the HTTP *Request* operation by sending a request to the https://developer.github.com/v3[GitHub API] for user information. In this example, the GitHub API accepts requests for user information on port 443 to `+https://api.github.com/user+`.
+To comply with basic authentication requirements, the Mule app provides the GitHub user name and password. You configure the HTTP *Request* operation to provide these credentials.
+
+Note that this example requires that you have a GitHub account.
+
+. In Studio > *Mule Palette*, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. Set *Path* to `/path`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
+. In the *HTTP Listener config* window, set the following fields:
++
+* *Protocol*: `HTTP (Default)`
+* *Host*: `All Interfaces [0.0.0.0] (default)`
+* *Port*: `8081`
++
+[start=6]
+. Click *OK*.
+. In the *Advanced* tab, set *Allowed methods* to `GET`.
+. Drag an HTTP *Request* operation next to the HTTP *Listener* source.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the operation in the app.
+. In the *HTTP Request configuration* window, set the following fields:
++
+** *Name*: `HTTP_Request_configuration`
+** *Protocol*: `HTTPS`
+** *Host*: `api.github.com`
+** *Port*: `443`
++
+[start=11]
+. Set *Authentication* to *Basic authentication*.
+. Set *Username* to your GitHub username account.
+. Set *Password* to either your GitHub password account or a https://github.com/settings/tokens[personal access token].
+. Set *Preemptive* to *True (Default)*.
+. Click *OK*.
++
+image::http-basic-authentication-1.png[HTTP Request basic authentication window configuration]
++
+. In the HTTP *Request* configuration window, set *Method* to *GET (Default)*.
+. Set *Path* to `/user`.
+. In the *Mule Palette*, select *Core > Transform message*.
+. Drag the *Transform message* component to the right of the HTTP *Request* operation.
+. In the *Output* properties window, change the output to the following DataWeave code:
++
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/json
+---
+payload
+----
++
+
+. Save your Mule app.
+. Click *Run > Run as > Mule Application*.
+. To call the API, type `+http://localhost:8081/+` in your internet browser.
++
+The GitHub API returns your user information, for example:
++
+[source,json,linenums]
+----
+{
+    "login":"kahn",
+    "id":16xxx343,
+    "avatar_url":"https://avatars.githubusercontent.com/u/16xxx343?v=3"`
+    ...
+}
+----
+
+If the browser returns `HTTP GET on resource 'https://api.github.com:443/user' failed: unauthorized (401)`, use a https://github.com/settings/tokens[personal access token] instead of
+specifying your GitHub password. If you are generating a new token, you need only the *user* > *read:user* scope.
+
+=== XML for Configuring Basic Authentication Example
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<http:request-config name="HTTP_Request_configuration" >
+		<http:request-connection protocol="HTTPS" host="api.github.com" port="443" >
+			<http:authentication >
+				<http:basic-authentication username="GitHubusername" password="GitHubpassword" />
+			</http:authentication>
+		</http:request-connection>
+	</http:request-config>
+	<flow name="Authenticaterequests" >
+		<http:listener config-ref="HTTP_Listener_config" path="/path">
+		</http:listener>
+		<http:request method="GET" config-ref="HTTP_Request_configuration" path="/user"/>
+		<ee:transform >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+[[digest-authentication]]
+== Configure Digest Authentication
+
+The digest authentication method enables a web server to verify user credentials via the user's web browser.
+
+The following example shows how to configure the digest authentication for the HTTP *Request* operation by sending a `GET` request to the URL `+http://www.example.com/test+`, adding an authorization header with the provided username and password.
+
+. In Studio, select the HTTP *Request* operation from your flow.
+. Set *Method* to `GET` and *Path* to `test`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the operation in the app.
+. In the *HTTP Request configuration* window, set the following fields:
++
+** *Name*: `HTTP_Request_configuration`
+** *Protocol*: `HTTPS`
+** *Host*: `example.com`
+** *Port*: `8081`
++
+[start=5]
+. Set *Authentication* to *Digest authentication*.
+. Set *Username* to `Username`.
+. Set *Password* to `Password`.
+. Click *OK*.
++
+image::http-digest-authentication-1.png[HTTP Request digest authentication window configuration]
+
+=== XML for Configuring Digest Authentication Example
+
+The following code shows how to configure the digest authentication in XML:
+
+[source,xml,linenums]
+----
+...
+<http:request-config name="HTTP_Request_configuration"
+      doc:name="HTTP Request configuration" >
+    <http:request-connection host="example.com" port="8081" >
+        <http:authentication >
+            <http:digest-authentication
+              username="Username"
+              password="Password" />
+        </http:authentication>
+    </http:request-connection>
+</http:request-config>
+<flow name="digest_flow">
+    ...
+    <http:request config-ref="HTTP_Request_configuration"
+    path="test"
+    method="GET" />
+</flow>
+----
+
+[[ntlm-authentication]]
+== Configure NTLM Authentication
+
+NT LAN Manager (NTLM) authentication replaces the authentication protocol in Microsoft LAN Manager (LANMAN), an older Microsoft product.
+
+The following example shows how to configure the NTLM authentication for the HTTP *Request* operation by sending a `GET` request to the URL `+http://www.example.com/test+`, adding an authorization header with the provided username and password.
+
+. In Studio, select the HTTP *Request* operation from your flow.
+. Set *Method* to `GET` and *Path* to `test`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the operation in the app.
+. In the *HTTP Request configuration* window, set the following fields:
++
+** *Name*: `HTTP_Request_configuration`
+** *Protocol*: `HTTPS`
+** *Host*: `example.com`
+** *Port*: `8081`
++
+[start=5]
+. Set *Authentication* to *Ntlm authentication*.
+. Set *Username* to `Username`.
+. Set *Password* to `Password`.
+. Optionally, set *Domain* and *Workstation*.
+. Click *OK*.
++
+image::http-NTLM-authentication-1.png[HTTP Request NTLM authentication window configuration]
+
+=== XML for Configuring NTLM Authentication
+
+The following code shows how to configure the NTLM authentication in XML:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_configuration"
+     doc:name="HTTP Request Configuration" >
+  <http:request-connection
+     host="example.com"
+     port="8081" >
+     <http:authentication >
+        <http:ntlm-authentication username="Username" password="Password" />
+     </http:authentication>
+  </http:request-connection>
+</http:request-config>
+<flow name="digest_flow">
+    ...
+    <http:request method="GET" doc:name="Request"
+    config-ref="HTTP_Request_configuration"
+    path="test"
+     />
+</flow>
+----
+[[oauth2-grant-authentication]]
+== Configure OAuth2 Authorization Code Grant Type Authentication
+
+The OAuth2 authorization code configures the OAuth 2.0 authorization code grant type. The OAuth authentication server holds the resources protected by OAuth. For example, API calls to the GitHub API can be authenticated through https://developer.github.com/v3/oauth/[GitHub server using OAuth].
+
+Note that HTTP Connector supports only OAuth 2.0.
+
+The following example shows how to configure the OAuth2 Authorization code grant type authentication for the HTTP *Request* operation by creating a Mule app to access a protected resource, GitHub user data, on the GitHub OAuth authentication server. The example covers how to:
+
+* Set up authorization
+* Create a Mule app
+* Run the Mule app
+
+This example requires that you have a GitHub account.
+
+Before you create the Mule app, review the following diagrams that show the procedure of getting OAuth access token and returning token for data:
+
+image::http-authentication-diagram-2.png[Get OAuth access token diagram ]
+. Submit an HTTP request for GitHub access to the client app.
+. The client app redirects the request to the GitHub authentication server.
+. GitHub requests login credentials.
+. Log in an authorize the client app.
+. The GitHub authentication server returns an access token.
+. The client app listens for the next request.
+
+image::http-authentication-diagram-3.png[Return token for data diagram]
+
+. Request the secured user data using the access token.
+. Redirect user data request.
+. The client app gets the user data from the GitHub authentication server.
+. The client app listens for the next request.
+
+=== Set Up Authorization
+
+To set up the authorization, follow these steps:
+
+image::http-authentication-diagram-1.png[Set up authorization]
+
+. Register the client application on the authentication server. +
+ The authentication server assigns a client ID and client secret to the Mule app. The app uses these credentials to identify itself to the authentication server. During the registration, provide the URL to the Mule app home page and the application callback URL.
+. Log in to GitHub.
+. https://github.com/settings/applications/new[Register the application] in your GitHub personal settings.
+. On the *Register a new OAuth application* page, complete the following fields:
++
+* *Application name*: `oauth-grant-code`
+* *Homepage URL*: `+http://localhost:8082+`
+* *Authorization callback URL*: `+http://localhost:8082/callback+`
+[start=5]
+. Click *Register application*.
++
+GitHub creates a page for the registered application on `+https://github.com/settings/applications/<app number>+` that includes the GitHub-assigned client ID and client secret.
+
+=== Create the Mule App
+
+Create a Mule app that uses the GitHub assigned client ID and client secret to access the user data on the GitHub OAuth2 authentication server.
+
+The Mule app consists of an HTTP *Listener* source, an HTTP *Request* operation, and a DataWeave *Transform message* component to transform plain text to JSON. In the HTTP *Request* operation, you configure access to the authentication server. To create the Mule app:
+
+. In Studio > *Mule Palette*, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. Set *Path* to `/`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of the source in the app.
+. In the *HTTP Listener config* window, set the following fields:
++
+* *Protocol*: `HTTP (Default)`
+* *Host*: `All Interfaces [0.0.0.0] (default)`
+* *Port*: `8081`
+[start=6]
+. Drag an *HTTP > Request* operation to the right of the *Listener* source.
+. Expand the *Package Explorer* window.
+. Expand your Mule app project.
+. Open the `pom.xml` file.
+. At the end of the `<dependencies>` section and before the `</dependencies>` statement,
+add the following statement to enable OAuth options for the *Request* operation:
++
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.mule.modules</groupId>
+    <artifactId>mule-oauth-module</artifactId>
+    <version>1.1.8</version>
+    <classifier>mule-plugin</classifier>
+</dependency>
+----
++
+[start=11]
+. Select the HTTP *Request* operation from your flow, and in the properties editor for *Connector Configuration*, click the plus sign (*+*).
+. Set *Authentication* to *Authorization code grant type*.
+. Set the following required fields:
++
+* *External callback url*: `+http://myapp.mycompany.com:8082/callback+` +
+The OAuth authentication server uses this URL to provide the authentication code to the Mule server so that the Mule server can retrieve the access token. This must be the externally visible address of the callback, not the local one.
+* *Local authorization url*: `+https://localhost:8082/login+` +
+This URL enables you to authenticate and grant access to the app for your account.
+* *Authorization url*: `+https://github.com/login/oauth/authorize+` +
+This URL redirects the user request from the Mule app to the authorization URL of the GitHub authentication server.
+* *Client id* +
+The client ID that GitHub provided when you registered the app.
+* *Client secret* +
+The client secret that GitHub provided when you registered the app.
+* *Token url*: `+https://github.com/login/oauth/access_token+` +
+The Mule client app sends the token to the token URL.
++
+Additionally, you can set these optional fields:
+
+* *Local callback url*: `+http://localhost:8082/callback+` +
+This URL matches the value you configured for *External callback URL* when registering the app in GitHub. This is the configuration of the server that Mule creates to receive the requests that a remote host sends to the *External callback URL*. External and internal callback URLs are the same, one URL enables you to create a server in the runtime (internal) and the other URL enables the internet (external) to see the server.
+* *Response Access Token*: `#[payload.access_token]` +
+This DataWeave expression extracts an access token.
+* *Response Refresh Token*: `#[payload.access_token]` +
+If the provider you use sends a refresh token, use a DataWeave expression for the refresh token as the following `#[payload.refresh_token]`. In this example, however, GitHub doesn't actually use a refresh token.
++
+image::http-oauth-authentication-1.png[Configure Authorization code grant type authentication]
++
+. Click *OK*.
+. Save your Mule app.
+
+=== Run the Mule Client App
+
+To run the Mule client app and get the GitHub user data, perform the following steps before the access token expires:
+
+. In the *Package Explorer* window, right-click the project name and choose *Run as > Mule Application*.
++
+The console shows the Mule app deploying.
++
+. In a browser, enter the local authorization URL `+http://localhost:8082/login+` to initiate the https://tools.ietf.org/html/rfc6749#section-4.1[OAuth2 dance].
++
+GitHub prompts you to log in.
++
+. Log in using your GitHub username and password.
++
+GitHub prompts you to authorize the application you registered to run.
++
+image::http-authentication-githubpage.png[Github Authorize application page]
++
+. Click *Authorize application*.
++
+`Successfully retrieved access token` appears as body text in the browser you used to initiate the OAuth2 dance.
+
+. For the token to get data, enter the following URL in a browser: +
+`+http://localhost:8081/github+`
++
+The GitHub API returns your user information:
++
+----
+{
+    "login":"kahn",
+    "id":16xxx343,"avatar_url":"https://avatars.githubusercontent.com/u/16xxx343?v=3"`
+    ...
+}
+----
+
+=== XML for Configuring OAuth2 Authorization Code Example
+
+The following code shows how to configure OAuth2 Authorization Code in XML:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Configuration"
+                      host="0.0.0.0" port="8081" basePath="/github"/>
+<http:request-config name="HTTP_Request_Configuration"
+                     protocol="HTTPS" host="api.github.com" port="443">
+    <http:authentication>
+        <oauth:authorization-code-grant-type
+        externalCallbackUrl="http://myapp.mycompany.com:8082/callback"
+        localAuthorizationUrl="http://localhost:8082/login"
+        authorizationUrl="https://github.com/login/oauth/authorize"
+        clientId="CLIENT_ID"
+        clientSecret="CLIENT_SECRET"
+        tokenUrl="https://github.com/login/oauth/access_token" />
+    </http:authentication>
+</http:request-config>
+----
+
+=== Configure OAuth2 Authorization Scopes
+
+Scopes in OAuth are like security roles. Configure scopes for the OAuth2 Authorization code grant type in the *Scopes* field by defining a comma-separated list of OAuth scopes available in the authentication server.
+
+. In Studio, select the HTTP *Request* operation from your flow.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element.
+. Set *Authentication* to *Authorization code grant type*.
+. Set *Scopes* to `access_user_details, read_user_files`.
++
+image::http-oauth-scopes.png[Configure Scopes field for OAuth Authentication]
+[start=5]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `scopes` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:authentication>
+    <oauth:authorization-code-grant-type
+        localCallbackUrl="http://localhost:8082/redirectUrl"
+        externalCallbackUrl="http://myapp.mycompany.com:8082/callback"
+        localAuthorizationUrl="https://localhost:8082/authorization"
+        authorizationUrl="https://www.box.com/api/oauth2/authorize"
+        clientId="your_client_id"
+        clientSecret="your_client_secret"
+        tokenUrl="https://www.box.com/api/oauth2/token"
+        tlsContextFactory="TLS_Context"
+        scopes="access_user_details, read_user_files" />
+</http:authentication>
+----
+
+=== Configure OAuth2 Authorization Custom Parameters
+
+There are OAuth implementations that require or allow extra query parameters to be sent when calling the Authentication URL of the OAS. Configure these parameters for the OAuth2 authorization code grant type in the *Custom parameters* field:
+
+. In Studio, select the HTTP *Request* operation from your flow.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element.
+. Set *Authentication* to *Authorization code grant type*.
+. Set the following fields:
++
+* *External callback url*: `+http://myapp.mycompany.com:8082/callback+`
+* *Local authorization url*: `+http://localhost:8082/login+`
+* *Authorization url*: `+https://github.com/login/oauth/authorize+`
+* *Client id*: Client ID from your GitHub account
+* *Client secret*: Client secret from your GitHub account
+* *Token url*: `+https://github.com/login/oauth/access_token+`
+[start=5]
+. Set *Custom parameters* to *Edit inline*.
+. Click the plus sign (*+*) to add a new custom parameter.
+. Set *Key* to `box_device_id` and *Value* to `123142`.
+. Repeat Step 6.
+. Set *Key* to `box_device_name` and *Value* to `my-phone`.
++
+image::http-oauth-customparameter.png[Configure Custom Parameters field for OAuth Authentication]
+[start=6]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `oauth:custom-parameter` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_Configuration"
+        host="api.box.com" port="443" basePath="/2.0">
+    <http:authentication>
+        <oauth:authorization-code-grant-type
+        externalCallbackUrl="http://myapp.mycompany.com:8082/callback"
+        localAuthorizationUrl="http://localhost:8082/login"
+        authorizationUrl="https://github.com/login/oauth/authorize"
+        clientId="CLIENT_ID"
+        clientSecret="CLIENT_SECRET"
+        tokenUrl="https://github.com/login/oauth/access_token" />
+        <oauth:custom-parameters>
+            <oauth:custom-parameter
+                key="box_device_id" value="123142"/>
+            <oauth:custom-parameter
+                key="box_device_name" value="my-phone"/>
+        </oauth:custom-parameters>
+    </http:authentication>
+</http:request-config>
+----
+
+=== Configure OAuth2 Authorization Redirect URI
+
+The https://tools.ietf.org/html/rfc6749[OAuth 2.0 specification] describes checking the redirect URI from the destination site of the redirect. The OAuth authentication server uses the URL to provide the authentication code to the Mule server for retrieving the access token. If you provide this URL, Mule creates an endpoint at the URL for storing the authentication code unless there’s already an endpoint registered to manually extract the authorization code.
+
+To override the redirect URI (external `redirect_uri`), configure the external redirect URI in the *External callback url* field, which is useful for actions such as deploying applications to CloudHub. When you configure authentication, you can optionally configure the *Local callback url* field as well.
+
+For CloudHub, Mule has to create an endpoint with a format similar to the following:
+
+`+https://<app>.cloudhub.io/<redirect Uri>+`
+
+To instruct Mule to create the endpoint for CloudHub in the correct format, include the *External callback url* field in your OAuth2 authorization code grant type configuration.
+
+=== Configure OAuth2 Authorization Extract Parameters
+
+After you obtain an authorization code from the authentication server, OAuth requests an access token from the token URL of the server.
+
+The format of the response to the token URL is not defined in the OAuth specification. Each implementation can return different response formats. By default, Mule expects the response to be in JSON format. When this is the case, HTTP requests know how to extract the required information, as long as the following fields are specified:
+
+* *Response access token* +
+The JSON field is `access_token`.
+* *Response refresh token* +
+The JSON field is `refresh_token`.
+* *Response expires in* +
+The JSON field is `expires_in`.
+
+When the response is in JSON format, the parameters are automatically extracted and you can use xref:mule-runtime::dataweave.adoc[DataWeave expressions] to reference these values in the response to the token URL.
+
+When the response is not in JSON format, then you must first configure the connector so that it knows how to extract these values.
+
+In the following example, HTTP Connector expects the response to have a `Content-Type` of `application/x-www-form-urlencoded`, so the body of the response is transformed into a map in the payload. You extract the values from the map through DataWeave expressions, such as `#[payload.access_token]` (the default value for the *Response access token* and *Response refresh token*).
+
+. In Studio, select the HTTP *Request* operation from your flow and in the properties editor for *Connector Configuration*, click the plus sign (*+*).
+. Set *Authentication* to *Authorization code grant type*.
+. Verify the default options for the following fields:
++
+* *Response access token*: `#[payload.access_token]`
+* *Response refresh token*: `#[payload.refresh_token]`
+* *Response expires in*: `#[payload.expires_in]`
+
+image::http-oauth-extractparameters.png[Configure Response access token, Response refresh token, and Response expires in fields for OAuth Authentication]
+[start=4]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `responseAccessToken`,  `responseRefreshToken` and `responseExpiresIn` configurations look like this:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_Configuration"
+                   host="api.box.com" port="443" basePath="/2.0">
+      <http:authentication>
+          <oauth:authorization-code-grant-type
+              localCallbackUrl="http://localhost:8082/redirectUrl"
+              externalCallbackUrl="http://myapp.mycompany.com:8082/callback"
+              localAuthorizationUrl="http://localhost:8082/authorization"
+              authorizationUrl="http://www.box.com/api/oauth2/authorize"
+              clientId="your_client_id"
+              clientSecret="your_client_secret"
+              tokenUrl="http://www.box.com/api/oauth2/token"
+              responseAccessToken="#[payload.access_token]"
+              responseRefreshToken="#[payload.refresh_token]"
+              responseExpiresIn="#[payload.expires_in]" />
+      </http:authentication>
+</http:request-config>
+----
+
+=== Configure OAuth2 Authorization Refresh Token When
+
+The access token you obtain from the token URL eventually expires. The length of time the token is valid depends on the authentication server implementation. After the access token expires, instead of going through the whole process once again, you can retrieve a new access token by using the refresh access token provided by the token URL response.
+
+Mule manages this behavior automatically. By default, when an HTTP request is executed, if the response has a status code of 403, Mule calls the token URL and gets a new access token.
+
+You can configure when Mule performs one of these requests to obtain a new access token using a xref:mule-runtime::dataweave.adoc[DataWeave expression]. The expression is evaluated against the response of the HTTP Request call.
+
+. In Studio, select the HTTP *Request* operation from your flow and in the properties editor for *Connector Configuration*, click the plus sign (*+*).
+. Set *Authentication* to *Authorization code grant type*.
+. Set *Request Token When* to *Expression*.
+. In the expression box, add the following DataWeave expression:
+`#[payload.response.status == 'unauthorized']`
+
+image::http-oauth-refreshtoken.png[Configure Response Token When field for OAuth Authentication]
+
+In the *Configuration XML* editor, the `refreshTokenWhen` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_Configuration"
+        host="api.box.com" port="443" basePath="/2.0">
+    <http:authentication>
+        <oauth:authorization-code-grant-type
+        localCallbackUrl="http://localhost:8082/redirectUrl"
+        externalCallbackUrl="http://myapp.mycompany.com:8082/callback"
+        localAuthorizationUrl="http://localhost:8082/authorization"
+        authorizationUrl="http://www.box.com/api/oauth2/authorize"
+        clientId="your_client_id"
+        clientSecret="your_client_secret"
+        tokenUrl="http://www.box.com/api/oauth2/token"
+        refreshTokenWhen="#[payload.response.status == 'unauthorized']" />
+    </http:authentication>
+</http:request-config>
+----
+
+When a request authorization fails, the response contains an XML node named `status` with value `'unauthorized'`. In the previous example, the DataWeave expression evaluates that condition. When the condition evaluates to true, Mule sends a request to the token URL to retrieve a new access token.
+
+
+=== Configure HTTPS for OAuth Authorization
+
+When you need to use HTTPS for the communication with the authentication server, such as in a production environment, apply HTTPS encoding to the OAuth credentials in all requests, including those for the:
+
+* *Local authorization url*
+* *Authorization url*
+* *Redirect url*
+* *Token url*
+
+To configure HTTPS for OAuth Authorization code grant type:
+
+ . In Studio, select the HTTP *Request* operation from your flow and, in the properties editor for *Connector Configuration*, click the plus sign (*+*).
+. Set *TLS Configuration* to *Global Reference*.
++
+image::http-oauth-tls-1.png[TLS Configuration field set to Global reference]
+[start=3]
+. Click the green plus sign (*+*) next to the field to create a new TLS context.
+. For *Trust Store Configuration*, set the following fields:
++
+* *Path*: `your_trust_store`
+* *Password*: `your_password`
+[start=5]
+. For *Key Store Configuration*, set the following fields:
++
+* *Path*: `your_keystore_path`
+* *Key Password*: `your_key_password`
+* *Password*: `your_password`
+
+image::http-oauth-tls-2.png[TLS Context global configuration settings window]
+[start=6]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `tls:context`, `tls:trust-store` and `tls:key-store` configurations look like this:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_Configuration_HTTPS"
+         host="api.box.com" port="443" basePath="/2.0"
+         tlsContext-ref="TLS_Context" protocol="HTTPS">
+    <http:authentication>
+        <oauth:authorization-code-grant-type
+            localCallbackUrl="http://localhost:8082/redirectUrl"
+            externalCallbackUrl="http://myapp.mycompany.com:8082/callback"
+            localAuthorizationUrl="https://localhost:8082/authorization"
+            authorizationUrl="https://www.box.com/api/oauth2/authorize"
+            clientId="your_client_id"
+            clientSecret="your_client_secret"
+            tokenUrl="https://www.box.com/api/oauth2/token"
+            tlsContextFactory="TLS_Context"
+            scopes="access_user_details, read_user_files" />
+    </http:authentication>
+</http:request-config>
+    <tls:context name="TLS_Context">
+        <tls:trust-store path="your_trust_store"
+            password="your_password"/>
+        <tls:key-store path="your_keystore_path"
+            password="your_password" keyPassword="your_key_password"/>
+    </tls:context>
+----
+
+
+[[oauth2-client-authentication]]
+== Configure OAuth2 Client Credentials Grant Type Authentication
+
+The OAuth authentication server (OAS) is a server that holds the resources that are protected by OAuth. For example, the Box server provides an API with OAuth authentication.
+
+Note that HTTP Connector supports only OAuth 2.0.
+
+The client application (CA) is the server that tries to access a protected resource that belongs to a resource owner (RO). For example, a Mule server tries to access the resources that belong to a Box user, and the resources are in a Box server.
+
+In this case, the RO is also the CA. This means that the CA is implicitly authorized by the RO, which makes the whole procedure a lot simpler.
+
+The following diagram illustrates the relationship between both CA and OAS:
+
+image::http-authentication-diagram-4.png[OAuth2 dance between CA and OAS]
+
+To access protected resources:
+
+. The CA must register an app to the OAS server. When this occurs, the OAS assigns credentials to the CA that it can later use to identify itself: `client ID` and `client secret`. The OAS must also provide a `Token URL`, to which the CA can later send HTTP requests to retrieve an `access token` that is required when accessing the protected resources.
+. The CA makes a request to the `Token URL` of the OAS, containing its client ID to prove its identity. As a response, the OAS grants it an `access token`.
+. With the access token, the CA is now free to access the protected resources in the OAS as long as it includes the access token in the requests. Depending on the policies defined by the OAS, the token may eventually expire.
+
+Client credentials grant type is meant to be used by a client application to grant access to an application on behalf of itself, rather than on behalf of resource owner in the OAS. To get an access token, all you need is the application credentials.
+
+To configure the OAuth2 authorization code grant type for the HTTP *Request* operation, set the *Authentication* field to *Client credentials grant type*:
+
+. In Studio, select the HTTP Request Configuration global element where you want to use the OAuth client credentials grant type.
+. Set *Authentication* to *Client credentials grant type*.
+. Set the following fields:
++
+* *Client id* +
+The client ID that GitHub provided when you registered the app.
+* *Client secret* +
+The client secret that GitHub provided when you registered the app.
+* *Scopes*  +
+Scopes in OAuth are like security roles.
+* *Token URL* +
+The Mule client app sends the token to the token URL.
+
+image::http-oauthcc-authentication-1.png[Client credentials grant type configuration]
+
+[start=4]
+. Click *OK*.
+
+
+When the Mule app is deployed, it tries to retrieve an access token. If the Mule app is not able to retrieve an access token, deployment fails.
+
+=== XML for Configuring Client Credentials Grant Type Authentication
+
+The following code shows how to configure client credentials grant type authentication in XML:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_configuration" >
+	<http:request-connection host="some.api.com" port="80" >
+	<http:authentication>
+		<oauth:client-credentials-grant-type
+		clientId="your_client_id"
+		clientSecret="your_client_secret"
+		tokenUrl="http://some.api.com/api/1.0/oauth/token"
+		scopes="access_user_details, read_user_files" />
+	</http:authentication>
+	</http:request-connection>
+</http:request-config>
+----
+
+=== Configure OAuth2 Client Credential Extract Parameters
+
+The same behavior of extracting parameters from the token URL that applies to OAuth2 authorization code grant type applies to the client credentials grant type as well:
+
+. In Studio, select the HTTP *Request* operation from your flow and, in the properties editor for *Connector Configuration*, click the plus sign (*+*).
+. Set *Authentication* to *Client credentials grant type*.
+. Verify the default options for the following fields:
++
+* *Response access token*: `#[payload.access_token]`
+* *Response refresh token*: `#[payload.refresh_token]`
+* *Response expires in*: `#[payload.expires_in]`
+
+image::http-oauthcc-extractparameters.png[Configure Response access token, Response refresh token, and Response expires in fields for Client credentials grant type]
+[start=4]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `responseAccessToken`,  `responseRefreshToken` and `responseExpiresIn` configurations look like this:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_Configuration"
+                   host="api.box.com" port="443" basePath="/2.0">
+      <http:authentication>
+          <oauth:client-credentials-grant-type
+              clientId="CLIENT_ID"
+          		clientSecret="CLIENT_SECRET"
+          		tokenUrl="http://some.api.com/api/1.0/oauth/token"
+          		scopes="access_user_details, read_user_files" />
+      </http:authentication>
+</http:request-config>
+----
+
+=== Configure OAuth2 Client Credential Refresh Access Token When
+
+The same behavior of extracting parameters from the token URL that applies to OAuth2 authorization code grant type applies to the client credentials grant type as well:
+
+. In Studio, select the HTTP *Request* operation from your flow and, in the properties editor for *Connector Configuration*, click the plus sign (*+*).
+. Set *Authentication* to *Client credentials grant type*.
+. Set *Request Token When* to *Expression*.
+. In the expression box, add the following DataWeave expression:
+`#[payload.response.status == 'unauthorized']`
+
+image::http-oauthcc-refreshtoken.png[Configure Response Token When field for OAuth2 Client credentials grant type]
+[start=5]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `refreshTokenWhen` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:request-config name="HTTP_Request_Configuration"
+        host="api.box.com" port="443" basePath="/2.0">
+    <http:authentication>
+      <oauth:client-credentials-grant-type
+          clientId="CLIENT_ID"
+          clientSecret="CLIENT_SECRET"
+          tokenUrl="http://some.api.com/api/1.0/oauth/token"
+          scopes="access_user_details, read_user_files"
+        refreshTokenWhen="#[payload.response.status == 'unauthorized']" />
+    </http:authentication>
+</http:request-config>
+----
+
+== Configure a Token Manager
+
+To access authorization information for client credentials and authorization codes, configure a token manager:
+
+. In Studio, select the HTTP *Request* operation from your flow and, in the properties editor for *Connector Configuration*, click the plus sign (*+*).
+. Set *Authentication* to *Authorization code grant type*.
+. Set *Token manager* to *Edit inline*.
+. Click the plus sign (*+*) to create a new configuration that references an object store.
+
+image::http-oauth-tokenmanager-1.png[Configure Token manager]
+[start=5]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `tokenManager-ref` attribute references a `token-manager-config` element like this:
+
+[source,xml,linenums]
+----
+    <oauth:token-manager-config name="Token_Manager_Config"/>
+    <http:request-config name="HTTP_Request_Configuration"
+                         host="api.box.com" port="443" basePath="/2.0">
+        <http:authentication>
+            <oauth:authorization-code-grant-type
+            clientId="your_client_id"
+            clientSecret="your_client_secret"
+            localCallbackUrl="http://localhost:8082/redirectUrl"
+            tokenManager-ref="Token_Manager_Config"
+            localAuthorizationUrlResourceOwnerId="#[attributes.queryParams.userId]"
+            resourceOwnerId="#[vars.userId]"
+            authorizationUrl="https://www.box.com/api/oauth2/authorize"
+            localAuthorizationUrl="https://localhost:8082/authorization"
+            scopes="access_user_details, read_user_files"
+            tokenUrl="https://www.box.com/api/oauth2/token" />
+        </http:authentication>
+    </http:request-config>
+----
+
+=== Token Manager - Access Authorization
+
+After you have a token manager associated with an authorization grant type,you can use OAuth module operations anywhere in your Mule app flows to access information from an OAuth authorization.
+
+If you use client credentials or an authorization code with a single resource owner, use the following OAuth module operations in a flow. These operations provide access to the OAuth authorization information from a token manager:
+
+[source,xml,linenums]
+----
+<oauth:retrieve-access-token
+    tokenManager="tokenManagerConfig"/>
+<oauth:retrieve-refresh-token
+    tokenManager="tokenManagerConfig"/>
+<oauth:retrieve-expires-in
+    tokenManager="tokenManagerConfig"/>
+<oauth:retrieve-state
+    tokenManager="tokenManagerConfig"/>
+<oauth:retrieve-custom-token-response-param
+    tokenManager="tokenManagerConfig"
+    key="#[vars.key]"/>
+----
+
+If you use an authorization code with multiple resource owners, use the following OAuth module operations:
+
+[source,xml,linenums]
+----
+<oauth:retrieve-access-token
+    tokenManager="tokenManagerConfig"
+    resourceOwnerId="#[vars.resourceOwnerId]"/>
+<oauth:retrieve-refresh-token
+    tokenManager="tokenManagerConfig"
+    resourceOwnerId="#[vars.resourceOwnerId]"/>
+<oauth:retrieve-expires-in
+    tokenManager="tokenManagerConfig"
+    resourceOwnerId="#[vars.resourceOwnerId]"/>
+<oauth:retrieve-state
+    tokenManager="tokenManagerConfig"
+    resourceOwnerId="#[vars.resourceOwnerId]"/>
+<oauth:retrieve-custom-token-response-param
+    tokenManager="tokenManagerConfig"
+    resourceOwnerId="#[vars.resourceOwnerId]"
+    key="#[vars.key]"/>
+----
+
+
+==== Token Manager Examples
+
+The following table includes examples of how to retrieve information from a token manager. Place these OAuth module operations in your flow after the HTTP *Request* operation that manages your OAuth authentication:
+
+[%header%autowidth.spread]
+|===
+|Function |Result
+| `<oauth:retrieve-access-token tokenManager="tokenManagerConfig" target="accessToken"/>` | `accessToken` value accessible through `vars.accessToken` from DataWeave.
+| `<oauth:retrieve-access-token tokenManager="tokenManagerConfig" resourceOwnerId="Peter" target="accessToken"/>` | `accessToken` value for the resource owner identified with the ID `Peter` accessible through `vars.accessToken` from DataWeave.
+| `<oauth:retrieve-refresh-token tokenManager="tokenManagerConfig" target="refreshToken"/>` |`refreshToken` value accessible through `vars.refreshToken` from DataWeave.
+| `<oauth:retrieve-expires-in tokenManager="tokenManagerConfig" target="expiresIn"/>` |Expires in value accessible through `vars.expiresIn` from DataWeave.
+| `<oauth:retrieve-state tokenManager="tokenManagerConfig" target="state"/>` |State used for the authorization URL accessible through `vars.state` from DataWeave.
+| `<oauth:retrieve-custom-token-response-param tokenManager="tokenManagerConfig" key="a_custom_param_name" target="customParam"/>` |Custom parameter extracted from the token URL response accessible through `vars.customParam` from DataWeave.
+| `<oauth:retrieve-custom-token-response-param tokenManager="tokenManagerConfig" resourceOwnerId="Peter" key="a_custom_param_name" target="customParam"/>`
+|Custom parameter extracted from the token URL response for resource owner `Peter` accessible through `vars.customParam` from DataWeave.
+|===
+
+=== Configure Token Manager Access Token Invalidation
+
+When using a token manager, you can block a particular resource owner:
+
+. In Studio, drag the OAuth module *Invalidate oauth context* operation to your flow.
+. In the properties editor, set the token manager to point to the same token manager that your HTTP *Request* operation references when managing OAuth authentication.
+. Set *Resource owner id* to an expression that points to the resource owner you want to clear, for example, `#[vars.resourceOwnerId]`.
+
+image::http-oauth-tokenmanager-2.png[Configure Token manager]
+
+In the *Configuration XML* editor, the `invalidate-oauth-context` configuration looks like this:
+
+[source,xml,linenums]
+----
+  <flow name="invalidateOauthContext" >
+		<oauth:invalidate-oauth-context
+      tokenManager="tokenManagerConfig"
+       resourceOwnerId="#[vars.resourceOwnerId]">
+		</oauth:invalidate-oauth-context>
+	</flow>
+----
+
+The *Invalidate oauth context* operation removes all of the OAuth information stored in the token manager.
+
+When using multiple resource owners with a single token manager, if you want to clear only the OAuth information of one resource owner, then specify the resource owner ID in the Invalidate OAuth Context element.
+
+[source,xml,linenums]
+----
+<flow name="invalidateOauthContextWithResourceOwnerId">
+    <oauth:invalidate-oauth-context
+           tokenManager="tokenManagerConfig"
+           resourceOwnerId="#[vars.resourceOwnerId]"/>
+</flow>
+----
+
+=== Configure Token Manager Object Store
+
+By default, the token manager uses an in-memory object store to store credentials. You can configure the token manager object store by using the *Object store* field.
+
+For further information about object stores, refer to the documentation about xref:object-store-connector::object-store-to-define-a-new-os.adoc[configuring a custom object store].
+
+== Access Resources on Behalf of Several Users
+
+When you need to access resources on behalf of several users, use SDK Connectors instead of using HTTP Connector in conjunction with the OAuth module.
+
+== See Also
+
+* xref:index.adoc[HTTP Connector Overview]
+* xref:http-connector-xml-reference.adoc[HTTP Connector XML Reference]
+* xref:object-store::index.adoc[Object Store V2]

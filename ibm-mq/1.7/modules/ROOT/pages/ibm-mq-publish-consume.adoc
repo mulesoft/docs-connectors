@@ -1,0 +1,142 @@
+= Listen For A Reply
+:page-aliases: connectors::ibm/ibm-mq-publish-consume.adoc
+
+Request and reply is a widespread pattern between applications, thus the new IBM MQ
+connector provides an operation for that called `publish-consume`.
+The publish-consume operation allows you to publish a message to any destination,
+and then wait for a reply on a different destination.
+
+When using the publish-consume operation, the JMSReplyTo header of the outgoing message
+contains the ID of the destination at which an application waits for a
+response. This destination may be a well-known destination, or it may be a
+temporary destination created on the fly with the only purpose of receiving a
+single response message.
+
+The result of the operation is the message received as a response,
+with the same structure as if a consume operation was invoked.
+
+== Wait For A Reply On A Temporary Queue
+
+Using a temporary queue to wait for a response is very simple, just configure the
+message being sent and the operation automatically waits for a response in a
+temporary queue:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish-consume
+     config-ref="config"
+     destination="targetDestination"
+     maximumWait="20"
+     maximumWaitUnit="SECONDS"/>
+----
+
+In this example, the operation publishes a message with the current payload
+as its body and the JMSReplyTo header configured to a temporary destination,
+to the `targetDestination`.
+Then, it automatically tries to consume the response from that temporary
+queue until a message is consumed or the maximumWait is reached (in which case
+the operation fails with a IBM-MQ:TIMEOUT error).
+
+== Receive a Reply On a Known Queue
+
+In many cases, reply queues do not need to be created for each request,
+but instead a well-known queue can be used for replies.
+For this case, all you have to do is to configure the `reply-to` parameter on
+the outgoing message:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish-consume config-ref="config"
+     destination="targetDestination">
+    <ibm-mq:message>
+        <ibm-mq:reply-to destination="replyToDestination"/>
+    </ibm-mq:message>
+</ibm-mq:publish-consume>
+----
+
+The operation publishes a message to the `targetDestination` with the
+current payload as its body and the JMSReplyTo header configured with
+the `replyToDestination`.
+
+The operation automatically tries to consume the response from the
+replyToDestination queue until a message is consumed or the maximumWait
+is reached (in which case the operation fails with a IBM-MQ:TIMEOUT error).
+
+== Request Reply Patterns
+
+As of IBM MQ connector v1.5.0:
+
+In JMS, there exists two well known request-reply patterns for how request and reply messages
+are correlated. This means how to ensure that the incoming message is the proper reply
+of the outgoing message.
+
+=== Correlation ID Pattern
+
+This pattern is the default for the Publish Consume Operation, the usage of
+this pattern implies that the operation after publishing a message to the
+destination queue, will consume a message using a selector that expects a message
+with the same Correlation ID to be used to publish the request message.
+
+.Client and Listener IBM MQ Correlation ID pattern implementation
+[source,xml,linenums]
+----
+<flow name="publish-consume-correlation-id">
+  <ibm-mq:publish-consume config-ref="config"
+    destination="targetDestination"
+    requestReplyPattern="CORRELATION_ID">
+    <ibm-mq:message >
+      <ibm-mq:reply-to destination="replyToDestination" />
+    </ibm-mq:message>
+  </ibm-mq:publish-consume>
+  <logger message="Received message from 'replyToDestination' with Correlation ID: #[attributes.headers.correlationId]"/>
+</flow>
+
+<flow name="ibm-mq-listener-correlation-id" >
+  <ibm-mq:listener config-ref="config" destination="targetDestination">
+    <ibm-mq:reply-to-response requestReplyPattern="CORRELATION_ID" />
+  </ibm-mq:listener>
+  <logger level="INFO" message="About to reply to 'targetDestination' with Correlation ID: #[attributes.headers.correlationId]"/>
+</flow>
+----
+
+=== Message ID Pattern
+
+Different from the Correlation ID pattern is the Message ID pattern which implies
+that the operation after publishing a message to the destination queue, will
+consume a message using a selector expecting a message with the a Correlation ID
+of the same value as the Message ID of the request message.
+
+.Client and Listener IBM MQ Message ID pattern implementation
+[source,xml,linenums]
+----
+<flow name="publish-consume-message-id">
+  <ibm-mq:publish-consume config-ref="config"
+   destination="targetDestination"
+   requestReplyPattern="MESSAGE_ID">
+    <ibm-mq:message >
+      <ibm-mq:reply-to destination="replyToDestination" />
+    </ibm-mq:message>
+  </ibm-mq:publish-consume>
+  <logger message="Received message from 'replyToDestination' with Correlation ID: #[attributes.headers.correlationId]"/>
+</flow>
+
+<flow name="ibm-mq-listener-message-id" >
+  <ibm-mq:listener config-ref="config" destination="targetDestination">
+    <ibm-mq:reply-to-response requestReplyPattern="MESSAGE_ID" />
+  </ibm-mq:listener>
+  <logger level="INFO" message="About to reply to 'targetDestination' with Correlation ID: #[attributes.headers.messageId]"/>
+</flow>
+----
+
+=== None
+
+Also the operation can be configured to not use any of above patterns, and the
+consumer will try to consume from the reply queue without using a selector
+to correlate messages.
+
+This option is useful when working with temporal queues where it's ensured that
+the queue will have only one message.
+
+== See Also
+
+* xref:ibm-mq-publish.adoc[Publish Messages]

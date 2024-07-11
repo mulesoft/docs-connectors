@@ -1,0 +1,73 @@
+= Salesforce Pub/Sub Connector 1.0 - Tracking Salesforce Platform Events Example
+
+One way to use Salesforce Pub/Sub Connector is to track whether a Salesforce platform event is received from MuleSoft and processed. You can keep track of processed messages using a combination of Salesforce and Mule runtime engine (Mule). 
+
+For a detailed example of one approach to message tracking, see https://docs.google.com/document/d/1NXLE93nzo7IRy4HSHsxh_InhhDJGv_m_xGo91VDyb3U/edit#heading=h.3xat2b92h1uu[Keeping Track of the Processed and Received Messages].
+
+== Replay ID and MuleSoft Object Store
+
+To implement message tracking, it's important to understand the core concepts of the Salesforce Streaming API, the Replay ID attribute, and MuleSoft object store.
+
+[[replay-id]]
+=== Replay ID
+
+On the Salesforce Event Bus, each published event message is assigned an opaque ID, which is contained in the Replay (`replay_id`) attribute. The system populates the Replay ID field value when the event message is delivered to subscribers and refers to the position of the event message within the event stream. 
+
+The event stream has a message durability of 72 hours for high-volume platform events so, using the Replay ID, it's possible to receive event messages from the event stream that fall within that period. The MuleSoft subscriber must carefully track the processed Replay IDs to ensure it doesn't miss or duplicate process events in case of downtime or restart (either intentional or unintentional). 
+
+To enable advanced Replay ID tracking to ensure that the event message is received and processed correctly, you are given control over the replay behavior with the Salesforce Pub/Sub Connector in the connector configuration UI. 
+
+This example configuration uses the *Replay id from object store* option for the *Replay option* property and specifies a dedicated object store in the *Object Store Name* field:  
+
+image::pubsub-channel-listener-config.png["Subscribe channel listener General properties configuration panel"]
+
+
+The following table shows the Replay ID options:
+
+[%header%autowidth.spread]
+|===
+| Replay Option | Description | Usage
+| ReplayId | The Subscriber receives all stored events after the event specified by its `replay_id` value, and new events. | Catch up on missed events after a certain event message, for example, after a connection failure. To subscribe with a specific Replay ID, save the Replay ID of the event message to retrieve stored events after, and then use it when you resubscribe.
+| `-1` | If no replay option is specified, this is the default. The Subscriber receives new events that are broadcast after the client subscribes. | It is best to subscribe with the `-1` option to receive new event messages. To get earlier event messages, don't use this option. 
+| `-2` | The Subscriber receives all events, including past events that are within the 72-hour retention window. | Catch up on missed events and retrieve all stored events, for example, after a connection failure. Using this option can slow performance if a large number of event messages are stored. 
+|===
+
+[[mulesoft-object-store]]
+=== MuleSoft Object Store
+
+Mule runtime engine (Mule) uses object stores to persist data for later retrieval. Mule uses object stores in various filters, routers, and other message processors that store states between messages. 
+
+For CloudHub deployments, the free Object Store v2 limits usage to 10 transactions per second (TPS) per application. The premium add-on for Object Store v2 increases the limit to 100 TPS per application.
+
+[[example-message-tracking]]
+== Example of Tracking Messages
+
+One of the challenges of the Salesforce-provided event-based integration is knowing whether a particular message is received and processed by the subscriber. To achieve this goal, additional logic is required. 
+
+For details about the implementation logic for one approach to message tracking, see https://docs.google.com/document/d/1NXLE93nzo7IRy4HSHsxh_InhhDJGv_m_xGo91VDyb3U/edit#heading=h.3xat2b92h1uu[Keeping Track of the Processed and Received Messages].
+
+[[batch-event-size]]
+== Batch Event Size 
+
+A key feature of Salesforce Pub/Sub Connector is that it allows you to control the number of messages received and processed in a given period of time using the *Batch event size* (`BatcheventSize`) attribute of the *Subscribe Channel Listener* operation to specify the total number of events included in a server batch. 
+
+=== Batch Event Size Example 
+
+In a test case, 500 records were created in Salesforce using Apex code. After all the processing completed in Salesforce, the "delta" time between creating the log entry during record creation and the log entry from the confirmation message was analyzed and MuleSoft worker statistics were reviewed. 
+
+In summary:
+
+* Using `BatcheventSize=1` vs the maximum value of 100 triples the time until Salesforce records the processing, which is still in the area of milliseconds. 
+* A CloudHub 0.1 vCore worker is sufficient to handle the load. There is no performance improvement when using a 0.2 core worker. 
+
+For more details about this test case, see https://docs.google.com/document/d/1NXLE93nzo7IRy4HSHsxh_InhhDJGv_m_xGo91VDyb3U/edit#heading=h.ormr8aypbrgp[BatcheventSize - How Does it Work?].
+
+== See Also
+
+* https://docs.google.com/document/d/1NXLE93nzo7IRy4HSHsxh_InhhDJGv_m_xGo91VDyb3U/edit#heading=h.jv94keayzqia[Have my Published Salesforce Platform Events Been Received by My Mule App?]
+* https://developer.salesforce.com/docs/platform/pub-sub-api/guide/event-message-durability.html[Event Message Durability]
+* https://developer.salesforce.com/docs/platform/pub-sub-api/guide/expanded-event-bus.html[Pub/Sub API and the Expanded Event Bus]
+
+
+
+
