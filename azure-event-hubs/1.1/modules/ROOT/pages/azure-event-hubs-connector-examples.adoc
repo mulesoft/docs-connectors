@@ -1,0 +1,250 @@
+= Azure Event Hubs Connector 1.1 Examples - Mule 4
+
+The following examples show several Mule flows for Azure Event Hubs Connector:
+
+* <<publish-single-event>> +
+This Mule flow sends a single event to an Event Hub.
+* <<publish-bulk-event>> +
+This Mule flow sends multiple events simultaneously to an Event Hub.
+* <<configure-json>> +
+This Mule flow sends a single event to an Event Hub with content type as JSON.
+
+== Before You Begin
+
+* Java 8, 11 or 17
+* Anypoint Studio 7.5 and later
+* Mule runtime engine (Mule) 4.3.0 and later
+* DataWeave
+
+[[create-config-file]]
+== Create a Configuration File for a Connection
+
+Create a configuration file that includes properties for a connection:
+
+. Create a file named `mule-app.properties` in the `/src/main/resources/` folder.
+. In the `mule-app.properties` file, create a set of properties for the connection,
+similar to the ones that follow, replacing the bracketed text (including the brackets)
+with the correct values for your configuration:
++
+----
+config.namespace = <namespace>
+	config.eventHuName = <eventHuName>
+	ad-config.tenantId = <tenantId>
+	ad-config.clientId = <clientId>
+	ad-config.ClientSecret = <ClientSecret>
+	
+	sas-config.sharedAccessKeyName = <sharedAccessKeyName> 
+	sas-config.sharedAccessKey = <sharedAccessKey>
+	
+	bs-config.containerName = <containerName>
+	bs-config.accountName = <accountName>
+	bs-config.accountKey = <accountKey>
+----
+
+For more information about creating a properties file, refer to xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+
+[[publish-single-event]]
+== Send a Single Event and Listen with EventHub Listener
+
+This Mule flow sends a single event to an Event Hub. The result is displayed on the console.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Send a single event* +
+Sends a single event
+* *Logger* +
+Shows that the event was published
+* *Eventhub listener* +
+Reads events from an event hub in a namespace.
+* *Logger* +
+Logs that the event was listened.
+
+image::aeh-example-1.png[Studio flow for the Send a Single Event flow]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns:azure-event-hub-management-connector="http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector" xmlns:azure-eventhubs="http://www.mulesoft.org/schema/mule/azure-eventhubs" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/azure-eventhubs http://www.mulesoft.org/schema/mule/azure-eventhubs/current/mule-azure-eventhubs.xsd
+http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector/current/mule-azure-event-hub-management-connector.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+	
+	
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	
+	<http:listener-config name="HTTP_config" doc:name="HTTP Listener config"  >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+		
+	<azure-eventhubs:azure-eventhubs-config name="ActiveDirectory" doc:name="Azure Event Hubs Connector Azure Event Hubs" >
+		<azure-eventhubs:active-directory-authentication-connection namespace="${config.namespace}" eventHubName="${config.eventHubName}">
+		
+	<azure-eventhubs:token-credential-properties tenantId="${ad-config.tenantId}" clientId="${ad-config.clientId}" clientSecret="${ad-config.clientSecret}" />
+			<azure-eventhubs:checkpoint-store-type>
+				<azure-eventhubs:azure-blob-storage-sas-authentication containerName="${bs-config.containerName}" accountName="${bs-config.accountName}" accountKey="${bs-config.accountKey}" />
+			</azure-eventhubs:checkpoint-store-type>
+		</azure-eventhubs:active-directory-authentication-connection>
+	</azure-eventhubs:azure-eventhubs-config>
+	
+		<flow name="publish-single-event"  >
+		<http:listener doc:name="events"  config-ref="HTTP_Listener_config" path="/events" allowedMethods="GET"/>
+		<azure-eventhubs:publish doc:name="Send a single event"  config-ref="ActiveDirectory">
+		    <azure-eventhubs:event ><![CDATA[#[{
+            "body":"event to send",
+            "metadata": {
+                "param1": "param 1",
+            "param2": "param 2",
+            }
+            }]]]>
+                </azure-eventhubs:event>
+		</azure-eventhubs:publish>
+		<logger level="INFO" doc:name="Logger" message="messagePublished"/>
+	</flow>
+
+	
+	<flow name="EventHubListner" >
+		<azure-eventhubs:eventhub-listener doc:name="Eventhub listener"  config-ref="ActiveDirectory" checkpointFrequency="1" consumerGroup="consumer-group-1 "/>
+		<logger level="INFO" doc:name="Logger" message="Message Received on Event Hub!" />
+	</flow>	
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. From a web browser, test the application by entering `http://localhost:8081/events`.
+
+
+[[publish-bulk-event]]
+== Publish a Batch of Events and Listen with Partition Listener
+
+This Mule flow sends multiple events simultaneously to an Event Hub. The result is displayed on the console.
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests
+* *Publish in bulk* +
+Sends a batch of events
+* *Logger* +
+Shows that the events were published
+* *Partition listener* +
+Reads events from a specific event hub partition in a namespace
+* *Logger* +
+Logs twice the events listened.
+
+image::aeh-example-2.png[Studio flow for the Publish a batch of Events flow]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka" xmlns:azure-event-hub-management-connector="http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector" xmlns:azure-eventhubs="http://www.mulesoft.org/schema/mule/azure-eventhubs" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/azure-eventhubs http://www.mulesoft.org/schema/mule/azure-eventhubs/current/mule-azure-eventhubs.xsd
+http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector http://www.mulesoft.org/schema/mule/azure-event-hub-management-connector/current/mule-azure-event-hub-management-connector.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+	
+	
+	<http:listener-config name="HTTP_config_" doc:name="HTTP Listener config"  >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+		
+	<azure-eventhubs:azure-eventhubs-config name="SAS" doc:name="Azure Event Hubs Connector Azure Event Hubs" >
+		<azure-eventhubs:sas-authentication-connection namespace="${config.namespace}" sharedAccessKeyName="${sas-config.sharedAccessKey}" sharedAccessKey="${sas-config.sharedAccessKeyName}" eventHubName="${config.eventHuName}" >
+		</azure-eventhubs:sas-authentication-connection>
+	</azure-eventhubs:azure-eventhubs-config>
+	
+	<configuration-properties doc:name="Configuration properties" file="mule-app.properties" />
+	
+		<flow name="Partition-Listener" >
+		<azure-eventhubs:partition-listener doc:name="Partition listener"  config-ref="SAS" partitionId="1">
+			<azure-eventhubs:event-position-type >
+				<azure-eventhubs:latest />
+			</azure-eventhubs:event-position-type>
+		</azure-eventhubs:partition-listener>
+		<logger level="INFO" doc:name="Logger" message='Message received in partition'/>
+	</flow>
+	<flow name="Publish-in-Bulk" >
+		<http:listener doc:name="events"  config-ref="HTTP_Listener_config" path="/bulk" allowedMethods="GET" />
+		<azure-eventhubs:bulk-publish doc:name="Publish in bulk"  config-ref="SAS" maxBatchSizeInBytes="2" partitionId="1">
+			<azure-eventhubs:events ><![CDATA[#[[{
+	"body": "body event1"
+},
+{
+	"body": "body event2"
+}]]]]></azure-eventhubs:events>
+		</azure-eventhubs:bulk-publish>
+		<logger level="INFO" doc:name="Logger" message='A Batch  of messages published' />
+	</flow>
+
+</mule>
+----
+
+=== Steps for Running This Example
+
+. Verify that your connector is configured.
+. Save the project.
+. From a web browser, test the application by entering `http://localhost:8081/bulk`.
+
+[[configure-json]]
+== Send Single Event with Content Type
+This Mule flow sends a single event to an Event Hub with content type as JSON.
+
+image::aeh-example-3.png[Send Single Event with Content Type configuration in Studio]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<flow name="Send-single-event-with-content-type" >
+		<http:listener doc:name="events" config-ref="HTTP_Listener_config" path="/content"  />
+		<azure-eventhubs:publish doc:name="Send a single event" config-ref="ActiveDirectory" partitionId="1" contentType="application/json">
+			<azure-eventhubs:event ><![CDATA[#[{
+ "body": write(payload, "application/json"),           
+}]]]></azure-eventhubs:event>
+		</azure-eventhubs:publish>
+		<logger level="INFO" doc:name="Logger" message="Event Published" />
+	</flow>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
