@@ -1,0 +1,151 @@
+= Handling Transactions in IBM MQ
+:keywords: jms, ibm mq, mq, xa, connector, transactions, transactional
+:page-aliases: connectors::ibm/ibm-mq-transactions.adoc
+
+Transactional connections in IBM MQ allow you to execute a series of operations
+that are actually performed only when the transaction is committed. This has two main scenarios:
+
+* Publishing a message as part of a transaction: When publishing, a message
+is sent to the destination after the transaction commits.
+If for some reason the transaction fails and a rollback occurs,
+then the message is not sent.
+
+* Consuming a message as part of a transaction: When consuming a message,
+either with the listener or consume, the message is acknowledged
+only after the transaction is committed, and instead it's returned to
+the destination for redelivery if the transaction is rolled-back.
+
+The IBM MQ connector provides support for executing its operations in a
+transactional way out of the box using Mule's transactionalAction configuration.
+
+To execute an operation as part of the transaction, we have the following two options.
+
+== Processing New Messages With Transactional Session
+
+If you want a IBM MQ `On New Message` Listener to use a transactional session when dispatching the
+messages, you should set the transactionalAction to ALWAYS_BEGIN:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener
+     config-ref="IBM_MQ_Config"
+     destination="${originQueue}"
+     transactionalAction="ALWAYS_BEGIN"/>
+----
+
+With this configuration, each new message is processed in a transaction
+that is propagated to all the flow's components and is committed once the flow
+execution is completed successfully.
+The transaction is rolled back if the flow execution completes with an error.
+
+*Note:* By default, other components in the flow do not join the transaction
+created by the listener. To execute other operations using the listener’s
+transaction, you must declare them either with ALWAYS_JOIN, or JOIN_IF_POSSIBLE.
+
+== Execute Operations As Part Of A Transaction
+
+To execute an operation like publish or consume as part of a transaction,
+set transactionalAction to ALWAYS_JOIN or JOIN_IF_POSSIBLE:
+
+This operations can join a transaction initiated by the listener:
+
+[source,xml,linenums]
+----
+
+<flow name="joiningToListenerTransaction">
+    <ibm-mq:listener config-ref="IBM_MQ_Config"
+      destination="${originQueue}"
+      transactionalAction="ALWAYS_BEGIN"/>
+    <ibm-mq:publish config-ref="IBM_MQ_Config"
+      destination="#[attributes.properties.userProperties.redirectDestination]"
+      transactionalAction="JOIN_IF_POSSIBLE"/>
+    <ibm-mq:consume config-ref="IBM_MQ_Config"
+      destination="#[attributes.properties.userProperties.callbackDestination]"
+      transactionalAction="JOIN_IF_POSSIBLE"/>
+</flow>
+----
+
+Or join a scoped transaction:
+
+[source,xml,linenums]
+----
+<flow name="nonTxPublishMustNotJoinCurrentTx">
+    <http:listener config-ref="HTTP_Config" path="/orders"/>
+    <try transactionalAction="ALWAYS_BEGIN">
+        <ibm-mq:publish config-ref="config"
+	destination="${billingService}"
+	transactionalAction="ALWAYS_JOIN"/>
+        <ibm-mq:publish config-ref="config"
+	destination="${shipmentService}"
+	transactionalAction="ALWAYS_JOIN"/>
+        <ibm-mq:publish-consume config-ref="IBM_MQ_Config"
+	destination="${invoicesVerificationService}"/>
+        <validation:is-true expression="#[payload]"/>
+    </try>
+</flow>
+----
+
+== XA Transactions
+
+IBM MQ Connector supports a create and join XA transactions feature that enables the
+connector to participate in a transaction with multiple resources. This also enables the connector to execute transactional actions with other connections of IBM MQ or other connectors such as Database Connector or VM Connector.
+
+[NOTE]
+IBM MQ Connector does not support nested XA transactions because of an IBM MQ driver limitation. When you work with nested transactions, outer transactions get suspended and then resume after the inner transactions finish. The failure occurs when the outer transactions are resumed, due to the driver implementation.
+
+
+To enable XA transactions:
+
+. Create an XA enabled connection: set `enableXa` to true.
++
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config" >
+		<ibm-mq:connection enableXa="true" >
+			<ibm-mq:connection-mode >
+				<ibm-mq:client host="0.0.0.0" queueManager="QM1" />
+			</ibm-mq:connection-mode>
+		</ibm-mq:connection>
+	</ibm-mq:config>
+----
++
+. Configure to create a XA Transaction: Set transactionType to XA:
++
+[source,xml,linenums]
+----
+<flow name="joiningToListenerTransaction">
+    <ibm-mq:listener config-ref="IBM_MQ_Config"
+    destination="${originQueue}"
+    transactionalAction="ALWAYS_BEGIN"
+    transactionType="XA"/>
+    <ibm-mq:publish config-ref="IBM_MQ_Config"
+    destination="#[attributes.properties.userProperties.redirectDestination]"
+    transactionalAction="JOIN_IF_POSSIBLE"
+    transactionType="XA"/>
+    <ibm-mq:consume config-ref="IBM_MQ_Config"
+    destination="#[attributes.properties.userProperties.callbackDestination]"
+    transactionalAction="JOIN_IF_POSSIBLE" transactionType="XA"/>
+</flow>
+----
++
+Or join a scoped transaction:
++
+[source,xml,linenums]
+----
+<flow name="nonTxPublishMustNotJoinCurrentTx">
+    <http:listener config-ref="HTTP_Config" path="/orders"/>
+    <try transactionalAction="ALWAYS_BEGIN" transactionType="XA">
+        <ibm-mq:publish config-ref="config"
+	destination="${billingService}"
+	transactionalAction="ALWAYS_JOIN"
+	transactionType="XA"/>
+        <ibm-mq:publish config-ref="config"
+	destination="${shipmentService}"
+	transactionalAction="ALWAYS_JOIN"/>
+
+        <ibm-mq:publish-consume config-ref="IBM_MQ_Config"
+	destination="${invoicesVerificationService}"/>
+        <validation:is-true expression="#[payload]"/>
+    </try>
+</flow>
+----

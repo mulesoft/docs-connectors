@@ -1,0 +1,80 @@
+= Using Topic Subscriptions
+:keywords: jms, ibm mq, connector, consume, source, listener, topic, subscription
+:page-aliases: connectors::ibm/ibm-mq-topic-subscription.adoc
+
+
+
+Topics in IBM MQ allow you to configure how the subscription behaves regarding the
+connection of the consumer and also how these consumers interact with each other.
+
+Using IBM MQ Connector, you can handle of the aspects of a Topic subscription
+using the `topic-consumer` configuration in both the `consumer` and `listener` operations.
+
+== Registering Durable Subscriptions
+
+Durable subscriptions allows to receive messages that were published to the topic
+while the consumer was offline.
+Once a durable subscription registered, each time a consumer is available it will
+receive all the messages published before the connection was established:
+
+[source,xml,linenums]
+----
+<ibm-mq:consume config-ref="JMS_config" destination="#[vars.destination]">
+    <ibm-mq:consumer-type>
+        <ibm-mq:topic-consumer durable="true" subscriptionName="SampleSub"/>
+    </ibm-mq:consumer-type>
+</ibm-mq:consume>
+----
+
+Then IBM MQ stores the messages published to the topic, as it would store messages
+sent to a queue. If this or another application creates a `topic-consumer`
+using the same connection and its client ID, the same topic, and the same
+subscription name, the subscription is reactivated, and IBM MQ delivers the
+messages that were published while the subscriber was inactive.
+
+== Allowing Multiple Consumers on the Same Subscription
+
+In JMS 1.1, a subscription on a topic was not permitted to have more than one
+consumer at a time, meaning that the work of processing messages on a topic
+subscription could not be shared, thereby limiting the scalability of the application.
+This restriction has been removed in JMS 2.0 by the introduction of *shared subscriptions*.
+
+The IBM MQ Connector, *when configured with a JMS 2.0 connection*, allows you to
+declare any `topic-consumer` as part of a `shared` subscription:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="config" destination="InvoiceEventsTopic">
+    <ibm-mq:consumer-type>
+        <ibm-mq:topic-consumer shared="true" subscriptionName="ClusterSubscription"/>
+    </ibm-mq:consumer-type>
+</ibm-mq:listener>
+----
+
+With this configuration on two different `listener` instances, when a Message
+is published to the invoices destination, it will be delivered only to one of the
+listeners and not the other.
+
+
+== How to Ignore Self Published Messages
+
+There are cases in which you may not want to receive the Messages that were
+published to a Topic by the same application. For this cases, you can use the
+`noLocal` parameter in the `topic-consumer`, thus preventing the Consumer to
+receive Messages published to the Topic *by the same Connection*:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="config" destination="${notificationsChannel}">
+    <ibm-mq:consumer-type>
+        <ibm-mq:topic-consumer noLocal="true"/>
+    </ibm-mq:consumer-type>
+</ibm-mq:listener>
+----
+
+Consumers configured as `noLocal` *can't* be part of a `shared` subscription.
+
+== See Also
+
+* xref:ibm-mq-listener.adoc[To Listen For New Messages]
+* xref:ibm-mq-consume.adoc[To Consume Messages]

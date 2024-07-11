@@ -1,0 +1,146 @@
+= Configuring Cross-Region Failover in Your App
+
+
+Anypoint MQ Connector for Mule 4 version 4.0.7 and later provides failover capability for standard queues.
+
+This feature is not enabled by default.
+Before using this feature, review xref:mq::mq-failover.adoc[].
+
+[IMPORTANT]
+When you enable failover for a queue and the primary region goes down,
+your data might reside in a region outside the country until the primary region is available
+
+
+To use the failover feature, do the following:
+
+* In your app:
+
+.. Upgrade Anypoint MQ Connector to version 4.0.7 or later.
+.. <<enable-failover-feature,Enable failover in your app.>>
+.. (Optional) <<configure-check-frequency,Change the check frequencies>>. 
+
+* In Anypoint MQ:
+.. Create or modify a queue and xref:mq::mq-failover.adoc#enable-failover[enable failover on the queue].
+
+
+[[enable-failover-feature]]
+== Enable Failover in Your App
+
+To enable the failover feature in your app, set the `cross.region.failover.feature.enabled` system property to `true`.
+This property is set to `false` by default.
+
+[NOTE]
+When the failover property is enabled, the connector handles processing messages for both the primary and failover queues.
+To prevent interruptions, the app can't publish or consume directly from the fallback queue.
+See <<consume-directly-fallback>> for information.
+
+To set this application property in Runtime Manager:
+
+. Sign in to Anypoint Platform and click *Runtime Manager* in the navigation menu.
+. Deploy a new app or change the settings for a deployed app.
+. On the *Properties* tab, specify the value for the property, for example:
++
+image::mq-set-properties-failover-enabled.png["Properties tab with failover system property set to true"]
+
+Alternatively, set the property in *Run Configurations* in Anypoint Studio.
+For more information, see xref:mule-runtime::mule-app-properties-system.adoc[System Properties in Mule Apps].
+
+[[consume-directly-fallback]]
+== Process Messages Directly from the Fallback Queue 
+
+If failover is enabled for an app, Anypoint MQ Connector manages the fallback queue (with the `_fb` suffix) and prevents publish, consume, or subscribe operations on the fallback queue directly.
+If the app connects to the fallback queue directly, Anypoint MQ Connector returns an error:
+
+[source]
+----
+java.lang.IllegalArgumentException: Using fallback queue directly is not supported
+----
+
+If you disable failover on a queue (from the Anypoint MQ UI) and restart the application, the connector no longer publishes or consumes from the fallback queue.
+
+To process any messages that remain in the fallback queue after disabling failover:
+
+. Configure the app to process directly from the fallback queue.
++
+For the Consume or Subscriber operations, set the *Queue* field to the name of the fallback queue, for example:
++
+image::mq-publish-fallback-queue-subscribe.png["General tab in Anypoint Studio with the fallback queue name in the Queue field"]
+. Allow the app to consume messages directly from the fallback queue:
++
+.. Sign in to Anypoint Platform and click *Runtime Manager* in the navigation menu.
+.. Change the settings for a deployed app.
+.. On the *Properties* tab, set the `cross.region.failover.feature.enabled` system property to `false`, for example:
++
+image::mq-set-properties-failover-disabled.png["Properties tab with failover system property set to false"]
++
+Alternatively, set the property in *Run Configurations* in Anypoint Studio.
+For more information, see xref:mule-runtime::mule-app-properties-system.adoc[System Properties in Mule Apps].
+
+[[configure-check-frequency]]
+== Configure the Frequency of Fallback Queue Checks
+
+By default, when the primary region is down, Anypoint MQ Connector checks the:
+
+* Fallback queue once every five minutes for new messages (300,000 milliseconds)
+* Primary queue to see if the primary region is back up once per minute (60,000 milliseconds)
+
+To change this behavior, set the following properties:
+
+[%header,cols="3,42,15,15,15"]
+|===
+|Property | Description | Minimum Value | Maximum Value | Default Value
+5+|`primary.region.status.check.interval.ms`
+||How often the connector checks the availability of the primary region when processing from the fallback region
+|1 minute
+(60,000 milliseconds)
+|15 minutes
+(900,000 milliseconds)
+|1 minute
+(60,000 milliseconds)
+5+|`fallback.messages.check.interval.ms`
+||How often the connector checks the fallback queue for received messages
+|1 minute
+(60,000 milliseconds)
+|12 hours
+(43.2 million milliseconds)
+|5 minutes
+(300,000 milliseconds)
+|===
+
+To set these application properties in Runtime Manager:
+
+. Sign in to Anypoint Platform and click *Runtime Manager* in the navigation menu.
+. Deploy a new app or change the settings for a deployed app.
+. On the *Properties* tab, specify values for the following properties (in milliseconds):
++
+image::mq-set-properties-failover.png["Properties tab with failover properties specified"]
+
+Alternatively, set these properties in *Run Configurations* in Anypoint Studio.
+For more information, see xref:mule-runtime::mule-app-properties-system.adoc[System Properties in Mule Apps] 
+
+[[check-interval]]
+=== Check Interval Considerations
+
+To determine how to set the application property values to fine-tune the check intervals: 
+
+* When publishing to the fallback region during primary region downtime, the Publish operation of Anypoint MQ Connector checks if the primary region is back up once per minute by default.
++
+If a flow triggers the Publish operation less frequently than once per minute, the connector checks to see if the primary region is back up every time the operation is triggered.
++
+To fine-tune this behavior, set the value of `primary.region.status.check.interval.ms` to be greater than the frequency at which your flow triggers the Publish operation.
+
+* When a flow triggers the Consumer or Subscriber operation of Anypoint MQ Connector, the connector checks the fallback queue (every five minutes by default) for new messages before checking the primary queue.
++
+If a flow triggers the Consumer or Subscriber operation less frequently than every five minutes, the connector first checks the fallback queue for new messages before consuming from the primary queue.
++
+To reduce the frequency of checking the fallback queue, set the value of `fallback.messages.check.interval.ms` to be greater than the frequency at which your flow triggers the Consumer or Subscriber operation.
++
+NOTE: Setting this property to a high value might result in out-of-order messages because messages in the fallback queue are not processed as frequently.
+
+== See Also
+
+* xref:mq::mq-failover.adoc[]
+* xref:cloudhub-2::ch2-manage-props.adoc[Changing App Behavior with Properties on CloudHub 2.0]
+* xref:cloudhub::cloudhub-manage-props.adoc[]
+* https://anypoint.mulesoft.com/exchange/com.mulesoft.connectors/anypoint-mq-connector/[Anypoint MQ Connector in Anypoint Exchange]
+* xref:release-notes::connector/anypoint-mq-connector-release-notes-mule-4.adoc[]
