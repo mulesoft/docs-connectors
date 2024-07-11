@@ -1,0 +1,92 @@
+= IBM MQ Tuning For Performance
+:keywords: jms, ibm mq, mq, performance, connector, consume, message, source, listener
+:page-aliases: connectors::ibm/ibm-mq-performance.adoc
+
+Performance can be a significant factor when processing many messages, which
+means that you probably want to check the following configurations to ensure
+you get the most out of the IBM MQ connector.
+
+== Don't Disable Connections Reuse
+
+Connections are expensive to create, so it's important to reuse them as much as possible.
+
+*Notes:*
+
+* By default, the IBM MQ connector uses an aggressive `caching-strategy` that
+reuses as many consumers and producers as possible. We recommend that you keep
+this configuration untouched since any modification can reduce the performance
+of your application.
+
+* Disabling connections caching reduces the performance of your application.
+
+== Increasing Concurrent Messages Processing
+
+A good way to improve the performance of your application is to increase the
+number of concurrent consumers that receive messages from the same destination.
+This can be done easily in the IBM MQ connector by configuring the `numberOfConsumers`
+parameter.
+
+Out of the box, the `listener` uses four consumers concurrently at the same
+destination, but you can increase this number to a value that better fits your needs:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="config"
+     destination="#[vars.destination]"
+     numberOfConsumers="20"/>
+----
+
+TIP: Increasing the `numberOfConsumers` is the easiest way to improve the throughput of your listeners.
+
+== Optimize Your Configuration For Clusters
+
+For applications running in clusters, keep in mind the concept of
+*primary node* and how the connector behaves. When running in a cluster,
+the IBM MQ `listener` default behavior is to receive messages only at the primary node,
+no matter what kind of destination you are consuming from.
+
+In case of consuming messages from a queue, change this configuration to receive messages
+in all the nodes of the cluster,
+not just the primary.
+
+This can be done with the `primaryNodeOnly` parameter:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="config"
+     destination="${inputQueue}"
+     primaryNodeOnly="false"/>
+----
+
+Consuming messages from a topic is a bit different, since the default behavior
+of receiving messages only in the primary node is the most common use case,
+given that it avoids processing the same message multiple times across the cluster.
+
+If you are using the JMS 2.0 shared subscriptions mechanism, then you want
+to change the cluster configuration to consume from all the nodes, again
+setting `primaryNodeOnly` to `false`:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="JMS_20_config"
+      destination="${inputTopic}"
+      primaryNodeOnly="false">
+     <ibm-mq:consumer-type>
+         <ibm-mq:topic-consumer
+         shared="true"
+         subscriptionName="clusteredEventListener"/>
+     </ibm-mq:consumer-type>
+ </ibm-mq:listener>
+----
+
+TIP: When listening from a queue in a cluster, change the `primaryNodeOnly`
+configuration to `false`.
+
+WARNING: When listening from a topic in a cluster, not using the `primaryNodeOnly`
+configuration causes the cluster to process the same message more than once
+unless shared-subscriptions is used.
+
+== See Also
+
+* xref:ibm-mq-consume.adoc[To Consume Messages]
+* xref:ibm-mq-topic-subscription.adoc[Using Topic Subscriptions]
