@@ -1,0 +1,569 @@
+= Configure HTTP Listener Source - Mule 4
+:page-aliases: connectors::http/http-listener-ref.adoc, connectors::http/http-about-http-request.adoc, http-about-http-request.adoc
+
+The Anypoint Connector for HTTP (HTTP Connector) *Listener* source enables you to set up an HTTP server and trigger flows when receiving HTTP requests.
+
+You can choose what methods the source accepts, such as `GET` and `POST` or a list of methods. You can also choose in which path to receive HTTP requests, thereby allowing requests to be routed through different flows.
+
+When the HTTP *Listener* source receives an HTTP request, the source triggers the flow by using the request data. The HTTP body is set as the payload, and the remaining HTTP data is set as attributes, such as headers and query parameters.
+
+When the flow finishes its execution, the HTTP *Listener* source sends an HTTP response based on whether the flow execution was successful or not, which returns different status codes. You can also customize how the source generates HTTP responses in the connector source configuration.
+
+== Configure HTTP Listener Connection
+
+To use an HTTP *Listener* source, you must configure a connection with these settings:
+
+* *Host* +
+Indicates where the requests are received. Also, the host can be a hostname, such as `localhost`, `www.mulesoft.com`, or an IP, for example `127.0.0.1`, `::1`.
+* *Port* +
+Indicates where the requests are received.
+* *Protocol* +
+Indicates the protocol for communication, either HTTP for plain connections or HTTPS for TLS secure connections.
+
+To enable secure connections through HTTPS, you must define a TLS context in the connection and provide:
+
+* A keystore for the server
+* A truststore if you need two-way authentication
+
+To learn about TLS configuration, refer to the xref:mule-runtime::tls-configuration.adoc[Configure TLS with Keystores and Truststores] documentation.
+
+Additionally, you can configure the *Base path* field that applies to all HTTP *Listener* sources using the configuration.
+
+The following example shows how to configure the HTTP *Listener* connection in Studio:
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. Set *Path* to `/path`.
+
+image::http-listener-1.png[HTTP Listener configuration window and Path field set to /test]
+
+[start=4]
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Listener* in the app.
+. Set *Host* to `0.0.0.0` and *Port* to `8081`.
+
+image::http-listener-2.png[HTTP Listener global configuration window with Host field set to 0.0.0.0 and Port field to 8081]
+
+[start=6]
+. Click the *TLS* tab.
+. Set *TLS configuration* to *Edit inline*.
+. In the *Trust Store Configuration* section, set *Path* to `keystore.jks` and *Password* to `MyP455W0rD`.
+
+image::http-listener-3.png[Trust Store Configuration window with Path field set to keystore.jks and Password field to MyP455W0rD]
+
+[start=9]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `host`, `port`, `path` and `trust-store` configurations look like these:
+
+[source,xml,linenums]
+----
+	<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="0.0.0.0" port="8081" >
+			<tls:context >
+				<tls:trust-store path="keystore.jks" password="MyP455W0rD" />
+			</tls:context>
+		</http:listener-connection>
+	</http:listener-config>
+  <flow name="test" >
+		<http:listenerconfig-ref="HTTP_Listener_config" path="/path"/>
+	</flow>
+----
+
+To configure the *Base path* field for the source:
+
+. In the HTTP *Listener* configuration screen, click the plus sign (*+*) next to the *Connector configuration* field to configure a global element.
+. In *HTTP Listener config*, set *Base path* to `api/v1`.
+
+image::http-listener-4.png[HTTP Listener global configuration window with Base path field set to api/v1]
+
+[start=3]
+. Click *OK*.
+
+In the *Configuration XML* editor, the `basePath` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_config" basePath="api/v1">
+  <http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+----
+
+[NOTE]
+If you deploy a project to CloudHub, set *Host* to *0.0.0.0* so the connection listens to all the interfaces of the machine. +
+If you deploy locally for testing purposes, set *Host* to *localhost* to receive only requests that are generated locally. The app is not vulnerable to external threats.
+
+You can also configure advanced settings that can define whether the connections are persistent and, if they are not, the timeout the connections will have.
+
+
+== Configure Paths
+
+Because an HTTP *Listener* source acts as an event trigger within flows, it  must reference the configuration to use and the path where the source listens for HTTP requests.
+
+Paths can be either static, which requires exact matches, or feature placeholders. Placeholders can be:
+
+* Wildcards (`*`) +
+Match anything they are compared to. Wildcards at the end of a path can help provide better error messages by capturing requests to unmanaged resources.
+* Parameters (`{param}`) +
+Match not only anything they are compared to but also capture those values on a URI parameters map.
+
+
+The following examples show different path configurations for three HTTP *Listener* sources, the paths are defined in the *Path* field and the *Base path* field is set to `api/v1`:
+
+* `account/mulesoft/main-contact` +
+Matches only the exact path request `+http://awesome-company.com/api/v1/account/mulesoft/main-contact+`.
+* `account/{accountId}/main-contact` +
+Matches all path requests structured similarly, such as `+http://awesome-company.com/api/v1/account/salesforce/main-contact+`, and saves `salesforce` as the value of `accountId`.
+* `account/{accountId}/*` +
+Matches all path requests different from `main-contact`, such as `+http://awesome-company.com/api/v1/account/mulesoft/users+`, and saves `mulesoft` as the value of `accountId`.
+
+When the Mule app has multiple HTTP *Listener* sources, HTTP requests are always routed to the most specific source. In the previous examples, the first HTTP *Listener* source receives a request with `accountId: mulesoft` and suffix `main-contact`, and the second source receives any different `accountId` value.
+
+
+== Configure Allowed Methods
+
+HTTP requests are routed based on the HTTP method received. By default, an HTTP *Listener* source supports all methods, but you can restrict the available methods or even configure custom ones.
+
+The following example shows how to configure the *Allowed methods* field in Studio:
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. In the HTTP *Listener* source configuration screen, click the *Advanced* tab.
+. Set *Allowed methods* to `GET`.
+
+image::http-listener-5.png[HTTP Listener configuration window and Allowed methods field set to GET]
+
+In the *Configuration XML* editor, the `allowedMethods` configuration looks like this:
+[source,xml,linenums]
+----
+<http:listener path="/test" allowedMethods="GET" config-ref="HTTP_Listener_config"/>
+----
+
+When a Mule app has multiple HTTP *Listener* sources, requests are routed to the first source matching the method, so default sources should always be defined last.
+
+The following example shows different HTTP *Listener* source configurations, in which the *Allowed method* field is set to `GET`, `POST` and `PUT`. These different configurations cause HTTP requests to be routed to different flows, enabling you to specify and restrict user access to your data:
+
+[source,xml,linenums]
+----
+<flow name="main-contact-write">
+  <http:listener path="account/{accountId}/main-contact" allowedMethods="POST, PUT" config-ref="HTTP_Listener_config"/>
+  <!-- validate user permissions -->
+  <!-- store or update main contact for accountId -->
+</flow>
+
+<flow name="main-contact-read">
+  <http:listener path="account/{accountId}/main-contact" allowedMethods="GET" config-ref="HTTP_Listener_config"/>
+  <!-- fetch main contact for accountId -->
+</flow>
+
+<flow name="main-contact-general">
+  <http:listener path="account/{accountId}/main-contact" config-ref="HTTP_Listener_config"/>
+  <set-payload value="#['The main contact resource does not support ' ++ attributes.method ++ ' requests.']"
+</flow>
+----
+
+== Configure Response Streaming Mode
+
+When HTTP Connector manages response bodies, the connector considers the type of data to send and uses _chunked_ encoding when the body size is not clear. This causes streams with no size information.
+
+To control this behavior, configure the *Response streaming mode* field to any of these options:
+
+* *AUTO (default)* +
+Uses `Content-Length` encoding if a size is defined for the body, otherwise uses `Transfer-Encoding: chunked`.
+* *ALWAYS* +
+Uses `Transfer-Encoding: chunked` regardless of any size data present.
+* *NEVER* +
+Uses `Content-Length` encoding, consuming streams if necessary to determine the data size.
+
+The following example shows how to configure the *Response streaming mode* field in Studio. In the example, the main contact data for an account always returns `Content-Length` encoding:
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. Set *Path* to `account/{accountId}/main-contact`.
+. In the HTTP *Listener* source configuration screen, click the *Advanced* tab.
+. Set *Allowed methods* to `GET`.
+. Set *Response streaming mode* to `NEVER`.
+
+image::http-listener-6.png[HTTP Listener configuration window with Allowed methods field set to GET and Response streaming mode field set to NEVER]
+
+In the *Configuration XML* editor, the `allowedMethods` and `responseStreamingMode` configurations look like this:
+
+[source,xml,linenums]
+----
+<flow name="main-contact-read">
+  <http:listener path="account/{accountId}/main-contact" allowedMethods="GET" responseStreamingMode="NEVER" config-ref="HTTP_Listener_config"/>
+  <!-- fetch main contact for accountId -->
+</flow>
+----
+
+== Configure Read Timeout
+
+The read timeout means that if the HTTP *Listener* source doesn't read data after read timeout milliseconds, the connector raises a timeout error. Use the *Read timeout* field to prevent a client from sending an HTTP request such as:
+
+[source,JSON,linenums]
+----
+POST /test HTTP/1.1
+Host: localhost:8081
+Content-Length: 10000
+
+2
+----
+
+Notice that you don't specify a read timeout, the *Listener* source waits for data for ever, and the connection is not released. The *Read timeout* field defaults to a value of 30000, and the time unit in milliseconds.
+
+To configure the read timeout for the source, in the HTTP *Listener* configuration window, set the *Read timeout* field to the desired value:
+
+image::http-listener-7.png[HTTP Listener configuration window with Read timeout field set to 30000]
+
+In the *Configuration XML* editor, the `readTimeout` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:listener-config >
+		<http:listener-connection host="0.0.0.0" port="8081" readTimeout="30000" />
+</http:listener-config>
+----
+
+== Configure Reject Invalid Transfer Encoding Headers
+
+Based on https://www.rfc-editor.org/rfc/rfc7230.html[RFC7230] and https://www.rfc-editor.org/rfc/rfc2616.html[RFC2616] valid Transfer-Encoding headers are `chunked`, `deflate`, `compress`, `identity`, and `gzip`. These headers are not case-sensitive.
+
+To reject requests with invalid Transfer-Encoding headers, in the HTTP *Listener* configuration window, select the *Reject invalid transfer encoding* checkbox:
+
+image::http-listener-8.png[HTTP Listener configuration window with Reject invalid transfer encoding field selected]
+
+In the *Configuration XML* editor, the `rejectInvalidTransferEncoding` configuration looks like this:
+
+[source,xml,linenums]
+----
+<http:listener-config rejectInvalidTransferEncoding="true">
+		<http:listener-connection host="0.0.0.0" port="8081" readTimeout="3000" />
+</http:listener-config>
+----
+
+
+== Receiving HTTP Requests
+
+When an HTTP *Listener* source receives an HTTP request, the data from the HTTP request line includes the method, request path, query, URI parameters, and headers as attributes. The body sets the payload, and the `Content-Type` header sets the  MIME type, which enables other components to inspect the payload MIME type. For example, DataWeave works with an HTTP payload without requiring any input information. You can refer to attributes, such as headers, query parameters, and so on using the `HttpRequestAttributes` syntax.
+
+When you configure an HTTP request, do not set the `Content-Type` header. Mule runtime engine automatically infers the header from the message payload. If you set the `Content-Type` header for payload formatted as `multipart/form-data`, the HTTP request fails with a 400 error status.
+
+Additionally, if an HTTP request contains any of these headers: `X-Correlation-ID` or `MULE_CORRELATION_ID` (for interoperability with Mule 3), these set the message's correlation ID for traceability.
+
+=== HTTP Request Example
+
+The following example shows an HTTP request:
+
+[source,JSON,linenums]
+----
+POST api/v1/account/salesforce/main-contact?overwrite=true&notify=jane.doe&notify=admin HTTP/1.1
+Host: localhost:8081
+Content-Type: application/json
+Content-Length: 166
+X-Correlation-ID: 9cf32672-4f0b-4e8b-b988-40c13aae85b4
+
+{
+  "name": "John",
+  "surname": "Doe",
+  "role": "Senior Vice President",
+  "organization": "Marketing",
+  "phone": 701222369,
+  "email": "john.doe@salesforce.com"
+}
+----
+
+The message's correlation ID is `9cf32672-4f0b-4e8b-b988-40c13aae85b4`.
+
+The payload is in JSON format:
+
+[source,JSON,linenums]
+----
+{
+  "name": "John",
+  "surname": "Doe",
+  "role": "Senior Vice President",
+  "organization": "Marketing",
+  "phone": 701222369,
+  "email": "john.doe@salesforce.com"
+}
+----
+
+The attributes include:
+
+* method: `POST`
+* listenerPath: `api/v1/account/{accountId}/main-contact`
+* requestPath: `api/v1/account/salesforce/main-contact`
+* relativePath: `account/salesforce/main-contact`
+* queryParams: a multimap with entries `overwrite=true`, `notify=jane.doe`, and `notify=admin`
+* uriParams: a map with entry `accountId => salesforce`
+* headers: a multimap with entries `Host=localhost:8081`, `Content-Type=application/json`, `Content-Length=166`, and `X-Correlation-ID=9cf32672-4f0b-4e8b-b988-40c13aae85b4`
+
+A DataWeave expression such as `#[payload.name ++ ' ' ++ payload.surname]` returns `John Doe` because DataWeave correctly interprets the JSON data.
+
+A DataWeave expression such as `#['Received a ' ++ attributes.method ++ ' request for account ' ++ attributes.uriParams.accountId ++ '. The following users are notified: ' ++ (attributes.queryParams.*notify joinBy ', ')]` returns `Received a POST request for account salesforce. The following users are notified: admin, jane.doe`.
+
+To access HTTP Listener attributes, use DataWeave syntax as shown in the following table:
+
+[%header,cols="15a,45a,40a",]
+|===
+|HTTP object | Mule runtime engine 3.x | Mule runtime engine 4.x
+| Method | #[inboundProperties.’http.method’] | #[attributes.method]
+| Path | #[inboundProperties.’http.listener.path’] | #[attributes.listenerPath]
+| Relative Path | #[inboundProperties.’http.relative.path’] | #[attributes.relativePath]
+| Request URI | #[inboundProperties.’http.request.uri’] | #[attributes.requestUri]
+| Query String | #[inboundProperties.’http.query.string’] | #[attributes.queryString]
+| Query Parameters | #[inboundProperties.’http.query.params’] | #[attributes.queryParams]
+| URI Parameters | #[inboundProperties.’http.uri.params’] | #[attributes.uriParams]
+| Version | #[inboundProperties.’http.version’] | #[attributes.version]
+| Scheme | #[inboundProperties.’http.scheme’] | #[attributes.scheme]
+| Headers | #[inboundProperties] | #[attributes.headers]
+| Remote Address | #[inboundProperties.’http.remote.address’] | #[attributes.remoteAddress]
+| Client Certificate | #[inboundProperties.’http.client.cert’] | #[attributes.clientCertificate]
+|===
+
+[NOTE]
+_Multimaps_ are similar to maps except they allow several values for a given key. Multimaps return the first value when using a single-value selector (`.`), but they allow to retrieve all values when using the multiple-value selector (`.*`).
+
+=== HTTP Request Mapping to Mule Event Example
+
+The following diagram shows an example of an HTTP request and its mapping to a Mule event.
+
+image::request-mule-msg-map.png[Map of HTTP Request to Mule Event]
+
+Use xref:dataweave::index.adoc[DataWeave] language to access the HTTP request data attributes and payload.
+
+=== HTTP Request Multipart Form-Data Example
+
+The following example shows an HTTP request of an HTML form received by an HTTP *Listener* source. Additionally, the example shows how to use DataWeave expressions to read `multipart/form-data` content.
+
+Based on the following HTML form:
+
+[source,xml,linenums]
+----
+<form action="http://server.com/cgi/handle"
+        enctype="multipart/form-data"
+        method="post">
+
+    How would you like to identify the logo? <INPUT type="text" name="name"><BR>
+    Which is the logo file? <INPUT type="file" name="logo"><BR>
+    What is the main color in the logo? <INPUT type="text" name="color"><BR>
+    <INPUT type="submit" value="Send"> <INPUT type="reset">
+
+</form>
+----
+
+The HTTP *Listener* source receives the following `multipart/form-data` HTTP request:
+
+[source,text,linenums]
+----
+POST /api/v1/account/mulesoft/logo HTTP/1.1
+Content-Type: multipart/form-data; boundary=489691234097965980223899
+Host: localhost:8081
+content-length: 34332
+
+--489691234097965980223899
+Content-Disposition: form-data; name="name"
+
+Corporate Logo
+--489691234097965980223899
+Content-Disposition: form-data; name="logo"; filename="MuleSoft_logo.png"
+Content-Type: image/png
+
+.PNG
+.
+...
+IHDR.......L......~.....	pHYs...#...#.x.?v.. .IDATx....q.W.6.....~".N....t....t..#.....LD0T.CF0b..:.3......Q..@...q]U*y\c....
+....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%
+.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....V"H....`%.$....^6.......|..P.....IEND.B`.
+--489691234097965980223899
+Content-Disposition: form-data; name="color"
+
+blue
+--489691234097965980223899--
+----
+
+You can use DataWeave expressions to access and read each HTTP request parameter data through the `parts` object, either by name or item number. For example, to access the second part of the HTTP request that contains the `Corporate Logo` parameters data, you can use `payload.parts.logo` or `payload.parts[1]`. The latter is useful when a name is not provided.
+
+Within each part, you can access its content and headers. For example, `payload.parts.color.content` returns `blue`, while `payload.parts.logo.headers.'Content-Type'` returns `application/png`.
+
+You can also access the filename of a part. For example, the `Content-Disposition` header is parsed to allow an expression like `payload.parts.logo.headers.'Content-Disposition'.filename`, which in this case returns `MuleSoft_logo.png`.
+
+Refer to the xref:dataweave::dataweave-formats.adoc[Formats Supported by DataWeave] documentation to learn about reading and writing multipart content.
+
+== Sending HTTP Responses
+
+After the triggered flow finishes its execution, the HTTP *Listener* source sends either of the following default results:
+
+* Successful execution: an HTTP response with 200 status code and the message payload as the body
+* Unsuccessful execution: an HTTP error response with 500 status code with the flow error's description as the body
+
+In the HTTP *Listener* source configuration, you can customize HTTP responses by providing the following parameters:
+
+* *Body*
+* *Headers*
+* *Status code*
+* *Reason phrase*
+
+Note that you can use DataWeave to generate content for each parameter, and variables to propagate data from the flow.
+
+=== Create Sending HTTP Responses Mule App Example
+
+The following example shows how to configure HTTP responses for the HTTP *Listener* source in Studio. The example is a Mule app flow where an endpoint stores logos for an account:
+
+* When storage is successful, an HTTP regular response returns the status code `201`, the reason phrase `Created`, and the body `Corporate Logo has been stored as a MuleSoft logo`.
+* When storage fails, an HTTP error response returns a status code defined through the `errorCode` variable (if available) or `500` by default.
+** The custom header returns `X-Time`.
+** The body returns `Corporate Logo could not be stored`.
+** If there is a `CONNECTIVITY` error storing the logo, the returned status code is `504`, while any other errors result in a `500` status code.
+
+While a reason phrase is not defined for error responses, HTTP Connector attempts to define a reason phrase based on the status code. Thereby, a `Gateway Timeout` or `Internal Server Error` error can be returned for the previous explained HTTP responses scenarios.
+
+To test the Mule app you need a table named `logo` with two columns: `(accountId,logoName)`. You can use Mule to create the table or create it some other way. For example, the following XML code shows how to create the table using the Database Connector *Execute script* operation:
+
+[source,xml,linenums]
+----
+<db:execute-script config-ref="Database_Config">
+  <db:sql ><![CDATA[CREATE TABLE logo (
+	accountId VARCHAR(255),
+	logoName VARCHAR(255),
+	PRIMARY KEY (accountId)
+)]]></db:sql>
+</db:execute-script>
+----
+
+To create the Mule app in Studio, follow these steps:
+
+. In the *Mule Palette* view, select *HTTP>Listener*.
+. Drag *Listener* to the Studio canvas.
+. Set *Path* to `/account/{accountId}/logo`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Listener* in the app.
+. Set *Host* to `0.0.0.0` and *Port* to `8081`.
+. Click *OK*.
+. In the HTTP *Listener* configuration screen, click the *Responses* tab.
+. In the *Response* section, set these values:
++
+* *Body* : `output text/plain --- vars.logoName ++ ' has been stored as a ' ++ vars.accountId ++ ' logo.'`
+* *Status code* : `201`
+* *Reason phrase* : `Created`
+
+[start=9]
+. In the *Error Response* section, set these values:
++
+* *Body* : `vars.logoName ++ ' could not be stored.'`
+* *Headers* :
++
+[source,DataWeave,linenums]
+----
+output application/java
+---
+  {
+    "X-Time" : "50s" // 4
+  }
+----
+* *Status code* : `vars.errorCode default 500`.
+
+image::http-listener-9.png[HTTP Listener Responses configuration window with Body, Header, Status Code and Reason phrase fields]
+
+[start=10]
+. Drag a *Set Variable* component to the right of HTTP *Listener*.
+. Set *Name* to `logoName`.
+. Set *Value* to the expression `payload.parts.name.content`.
+. Drag another *Set Variable* component to the right of first *Set Variable* component.
+. Set *Name* to `accountId`.
+. Set *Value* to the expression `attributes.uriParams.accountId`.
+. Drag a Database *Insert* operation to the right of the second *Set Variable* component.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure the database connection. +
+For further information about how to configure a database connection, refer to the xref:db-connector::database-connector-connection.adoc[configure a database connection] documentation.
+. In the *Insert* operation configuration screen, set *SQL Query Text* to `INSERT INTO logo (accountId,logoName) VALUES (:accountId, :logoName`).
+. Set *Input parameters* to the expression `{'accountId': vars.accountId as String, 'logoName': vars.logoName as String}`.
+. Drag an *On Error Propagate* component in the *Error handling* section of the flow.
+. Set *Type* to `DB:CONNECTIVITY`.
+. Drag a *Set Variable* component into the *On Error Propagate* component.
+. Set *Name* to `errorCode`.
+. Set *Value* to `504`.
+. Save and run your Mule app.
+. Send the following CURL command:  `curl -v -F 'data=@/path/to/MuleSoft_logo.svg' -F name=mulesoftlogo http://localhost:8081/account/muley/logo`.
+
+Note that the complete payload has been hidden because the content length is too big to be human readable:
+
+[source,json,linenums]
+----
+*   Trying 127.0.0.1...
+* TCP_NODELAY set
+* Connected to localhost (127.0.0.1) port 8081 (#0)
+> POST /account/muley/logo HTTP/1.1
+> Host: localhost:8081
+> User-Agent: curl/7.64.1
+> Accept: */*
+> Content-Length: 5313
+> Content-Type: multipart/form-data; boundary=------------------------d96e85d23101a1c3
+> Expect: 100-continue
+>
+< HTTP/1.1 100 Continue
+* We are completely uploaded and fine
+< HTTP/1.1 201 Created
+< Content-Type: text/plain; charset=UTF-8
+< Content-Length: 45
+< Date: Tue, 18 Jan 2022 20:30:20 GMT
+<
+* Connection #0 to host localhost left intact
+mulesoftlogo has been stored as a muley logo.* Closing connection 0
+----
+
+
+=== XML for Sending HTTP Responses Mule App Example
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<db:config name="Database_Config" >
+		<db:derby-connection />
+	</db:config>
+	<flow name="httplistenerresponseFlow"  >
+		<http:listener config-ref="HTTP_Listener_config" path="/account/{accountId}/logo">
+			<http:response statusCode="201" reasonPhrase="Created">
+				<http:body ><![CDATA[output text/plain --- vars.logoName ++ ' has been stored as a ' ++ vars.accountId ++ ' logo.']]></http:body>
+			</http:response>
+			<http:error-response statusCode="#[vars.errorCode default 500]" >
+				<http:body ><![CDATA[vars.logoName ++ ' could not be stored.']]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+        ---
+        {
+          "X-Time" : "50s" // 4
+        }]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<set-variable value="payload.parts.name.content" variableName="logoName"/>
+		<set-variable value="attributes.uriParams.accountId"  variableName="accountId"/>
+		<db:insert doc:name="Insert" config-ref="Database_Config">
+			<db:sql><![CDATA[INSERT INTO logo (accountId,logoName) VALUES (:accountId, :logoName)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{'accountId': vars.accountId as String, 'logoName': vars.logoName as String}]]]></db:input-parameters>
+		</db:insert>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate"  type="DB:CONNECTIVITY">
+				<set-variable value="504" variableName="errorCode"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:http-documentation.adoc[HTTP Connector Reference]
+* xref:http-troubleshooting.adoc[HTTP Connector Troubleshooting Guide]
+* xref:dataweave::dataweave-formats.adoc[DataWeave Formats]
+* xref:mule-runtime::tls-configuration.adoc[TLS Configuration]
+* xref:http-documentation#HttpRequestAttributes[HTTP Request Attributes Reference]
+* xref:http-documentation#HttpResponseAttributes[HTTP Response Attributes Reference]
