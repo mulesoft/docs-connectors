@@ -1,0 +1,119 @@
+= HTTP Error Status Code and Reason Phrase Example - Mule 4
+ifndef::env-site,env-github[]
+include::_attributes.adoc[]
+endif::[]
+:page-aliases: connectors::http/http-error-status-reason-phrase-task.adoc
+
+The following example illustrates how to configure Anypoint Connector for HTTP (HTTP Connector) *Listener* source, so you can set the error status code and reason phrase for a user login validation request. To view the status code and explanation of an HTTP request, use a browser extension, or the http://curl.haxx.se/[curl] command line utility. +
+The example expects to receive requests in the address of `+http://localhost:8081/login/+`, these requests must contain a query parameter named `user`. Depending on the value of this parameter, one of two things may occur:
+
+* When the parameter equals to `user=mule`: +
+** The validation operation evaluates the parameter as true.
+** A set payload transformer sets the message payload to a success message.
+** The HTTP Connector sets variables in *Status Code* and *Reason* as `200 Log in Successful!`.
+
+* When the parameter equals to `user=anythingElse`: +
+** The validation operation assertion on the parameter fails.
+** The flow calls an error handler.
+** The HTTP Connector sets the variables in *Status Code* and *Reason* as `404 Requested user does not exist`
+
+Note that in either case, the request response doesn't display as the response body, so it won't display if you make your request through a browser window. To accomplish this example, you must create the Mule app, configure an HTTP global element, run, and test the app with curl commands.
+
+The following screenshot shows the Anypoint Studio app flow for this example:
+
+image::http-error-flow.png[HTTP Error Status Code and Reason Phrase Flow]
+
+== Create the Mule Application
+
+To create the Mule flow:
+
+. In the *Mule Palette* view, select the HTTP *Listener* source and drag it on to the canvas. +
+. On the *Listener* configuration screen, optionally change the value of the *Display Name* field.
+. Set *Path* to `/login`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that can be used by all instances of HTTP *Listener* in the app.
+. On the *General* tab, configure the following fields:
++
+* *Host*: `localhost`
+* *Port*: `8081`
++
+[start=6]
+. Click *OK*.
+
+image::http-error-studio-1.png[HTTP Listener Configuration]
+
+[start=7]
+. On the *Response* section of the *Responses* tab of the HTTP Listener, set the *Status Code* to `200` and the *Reason phrase* to `Login Successful`.
+. On the *Error Response* section, set the *Status Code* to `&#35;[vars.errorStatusCode]` and the *Reason phrase* to `&#35;[vars.errorReasonPhrase]`.
+
+image::http-error-studio-2.png[HTTP Error Status Code and Reason]
+
+[start=9]
+. Drag a *Validation: Is True* operation after the HTTP *Listener* source.
+. On the *General* section of the *General* tab, select *Expression* from the dropdown menu, and to validate the `user` query parameter, add the following code in the expression field box:
+
+[source,text,linenums]
+----
+#[attributes.queryParams.user == 'mule']
+----
+
+image::http-error-studio-3.png[Validate Module Configuration]
+
+[start=11]
+. Drag a *Set Payload* transformer after the *Validation: Is True* operation, and set the *Value* field to `Log in Successful!`
+
+.Set Payload Configuration
+image::http-error-studio-4.png[Set Payload Configuration]
+
+[start=11]
+. On the *Error Handling* section of your flow, add an *On Error Propagate* component.
+. On the *On Error Propagate* component, add two *Set Variable* transformers: +
+* On the first variable, set *Display Name* to `Set Status Code`, *Name* to `errorStatusCode` and *Value* to `404`.
+* On the second variable, set *Display Name* to `Set Reason Phrase`, set *Name* to `errorReasonPhrase` and *Value* to `Requested user does not exist`.
+
+image::http-error-studio-5.png[Error Handling Configuration]
+
+[start=13]
+. Save your Mule app.
+. Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*. +
+. In cURL test the URL `http://localhost:8081/login?user=mule` +
+
+If the user is valid, the result returns `200 Log in Successful!` otherwise, returns `404 Requested user does not exist`.
+
+== XML for HTTP Error Status Code and Reason Phrase
+
+Paste this code into your Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+                          http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+                          http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+    <http:listener-config name="HTTP_Listener_config" >
+        <http:listener-connection host="localhost" port="8081" />
+    </http:listener-config>
+    <flow name="customResponseFlow" >
+        <http:listener doc:name="Listener" path="/login" config-ref="HTTP_Listener_config">
+            <http:response statusCode="200" reasonPhrase="Login Successful" />
+            <http:error-response statusCode="#[vars.errorStatusCode]" reasonPhrase="#[vars.errorReasonPhrase]" />
+        </http:listener>
+        <validation:is-true expression="#[attributes.queryParams.user == 'mule']"/>
+        <set-payload value="Log in Successful!" />
+        <error-handler name="Error_Handler" >
+            <on-error-propagate enableNotifications="true" logException="true" >
+                <set-variable value="404" variableName="errorStatusCode"/>
+                <set-variable value="Requested user does not exist" variableName="errorReasonPhrase"/>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
