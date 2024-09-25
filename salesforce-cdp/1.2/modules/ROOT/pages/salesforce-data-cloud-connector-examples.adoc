@@ -23,6 +23,10 @@ Shows how to delete or close the specified job ID, which deletes job data and me
 * Query API Flows include: +
 ** <<Query API>> +
 Shows how to query the Salesforce Data Cloud data lake across data model, lake, unified, and linked objects.
+** <<Query v2>> +
+Shows how to use the Query v2 API to make a query against the Data Cloud data lake.
+** <<Query v2 - Get Next Batch>> +
+Shows how to use the Query v2 Get Next Batch API to get the next batch of results.
 * Calculated Insights API Flows include: +
 ** <<Insights - List Metadata API>> +
 Shows how to retrieve the metadata, including the dimensions and measures for all calculated insights.
@@ -179,6 +183,305 @@ http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/
 ----
 {
     "sql": "SELECT ID FROM ACCOUNT LIMIT 1"
+}
+----
+
+== Query v2 
+
+This Mule flow shows how to send an initial query. Use this flow before <<Query v2 - Get Next Batch>>. For more information about the Query v2 API, refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_query_v2.htm[Data Cloud Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP POST requests with the query in the payload.
+* *Logger* +
+Shows the HTTP request received from the *Listener*.
+* *Set Variable* +
+Sets a variable called `sampleResults` to get a maximum sample of 10 results. Your paging calls are unaffected and this is to limit returned payloads to avoid having 40 MB large payloads on your testing calls. 
+* *Query v2*
++
+Makes a query against the Data Cloud data lake.
+* *Flow Reference*
++
+Makes a reference to the <<Query v2 - Get Next Batch>> flow.
+
+image::query-v2-flow.png["Salesforce Data Cloud Query v2 flow with Listener, Logger, Set Variable, Query v2, and Flow Reference"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd 
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+      http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config" doc:id="8b8cb9b6-54eb-453d-92a0-33199d6c51d9" >
+		<sdc:oauth-jwt-connection />
+	</sdc:sdc-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3797f40d-21cd-43a6-9ed4-c52fa6353a51" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="Query_V2_Perform_Query_For_First_Batch" doc:id="f6661148-d0ed-4cf0-867e-4c5966562ff1" >
+        <http:listener doc:name="POST queryv2" doc:id="50fccf50-6807-49e4-89ba-561e6ccf7ab1" config-ref="HTTP_Listener_config" allowedMethods="POST" path="queryv2" outputMimeType="application/json"/>
+        <logger level="INFO" doc:name="Logger" doc:id="b7e78a46-731a-46c8-88a7-e025af92af66" message='#["Received query: " ++ payload.sql as String]'/>
+        <set-variable value="#[attributes.queryParams.sampleResults]" doc:name="Set Variable" doc:id="065c7163-4f4d-49fa-81e7-b5bc4b490ba0" variableName="sampleResults"/>
+        <sdc:query-ansi-sql-v2 doc:name="Query v2" doc:id="84d8f88e-2b03-4186-bf40-b490b08b5feb" config-ref="Salesforce_Data_Cloud_config"/>
+        <flow-ref doc:name="Flow Reference" doc:id="98389a4a-a2cd-4de2-b0fd-79e3dfa1f761" name="Query_V2_Get_Next_Batch"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. Test the flow by sending a request, for example:
++
+----
+curl --location 'http://127.0.0.1:8081/queryv2' \
+--header 'Content-Type: application/json' \
+--data '{"sql": "SELECT assigned_to_uid__c, campaign_name__c, cdp_sys_PartitionDate__c, coupon_code__c, currency__c, DataSource__c, DataSourceObject__c, expiry_date__c, sent__c, value__c FROM MunitQueryV2Test_coupons_C7876AA7__dll "}'
+----
++
+This example request returns this example response, in which you can use `nextBatchId` to get the next set of results if any are present in the <<Query v2 - Get Next Batch>>:
++
+----
+{
+    "data": [
+        [
+            "TorBsKqi",
+            "kvoEyIhx",
+            "2022-08-22 00:00:00.000 UTC",
+            "pxMEsTAR",
+            "GJWzpgut",
+            "MunitQueryV2Test_b1ed190e_fd18_49ce_8813_f2f4ad59df50",
+            "MunitQueryV2Test_coupons_C7876AA7",
+            "2022-08-22 18:28:58.905 UTC",
+            "RkXmYcdH",
+            "87.000000000000000000"
+        ],
+        [...]
+    ],
+    "startTime": "2023-03-30T15:51:44.33103Z",
+    "endTime": "2023-03-30T15:51:46.065576Z",
+    "rowCount": 63803,
+    "queryId": "20230330_155144_13391_5rx4m",
+    "nextBatchId": "1449c1d1-2bf2-471d-824f-62c8f18c5c26",
+    "done": false,
+    "metadata": {
+        "value__c": {
+            "type": "DECIMAL",
+            "placeInOrder": 9,
+            "typeCode": 3
+        },
+        "sent__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 8,
+            "typeCode": 12
+        },
+        "assigned_to_uid__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 0,
+            "typeCode": 12
+        },
+        "currency__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 4,
+            "typeCode": 12
+        },
+        "DataSource__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 5,
+            "typeCode": 12
+        },
+        "campaign_name__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 1,
+            "typeCode": 12
+        },
+        "DataSourceObject__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 6,
+            "typeCode": 12
+        },
+        "coupon_code__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 3,
+            "typeCode": 12
+        },
+        "expiry_date__c": {
+            "type": "TIMESTAMP WITH TIME ZONE",
+            "placeInOrder": 7,
+            "typeCode": 2014
+        },
+        "cdp_sys_PartitionDate__c": {
+            "type": "TIMESTAMP WITH TIME ZONE",
+            "placeInOrder": 2,
+            "typeCode": 2014
+        }
+    }
+}
+----
+
+== Query v2 - Get Next Batch
+
+This Mule flow shows how to page through the results using the `nextBatchId` forward only cursor for Salesforce Data Cloud. Use this flow after <<Query v2>>. For more information about the Query v2 Get Next Batch API, refer to the https://developer.salesforce.com/docs/atlas.en-us.c360a_api.meta/c360a_api/c360a_api_get_query_v2.htm[Data Cloud Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP GET requests with the query in the payload.
+* *Logger* +
+Shows the HTTP request received from the *Listener*.
+* *Set Variable* +
+Sets a variable called `sampleResults` to get a maximum sample of 10 results. Your paging calls are unaffected and this is to limit returned payloads to avoid having 40 MB large payloads on your testing calls. 
+* *Query v2 - Get Next Batch*
++
+Uses a forward cursor to get more results from the <<Query v2>> and <<Query v2 - Get Next Batch>> flows using `nextBatchId`.
+* *Flow Reference*
++
+Makes a reference to the <<Query v2>> flow.
+
+image::query-v2-get-next-batch.png["Salesforce Data Cloud Query v2 Get Next Batch flow with Listener, Logger, Set Variable, Query v2 Get Next Batch, and Flow Reference"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd 
+      http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+      http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config" doc:id="8b8cb9b6-54eb-453d-92a0-33199d6c51d9" >
+		<sdc:oauth-jwt-connection />
+	</sdc:sdc-config>
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3797f40d-21cd-43a6-9ed4-c52fa6353a51" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<sdc:sdc-config name="Salesforce_Data_Cloud_config1" doc:name="Salesforce Data Cloud config" doc:id="acb1d379-3715-4253-9c34-ab33d5977a4a" >
+		<sdc:oauth-jwt-connection />
+	</sdc:sdc-config>
+    <flow name="Query_V2_Get_Next_Batch" doc:id="041306ea-0617-4ae1-870b-5300dcf57ba6" >
+        <http:listener doc:name="GET queryv2" doc:id="0ab08df2-c966-4e0c-ba80-07249a92dfa0" config-ref="HTTP_Listener_config" path="queryv2" allowedMethods="GET"/>
+        <logger level="INFO" doc:name="Logger" doc:id="f197bc98-829d-489c-8318-ceee4bcdd8f6" message='#["Next Batch ID Received: " ++ attributes.queryParams.nextBatchId as String]'/>
+        <set-variable value="#[attributes.queryParams.sampleResults]" doc:name="Set Variable" doc:id="0ae026f9-1660-4d10-8025-213a9a4fb0f5" variableName="sampleResults"/>
+        <sdc:get-next-batch-ansi-sql-v2 doc:name="Query v2 - Get Next Batch" doc:id="1a9b3856-5991-4177-8783-1e4a2c0496a0" config-ref="Salesforce_Data_Cloud_config1" nextBatchIdUriParam="#[attributes.queryParams.nextBatchId]"/>
+        <flow-ref doc:name="Flow Reference" doc:id="ed91ecf6-821d-43e0-969b-4bc0ad921431" name="Query_V2_Perform_Query_For_First_Batch" />
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://help.salesforce.com/s/articleView?id=sf.c360_a_connect_an_ingestion_source.htm&type=5[Verify that your connector is configured.]
+. Save the project.
+. Test the flow by sending a request, for example:
++
+----
+curl --location 'http://127.0.0.1:8081/queryv2?nextBatchId=3e2f0036-f75b-4ee9-a29b-35d8f914e2f1'
+----
++
+This example request returns this example response:
++
+----
+{
+    "data": [
+        [
+            "TorBsKqi",
+            "kvoEyIhx",
+            "2022-08-22 00:00:00.000 UTC",
+            "pxMEsTAR",
+            "GJWzpgut",
+            "MunitQueryV2Test_b1ed190e_fd18_49ce_8813_f2f4ad59df50",
+            "MunitQueryV2Test_coupons_C7876AA7",
+            "2022-08-22 18:28:58.905 UTC",
+            "RkXmYcdH",
+            "87.000000000000000000"
+        ],
+        [...]
+    ],
+    "startTime": "2023-03-30T15:51:44.33103Z",
+    "endTime": "2023-03-30T15:51:46.065576Z",
+    "rowCount": 63803,
+    "queryId": "20230330_155144_13391_5rx4m",
+    "nextBatchId": "1449c1d1-2bf2-471d-824f-62c8f18c5c26",
+    "done": false,
+    "metadata": {
+        "value__c": {
+            "type": "DECIMAL",
+            "placeInOrder": 9,
+            "typeCode": 3
+        },
+        "sent__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 8,
+            "typeCode": 12
+        },
+        "assigned_to_uid__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 0,
+            "typeCode": 12
+        },
+        "currency__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 4,
+            "typeCode": 12
+        },
+        "DataSource__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 5,
+            "typeCode": 12
+        },
+        "campaign_name__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 1,
+            "typeCode": 12
+        },
+        "DataSourceObject__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 6,
+            "typeCode": 12
+        },
+        "coupon_code__c": {
+            "type": "VARCHAR",
+            "placeInOrder": 3,
+            "typeCode": 12
+        },
+        "expiry_date__c": {
+            "type": "TIMESTAMP WITH TIME ZONE",
+            "placeInOrder": 7,
+            "typeCode": 2014
+        },
+        "cdp_sys_PartitionDate__c": {
+            "type": "TIMESTAMP WITH TIME ZONE",
+            "placeInOrder": 2,
+            "typeCode": 2014
+        }
+    }
 }
 ----
 
