@@ -1,0 +1,277 @@
+= LDAP Connector 3.6 Examples - Mule 4
+
+The following examples show how to use Anypoint Connector for Lightweight Directory Access Protocol Connector (LDAP Connector) to:
+
+* Add a group and user to an organizational unit and then delete that user and group
+* Set up a common truststore
+
+[[add-delete-entry]]
+== Add and Delete Groups and Users from an Organizational Unit
+
+This example shows how to use the LDAP *Add entry* operation to add a group and user to an organizational unit and the *Delete entry* operation to delete a user and group from that organizational unit.
+
+The following screenshot shows the Studio app flow for this example:
+
+image::ldap-usecase-flow.png["Flow for adding and deleting users"]
+
+=== Add a Group and User to an Organizational Unit
+
+To add a group and user to an organizational unit:
+
+. Create a new Mule Project in Anypoint Studio.
+. Add these properties to the `mule-artifact.properties` file:
++
+[source,text,linenums]
+----
+config.principal.dn=<DN>
+config.password=<Password>
+config.url=<URL>
+----
++
+. Place the `mule-artifact.properties` file into the project's `src/main/resources` directory.
+. From the *Mule Palette* view, click *HTTP* and drag the *Listener* source to the canvas.
+. In the Listener properties window, change the display name of the *Listener* source to `HTTP`.
+. Click *+* next to the *Connector configuration* field to add a global element.
+. Accept the defaults.
+. In the Listener properties window, set the *Path* field value to `/`.
+. From the *Mule Palette* view, select *Core* and drag the *Transform Message* component next to *HTTP*.
+. In the *Output* section, replace the existing text with the following DataWeave script:
++
+[source,java,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	dn : "ou=DevOpsGroup," ++ attributes.queryParams.dn,
+	ou : "DevOpsGroup",
+	objectclass : ["top", "organizationalUnit"]
+}
+----
++
+. From the *Mule Palette* view, select *LDAP* and drag the *Add entry* operation next to the *Transform Message* component to start adding an LDAP group.
+. Click *+* next to the connector configuration field to add a new global element.
+. Configure the global element as follows:
++
+[%header%autowidth]
+|===
+|Parameter|Description|Value
+|Name|Name of the configuration|`LDAP_Configuration`
+|Principal DN|User distinguished name (DN)|`${config.principal.dn}`
+|Password|User password|`${config.password}`
+|URL|URL that connects to the LDAP server|`${config.url}`
+|===
++
+. Click *Test Connection* to confirm that Mule can connect to the LDAP server instance.
+. Process the connection results as follows:
+* If the connection succeeds, click *OK* to save the configuration.
+* If the connection fails, review and correct any incorrect field values and test again.
+. Return to the LDAP Connector properties window and configure the parameters required for the *Add entry* operation:
++
+[%header%autowidth]
+|===
+|Parameter|Value
+|Display Name|`Add Group Entry to LDAP Directory`
+2+|Basic Settings
+|Connector configuration|LDAP Connector global element that you created previously
+2+|General
+|Entry|`payload` (the default value)
+|===
++
+. From the *Mule Palette* view, select *Core* and drag the *Transform Message* component next to *Add Group Entry to the LDAP directory*.
+. In the *Output* section, replace the existing text with the following DataWeave script:
++
+[source,java,linenums]
+----
+%dw 2.0
+output application/java
+---
+{
+	dn : "cn=Test User,ou=DevOpsGroup," ++ attributes.queryParams.dn,
+	uid : "testUser",
+	cn : "Test User",
+	sn : "User",
+	userPassword : "test1234",
+	objectclass : ["top", "person", "organizationalPerson", "inetOrgPerson"]
+}
+----
++
+. From the *Mule Palette* view, select *LDAP* and drag the the *Add entry* operation next to *Transform Message* to start adding an LDAP user.
+. In the LDAP Connector properties editor, configure the parameters as follows:
+
++
+[%header%autowidth]
+|===
+|Parameter|Value
+|Display Name|`Add User Entry to LDAP Directory`
+2+|Basic Settings
+|Connector configuration|LDAP Connector global element that you created previously
+2+|General
+|Entry| `payload` (the default value)
+|===
+
+=== Delete a Group and User from an Organizational Unit
+
+After you successfully add a group and user to an organizational unit, delete them using LDAP Connector:
+
+. From the *Mule Palette* view, select *LDAP* and drag the *Delete entry* operation next to the *Add User Entry to LDAP Directory* on the canvas.
+. In the LDAP Connector properties editor, configure the parameters as follows:
++
+[%header%autowidth]
+|===
+|Parameter|Value
+|Display Name|`Delete User Entry from LDAP Directory`
+2+|Basic Settings
+|Connector configuration|LDAP Connector global element that you created previously
+2+|General
+|DN|`#['cn=Test User,ou=DevOpsGroup,' ++ attributes.queryParams.dn]`
+|===
++
+. Drag another *Delete entry* operation next to the first one to start deleting the LDAP group entry.
++
+[%header%autowidth]
+|===
+|Parameter|Value
+|Display Name|`Delete Group Entry from LDAP Directory`
+2+|Basic Settings
+|Connector configuration|LDAP Connector global element that you created previously
+2+|General
+|DN|`#['ou=DevOpsGroup,' ++ attributes.queryParams.dn]`
+|===
++
+. Drag the *Transform Message* component next to *Delete Group Entry from LDAP Directory*.
+. Set the payload to "Flow Successfully Completed".
+
+=== Test the App
+
+To test the app:
+
+. Save the project.
+. Run the project as a Mule app.
+. Send a PUT command to this URL:
++
+`+http://localhost:8081/?dn=mulesoft,dc=orgrequest+`
+
+=== XML for the Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ldap="http://www.mulesoft.org/schema/mule/ldap" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ldap
+http://www.mulesoft.org/schema/mule/ldap/current/mule-ldap.xsd">
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="74b34b41-4e8b-4b96-adec-da917b183083" >
+<http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+<ldap:config name="LDAP_Configuration" doc:name="LDAP Configuration" doc:id="2e1caebb-d041-47ec-9513-69c140c78700" >
+		<ldap:basic-connection authDn="${config.principal.dn}" authPassword="${config.password}" url="${config.url}" />
+	</ldap:config>
+	<flow name="ldap-examplesFlow" doc:id="dc01fbb8-1e2c-4255-be17-46309cdbef07" >
+		<http:listener doc:name="HTTP" doc:id="180e5809-d508-498c-a74f-97d93afc98f8" config-ref="HTTP_Listener_config" path="/"/>
+		<ee:transform doc:name="Transform Message" doc:id="183ca95a-dcc2-448f-8bba-26f7295fb1e4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	dn : "ou=DevOpsGroup," ++ attributes.queryParams.dn,
+	ou : "DevOpsGroup",
+	objectclass : ["top", "organizationalUnit"]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ldap:add doc:name="Add Group Entry to LDAP Directory" doc:id="95d60199-e087-4fe1-afa7-1c035fdd3aec" config-ref="LDAP_Configuration"/>
+		<ee:transform doc:name="Transform Message" doc:id="0e96e606-48be-4ba0-9266-242bd9911184">
+			<ee:message>
+				<ee:set-payload><![CDATA[{
+	dn : "cn=Test User,ou=DevOpsGroup," ++ attributes.queryParams.dn,
+	uid : "testUser",
+	cn : "Test User",
+	sn : "User",
+	userPassword : "test1234",
+	objectclass : ["top", "person", "organizationalPerson", "inetOrgPerson"]
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<ldap:add doc:name="Add User Entry to LDAP Directory" doc:id="28c98048-0ba6-4a36-92df-49d437303217" config-ref="LDAP_Configuration"/>
+		<ldap:delete doc:name="Delete User Entry from LDAP Directory" doc:id="07e7141a-03d9-4565-bbca-8a4b03cbb6ee" config-ref="LDAP_Configuration" dn="#['cn=Test User,ou=DevOpsGroup,' ++ attributes.queryParams.dn]"/>
+		<ldap:delete doc:name="Delete Group ENtry from LDAP Directory" doc:id="892dca59-86a3-40a2-b758-09560fb95383" config-ref="LDAP_Configuration" dn="#['ou=DevOpsGroup,' ++ attributes.queryParams.dn]"/>
+		<ee:transform doc:name="Transform Message" doc:id="5dc391aa-87b1-4e84-97e5-71dc5f8daa22" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
+----
+
+[[set-up-common-truststore]]
+== Set Up a Common Truststore
+
+This example shows how to change the previous example so that it has a TLS configuration that uses a custom truststore.
+
+NOTE: The custom truststore feature is not FIPS compliant.
+
+To set up a custom truststore:
+
+. Follow the steps in the previous example.
+. Add these properties to the `mule-artifact.properties` file to hold your LDAP credentials:
++
+[source,text,linenums]
+----
+config.principal.dn=<DN>
+config.password=<Password>
+config.url=<URL>
+----
++
+. Place the `mule-artifact.properties` file into the project's `src/main/resources` directory.
+. Locate the following element in the XML code:
++
+[source,xml,linenums]
+----
+ <ldap:conf name=:LDAP_configuration" doc:name="LDAP Configuration"
+ .
+ .
+ .
+ </ldap:config
+----
++
+. Overlay the located element with the following code:
++
+[source,xml,linenums]
+----
+<ldap:config name="LDAP_Configuration">
+  <ldap:tls-connection
+    authDn="${config.principal.dn}}"
+    authPassword="${config.password}"
+    url="${config.url}"
+    trustStorePath="path_to_truststore_jks_file"
+    trustStorePassword="changeit" />
+----
+
+[[run-time]]
+=== Test the App
+
+To test the app:
+
+. Save the project.
+. Run the project as a Mule app.
+. Send a PUT command to this URL:
++
+`+http://localhost:8081/?dn=mulesoft,dc=orgrequest+`
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
