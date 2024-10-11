@@ -1,4 +1,5 @@
-= Workday Connector 16.1 Reference - Mule 4
+= Workday Connector 16.2 Reference - Mule 4
+:page-aliases: connectors::workday/workday-reference.adoc
 
 Anypoint Connector for Workday (Workday Connector) provides access to standard Workday operations.
 
@@ -13,6 +14,7 @@ Default Configuration for Workday Connector.
 | Name | Type | Description | Default Value | Required
 |Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| * <<config_basic-authentication-api, Workday Basic Authentication Connection>>
+* <<Config_WorkdayOauthAuthentication, Workday OAuth Code Authentication Connection>> 
 * <<config_x509-authentication, x.509 Authentication>>
 | Connection types for this configuration. | | x
 | Time Zone a| String |  Indicates the timezone. Must be in the format `UTC+01:00`. |  `UTC` |
@@ -82,6 +84,78 @@ Mule closes the connection after the first request completes. |  `true` |
 ** DAYS |  Time unit for the *Connection Timeout* field. |  `SECONDS` |
 | TLS Configuration a| <<Tls>> |  Configures TLS. If using the HTTPS protocol, you must configure TLS.  |  |
 | Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+|===
+
+[[Config_WorkdayOauthAuthentication]]
+=== Workday OAuth Code Authentication Connection Type
+
+include::connectors::partial$oauth2-description.adoc[]
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Proxy Configuration a| One of:
+
+* <<Default>>
+* <<NTLM>> | Configures a proxy for outbound connections. |  |
+| State a| String | A String value that you send when the OAuth dance is initiated and that is returned back by the service provider with the token callback.
+
+[NOTE]
+====
+Although the *State* parameter is optional, Workday requires it. You can pass the *State* parameter either directly to the OAuth dance or pass it through the *Resource Owner Id* (in multi-tenancy environments), for example, `/authorize?state=test_state`. Failing to do so results in a `The state query parameter is missing from the authorization request` error from Workday.
+
+The *State* parameter will be deprecated in a future release.
+==== |  | 
+| Host name a| String |  Hostname of your Workday instance. |  `impl-cc.workday.com` |
+| Tenant name a| String |  Workday tenant name or ID. Use expressions in this field to configure a connection for multiple tenants. |  | x
+| Use Persistent Connections a| Boolean a| Indicates whether to use persistent connections:
+
+* `true`
++
+Mule uses persistent connections.
+
+* `false`
++
+Mule closes the connection after the first request completes. |  `true` |
+| Max Connections a| Number |  Maximum number of parallel outbound connections to keep open. The default value of `-1` means unlimited connections for maximum throughput. If resource consumption is too high, lower this value accordingly. | `-1` |
+| Connection Idle Timeout a| Number | When persistent connections are enabled, how long a connection can remain idle before Mule closes it. |  `30` |
+| Connection Idle Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Connection Idle Timeout* field. |  `SECONDS` |
+
+| Stream Response a| Boolean |  If set to `true`, Mule streams received responses. |  `false` |
+| Response Buffer Size a| Number |  Size of the buffer that stores the HTTP response, in bytes. |  `-1` |
+| Connection Timeout a| Number |  How long a connection can remain idle before it is closed. The value of this attribute is used only when persistent connections are enabled. |  `30` |
+| Connection Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Connection Timeout* field. |  `SECONDS` |
+| TLS Configuration a| <<Tls>> |  Configures TLS. If using the HTTPS protocol, you must configure TLS.  |  |
+| Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+| Consumer Key a| String | OAuth consumer key, as registered with the service provider. |  | x
+| Consumer Secret a| String | OAuth consumer secret, as registered with the service provider. |  | x
+| Authorization Url a| String |  Service provider's authorization endpoint URL. |  `\https://impl.workday.com/wday/authgwy/<tenantName>/authorize` | 
+| Access Token Url a| String |  Service provider's access token endpoint URL. |  `\https://wd2-impl-services1.workday.com/ccx/oauth2/<tenantName>/token` | 
+| Scopes a| String |  OAuth scopes to request during the OAuth dance. If not provided, it defaults to the OAuth scopes in the annotation.  |  | 
+| Resource Owner Id a| String |  The resource owner ID that each component should use if the resource owner ID is not otherwise referenced.  |  |
+| Before a| String | Name of a flow to execute immediately before starting the OAuth dance. |  |
+| After a| String |  Name of a flow to execute immediately after an access token is received. |  |
+| Listener Config a| String | Reference to a `<http:listener-config />` to use to create the listener that will receive the access token callback endpoint. |  | x
+| Callback Path a| String | Path of the access token callback endpoint. |  | x
+| Authorize Path a| String |  Path of the local HTTP endpoint that triggers the OAuth dance. |  | x
+| External Callback Url a| String |  If the callback endpoint is behind a proxy or must be accessed through a non-direct URL, use this parameter to tell the OAuth provider the URL to use to access the callback. |  |
+| Object Store a| String |  Reference to the object store to use to store each resource owner ID's data. If not specified, Mule automatically provisions the default object store. |  |
 |===
 
 
@@ -264,6 +338,7 @@ a|  Workday object type that applies to this source. The following object types 
 * <<talent>>
 * <<tenantDataTranslation>>
 * <<timeTracking>>
+* <<Unauthorize>> 
 * <<workdayConnect>>
 * <<workdayExtensibility>>
 * <<workforcePlanning>>
@@ -2735,6 +2810,26 @@ Invokes the Time Tracking web service, which contains operations for importing a
 * WORKDAY:PROCESSING_ERROR
 * WORKDAY:RETRY_EXHAUSTED
 * WORKDAY:VALIDATION_ERROR
+
+
+[[Unauthorize]]
+=== Unauthorize
+`<workday:unauthorize>`
+
+Deletes all the access token information of a given resource owner ID so that it is impossible to execute any operation for that user without doing the authorization dance again.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Resource Owner Id a| String | ID of the resource owner for whom to invalidate access. |  | 
+| Config Ref a| ConfigurationProvider | Name of the configuration used to execute this component. |  | x
+|===
+
+==== Associated Configurations
+
+* <<config>> 
+
 
 
 [[workdayConnect]]
