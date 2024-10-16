@@ -1,0 +1,181 @@
+= Configuring Tools Operations
+
+== Before You Begin
+
+To use Tools you must create a `tools.config.json` file that includes all the necessary API information for the operation to execute APIs successfully, for example:
+
+[source,json]
+----
+[
+    {
+        "action": "Execute POST requests for API endpoints.",
+        "url": "http://check-inventory-material.cloudhub.io/mmbe",
+        "name": "Check Inventory",
+        "method": "POST",
+        "headers": "Basic XXX",
+        "example-payload": "{\n \"materialNo\": \"paramValue\"}",
+        "query": [
+            "Check inventory in SAP",
+            "Check Stock Overview",
+            "Show product availability for MULETEST0",
+            "Check the inventory for MULETEST0",
+            "Check Stock for 400-110"
+        ],
+        "description": "Check inventory details for material in SAP by providing the materialNo as input for paramValue. Please use the materialNo and not materialNumber. This action applies whenever users' intent is 'Stock overview', 'product availability', 'Inventory', 'available stock'. Use the headers to perform the request."
+    },
+    {
+        "action": "Execute GET requests for API endpoints.",
+        "url": "https://anypoint.mulesoft.com/mocking/api/v1/sources/exchange/assets/612eb739-4266-4f4c-bf2f-29953c153d80/accounts-api/1.0.1/m/accounts",
+        "name": "Show Accounts",
+        "method": "GET",
+        "headers": "",
+        "example-payload": "{}",
+        "query": [
+            "Get all accounts",
+            "Show all accounts from CRM"
+        ],
+        "description": "Get all accounts from a CRM. This action applies whenever users' intent is 'CRM accounts', 'customers', 'customer accounts', 'accounts'."
+    },
+    {
+        "action": "Execute GET requests for API endpoints.",
+        "url": "https://anypoint.mulesoft.com/mocking/api/v1/sources/exchange/assets/7b99cead-a984-497b-9e6c-c16a3b4dcb76/employee-api/1.0.1/m/employees",
+        "name": "Show Employees",
+        "method": "GET",
+        "headers": "",
+        "example-payload": "{}",
+        "query": [
+            "Get all employee information",
+            "Show employees for the country Switzerland",
+            "How many employees do we have",
+            "Show a list of all employees"
+        ],
+        "description": "Get all information about employees. This action applies whenever users' intent is 'employees', 'workforce'."
+    }
+]
+----
+
+Each object in the tools array represents a tool that the autonomous agent can use, so it is important to describe each field as accurately as possible.
+
+* `action`
++
+This field supports the following options:
+** `Execute GET` requests for API endpoints.
+** `Execute POST` requests for API endpoints.
+* `url` The complete URL to the endpoint, including the resource path.
+* `name` 
++
+The name of the action in natural language.
+* `method` 
++
+The HTTP method for the endpoint. Only POST and GET are supported.
+* `headers` 
++
+The HTTP headers required for authorization to the endpoint. Only Basic Auth is supported.
+* `example-payload` 
++
+The example payload in JSON format.
+`query` 
++
+Example queries a user might use to invoke this action.
+`description` 
++
+A detailed description of how to use the tool. The description should be comprehensive enough for the LLM to understand its purpose and usage.
+
+Ensure that the file path to the `tools.config.json` is accessible to the application at runtime.
+
+== Configure the Tools Use AI Service Operation
+
+The *Tools use AI service* operation is useful if you want to create autonomous agents that can use external tools whenever a prompt can't be answered directly by the AI model. 
+
+To configure the *Tools use AI service* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Data*
++
+The prompt to send to the LLM.
+* *Tool Config*
++
+The full file path to the `tools.config.json` file. Ensure the file path is accessible. 
+
+You can also use a DataWeave expression for this field, for example: 
++
+`mule.home ++ "/apps/" ++ app.name ++ "/tools.config.json"`
+
+
+This is the XML configuration for this operation:
+
+[[source,xml]]
+----
+<ms-aichain:tools-use-ai-service 
+  doc:name="Tools use AI service" 
+  doc:id="910f744f-e359-4e39-afd1-3fb932c5fc53" 
+  config-ref="MAC_AI_Llm_configuration" 
+  data="#[payload.prompt]" 
+  toolConfig='#[mule.home ++ "/apps/" ++ app.name ++ "/tools.config.json"]'
+/>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload that contains the main LLM response. Additionally, attributes such as token usage and tool usage (boolean value) are included as part of the attributes, but not within the main payload.
+
+This is an example response of the JSON payload if the prompt is "What is the capital of Switzerland?"
+
+[source,json]
+----
+{
+    "response": "The capital of Switzerland is Bern."
+}
+----
+
+If the prompt requires accessing external data through a tool, for example, "Show me the latest account created in Salesforce", the AI model uses the configured tool to fetch the information, resulting in:
+
+[source,json]
+----
+{
+    "response": "The latest account created in Salesforce is:\n\n- **Name:** MuleTalks\n- **Id:** 0010600002JKf42AAD\n- **Created Date:** 2024-07-10T20:21:36.000Z\n\nIf you have any further questions or need additional assistance, feel free to ask!"
+}
+----
+
+Along with the JSON payload, the operation returns attributes, which include information about token and tool usage, for example:
+
+[source,json]
+----
+{
+    "tokenUsage": { <1>
+        "outputCount": 9,
+        "totalCount": 18,
+        "inputCount": 9
+    },
+    "additionalAttributes": { <2>
+        "toolsUsed": "true"
+    }
+}
+----
+
+<1> tokenUsage: Provides information on the token usage for the operation:
+* `outputCount` 
++
+Number of tokens generated in the response
+`totalCount` 
++
+Total number of tokens processed for the entire operation, including input and output
+* `inputCount` 
++
+Number of tokens processed from the input query or document
+<2> `additionalAttributes` includes the boolean value for `toolsUsed`:
+* `true`
++
+External tools, such as APIs or integrations, were used to gather or generate the response.
+* `false`
++
+No external tools were used, and the response was based on internal knowledge only.
+
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:index.adoc[]
+* xref:mulesoft-ai-chain-connector-reference.adoc[]
+* https://help.mulesoft.com[MuleSoft Help Center]
+
