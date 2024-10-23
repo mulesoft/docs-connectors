@@ -1,0 +1,212 @@
+= RosettaNet Connector - Mule 4
+:page-aliases: connectors::rosettanet/rosettanet-connector.adoc
+
+Support Category: Premium
+
+The RosettaNet connector provides B2B functionality using the RosettaNet Information Framework (RNIF) for the information exchange of Rosetta Partner Interface Process (PIP) messages.
+
+The RosettaNet Connector supports RNIF 2.00.01.
+
+The following PIPs are supported:
+
+[%header,cols="10s,20a,70a"]
+|===
+|PIP |Version |Purpose
+|0A1 |v02.00 |Notification of Failure
+|3A4 |3A4MG1 v02.02 |Request Purchase Order
+|3A4 |3A4MG2 v02.02 |Request Purchase Order
+|3A6 |3A6MG1 v02.00, v02.02, v02.03 |Distribute Order Status
+|3B2 |3B2MG1 v01.00 |Notify of Advance Shipment
+|3C3 |3C3MG1 v01.00, v01.11 |Notify of Invoice
+|===
+
+The RosettaNet Connector always uses PIP 0A1 v02.00 for all Failure Notification messages.
+
+*Note:* Example files are available for download as described in <<See Also>>.
+
+== Before You Begin
+
+This document assumes that you are familiar with RosettaNet, Mule, Anypoint
+Connectors, Anypoint Studio, Mule flows, and Mule Global Elements.
+
+See the xref:release-notes::connector/rosettanet-connector-release-notes-mule-4.adoc[RosettaNet Release Notes] for compatibility information.
+
+To use the RosettaNet connector in a production environment, you must
+have purchased a MuleSoft license for Anypoint B2B.
+
+== What's New in this Connector
+
+RosettaNet connector 2.x for Mule 4 makes several changes to the configuration and handling over what was implemented by RosettaNet connector 1.x:
+
+* Metadata supplied automatically for sources (no need for the separate metadata definition component used in 1.x)
+* Simplified flow structure, with separate flows used for each partner and message.
+* Additional validations are now performed on the keystore usage to address reported security vulnerabilities. 
+
+== Install this Connector in Anypoint Studio 7
+
+. In Studio, create a Mule Project.
+. Click the Exchange *(X)* icon in the Studio task bar.
+. In Exchange, click *Login* and supply your Anypoint Platform username and password.
+. In Exchange, select *All assets* and search for "RosettaNet".
+. Select RosettaNet, click *Add to project*.
+. Follow the prompts to install the connector.
+
+== Create a Mule Project in Anypoint Studio 7
+
+After you install the connector you can start using the connector. The first step is to create HTTP Listener and Request definitions for the Mule and partner endpoints used for your message exchanges.
+
+. Click the Global Elements tab at the base of the canvas, and click *Create*.
+. Under Connector Configuration, find and select HTTP Listener config, and click *OK*.
+. In the configuration definition, enter the *Host* and *Port* to be used for receiving action and/or signal messages from the trading partner, then click *OK*.
+. From the Global Elements tab, again click *Create*.
+. Under *Connector Configuration*, find and select HTTP Request configuration, and click *OK*.
+. In the configuration definition, enter the Host and Port to be used for sending action and/or signal messages to the trading partner, then click *OK*.
+. Click the *Global Elements* tab at the base of the canvas, and click *Create*.
+. Under *Connector Configuration*, find and select *RosettaNet Config*, and click *OK*.
+. Fill in the references to the Global HTTP Listener and Global HTTP Request definitions you've created,
+along with the endpoint paths, self/partner identification information, and PIP role and definition path
+(for the standard PIP definitions provided use paths of the form `/{pipId}/{version}.xml`, such as `/PIP3A4/V02_02.xml`).
+. If your PIP definition uses signed messages, you also need to configure the `Keystore path` and `Keystore
+access password` values, and if you're sending signed messages you also need the `Signing key password`.
+. Click *OK* to save the global connector configurations.
+. Return to the *Message Flow* tab in Studio.
+. Drag RosettaNet components into your flows, selecting the configuration to be used for each component.
+
+=== Connector Components
+
+The RosettaNet connector provides three components for use in your app flows:
+
+* Action Source - Source for processing action messages received from your partner.
+* Action Sender - Sender for action messages to be transmitted to your partner.
+* Acknowledge Source - Source for processing the completions (whether successful deliveries, exceptions, or failures) of action messages you've sent to your partner.
+
+== Configuration Details
+
+image::rosettanet-buyer-config.png[General tab properties]
+
+All configuration properties used by the RosettaNet connector are in the Studio General tab:
+
+[%header,cols="30s,70a"]
+|===
+|Configuration Property |Description
+| Global HTTP Listener |Name of the HTTP Listener configuration to be used for receiving messages from the partner.
+| Service Endpoint Path |Path relative to the HTTP Listener configuration (allowing the same HTTP Listener to be used with different paths for different partners, if desired).
+| Global HTTP Request |Name of the HTTP Request configuration to be used for sending messages to the partner.
+| Request Endpoint Path |Path relative to the HTTP Request configuration (allowing the same HTTP Request to be used with different paths, if desired).
+| Keystore path |Absolute file path or classpath relative to the project `/src/main/resources` directory for the keystore used for validating and/or signing messages (required when sending or receiving signed messages).
+| Keystore access password |Password used to protect the keystore (required when sending or receiving signed messages).
+| Signing key password |Password used to access the private signing key within the keystore (required when sending signed messages).
+| Force message signing |Optional override to force the use of signed messages even when not required by the PIP definition. Leave this value empty to the PIP definition for signing messages, set to `NEVER` to never sign any messages, or set to  `ALWAYS` to always sign messages.
+| Global usage code |Mode to run the connector, one of:
+
+* Production
+* Test
+* Unchecked
+| Object store reference |Optional reference to an object store definition to be used for storing messages awaiting acknowledgment. If not set, the connector always uses the default persistent object store to retain sent messages waiting for acknowledgments or retries. If set, the connector uses the referenced object store configuration instead.
+| Mule DUNS identifier |Dun & Bradstreet Universal Numbering System (DUNS) ID for this organization.
+| Mule location identifier |Location ID of this organization. If specified, this is included in all messages sent and must be present in all messages received. If not specified, any value present in received messages will be accepted and ignored. Using the location ID also changes the alias used for your key pair in the keystore.
+| Partner DUNS identifier |Dun and Bradstreet Universal Numbering System (DUNS) ID for your trading partner organization.
+| Partner location identifier |Expected location ID for partner organization. If specified, this will be included in all messages sent and must be present in all messages received. If not specified, any value present in received messages is accepted and ignored. Using the location ID also changes the alias used the partner certificate in the keystore.
+| Role in PIP |Role in Partner Interface Process (PIP) usage, one of:
+
+* INITIATOR
+* RESPONDER
+| PIP definition path |Absolute file path or classpath relative to the project `/src/main/resources` directory for the PIP definition XML file. For one of the standard PIP definitions included in the distribution this takes the form `/{pipId}/{version}.xml`, such as `/PIP3A4/V02_02.xml`.
+|===
+
+=== Configuration Options in XML
+
+All values listed in the Studio configuration can be set directly in XML:
+
+[%header%autowidth.spread]
+|===
+|XML Value |Visual Studio Option
+|globalUsageCode |Global usage code
+|keystorePass |Keystore access password
+|keystorePath |Keystore path
+|listenerConfigName |Global HTTP Listener
+|objectStore |Object store reference
+|partnerBusinessIdentifier |Partner DUNS identifier
+|partnerLocationId |Partner location identifier
+|pipFile |PIP definition path
+|pipRole |Role in PIP
+|privatePass |Signing key password
+|requestPath |Request Endpoint Path
+|requesterConfigName |Global HTTP Request
+|selfBusinessIdentifier |Mule DUNS identifier
+|selfLocationId |Mule location identifier
+|servicePath |Service Endpoint Path
+|signingOverride |Force message signing
+|===
+
+== Object Store
+
+The default object store uses the Mule default persistent object store, which means that sent messages may accumulate if not acknowledged, and which may cause retransmissions when you try running again.
+
+You can use the following to define a transient object store for testing and debugging, and reference the object store by name from your RosettaNet configuration.
+
+[source,xml,linenums]
+----
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" ...
+  http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd" ...>
+  ...
+  <os:object-store name="transientStore" persistent="false"/>
+  ...
+  <rosetta:config name="PO_InitiatorConfig_Buyer" ...
+    objectStore="transientStore"/>
+----
+
+When using a persistent object store unacknowledged messages are retained across restarts of the Mule app and are automatically retransmitted when the app restarts (assuming the timeout has expired). All messages are deleted from the object store if the number of retransmissions specified in the PIP definition occurs without an acknowledgment, or after three days time. You can also force unacknowledged messages to be discarded when the Mule app is started by setting the system property:
+
+`com.mulesoft.connectors.rosettanet.extension.internal.delivery.DeliveryManager.deleteStore=true`
+
+== Customize a PIP
+
+Customizing a PIP allows two types of changes to the PIP configuration:
+
+* Parameters: Change settings within a PIP version's XML file.
+* Advanced: Create a custom DTD from which you create an XSD file.
+
+For both paths, put the new or changed files in a directory in your Studio project's src/main/resources folder.
+
+You can used the supplied PIP configurations as a starting point. These are distributed inside the mule-rosettanet-extension-2.0.0-mule-plugin.jar, which is downloaded by Studio and added to your project under the `/target/repository/com/mulesoft/connectors/mule-rosettanet-extension` directory and can also be found in the standard MuleSoft enterprise Maven repositories (under group ID com.mulesoft.connectors). Each PIP configuration is in a separate directory (such as `PIP3A4`) inside the jar. You can copy a PIP directory out of this jar and edit the contents to match your specific needs.
+
+Inside the PIP configuration directory you'll find an XML file giving the parameters for a particular version of the PIP (such as `V02_02.xml`). This XML file gives all the details of retry counts, times to acknowledge, and signing requirements for the action(s) defined by the PIP. This file also references DTD and XSD definitions for the actual action messages (both are required, since the DTD is used by RosettaNet and the XSD is used to provide DataSense information inside Mule).
+
+Copy the base PIP definition directory out of the jar and into your Studio project's src/main/resources folder, changing the name of the copied directory to indicate your customization (such as `PIP3A4-custom`). Then make your desired changes and use the modified PIP directory name in your RosettaNet Connector configuration (as the `pipFile` value).
+
+== Keystores
+
+RosettaNet uses X.509 certificates to authenticate messages. RosettaNet connector currently only supports storing certificates (and the private keys used for signing) in JKS-format keystores. You can use various tools such as Portecle for working with keystores and creating keys and certificates.
+
+Keystore aliases have the form:
+`{Partner/Self Business Identifier}[:{Partner/Self Location ID}]`
+
+The curly braces surround values and the square brackets show the optional part that is used only when the Location ID is defined.
+
+=== Dig Deeper
+
+If you're interested in seeing the details of the RosettaNet protocol exchanges you can turn on `TRACE` logging in the `/src/main/resources/log4j2.xml` logging configuration files, adding a line like:
+
+[source,xml,linenums]
+----
+<Loggers>
+    ...
+    <AsyncLogger name="com.mulesoft.connectors.rosettanet.extension" level="TRACE"/>
+    ...
+</Loggers>
+----
+
+== See Also
+
+* xref:release-notes::connector/rosettanet-connector-release-notes.adoc[RosettaNet Connector Release Notes]
+* https://forums.mulesoft.com[MuleSoft Forum]
+
+Example Files:
+
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-request-content.xml[sample-purchase-order-request-content.xml]
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-confirmation-content.xml[sample-purchase-order-confirmation-content.xml]
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/partner1.jks[partner1.jks]
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/partner2.jks[partner2.jks]
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/rosetta-buyer.jar[rosetta-buyer.jar]
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/rosetta-seller.jar[rosetta-seller.jar]
