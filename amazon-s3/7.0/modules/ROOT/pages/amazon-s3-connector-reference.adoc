@@ -53,6 +53,7 @@ Uses the S3 connection type, which covers both the Basic and Role connections.
 | Role a| <<Role>> |  Role configuration. |  |
 | Try Default AWSCredentials Provider Chain a| Boolean |  If `true`, obtains credentials from the AWS environment. For more information, refer to https://docs.aws.amazon.com/sdk-for-java/v2/developer-guide/credentials.html[Provide Temporary Credentials to the SDK
 ]. |  `false` | 
+| Max Connections a| Number |  Defines the maximum number of outbound connections that are kept open at the same time. Unlimited by default. |  `-1` | 
 | Custom Service Endpoint a| String |  Sets a custom service endpoint. Useful when a non-standard service endpoint is required, such as a VPC endpoint. For local connections, set this field to `\http://localhost:8000/`. |  |
 | Custom SQS Endpoint a| String |  Sets a custom SQS endpoint. Useful when a non-standard SQS endpoint (used by sources) is required, such as a VPC endpoint. |  |
 | Proxy Configuration a| <<ProxyConfiguration>> |  Proxy connection settings for outbound connections. This setting applies to the sources and checkpoint operation. It does not affect the put record operation. |  |
@@ -366,6 +367,7 @@ Design your application to parse the contents of the response and handle it appr
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
 * S3:INVALID_OBJECT_STATE
+* S3:NO_SUCH_BUCKET 
 * S3:NO_SUCH_KEY
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
@@ -497,6 +499,8 @@ Returns a presigned URL to access an Amazon S3 object. The presigned URL can be 
 | Configuration | String | Name of the configuration to use. | | x
 | Bucket Name a| String | Name of the bucket in the request. |  | x
 | Key a| String | Key of the object in the request. |  | x
+| Part Number a| Number |  Required if *Method* is `UPLOAD_PART`. If the content size is equal to or less than 5 MB, then *Part Number* is `1`. If not, use a loop to increase the number (1, 2, 3, and so on).  |  | 
+| Upload Id a| String |  Required if *Method* is `ABORT_MULTIPART_UPLOAD`, `COMPLETE_MULTIPART_UPLOAD`, or `UPLOAD_PART`.  |  | 
 | Method a| Enumeration, one of:
 
 ** ABORT_MULTIPART_UPLOAD
@@ -515,6 +519,8 @@ Returns a presigned URL to access an Amazon S3 object. The presigned URL can be 
 ** MINUTES
 ** HOURS
 ** DAYS | Time unit of the *Duration* field. |  `SECONDS` | 
+| Content MD5 a| String | Base64 encoded 128-bit MD5 digest of the associated object (content - not including headers) according to RFC 1864. |  | 
+| Content Type a| String |  Standard MIME type describing the format of the contents. |  | 
 | Sse Customer Algorithm a| String |  Server-side encryption (SSE) algorithm used for the presigned URL. This field is not allowed for the HTTP GET method. If you set a value for this field and use the HTTP GET method, you will receive an error. |  | 
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  |
@@ -794,6 +800,7 @@ To remove a specific version, you must be the bucket owner and you must use the 
 * S3:BAD_REQUEST
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
+* S3:NO_SUCH_BUCKET
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
 * S3:S3_ERROR
@@ -834,6 +841,7 @@ The action supports two modes for the response: verbose and quiet. By default, t
 * S3:BAD_REQUEST
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
+* S3:NO_SUCH_BUCKET 
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
 * S3:S3_ERROR
@@ -1306,6 +1314,7 @@ Retrieves objects from Amazon S3. To use GET, you must have READ access to the o
 [%autowidth.spread]
 |===
 |Type |Any
+|Attributes Type | <<GetObjectOperationAttributes>>
 |===
 
 ==== Associated Configurations
@@ -1318,6 +1327,7 @@ Retrieves objects from Amazon S3. To use GET, you must have READ access to the o
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
 * S3:INVALID_OBJECT_STATE
+* S3:NO_SUCH_BUCKET 
 * S3:NO_SUCH_KEY
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
@@ -1364,6 +1374,7 @@ Returns the ACL of an object. To use this operation, you must have s3:GetObjectA
 * S3:BAD_REQUEST
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
+* S3:NO_SUCH_BUCKET 
 * S3:NO_SUCH_KEY
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
@@ -1419,6 +1430,7 @@ Retrieves all the metadata from an object without returning the object itself. T
 * S3:BAD_REQUEST
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
+* S3:NO_SUCH_BUCKET
 * S3:NO_SUCH_KEY
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
@@ -1470,6 +1482,7 @@ The HEAD action retrieves metadata from an object without returning the object i
 * S3:BAD_REQUEST
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
+* S3:NO_SUCH_BUCKET
 * S3:NO_SUCH_KEY
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
@@ -1939,7 +1952,7 @@ Sets the tags for a bucket. Use tags to organize your AWS bill to reflect your o
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
 | Bucket a| String |  Name of the bucket. |  | x
-| Bucket Tags a| Array of <<Tag>> | Bucket tags. |  |
+| Bucket Tags a| Object | Bucket tags. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
@@ -2100,7 +2113,8 @@ Amazon S3 is a distributed system. If it receives multiple write requests for th
 | Request Payer a| String |  Confirms that the requester knows that they are charged for the request. Bucket owners do not need to specify this field in their requests. Valid value are the requesters. |  |
 | Sse Customer Algorithm a| String |  Specifies the algorithm to use to when encrypting the object. Valid values are AES256. | `aws:kms` |
 | Sse Kms Key Id a| String |  AWS Key Management System key ID used for Server Side Encryption of the Amazon S3 object. You must specify the *Server Side Encryption* field when you set the *Sse Kms Key Id* field.  |  |
-| Sse Customer Key a| String |  AWS Key Management System key ID used for Server Side Encryption of the Amazon S3 object. Use this value if aws:kms sseCustomerAlgorithm is chosen. |  |
+| Sse Customer Key a| String | Represents a customer-provided key to use with Amazon S3 server-side encryption. |  |
+| Sse Kms Key Id a| String | AWS Key Management System key ID to use for server-side encryption of the Amazon S3 object. The *Server Side Encryption* field must be specified when this field is used. |  | 
 | Sse Customer Key MD5 a| String |  Specifies the base64-encoded 128-bit MD5 digest of the encryption key according to RFC 1321. Amazon S3 uses this header for a message integrity check to ensure that the encryption key is transmitted without error. |  |
  | Server Side Encryption a| String |  Server side encryption algorithm used when storing this object in Amazon S3. This field sets the HTTP x-amz-server-side-encryption. |  |
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  |
@@ -2125,6 +2139,7 @@ Amazon S3 is a distributed system. If it receives multiple write requests for th
 * S3:BAD_REQUEST
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
+* S3:NO_SUCH_BUCKET
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
 * S3:S3_ERROR
@@ -2185,6 +2200,7 @@ Uses the ACL subresource to set the access control list (ACL) permissions for a 
 * S3:BAD_REQUEST
 * S3:CONNECTIVITY
 * S3:FORBIDDEN
+* S3:NO_SUCH_BUCKET
 * S3:NO_SUCH_KEY
 * S3:REQUEST_TIMEOUT
 * S3:RETRY_EXHAUSTED
@@ -2247,6 +2263,7 @@ To restore a specific object version, you can provide a version ID. If you don't
 * S3:FORBIDDEN
 * S3:GLACIER_EXPEDITED_RETRIEVAL_NOT_AVAILABLE
 * S3:INVALID_OBJECT_STATE
+* S3:NO_SUCH_BUCKET
 * S3:NO_SUCH_KEY
 * S3:OBJECT_ALREADY_IN_ACTIVE_TIER
 * S3:REQUEST_TIMEOUT
@@ -2480,6 +2497,7 @@ Uploads a part by copying data from an existing object as data source. The minim
 * <<FilterRule>>
 * <<GetObjectAclResponse>>
 * <<GetObjectAttributesResponse>>
+* <<GetObjectOperationAttributes>>
 * <<Grant>>
 * <<Grantee>>
 * <<HeadObjectResponse>>
@@ -3013,6 +3031,52 @@ Configures the get object attributes response type.
 | Storage Class a| String | Storage class. |  |
 | Version Id a| String | Version ID. |  |
 |===
+
+[[GetObjectOperationAttributes]]
+=== Get Object Operation Attributes
+
+Configures the get object operation attributes response type. 
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| E Tag a| String | ETag. |  | 
+| Accept Ranges a| String | Accept ranges. |  | 
+| Bucket Key Enabled a| Boolean | Enable bucket key. |  | 
+| Cache Control a| String | Cache control. |  |
+| Checksum CRC32 a| String | Checksum CRC32. |  |
+| Checksum CRC32 C a| String | Checksum CRC32 C. |  |
+| Checksum SHA1 a| String | Checksum SHA1. |  |
+| Checksum SHA256 a| String | Checksum SHA256. |  |
+| Content Disposition a| String | Content disposition. |  |
+| Content Encoding a| String | Content encoding. |  |
+| Content Language a| String | Content language. |  |
+| Content Length a| Number | Content length. |  | 
+| Content Range a| String | Content range. |  | 
+| Content Type a| String | Content type. |  | 
+| Delete Marker a| Boolean | Delete marker. |  | 
+| Expiration a| String | Expiration. |  |
+| Expires a| DateTime | Expires. |  |
+| Last Modified a| DateTime | Last modified. |  |
+| Metadata a| Object | Metadata. |  |
+| Missing Meta a| Number | Missing meta. |  |
+| Object Lock Legal Hold Status a| String | Object lock legal hold status. |  |
+| Object Lock Mode a| String | Object lock mode. |  |
+| Object Lock Retain Until Date a| DateTime | Object lock retain until date. |  |
+| Parts Count a| Number | Parts count. |  |
+| Replication Status a| String | Replication status. |  |
+| Request Charged a| String | Request charged. |  |
+| Restore a| String | Restore. |  |
+| Server Side Encryption a| String | Server-side encryption. |  |
+| Sse Customer Algorithm a| String | SSE customer algorithm. |  |
+| Sse Customer Key MD5 a| String | SSE customer key MD5. |  |
+| Ssekms Key Id a| String | SSEKMS key ID. |  |
+| Storage Class a| String | Storage class. |  |
+| Tag Count a| Number | Tag count. |  | 
+| Version Id a| String | Version ID. |  |
+| Website Redirect Location a| String | Website redirect location. |  |
+|===
+
 
 [[Grant]]
 === Grant
