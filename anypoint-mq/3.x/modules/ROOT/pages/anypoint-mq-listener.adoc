@@ -10,6 +10,8 @@ By default, the Subscriber source works in continuous listening mode, providing 
 .The arrow shows *Subscriber type* set to *Prefetch* in the *Subscriber* properties window.
 image::amq-3x-subscriber-prefetch.png[Prefetch subscriber type]
 
+// MQ Prefetch Issue note
+include::connectors::partial$mq-disclaimer.adoc[tag=mqPrefetchLatency]
 
 For the `prefetch` subscriber-type configuration, you configure the `maxLocalMessages` parameter to specify the target size for a full buffer, which controls how quickly messages are taken from the queue.
 
@@ -26,14 +28,19 @@ When a consumer takes a message from the queue and stores it in the local buffer
 * Use a smaller buffer size to process messages as they are published to the queue.
 +
 The smaller buffer restricts app-level throughput and avoids blocking competing consumers.
++
+// MQ Prefetch maxLocalMessages
+include::connectors::partial$mq-disclaimer.adoc[tag=mqPrefetchMaxLocalMsgs]
+
+[[fifo-and-prefetch]]
+=== FIFO Queues and Prefetch Mode
 
 When using the `prefetch` mode, the `acknowledgementTimeout` timer begins when the message is taken from the queue. 
 Anypoint MQ attempts to honor the expiration time specified by `acknowledgementTimeout`.
 However, Anypoint MQ extends the expiration timeout if the time that the message remains in the buffer reaches 80% of the timeout value.
 
-Don't use `prefetch` mode for applications with long processing times that use the `maxConcurrency` attribute to limit concurrent processing.
-These options can cause messages to remain in the buffer.
-
+// Prefetch mode disclaimers
+include::connectors::partial$mq-disclaimer.adoc[tag=mqPrefetchMode]
 
 == Predictable Message Consumption
 
@@ -136,10 +143,17 @@ For more information, see xref:anypoint-mq-ack.adoc#automatic-acknowledgment[Aut
 
 * *Immediate*
 +
-When you use the IMMEDIATE acknowledgment mode, the consumed message is acknowledged right before being dispatched to the Mule flow. If the message acknowledgment fails, the message is discarded. The message isn't dispatched to the flow and remains in-flight until the acknowledgment timeout.
+When you use the `IMMEDIATE` acknowledgment mode, the consumed message is acknowledged (deleted from the queue) and then dispatched to the Mule flow for processing.
+If the message acknowledgment fails, the message is discarded. The message isn't dispatched to the flow and remains in-flight until the acknowledgment timeout.
 +
-For more information, see xref:anypoint-mq-ack.adoc#immediate-acknowledgment[Manual Acknowledgment].
-
+--
+// MQ IMMEDIATE mode app restart note
+include::connectors::partial$mq-disclaimer.adoc[tag=mqImmediateAppRestart]
+--
++
+Using the Subscriber source in Prefetch mode with the `IMMEDIATE` acknowledgment mode sometimes results in thread accumulation and an unresponsive application.
++
+For more information, see xref:anypoint-mq-ack.adoc#immediate-acknowledgment[Immediate Acknowledgment].
 * *Manual*
 +
 When you use the MANUAL acknowledgment mode, the app logic decides when to perform the acknowledgment of the message, using the xref:anypoint-mq-ack.adoc[ACK] or xref:anypoint-mq-ack.adoc[NACK] sources.
@@ -168,10 +182,27 @@ When the external service is not available, every attempt to process a message r
 
 The circuit breaker capability that the Subscriber source provides is bound to the error handling mechanism provided by Mule. It uses the error notification mechanism to count errors related to an external service, which is known as a circuit failure. You can bind any error to a circuit failure. For example, you can bind `HTTP:TIMEOUT`, `FTP:SERVICE_NOT_AVAILABLE`, or even a custom error from your app, such as `ORG:EXTERNAL_ERROR`.
 
-If a Mule flow finishes its execution with an error, the Subscriber source checks if the error is one of `onErrorTypes` that indicates an external service error, and counts consecutive occurrences until `errorsThreshold` is reached. When `errorsThreshold` is reached, the circuit trips and stops polling for new messages the duration specified by `tripTimeout`. Messages are consumed again on the next poll after the tripTimeout elapses.
+If a Mule flow finishes its execution with an error, the Subscriber source checks if the error is one of the `onErrorTypes` that indicates an external service error, and counts consecutive occurrences until `errorsThreshold` is reached.
+
+When `errorsThreshold` is reached, the circuit trips and remains open for the duration specified by `tripTimeout`.
+While the circuit is open, all polled or consumed messages are not acknowledged (NACK)
+and Anypoint MQ halts any future operations (poll, ACK, NACK, and Publish) until `tripTimeout` elapses.
+
+After `tripTimeout` elapses, the circuit breaker transitions to a new <<circuit-breaker-states,state>>.
+If the new state is *Closed*, clients can consume messages on the next poll.
+
+The behavior varies depending on whether you deploy the app to CloudHub with a single worker or multiple workers:
+
+Single worker::
+The worker processes messages individually from the queue and opens the circuit breaker when the number of errors reaches the value of `errorsThreshold`.
+Multiple workers::
+Each worker has an associated circuit breaker and tracks the values of `errorsThreshold` and `tripTimeout` individually.
+Each worker processes messages individually from the queue and opens the circuit breaker when the number of errors reaches the value of `errorsThreshold` set on the worker.
+
 
 By default, the circuit breaking feature is disabled.
 
+[[circuit-breaker-states]]
 === Circuit Breaker States
 
 The circuit breaker has three states: Closed, Open, and Half Open. The behavior of the app changes based on the current state. See the https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker[Microsoft Circuit Breaker pattern] for more information.
@@ -368,7 +399,7 @@ To preserve message processing order, set the value of `maxConcurrency` to `1` f
 
 === FIFO Queues and Clustering
 
-FIFO queues behave the same in a clustered environment as in a nonclustered environment.
+FIFO queues behave the same in a clustered environment as in a non-clustered environment.
 
 FIFO queues consume messages in the specified order. After the message is consumed, any further message processing can be distributed to other nodes. In this case, if the consumer acknowledges a message before it is fully processed, message order might be lost during message processing.
 
