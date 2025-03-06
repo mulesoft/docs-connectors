@@ -1,0 +1,132 @@
+= Listening For New Messages
+:keywords: jms, ibm mq, mq, connector, consume, message, source, listener
+:page-aliases: connectors::ibm/ibm-mq-listener.adoc
+
+The Listener source in the IBM MQ and its use of the JMS connector provides the ability to consume messages as
+they arrive at the destination.
+
+== Listening for New Messages
+
+The syntax to listen for new messages from a queue is:
+
+[source,xml]
+----
+<ibm-mq:listener config-ref="config" destination="#[vars.destination]"/>
+----
+
+The source listens for new messages in the queue identified by the destination, returning a Mule Message each time a JMS message is available in the queue.
+
+The message contains:
+
+* The message's content as a payload.
+* The message's metadata in the message attributes.
+
+By default, the message consumed is acknowledged only when the execution of
+the flow receiving the message completes successfully.
+If instead, an error occurs during the execution of the flow, the session is
+recovered, and the JMS message is redelivered.
+
+For more information regarding a message ACK, see xref:ibm-mq-ack.adoc[Handling Message Acknowledgement].
+
+== Configuring Message Throughput
+
+When extra processing power is needed, the JMS Listener allows you to configure
+the `numberOfConsumers` that a given Listener uses to consume messages concurrently.
+By default, each Listener uses four consumers to produce messages
+concurrently. Since each consumer waits for the message to be processed,
+that means that you can have a maximum of four messages in-flight at the same time.
+If you need to increase the concurrent message processing, just increase the
+`numberOfConsumers` in the Listener.
+
+== Filtering Incoming Messages
+
+The JMS connector provides full support for filtering which Messages should be
+consumed based on the standard JMS `selector` language.
+
+For example, if you have a priority Queue with Messages that need to be processed
+faster than the others, we can do:
+
+[source,xml,linenums]
+----
+<flow name="consumer">
+    <ibm-mq:listener config-ref="JMS_config"
+    destination="openTickets"
+    selector="JMSPriority=8"/>
+</flow>
+----
+
+When a selector is configured, only the messages matching it are received,
+ignoring any other message in the destination.
+
+== MIME Types and Encoding
+
+The JMS connector does its best to automatically determine a message’s MIME type (`contentType`)
+based on the MM_MESSAGE_CONTENT_TYPE property. However, there are cases in
+which that best guess is not enough, and you need first-hand knowledge of the
+message’s content. In such cases, you can force the content type to a particular
+value by using the `inboundContentType` parameter.
+
+The same process works for encoding. By default, the connector assumes that
+the runtime’s default encoding matches the one in the message if no other
+information is provided. You can set this by using the `inboundEncoding` parameter.
+
+== Replying to Incoming Messages
+
+When an incoming JMS message declares a *Reply to* destination, the *On new message* source
+automatically produces a response when the message is processed successfully, meaning that no error occurs during the flow execution.
+In this case, when the flow completes, a response is published to the
+destination specified in the processed message header.
+
+You can configure IBM MQ responses in the *On New message* source with the following XML syntax:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="config" destination="#[vars.destination]">
+  <ibm-mq:response priority="8" persistentDelivery="true">
+      <ibm-mq:body>#['Message received was: ' ++ payload]</ibm-mq:body>
+      <ibm-mq:properties>#[{'processedAt': now}]</ibm-mq:properties>
+  </ibm-mq:response>
+</ibm-mq:listener>
+----
+
+The *Reply to* field of the *On New Message* source is not to overwrite the reply to field of the original message, but to set the reply to field of the message that is being sent as a reply.
+
+This response builder allows you to configure not only the `body` and `properties`
+of the response message but also allows you to specify any header like `priority` and `persistentDelivery`.
+All these configurations impact the outbound message and can be built
+using all the information available in the flow when the processing is completed.
+
+Disable the automatic reply by using the `ignoreReplyTo` attribute in the `ibm-mq:response` element:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="config" destination="#[vars.destination]">
+  <ibm-mq:response priority="8" persistentDelivery="true" ignoreReplyTo="true"/>
+</ibm-mq:listener>
+----
+
+== Listening for Messages with a Topic Subscription
+
+Listening for messages from a topic destination is very similar to listening for
+them from a queue, but with the extra functionality of being able to use topic
+subscriptions to share state between consumers.
+The syntax for subscribing to a topic is:
+
+[source,xml,linenums]
+----
+<ibm-mq:listener config-ref="JMS_config" destination="#[vars.destination]">
+    <ibm-mq:consumer-type>
+        <ibm-mq:topic-consumer/>
+    </ibm-mq:consumer-type>
+</ibm-mq:listener>
+----
+
+All the `listener` parameters remain the same, but now you can handle the
+subscription configuration in the `topic-consumer` parameter.
+
+For details on how to configure the topic subscriptions see xref:ibm-mq-topic-subscription.adoc[Using Topic Subscriptions].
+
+== See Also
+
+* xref:ibm-mq-consume.adoc[To Consume Messages]
+* xref:ibm-mq-topic-subscription.adoc[Using Topic Subscriptions]
