@@ -1,0 +1,451 @@
+= Microsoft Dynamics CRM Connector
+:page-aliases: 3.5@mule-runtime::microsoft-dynamics-crm-connector.adoc
+
+The Microsoft Dynamics Customer Relationship Management (CRM) connector lets you access Microsoft Dynamics CRM’s SOAP Organization Service. You can add this connector to an Anypoint Studio flow.
+
+== Overview
+
+This connector lets you perform the following operations:
+
+* Create, update, and delete records
+* Retrieve a single record or query multiple records
+* Associate and disassociate records
+* Execute a request message
+
+This connector supports these Microsoft Dynamics CRM versions:
+
+* Microsoft Dynamics CRM 2011 (on-premise)
+* Microsoft Dynamics CRM 2013 (on-premise)
+* Microsoft Dynamics CRM Online
+
+Configuring the connector requires minimal parameters except for advanced use:
+
+* Username and password for users granted access to CRM
+* Organization Service URL - usually in the format:  +https://crm.mycompany.com/MyOrganization/XRMServices/2011/Organization.svc+
+
+== Installation
+
+To install this connector:
+
+. Install the Java Cryptography Extensions (JCE) package before installing the connector. Download JCE for Java 7 from Oracle's [Java SE Download site]. (MuleSoft does not support JDK or JRE 8.)
+. In Anypoint Studio, click *Help > Install New Software*.
+. In *Work with*, click `Anypoint Connectors Update Site`.
+. Expand *Standard* and click  *Microsoft Dynamics CRM Connector* version 2.n.
+. Click the checkbox for the connector.
+. Click *Next*, click *Next* at the Install Details screen, click *I accept the terms of the license agreement*, and click *Finish*.
+. Click *Yes* to restart Anypoint Studio. The restart reopens existing projects in Studio.
+
+== Configuring the Connector
+
+=== Step 1: Create a New Mule Project
+
+To configure:
+
+. In Anypoint Studio, click *File > New > Mule Project*.
+. Specify a *Project Name* and click *Finish*.
+
+=== Step 2: Configure the Global Element
+
+. Click the *Global Elements* tab and click *Create*.
+. In the *Search* field, type *crm*, click *Microsoft Dynamics CRM*, and click *OK*.
+. Specify a *Username* and *Password*.
+. Specify a *Organization Service URL* for accessing the CRM system. Click *OK*. For example: +http://{siteUrl}/XrmServices/2011/Organization.svc+
+. Click an *Authentication Scheme* from the dropdown list.
+. Specify values for *Domain Controller* and *Domain Name*.
+. Click *Test Connection* to ensure that the connection works correctly.
+. After the connection succeeds, click *OK*.
++
+image::crmglobalelementprops.png[CRMGlobalElementProps]
+
+== Creating a Mule Flow
+
+To create a flow:
+
+. Click the *Message Flow* tab.
+. In the *Search* field, type *http*, and drag the *HTTP* endpoint to the canvas.
+. In the *Search* field, type *crm*, and drag the *Microsoft Dynamics CRM* connector to the canvas next to the HTTP endpoint.
+. In the *Search* field, type *json*, and drag the *Object to jSON* transformer to the canvas next to the connector. You can use the default values in this transformer.
+
+The flow appears as:
+
+image::crmdemoflow1.png[CRMdemoflow1]
+
+To configure the flow:
+
+. Double-click the *HTTP* endpoint and set values:
++
+image::msdycrmhttpconfig.png[MSDyCRMHTTPconfig]
+
+.. Ensure that the *Host* is set to *lcoalhost* and that the *Port* is set to *8081*.
+
+.. Set the *Path* to *query*.
+
+. Double-click *Microsoft Dynamics CRM*:
+
+.. From the *Connector Configuration* list, select the *Microsoft Dynamics CRM Connector* configuration the you previously created.
+.. For *Operation*, click *Retreive multiple by query*.
+.. For *Query > Language*, click *DataSense Query Language*. *Note*: The Query section only appears for a query *Operation*.
+.. Click *Query Builder*.
++
+image::crmproperties.png[CRMproperties]
+
+. In the Query Builder window:
+
+.. In *Types*, click *account*.
+.. In *Fields*, click *accountid*, *accountnumber*, and *name*.
+.. In *Order By*, click *name*.
+.. In *Direction*, click *DESCENDING*.
+.. Click *Ok*.
++
+image::crmquerybuilder.png[CRMQueryBuilder]
+
+== Running a Flow
+
+. In Package Explorer, right click your project's name, and click *Run As > Mule Application*.
+
+. Check the console to see when the application starts. You should see a message such as this example if no errors occur:
++
+[source,text,linenums]
+----
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
++ Started app 'crm-demo'                                   +
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+----
+
+. Open a browser and visit http://localhost:8081/query
+
+The list of accounts display in descending order by name and in JSON format (results vary according to your CRM instance). For example:
+
+[source,text,linenums]
+----
+[{"name":"Alpine Ski House (sample)","accountnumber":"ABCO9M32","accountid":"f5a917b4-7e06-e411-82a5-6c3be5a8ad64"},
+{"name":"Adventure Works (sample)","accountnumber":"ABC28UU7","accountid":"eba917b4-7e06-e411-82a5-6c3be5a8ad64"}]
+----
+
+== CRM Authentication
+
+=== Authentication Schemes
+
+The Microsoft Dynamics CRM connector supports different authentication schemes based on the Microsoft Dynamics CRM that is accessed.
+
+Supported authentication schemes for Microsoft Dynamics CRM on premise:
+
+* Windows Authentication - Kerberos
+* Windows Authentication – NTLM (requires Anypoint Gateway for Windows)
+* Claims-based Authentication
+
+Supported authentication schemes for Microsoft Dynamics CRM online:
+
+* Live ID
+
+Unsupported authentication schemes:
+
+* Office 365 (not supported)
+
+=== Advanced Kerberos Authentication
+
+The preferred method to configure the connector for Kerberos authentication is to leverage auto-configuration. The prerequisites for setting *Automatically detect Kerberos configuration settings* are:
+
+* Mule ESB server joined to the same domain as the CRM instance
+* AD Domain Controller is accessible from the Mule ESB server
+
+If Mule ESB does not automatically detect the Kerberos configuration settings, create a Kerberos configuration file and reference it in the connector's connection configuration.
+
+Sample Kerberos configuration file:
+
+[source,text,linenums]
+----
+[libdefaults]
+default_realm = MYREALM.COM
+[realms]
+MYREALM.COM = {
+    kdc = mydomaincontroller.myrealm.com
+    default_domain = MYREALM.COM
+}
+[domain_realm]
+.myrealm.com = MYREALM.COM
+myrealm.com = MYREALM.COM
+----
+
+*Note*: The *default_realm* and *default_domain* values are case-sensitive. Specify these values exactly as defined in Active Directory. If you receive an error during Test Connection stating Message `stream modified (41)`, the domain name is not correctly formed.
+
+More information on how to create the Kerberos configuration file can be found at http://web.mit.edu/kerberos/krb5-devel/doc/admin/conf_files/krb5_conf.html.
+
+To reference the Kerberos configuration file in a connector's connection configuration:
+
+* Set the property *Kerberos Properties File Path*
+* Place the file in the class path (usually under `src/main/resources`) and set the value of the property to *classpath:krb5.conf*
++
+Or:
++
+Provide the full path to the file as in *C:\kerberos\krb5.conf*
+
+You can tune the Kerberos login module (Krb5LoginModule) with scenario-specific configurations by defining a JAAS login configuration file.
+
+Example JAAS login configuration file for the Kerberos login module:
+
+[source,text,linenums]
+----
+Kerberos {
+    com.sun.security.auth.module.Krb5LoginModule required
+    debug=true
+    refreshKrb5Config=true;
+};
+----
+
+For more information on how to create the JAAS login configuration file for the Kerberos login module, see [Class Krb5LoginModule].
+
+To reference the JAAS login configuration file for the Kerberos login module in a connector's connection configuration:
+
+. Set the property *Login Properties File Path*
+. Place the file in the class path (usually under `src/main/resources`) and set the value of the property to *classpath:jaas.conf*
++
+Or:
++
+Provide the full path to the file as in C:\kerberos\jaas.conf
+
+The Service Principal Name (SPN) can usually be automatically discovered from the Organization Service's WSDL. If the SPN cannot be discovered automatically, set the value in the connector's connection configuration SPN property.
+
+The SPN usually looks like `host/SERVER-NAME.MYREALM.COM`.
+
+If the Organization Service WSDL reports a UPN rather than SPN, then the CRM service is configured to run under a domain account. In this case, you must ensure that the domain admin has created an SPN under this service account in AD for the CRM hostname. In this case, the SPN is in the form *http/crm.mycompany.com*.
+
+*Note*: The SPN is typically created to match the fully qualified DNS name that is used to access the CRM service.
+
+=== NTLM Authentication
+
+For connecting to Microsoft Dynamics CRM with NTLM authentication, the connector routes requests through Anypoint Platform Gateway Service.
+
+The Anypoint Platform Gateway Service runs as a Windows service. Install the gateway service on a machine that is joined to the same domain as the Dynamics CRM instance that you wish to authenticate against.
+
+If you do not have Anypoint Platform Gateway Service installed, you can download it from: https://repository-master.mulesoft.org/nexus/content/repositories/releases/org/mule/modules/anypoint-windows-gateway-service/1.2.0/anypoint-windows-gateway-service-1.2.0.zip.
+
+To install:
+
+. Unzip the downloaded file and run the .exe contained within.
+. For your protection, the executable is signed by MuleSoft Inc.
+. Follow the instructions to complete the installation.
+. No further configuration is required.
+
+After installing Anypoint Platform Gateway Service, configure the connector’s connection properties with the Username, Password, and the Organization Service URL.
+
+Under NTLM authentication settings, set the Gateway Router Service Address to the address of the Anypoint Platform Gateway Service. This address is usually similar to +https://myserver.com:9000/router+.
+
+At this point, the connection should be successfully tested.
+
+== Operations
+
+=== Create Record
+
+Creates a record for an entity.
+
+The following table lists operation inputs:
+
+[%header%autowidth.spread]
+|===
+|Property |Usuage
+|*Logical Name* |The logical name of the entity that the record belongs to.
+|*Attributes* |A `Map<String, Object>` with the entity attribute names as the map's key. To create a payload for this operation, place a DataMapper transformer before the connector in the Mule flow.
+|===
+
+Output: A String containing the ID of the created record.
+
+=== Update Record
+
+Updates an existing record in an entity.
+
+The following table lists operation inputs:
+
+[%header%autowidth.spread]
+|===
+|*Logical Name* |The logical name of the entity that the record belongs to.
+|*ID* |The ID of the record to update.
+|*Attributes* |A `Map<String, Object>` with the entity attribute names as the map's keys. To create a payload for this operation, place a DataMapper transformer before the connector in the Mule flow.
+|===
+
+Output: Void. This operation does not return a value.
+
+=== Delete Record
+
+Deletes a record from an entity.
+
+The following table lists operations inputs:
+
+[%header%autowidth.spread]
+|===
+|Property |Usage
+|*Logical Name* |The logical name of the entity that the record belongs to.
+|*ID* |The ID of the record to delete.
+|===
+
+Output: Void. This operation does not return a value.
+
+=== Retrieve Record
+
+Retrieves a single record from an entity.
+
+The following table details the operation inputs.
+
+[%header%autowidth.spread]
+|===
+|Property |Usage
+|*Logical Name* |The logical name of the entity that the record belongs to.
+|*ID* |The ID of the record to update.
+|*Attributes* |A `List<String>` with the entity attribute names that returns for the record.
+|===
+
+Output: A `Map<String, Object>` where map's keys are the entity attribute names for the retieved record.
+
+=== Query Records (Retrieve Multiple by Query)
+
+Retrieves a list of records. This operation leverages Mule's DSQL for creating the query.
+
+The following table lists operation inputs:
+
+[%header%autowidth.spread]
+|===
+|Property |Usage
+|*Query* a|DataSense Query Language: The DSQL operation to run. The query is translated by the connector to a Fetch XML. More information on DSQL can be found at [DataSense Query Language].
+
+Native Query Language: The raw Fetch XML to run. More information on how to create these queries can be found at [Build queries with FetchXML].
+|===
+
+Output: A `ProviderAwarePagingDelegate<Map<String, Object>, DynamicsCRMConnector>`.
+
+In a Mule flow, this passes to the next flow component a `List<Map<String, Object>>`, where each `Map<String, Object>` element in the list contains a record of the queried entity. The map's keys are the entity attribute names for the records.
+
+=== Associate Records
+
+Creates a link between records.
+
+The following table details the operation inputs:
+
+[%header%autowidth.spread]
+|===
+|Property |Usage
+|*Logical Name* |The logical name of the entity that the record belongs to.
+|*ID* |The ID of the record to which the related records are associated.
+|*Schema Name* |That name of the relationship to create the link.
+|*Entity Role is Referenced* a|When associating records from the same entity (reflexive relationship), set this property as follows:
+
+* `false`: When the primary entity record *References* the record to the associate
+* `true`: When the primary entity record is *Referenced* by the record to associate.
+|*Related Entities* a|A `List<Map<String, Object>>` with the related entity records to associate.
+
+Each `Map<String, Object>` contains two keys:
+
+* `logicalName` The logical name of the entity that the record to associate belongs to.
+* `id`: The ID of the record to associate.
+|===
+
+Output: Void. This operation does not return a value.
+
+=== Disassociate Records
+
+Deletes a link between records.
+
+The following table details the operation inputs.
+
+[%header%autowidth.spread]
+|===
+|Property |Usage
+|*Logical Name* |The logical name of the entity that the record belongs to.
+|*ID* |The ID of the record to which the related records are disassociated.
+|*Schema Name* |That name of the relationship to create the link.
+|*Entity Role is Referenced* a|When associating records from the same entity (reflexive relationship), set this property as follows:
+
+* `false`: When the primary entity record *References* the record to the associate
+* `true`: When the primary entity record is *Referenced* by the record to associate.
+|*Related Entities* a|A `List<Map<String, Object>>` with the related entity records to disassociate.
+
+Each `Map<String, Object>` contains two keys:
+
+* `logicalName` The logical name of the entity that the record to disassociate belongs to.
+* `id`: The ID of the record to disassociate.
+|===
+
+Output: Void. This operation does not return a value.
+
+=== Execute
+
+Executes a message in the form of a request, and returns a response.
+
+The following table details the operation inputs.
+
+[%header%autowidth.spread]
+|===
+|Property |Usage
+|*Request Parameters* |A `Map<String, Object>` with the request parameter names as the map's keys.
+|*Request ID* |The ID of the request to make.
+|*Request Name* |The logical name of the request to make.
+|===
+
+Output: A `Map<String, Object>` containing the results of the method executed.
+
+== Exception Handling
+
+=== Exceptions in Operations
+
+Each operation throws a different type of exception. This is useful when defining an exception handling policy.
+
+The following table lists the exception types that are thrown for every operation.
+
+[%header%autowidth.spread]
+|===
+|Operation |Exception Type
+|Create |IOrganizationServiceCreateOrganizationServiceFaultFaultFaultMessage
+|Update |IOrganizationServiceUpdateOrganizationServiceFaultFaultFaultMessage
+|Delete |IOrganizationServiceDeleteOrganizationServiceFaultFaultFaultMessage
+|Retrieve |IOrganizationServiceRetrieveOrganizationServiceFaultFaultFaultMessage
+|Retrieve Multiple |IOrganizationServiceRetrieveMultipleOrganizationServiceFaultFaultFaultMessage
+|Associate |IOrganizationServiceAssociateOrganizationServiceFaultFaultFaultMessage
+|Disassociate |IOrganizationServiceDisassociateOrganizationServiceFaultFaultFaultMessage
+|Execute |IOrganizationServiceExecuteOrganizationServiceFaultFaultFaultMessage
+|===
+
+== Data Considerations
+
+=== Entity Reference
+
+Entity reference attributes are accessible as String values that match the pattern `myattribute_targetentity_reference`.
+
+To avoid conflicts, don't add fields to your CRM instance using this reserved naming scheme: `[*]_[*]_` reference.
+
+As an example, the *Contact* Entity Reference attribute *TransactionCurrencyId* is a Lookup field that targets the entity `transactioncurrency`. The `transactioncurrencyid` of the `transactioncurrency` is accessible as a String in the attribute `transactioncurrencyid_transactioncurrency_reference`.
+
+The Create and Update operations accept entity reference attributes. Following the example above, to create a *Contact* targeting a `transactioncurrency`, set the value of the attribute `transactioncurrencyid_transactioncurrency_reference` to the `transactioncurrencyid` of the record that's referenced.
+
+The Retrieve Multiple operation also allows selecting and filtering of Entity Reference attributes. As an example for *Contact*, the following DataSense Query returns all the contact full names that where created by a particular *systemuserid*:
+
+[source,text,linenums]
+----
+Select fullname From contact Where createdby_systemuser_reference =
+'c7a58b13-df19-491c-a918-1bc26eaf6eb3'
+----
+
+=== Picklist
+
+Picklist attributes are accessible as Integer values.
+
+As an example, the *Contact* attribute *familystatuscode* is accessible as an Integer value.
+
+=== Money
+
+Money attributes are accessible as BigDecimal values.
+
+As an example, the *Contact* attribute *creditlimit* is accessible as a BigDecimal value.
+
+== Additional Resources
+
+MuleSoft features used in this guide:
+
+* [Mule Expression Language]
+* [Configuring Endpoints]
+* [Transformers]
+* [Flow Reference Component Reference]
+
+Webinars and additional documentation related to Mule ESB can be found under the Resource menu option.
+
+== See Also
+
+* https://www.mulesoft.com/exchange/org.mule.modules/mule-module-ms-dynamics-crm/[Microsoft Dynammics CRM Connector in Exchange]

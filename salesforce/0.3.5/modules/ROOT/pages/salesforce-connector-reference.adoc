@@ -1,0 +1,451 @@
+= Salesforce Connector Reference
+:page-aliases: 3.5@mule-runtime::salesforce-connector-reference.adoc
+
+The Salesforce Connector enacts API calls targeting Salesforce's SOAP API, REST API, Bulk API, or Streaming API, depending on the operation that you configure. The connector's API calls to Salesforce use an XML request/response over an HTTPS connection. All required request headers, error handling, and HTTPS connection configuration are abstracted from the user and built into the connector.
+
+This page summarizes the essential configuration parameters for the current version of the Salesforce connector:
+
+* Creating a global connector configuration using username/password/securityToken or via OAuth
+* Selecting the appropriate <<Operations>> for your use case.
+
+This page _does not_ list the attributes of each operation.
+
+*Note*: Additional versions of the Salesforce connector reference information are available at the http://mulesoft.github.io/mule3-salesforce-connector/[GitHub Salesforce Connector site].
+
+== Global Salesforce Connector Configuration
+
+Depending on whether you are using OAuth to connect to your Salesforce account, configure your connector with one of these global configurations.
+
+* `sfdc:config`
+* `sfdc:config-with-oauth`
+
+Note that if you select `sfdc:config-with-oauth`, you must also configure an <<Configuring the Authorization Flow>> to acquire an access token. This access token is referenced via an `accessTokenId`attribute in all Salesforce operations configured to use an OAuth connection.
+
+For non-OAuth configurations, Mule performs the authentication with Salesforce within the same flow as the Salesforce operation itself – no separate authorization flow is required.
+
+=== Global Configuration
+
+[%header%autowidth.spread]
+|===
+|Element |Description
+|*sfdc:config* |Use to configure a connection to your Salesforce account.
+|===
+
+[%header%autowidth.spread]
+|===
+|Attribute |Description |Required? |Default Value
+|*name* |Defines unique identifier for global element |X |
+|*username* |Username used to initialize the session |X |
+|*password* |Password used to authenticate the user |X |
+|*securityToken* |User's security token |X |
+|*url* |Salesforce endpoint URL |  |`+https://login.salesforce.com/services/Soap/u/30.0+`
+|*proxyHost* |Hostname of the proxy |  |
+|*proxyPort* |Port of the proxy |  |
+|*proxyUsername* |Username used to authenticate against the proxy |  |
+|*proxyPassword* |Password used to authenticate against the proxy |  |
+|*sessionId* |This value could be used for specifying an active Salesforce session. Required connection parameters will be used in case of reconnection. |  |
+|*serviceEndpoint* |Specifies the service endpoint. This value is only used if you configure the sessionId attribute. Otherwise, the service endpoint is retrieved from the login results. |  |
+|===
+
+If you wish, you can customize the automatic connection management by explicitly configuring a connection pool to specify the parameters. For more information, see xref:3.6@mule-runtime::tuning-performance.adoc[Tuning Performance].
+
+You can also optionally configure a reconnection strategy using the reconnection child element. For more information, see xref:3.6@mule-runtime::configuring-reconnection-strategies.adoc[Configuring Reconnection Strategies].
+
+=== Global Configuration with OAuth
+
+[%header%autowidth.spread]
+|===
+|Element |Description
+|*sfdc:config-with-oauth* |Use to configure a connection to your Salesforce account via OAuth.
+|===
+
+[%header,cols="4*"]
+|===
+|Attribute |Description |Required? |Default Value
+|*name* |Define a name to this configuration so it can later be referenced. |X |
+|*onNoToken* |Defines the behavior of a connector when a user with no OAuth token attempts to utilize the service. Possible values are EXCEPTION and STOP_FLOW.   |X |EXCEPTION
+|*assignmentRuleId* |The ID of a specific assignment rule to run for the Case or Lead. The assignment rule can be active or inactive. The ID can be retrieved by querying the AssignmentRule object. If specified, do not specify useDefaultRule. This element is ignored for accounts, because all territory assignment rules are applied. If the value is not in the correct ID format (15-character or 18-character Salesforce ID), the call fails and a MALFORMED_ID exception is returned. |  |
+|*consumerKey* |Your application's client identifier (consumer key in Remote Access Detail). |X |
+|*consumerSecret* |Your application's client secret (consumer secret in Remote Access Detail). |X |
+|*timeObjectStore-ref* |The object store instance that should be used by the getUpdatedObjects() operation. If undefined, the connector will use the Mule default user object store. |  |
+|*clientId* |Client ID for partners. |  |
+|*batchSobjectMaxDepth* |Creating a batch creates sObjects using this value for the MAX_DEPTH check. |  |
+|*useDefaultRule* a|
+If true for a Case or a Lead, the connector uses the default (active) assignment rule. If true for an Account, all territory assignment rules are applied; if false for an Account, no territory rules are assigned.
+
+If you set this attribute to true, do not specify an assignmentRuleId.
+
+ |  |false
+|*allowFieldTruncationSupport* a|
+If true, the connector truncates field values that are too long, which is the behavior in API versions 14.0 and earlier.
+
+If false (default), no change in behavior. If a string or textarea value is too large, the operation fails with the fault code STRING_TOO_LONG.
+
+ |  |false
+|===
+
+==== Customizing the Callback URL
+
+OAuth requires a callback configuration. Salesforce automatically calls the callback endpoint once the user is authenticated and he or she grants authorization to the connector to access his or her private information.
+
+[%header%autowidth.spread]
+|===
+|Child Element |Description
+|*sfdc:oauth-callback-config* |Use to configure the callback URL.
+|===
+
+[%header%autowidth.spread]
+|===
+|Attribute |Description |Required? |Default Value
+|*domain* |The domain of the endpoint on which your OAuth callback is hosted.  When in production, this is the domain on which your application is hosted. |X |
+|*localPort* |The port on which your authorization flow is hosted. This is the port on which your HTTP endpoint is hosted. |X |
+|*remotePort* |The port of the endpoint at which your OAuth callback is hosted. |  |
+|*path* |The path of the endpoint at which your OAuth callback is hosted. |  |
+|*connector-ref* |References a global HTTP connector from which the sfdc:oauth-callback-config element borrows configuration details. If specified, then the sfdc:oauth-callback-config uses the referenced connector. |  |
+|*defaultAccessTokenId* |Mule uses this value to name an object store variable in which to store the Token ID. You can set this attribute to an expression to avoid overwriting the Token ID if multiple users access the same account. |  |
+|*async* |Determines whether the callback executes synchronously (default) or asynchronously. |  |false
+|===
+
+Example:
+
+[source,xml,linenums]
+----
+<sfdc:oauth-callback-config domain="localhost" localPort="8081" remotePort="8081" path="oauthcallback"/>
+----
+
+==== Customizing the Object Store
+
+The Salesforce connector can automatically save and restore access tokens. The connector stores the acquired access tokens, refresh tokens, and any other pertinent information in either the default user object store or a user-defined object store using the access token identifier as the key.
+
+To configure an existing user-defined object store, include an **sfdc:object-store-config** in your application and configure an **objectStore-ref** attribute to reference the name of your existing object store. Use this configuration if you already have an object store configured that you would prefer to use for the persistence of your access and refresh tokens.
+
+[%header%autowidth.spread]
+|===
+|Optional Child Element |Description
+|*sfdc:oauth-store-config* |Use to define a custom object store to persist access and refresh tokens.
+|===
+
+[%header%autowidth.spread]
+|===
+|Attribute |Description |Required? |Default Value
+|*objectStore-ref* |The name of the object store to which you wish to persist access and refresh tokens. |X |
+|===
+
+==== Configuring the Authorization Flow
+
+Every Salesforce connector configured to use OAuth has an extra attribute called *accessTokenId*, which is an identification of the user authorizing the connector. In order to obtain an access token identification, you need to first call the *authorize* operation in a separate authorization flow. This flow must consist of an HTTP inbound endpoint and the *sfdc:authorize* element, as shown.
+
+[source,xml,linenums]
+----
+<flow name="authorizationAndAuthenticationFlow">
+        <http:inbound-endpoint host="localhost" port="8081" path="oauth-authorize" />
+        <sfdc:authorize/>
+    </flow>
+----
+
+The sfdc:authorize element supports the following attributes.
+
+[%header,cols="4*"]
+|===
+|Attribute |Description |Required? |Default Value
+|*display* a|
+Use to tailor the login page to the user's device type. Valid values are:
+
+* page—Full-page authorization screen. This is the default value if none is specified.
+* popup—Compact dialog optimized for modern Web browser popup windows.
+* touch—Mobile-optimized dialog.
+* mobile—Mobile-optimized dialog for smartphones that don’t support touch screens.
+
+ |X |page
+|*immediate* a|
+Determines whether the user should be prompted for login and approval.
+
+* If set to true, and if the user is currently logged in and has previously approved the application, the approval step is skipped.
+* If set to true and the user is not logged in or has not previously approved the application, the session is immediately terminated with the immediate_unsuccessful error code.
+
+ |  |false
+|*prompt* |Specifies how the authorization server prompts the user for reauthentication and reapproval. |  |
+|*authorizationUrl* |The URL to which the resource owner redirects to grant authorization to the connector. |  |`+https://test.salesforce.com/services/oauth2/authorize+`
+|*accessTokenUrl* |The URL at which the user can obtain an access token. |  |`+https://test.salesforce.com/services/oauth2/token+`
+|===
+
+Calling this inbound endpoint via a browser initiates the OAuth dance, redirecting the user to the Salesforce authorization page and creating a callback endpoint so Salesforce can call back once the user has authenticated and properly authorized the connector.  Once the callback gets called, the connector automatically issues an access token identifier that Mule saves with the key *OAuthAccessTokenId*. The connector automatically sets the OAuthAccessTokenId as a flow variable that is available to all message processors after the authorize call has completed. All Salesforce connector operations after the authorize flow require an *accessTokenId* as a parameter of the operation. Specify the expression  `#[flowVars.OAuthAccessTokenId]`, as shown in the following example, to supply this parameter.
+
+[source,xml,linenums]
+----
+...
+<sfdc:query config-ref="mySalesforceConfig" query="SELECT Id FROM Account" accessTokenId="#[flowVars.OAuthAccessTokenId]"/>
+...
+----
+
+== Operations
+
+The following operations define the interaction you wish to perform via the Salesforce SOAP API, REST API, Bulk API, or Streaming API. Note that the Salesforce connector does not expose all possible operations of these Salesforce APIs. The selected operations below also have, in some cases, been modified from the bare minimum of the corresponding API call to change the return type. Refer to the Return Type Description column for more information.
+
+[TIP]
+Click the column headings to sort the operations alphabetically by your preferred column.
+
+[%header,cols="5*"]
+|===
+|Operation |XML Element with Link to Full Reference |Description |Salesforce API Documentation |Return Type Description
+|*Authorize* |`sfdc:authorize`|Relevant for OAuth-configured connectors only. If the connector is not authorized yet, the authorize operation will redirect to the service provider so the user can authorize the connector. See <<Configuring the Authorization Flow>> above. a|
+REST API
+
+http://www.salesforce.com/us/developer/docs/api_rest/Content/intro_understanding_web_server_oauth_flow.htm[Understanding the Web Server OAuth Flow]
+
+ |N/A
+|*Unauthorize* |`sfdc:unauthorize`|Relevant for OAuth-configured connectors only. Resets the state of the connector back to a non-authorized state.  a|
+REST API
+
+http://www.salesforce.com/us/developer/docs/api_rest/Content/intro_understanding_web_server_oauth_flow.htm[Understanding the Web Server OAuth Flow]
+
+ |N/A
+|*Abort job* |`sfdc:abort-job`|Aborts an open Job given its ID. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_jobs_abort.htm[Aborting a Job]
+
+ |A JobInfo that identifies the aborted Job.
+|*Batch info* |`sfdc:batch-info`|Access latest BatchInfo of a submitted BatchInfo. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_get_info.htm[Getting Information for a Batch]
+
+ |Latest BatchInfo representing status of the batch job result.
+|*Batch result* |`sfdc:batch-result`|Access com.sforce.async.BatchResult of a submitted BatchInfo. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_get_results.htm[Getting Batch Results]
+
+ |com.sforce.async. BatchResult representing result of the batch job result.
+|*Batch result stream* |`sfdc:batch-result-stream`|Access com.sforce.async.BatchResult of a submitted BatchInfo. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_get_results.htm[Getting Batch Results]
+
+ |java.io.InputStream representing result of the batch job result.
+|*Close job* |`sfdc:close-job`|Closes an open Job given its ID. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_jobs_close.htm[Closing a Job]
+
+ |A JobInfo that identifies the closed Job.
+|*Convert lead* |`sfdc:convert-lead`|Converts a Lead into an Account, Contact, or (optionally) an Opportunity. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_convertlead.htm[convertLead()]
+
+ |A `LeadConvertResult`object.
+|*Create* |`sfdc:create`|Adds one or more new records to your organization's data. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_create.htm[create()]
+
+ |An array of `SaveResult`if async is false.
+|*Create batch* |`sfdc:create-batch`|Creates a Batch using the given objects within the specified Job. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_create.htm[Adding a Batch to a Job]
+
+ |A com.sforce.async. BatchInfo that identifies the batch job.
+|*Create batch for query* |`sfdc:create-batch-for-query`|Creates a Batch using the given query. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_create.htm[Adding a Batch to a Job]
+
+ |A BatchInfo that identifies the batch job.
+|*Create batch stream* |`sfdc:create-batch-stream`|Creates a Batch using the given stream within the specified Job. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_create.htm[Adding a Batch to a Job]
+
+ |A com.sforce.async. BatchInfo that identifies the batch job.
+|*Create bulk* |`sfdc:create-bulk`|Adds one or more new records to your organization's data. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_create.htm[Adding a Batch to a Job]
+
+ |A BatchInfo that identifies the batch job.
+|*Create job* |`sfdc:create-job`|Creates a Job in order to perform one or more batches through Bulk API Operations. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_jobs_create.htm[Creating a New Job]
+
+ |A com.sforce.async. JobInfo that identifies the created Job.
+|*Create single* |`sfdc:create-single`|Adds one new record to your organization's data. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_create.htm[create()]
+
+ |An array of SaveResult
+|*Delete* |`sfdc:delete` |Deletes one or more records from your organization's data. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_delete.htm[delete()]
+
+|An array of `DeleteResult`
+|*Describe global* |`sfdc:describe-global` |Retrieves a list of available objects for your organization's data. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_describeglobal.htm[describeGlobal()]
+
+ |A `DescribeGlobalResult`
+|*Describe sObject* |`sfdc:describe-sobject` |Describes metadata (field list and object properties) for the specified object. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_describesobject.htm[describeSObject()]
+
+|`DescribeSObjectResult`
+|*Empty recycle bin* |`sfdc:empty-recycle-bin` |The recycle bin lets you view and restore recently deleted records for 30 days before they are permanently deleted. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_emptyrecyclebin.htm[emptyRecycleBin()]
+
+ |A list of `EmptyRecycleBinResult`
+|*Get deleted* |`sfdc:get-deleted` |Retrieves the list of individual records that have been deleted between the range of now to the duration before now. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_getdeleted.htm[getDeleted()]
+
+ |`GetDeletedResult`
+|*Get deleted range* |`sfdc:get-deleted-range` |Retrieves the list of individual records that have been deleted within the given timespan for the specified object. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_getdeletedrange.htm[getDeletedRange()]
+
+ |`GetDeletedResult`
+|*Get server timestamp* |`sfdc:get-server-timestamp` |Retrieves the current system timestamp (Coordinated Universal Time (UTC) time zone) from the API. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_getservertimestamp.htm[getServerTimestamp()]
+
+ |Calendar with the current timestamp.
+|*Get updated* |`sfdc:get-updated` |Retrieves the list of individual records that have been updated between the range of now to the duration before now. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_getupdated.htm[getUpdated()]
+
+ |GetUpdatedResult object containing an array of GetUpdatedResult objects containing the ID of each created or updated object and the date/time (Coordinated Universal Time (UTC) time zone) on which it was created or updated, respectively.
+|*Get updated objects* |`sfdc:get-updated-objects` |Checks the timestamp of the last time this method was called, then retrieves the list of records that have been updated between then and now. When called for the first time, the method calls the API with the configuration `getUpdatedObjects from [currentTime-window] to [ currentTime ]` and then stores `[ currentTime ] `in the object store as a timestamp. All subsequent calls using this method use this configuration: `getUpdatedObjects from [storedValue] to [currentTime]`. In order to reset the last updated time, call resetUpdatedObjectsTimestamp, described below. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_getupdated.htm[getUpdated()]
+
+ |List with the updated objects in the calculated time range.
+|*Get updated range* |`sfdc:get-updated-range` |Retrieves the list of individual records that have been created/updated within the given timespan for the specified object. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_getupdatedrange.htm[getUpdatedRange()]
+
+ |`GetUpdatedResult`
+|*Get user info* |`sfdc:get-user-info` |Retrieves personal information for the user associated with the current session. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_getuserinfo.htm[getUserInfo()]
+
+ |`GetUserInfoResult`
+|*Hard delete bulk* |`sfdc:hard-delete-bulk` |Deletes one or more records from your organization's data. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_create.htm[Adding a Batch to a Job]
+
+ |A BatchInfo that identifies the batch job.
+| *Paginated query* |`sfdc:paginated-query` |DEPRECATED. Executes a paginated query against the specified object and returns data that matches the specified criteria. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_query.htm[query()]
+
+ |`QueryResultObject` with the results of the query or null.
+|*Publish topic* |`sfdc:publish-topic` |Creates a topic which represents a query that is the basis for notifying listeners of changes to records in an organization. a|
+Streaming
+
+http://www.salesforce.com/us/developer/docs/api_streaming/Content/pushtopic.htm[Push Topic]
+
+ |N/A
+|*Query* |`sfdc:query` |Executes a paginated query against the specified object and returns data that matches the specified criteria. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_query.htm[query()]
+
+ |An array of SObjects
+|*Query all* |`sfdc:query-all` |Retrieves data from specified objects, whether or not they have been deleted or archived. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_queryall.htm[queryAll()]
+
+ |An array of SObjects.
+|*Query result stream* |`sfdc:query-result-stream` |Returns an InputStream with the query results of a submitted BatchInfo. Internally the InputStreams contained in the sequence will be requested on-demand (lazy-loading).   a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_get_results.htm[Getting Batch Results]
+
+ |InputStream with the results of the Batch.
+|*Query single* |`sfdc:query-single` |Executes a query against the specified object and returns the first record that matches the specified criteria. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_query.htm[query()]
+
+ |A single SObject.
+|*Reset updated objects timestamp* |`sfdc:reset-updated-objects-timestamp` |Resets the timestamp of the last updated object. After you call this method, the initial timestamp that was set (if it was set) on the getUpdatedObjects method is cleared. |N/A |
+|*Retrieve* |`sfdc:retrieve` |Retrieves one or more records based on the specified IDs. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_retrieve.htm[retrieve()]
+
+ |An array of SObjects.
+|*Search* |`sfdc:search` |Search for objects using Salesforce Object Search Language. Mimics using the search box inside the Salesforce UI.  a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_search.htm[search()]
+
+ |An array of SObjects.
+|*Set password* |`sfdc:set-password` |Change the password of a User or SelfServiceUser to a value that you specify. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_setpassword.htm[setPassword()]
+
+ |N/A
+|*Subscribe topic* |`sfdc:subscribe-topic` |Subscribe to a topic. To use this operation, place the connector as the first item in a flow. a|
+Streaming
+
+http://www.salesforce.com/us/developer/docs/api_streaming/index_Left.htm[Streaming API]
+
+ |org.mule.api.callback. StopSourceCallback
+|*Update* |`sfdc:update` |Updates one or more existing records in your organization's data. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_update.htm[update()]
+
+ |An array of SaveResult.
+|*Update bulk* |`sfdc:update-bulk` |Updates one or more existing records in your organization's data. a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_create.htm[Adding a Batch to a Job]
+
+ |A BatchInfo that identifies the batch job.
+|*Update single* |`sfdc:update-single` |Updates one record in your organization's data. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_update.htm[update()]
+
+ |A SaveResult.
+|*Upsert* |`sfdc:upsert` |Upserts a homogeneous list of objects: creates new records and updates existing records, using a custom field to determine the presence of existing records. a|
+SOAP API
+
+http://www.salesforce.com/us/developer/docs/api/Content/sforce_api_calls_upsert.htm[upsert()]
+
+ |A list of `UpsertResult`, one for each passed object.
+|*Upsert bulk* |`sfdc:upsert-bulk` |Upserts a homogeneous list of objects: creates new records and updates existing records, using a custom field to determine the presence of existing records. In most cases, prefer `upsert(String, String, List, Map)` over `create(String, List, Map)`, to avoid creating unwanted duplicate records.   a|
+Bulk API
+
+http://www.salesforce.com/us/developer/docs/api_asynch/Content/asynch_api_batches_create.htm[Adding a Batch to a Job]
+
+ |A BatchInfo that identifies the batch job.
+|===
+
+== See Also
+
+* Full documentation of all attributes can be found in the http://mulesoft.github.io/mule3-salesforce-connector/[reference index on github].
+* Refer to a table of standard http://www.salesforce.com/us/developer/docs/officetoolkit/Content/sforce_api_objects_list.htm[Salesforce objects] on which your operations act.
+* Access Salesforce.com documentation for their http://www.salesforce.com/us/developer/docs/api/[SOAP API], http://www.salesforce.com/us/developer/docs/api_asynch/[Bulk API], and http://www.salesforce.com/us/developer/docs/api_streaming/[Streaming API].
+* Access explanatory documentation at xref:0.3.7@index.adoc[Salesforce Connector].

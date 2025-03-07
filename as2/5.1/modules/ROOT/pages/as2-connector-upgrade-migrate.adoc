@@ -1,0 +1,249 @@
+= AS2 Connector 5.0.0 - Upgrade and Migrate - Mule 4
+
+== Supported Upgrade Paths
+
+This a direct upgrade from the AS2 connector 4.x to 5.0.0.
+
+== Changes in This Release
+
+* The `Async MDN` is now handled as a separate flow. You must add a new flow with an endpoint for the async MDN.
+
+* Users can reuse their HTTP listener configuration. Doing so means several changes for you and your trading partners:
+
+** Changing ports for an AS2-receive endpoint (port) with the new HTTP listener's endpoint (port) configuration
+** Making your trading partners aware of the new URL (port) configuration that corresponds to the HTTP listener you are reusing
+** Changes to the load-balancer, if used
+
+* Starting with AS2 connector 5.0.0, a broader set of ciphers are supported: `AES128_CBC`,`AES192_CBC`,`AES256_CBC`.
+Ciphers such as: `AES128`, `AES192`, and `AES256` that were used in versions of AS2 Connector earlier than 5.0.0 now map to this expanded set.
+
+* The namespace has changed from `as2` to `as2-mule4`.
+
+You must delete the old namespace before adding the new one.
+
+* The single global configuration is now divided into separate operation and source global configurations for a "receive endpoint" from a "send endpoint" because these are now mutually exclusive.
+
+For example:
+
+** `send-config` is now used by the `send-with-sync-mdn` and `send-with-async-mdn` operations.
+** `listener-config` is now used by the `as2-listener` source.
+** `mdn-listener-config` is now used by the `as2-mdn-listener` source.
+
+
+== Requirements and Limitations
+
+You should be aware of some requirements and limitations before you upgrade to the latest version.
+
+=== Requirements
+
+Ensure that you meet the following requirements before you migrate.
+
+Mule 4.1.0 or later
+
+Java 8
+
+=== Limitation
+
+Before you perform the migration, be aware of the following known limitation:
+
+* Signed copies of the document for nonrepudiation are not saved.
+
+== Upgrade Steps
+
+Follow these steps to perform the upgrade to AS2 version 5.0.0:
+
+. Download the AS2 connector 5.0.0 from Exchange.
+
+. Delete the old namespace and add the new one.
+
+=== Before (AS2 v4 namespace)
+[source,xml,linenums]
+----
+
+```
+<mule  xmlns:as2="http://www.mulesoft.org/schema/mule/as2"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/as2 http://www.mulesoft.org/schema/mule/as2-mule4/current/mule-as2.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+```
+
+----
+
+=== After (AS2 v5 namespace)
+[source,xml,linenums]
+----
+```
+<mule xmlns:as2-mule4="http://www.mulesoft.org/schema/mule/as2-mule4"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xsi:schemaLocation="
+	http://www.mulesoft.org/schema/mule/as2-mule4 http://www.mulesoft.org/schema/mule/as2-mule4/current/mule-as2-mule4.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+```
+----
+
+. If you use a load-balancer, make any necessary updates.
++
+For more info, see: https://docs.mulesoft.com/runtime-manager/dedicated-load-balancer-tutorial[CloudHub Load Balancers].
++
+. Add a new flow with an endpoint to handle the async MDN.
+
+. Change ports for your AS2-receive endpoint (port).
+
+[EXAMPLES]
+
+=== Global Configuration Now Divided into Operation and Source-Specific Global Configurations
+
+These configurations are for a "receive endpoint" from a "send endpoint" because they are now mutually exclusive.
+
+==== Before (AS2 v4 global config):
+[source,xml,linenums]
+----
+```
+<as2:config name="AS2_Config" doc:name="AS2 Config" doc:id="50470d1e-519b-4646-85ff-1ec5e0994e59" >
+    <as2:connection
+    namePartnerFrom="selfName" as2IdPartnerFrom="selfId" x509aliasPartnerFrom="selfAlias" emailPartnerFrom="self@email.com"
+    namePartnerTo="partnerName" as2IdPartnerTo="partnerID" x509aliasPartnerTo="partnerAlias" emailPartnerTo="partner@email.com"
+    subject="Send Subject" as2Url="partner-send-url" as2ReceiptOption="selfMDNUrl" mimeType="content-mimeType"
+    keyStorePath="path/to/keystore" keyPassword="keystorepwd"
+    receiverHost="receiveHost" receiverPort="receive port" secureReceiverPort="https receive port" secureReceiverKeystorePath="https receive keystore path" secureReceiverKeystorePassword="https receive keystore pwd"
+    mdnReceiverPort="MDN port" mdnSecureReceiverPort="https MDN port" mdnSecureReceiverKeystorePath="https mdn keystore path" mdnSecureReceiverKeystorePassword="https mdn keystore pwd"
+    encrypt="AES256" sign="SHA256" contentTransferEncoding="BASE64" compressionType="true">
+        <as2:proxy proxyHost="proxyhost" proxyPort="12345" proxyUsername="proxyUser" proxyPassword="proxyPwd" />
+    </as2:connection>
+</as2:config>
+```
+----
+
+==== After (AS2 v5 global config):
+[source,xml,linenums]
+----
+```
+<!-- Send global config -->
+<as2-mule4:send-config name="AS2_Connector_Send_config" doc:name="AS2 Connector Send config" doc:id="f32f6a99-15ea-411d-ad00-ec4d9990b874" >
+    <as2-mule4:connection partnerURL="partner-send-url" connectionTimeout="600000"
+        usePersistentConnections="false" maxConnections="5" connectionIdleTimeout="40000" tlsContext="TLS_Context">
+        <as2-mule4:proxy-config >
+            <as2-mule4:proxy host="proxyHost" port="12345" username="proxyUser" password="proxyPwd" />
+        </as2-mule4:proxy-config>
+    </as2-mule4:connection>
+    <as2-mule4:self-config as2Name="selfId" x509Alias="selfAlias" email="self@email.com" />
+    <as2-mule4:partner-config as2Name="partnerID" x509Alias="partnerAlias" email="partner@email.com" />
+	<as2-mule4:requester-config micAlg="SHA256" mdnMicAlg="SHA1" requestReceipt="SIGNED_REQUIRED" receiptDeliveryURL="selfMDNUrl" subject="Send Subject" encryptionAlg="AES256_CBC" contentTransferEncoding="BASE64" compressionType="ZLIB"/>
+    <as2-mule4:keystore-config keystorePassword="keystorepwd" keystorePath="path/to/keystore"/>
+</as2-mule4:send-config>
+
+<!-- HTTP global config -->
+	<http:listener-config name="HTTP_Listener_config">
+		<http:listener-connection host="localhost" port="8081"/>
+	</http:listener-config>
+
+<!-- HTTPS global config (Only required if as2-listener or as2-mdn-listener has to support HTTPS)-->
+	<http:listener-config name="HTTPS_Listener_config">
+		<http:listener-connection host="localhost" port="8082" tlsContext="TLS_Context" protocol="HTTPS">
+		</http:listener-connection>
+	</http:listener-config>
+	<tls:context name="TLS_Context" doc:name="TLS Context" doc:id="41e55ae5-c31b-48e8-91c7-a3acb92d6d2b">
+		<tls:trust-store path="path/to/truststore" password="pwd" algorithm="RSA"/>
+		<tls:key-store type="jks" path="path/to/keystore" alias="selfAlias" password="keystorepwd"/>
+	</tls:context>
+
+<!-- Receive global config -->
+	<as2-mule4:listener-config name="AS2_HTTPS_Listener_config" httpListenerConfig="HTTPS_Listener_config">
+		<as2-mule4:async-mdn-connection-provider-connection tlsContext="TLS_Context"/>
+		<as2-mule4:self-config as2Name="selfId" x509Alias="selfAlias" email="self@email.com"/>
+		<as2-mule4:partner-config as2Name="partnerId" x509Alias="partnerAlias" email="partner@email.com"/>
+		<as2-mule4:key-store-config keystorePassword="keystorepwd" keystorePath="path/to/keystore"/>
+	</as2-mule4:listener-config>
+
+<!-- Receive MDN global config -->
+	<as2-mule4:mdn-listener-config name="AS2_Connector_HTTPS_Mdn_listener_config" httpListenerConfig="HTTPS_Listener_config">
+		<as2-mule4:self-config as2Name="selfId" x509Alias="selfAlias" email="self@email.com"/>
+		<as2-mule4:partner-config as2Name="partnerId" x509Alias="partnerAlias" email="partner@email.com"/>
+		<as2-mule4:key-store-config keystorePassword="keystorepwd" keystorePath="path/to/keystore"/>
+	</as2-mule4:mdn-listener-config>
+```
+----
+
+==== Receive source
+
+The receive source needs a definition for the `path` of the listening endpoint.
+
+* Before:
+[source,xml,linenums]
+----
+```
+<as2:receive doc:name="Receive" config-ref="AS2_Config"/>
+```
+----
+
+* After:
+[source,xml,linenums]
+----
+```
+<flow name="AS2_HTTPS_Listener_Flow">
+    <as2-mule4:as2-listener path="/toSelf" config-ref="AS2_HTTPS_Listener_config"/>
+</flow>
+```
+----
+
+==== Send AS2 messages
+
+The send operation is divided into two separate operations: `send-with-async-mdn` and `send-with-sync-mdn`
+
+* Before:
+[source,xml,linenums]
+----
+```
+<as2:send timeout="send timeout" config-ref="AS2_Config" input="Hello world" fileName="fileName"/>
+```
+----
+
+* After
+[source,xml,linenums]
+----
+
+```
+<as2-mule4:send-with-async-mdn  fileName="fileName" config-ref="AS2_Connector_Send_Sync_config" mimeType="application/xml" requireProcessed="false">
+    <as2-mule4:content ><![CDATA[#['Hello world']]]></as2-mule4:content>
+</as2-mule4:send-with-async-mdn>
+
+<!-- OR -->
+
+<as2-mule4:send-with-sync-mdn  fileName="fileName" config-ref="AS2_Connector_Send_Sync_config" mimeType="application/xml" requireProcessed="false">
+    <as2-mule4:content ><![CDATA[#['Hello world']]]></as2-mule4:content>
+</as2-mule4:send-with-sync-mdn>
+
+```
+----
+
+==== Receive MDN source
+
+The receive MDN flow must be defined if you are using `send-with-async-mdn`.
+
+* Before:
+```
+No example; no configuration needed.
+```
+
+* After:
+[source,xml,linenums]
+----
+```
+<flow name="AS2_HTTPS_MDN_Listener_Flow">
+    <as2-mule4:as2-mdn-listener config-ref="AS2_Connector_HTTPS_Mdn_listener_config" path="/mdn"/>
+</flow>
+`
+----
+
+=== Post Upgrade Steps
+
+After you perform the previous steps, follow these steps to complete the upgrade:
+
+. Verify that the connector is working by making sure there are no exceptions on startup and test it against the AS2 partner.
+
+. Notify your Partners of the new URL (port) configuration that corresponds to the HTTP listener you are using.
+
+== See Also
+
+* https://help.mulesoft.com[MuleSoft Help Center]
