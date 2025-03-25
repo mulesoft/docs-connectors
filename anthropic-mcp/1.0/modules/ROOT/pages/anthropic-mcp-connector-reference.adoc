@@ -1,12 +1,12 @@
 = Anthropic MCP Connector 1.0 Reference
 
-Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Context Protocol (MCP) to enable supported Agents like Claude, Cursor, Windsurf, and so on.
+Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) allows Mule applications to act as both MCP servers and clients. This beta version includes support for tools and resources. 
 
 == Configurations
 
 [[Client]]
 === Client
-
+Configuration element that acts as a client and connects to an MCP server.
 ==== Parameters
 
 [%header%autowidth.spread]
@@ -15,8 +15,8 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 |Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| <<Client_SseClient, Sse Client>>
  | The connection types to provide to this configuration. | | x
-| Client Name a| String |  Name the client uses to identify itself during the protocol initialization phase. |  | x
-| Client Version a| String |  Version the client uses to identify itself during the protocol initialization phase. |  | x
+| Client Name a| String |  Name the client uses to identify itself during the protocol initialization phase. This isn't the same as the name given to this config element (which is later referenced through config-ref parameters). This name doesn't need to be unique. |  | x
+| Client Version a| String |  Version the client uses to identify itself during the protocol initialization phase. This doesn't need to match the connector or Mule application version. |  | x
 | Name a| String |  ID used to reference this configuration. |  | x
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration.   |  | 
 |===
@@ -31,7 +31,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 [%header%autowidth.spread]
 |===
 | Name | Type | Description | Default Value | Required
-| Server Url a| String |  Base URL for the target MCP server. |  | x
+| Server Url a| String | Base URL for the target MCP server. |  | x
 | Sse Endpoint Path a| String |  |  `/sse` | 
 | Request Timeout a| Number |  Sets the duration to wait for server responses before timing out requests. |  30 | 
 | Request Timeout Unit a| Enumeration, one of:
@@ -54,11 +54,12 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 ** HOURS
 ** DAYS |  Time Unit for the Reconnection Delay. |  MILLISECONDS | 
 | Authentication a| HttpRequestAuthentication |  |  | 
-| Tls Context a| <<Tls>> |  |  | 
+| Tls Context Factory a| <<Tls>> |  |  | 
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  | 
 |===
 
 == Supported Operations
+
 * <<CallTool>> 
 * <<ListResources>> 
 * <<ListTools>> 
@@ -68,6 +69,8 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 [[Server]]
 === Server
 
+Configuration element to act as an MCP server.
+
 ==== Parameters
 
 [%header%autowidth.spread]
@@ -75,28 +78,34 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 | Name | Type | Description | Default Value | Required
 |Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| <<Server_SseServer, Sse Server>>
- | The connection types to provide to this configuration. | | x
-| Server Name a| String |  The name that this server will use to identify itself during the protocol initialization phase |  | x
-| Server Version a| String |  The version that this client will use to identify itself during the protocol initialization phase |  | x
+ | Connection types to provide to this configuration. | | x
+| Server Name a| String |  Name this server uses to identify itself during the protocol initialization phase. This isn't the same as the name given to this config element (which is later referenced through config-ref parameters). This name doesn't need to be unique. |  | x
+| Server Version a| String | Version this client uses to identify itself during the protocol initialization phase. This doesn't need to match the connector or Mule application version. |  | x
 | Name a| String |  ID used to reference this configuration. |  | x
-| List Changed a| Boolean |  |  true | 
-| Subscribe a| Boolean |  |  true | 
-| List Changed a| Boolean |  |  true | 
+| List Changed a| Boolean | Whether to enable notifications for changes to the tool list. |  true | 
+| Subscribe a| Boolean | Whether to allow clients to subscribe to resource updates. |  true | 
+| List Changed a| Boolean | Whether to enable notifications for changes to the tool list.  |  true | 
 |===
 
 ==== Connection Types
+
 [[Server_SseServer]]
 ===== SSE Server
+
+Exposes the MCP server using the SSE transport, as defined in https://spec.modelcontextprotocol.io/specification/2024-11-05/basic/transports/#http-with-sse[HTTP With SSE]. 
+
+[NOTE]
+This connection type works only if Mule is started with the `mule.http.service.implementation=NETTY system property`.
 
 ====== Parameters
 
 [%header%autowidth.spread]
 |===
 | Name | Type | Description | Default Value | Required
-| Listener Config a| String |  Reference to the <http:listener-config> used to expose the inbound endpoint |  | x
-| Sse Endpoint Path a| String |  |  /sse | 
-| Messages Path a| String |  |  /message | 
-| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  | 
+| Listener Config a| String |  Reference to the <http:listener-config> used to expose the SSE and messaging endpoints. |  | x
+| Sse Endpoint Path a| String |The endpoint path clients use to initiate the SSE connection.  |  /sse | 
+| Messages Path a| String | Path the messaging endpoint request will be sent to. |  /message | 
+| Reconnection a| <<Reconnection>> | When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  | 
 |===
 
 == Supported Operations
@@ -115,6 +124,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 == Call Tool
 `<mcp:call-tool>`
 
+Invokes a tool in a remote MCP server.
 
 === Parameters
 
@@ -122,12 +132,12 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Tool Name a| String |  |  | x
-| Arguments a| Object |  |  #[payload] | 
+| Tool Name a| String | Name of the tool to invoke. |  | x
+| Arguments a| Object | The tool's input arguments.  |  #[payload] | 
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
 | Additional Properties a| Object |  |  #[null] | 
-| Target Variable a| String |  Name of the variable that storesoperation's output will be placed |  | 
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] | 
+| Target Variable a| String | Name of the variable that stores the operation's output. |  | 
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field.|  #[payload] | 
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  | 
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
@@ -138,6 +148,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 [%autowidth.spread]
 |===
 |Type |<<CallToolResponse>>
+| Attributes Type | Any
 |===
 
 === For Configurations
@@ -147,22 +158,14 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 === Throws
 
 * MCP:CONNECTIVITY 
-* MCP:INTERNAL_ERROR 
-* MCP:INVALID_PARAMS 
-* MCP:INVALID_REQUEST 
-* MCP:JSON_RPC_ERROR 
-* MCP:METHOD_NOT_FOUND 
-* MCP:PARSE_ERROR 
-* MCP:REQUEST_TIMEOUT 
 * MCP:RETRY_EXHAUSTED 
-* MCP:SERVER_ERROR 
-* MCP:UNKNOWN 
 
 
 [[ListResources]]
 == List Resources
 `<mcp:list-resources>`
 
+Lists all the available resources in the remote MCP server.
 
 === Parameters
 
@@ -174,8 +177,8 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 | Streaming Strategy a| * <<RepeatableInMemoryIterable>>
 * <<RepeatableFileStoreIterable>>
 * non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  | 
-| Target Variable a| String |  Name of the variable that storesoperation's output will be placed |  | 
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] | 
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  | 
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field.|  #[payload] | 
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  | 
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
@@ -195,23 +198,14 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 === Throws
 
 * MCP:CONNECTIVITY 
-* MCP:INTERNAL_ERROR 
-* MCP:INVALID_PARAMS 
-* MCP:INVALID_REQUEST 
-* MCP:INVALID_URI 
-* MCP:JSON_RPC_ERROR 
-* MCP:METHOD_NOT_FOUND 
-* MCP:PARSE_ERROR 
-* MCP:REQUEST_TIMEOUT 
 * MCP:RETRY_EXHAUSTED 
-* MCP:SERVER_ERROR 
-* MCP:UNKNOWN 
 
 
 [[ListTools]]
 == List Tools
 `<mcp:list-tools>`
 
+Lists all the available tools in the remote MCP server.
 
 === Parameters
 
@@ -223,8 +217,8 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 | Streaming Strategy a| * <<RepeatableInMemoryIterable>>
 * <<RepeatableFileStoreIterable>>
 * non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  | 
-| Target Variable a| String |  Name of the variable that storesoperation's output will be placed |  | 
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] | 
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  | 
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] | 
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  | 
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
@@ -244,22 +238,14 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 === Throws
 
 * MCP:CONNECTIVITY 
-* MCP:INTERNAL_ERROR 
-* MCP:INVALID_PARAMS 
-* MCP:INVALID_REQUEST 
-* MCP:JSON_RPC_ERROR 
-* MCP:METHOD_NOT_FOUND 
-* MCP:PARSE_ERROR 
-* MCP:REQUEST_TIMEOUT 
 * MCP:RETRY_EXHAUSTED 
-* MCP:SERVER_ERROR 
-* MCP:UNKNOWN 
 
 
 [[Ping]]
 == Ping
 `<mcp:ping>`
 
+Pings the remote server.
 
 === Parameters
 
@@ -268,11 +254,20 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
-| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  | 
+| Target Variable a| String | Name of the variable that stores the operation's output. |  | 
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] | 
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
 |===
 
+=== Output
+
+[%autowidth.spread]
+|===
+| *Type* a| Any
+| *Attributes Type* a| Any
+|===
 
 === For Configurations
 
@@ -288,6 +283,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 == Read Resource
 `<mcp:read-resource>`
 
+Reads a resource referenced by its URI.
 
 === Parameters
 
@@ -298,8 +294,8 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 | Uri a| String |  |  | x
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
 | Additional Properties a| Object |  |  #[null] | 
-| Target Variable a| String |  Name of the variable that storesoperation's output will be placed |  | 
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable |  #[payload] | 
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  | 
+| Target Value a| String | Expression that evaluates the operation’s output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] | 
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  | 
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
@@ -310,6 +306,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 [%autowidth.spread]
 |===
 |Type |<<ResourceContent>>
+| Attributes Type | Any
 |===
 
 === For Configurations
@@ -318,24 +315,14 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 
 === Throws
 
-* MCP:CONNECTIVITY 
-* MCP:INTERNAL_ERROR 
-* MCP:INVALID_PARAMS 
-* MCP:INVALID_REQUEST 
-* MCP:INVALID_URI 
-* MCP:JSON_RPC_ERROR 
-* MCP:METHOD_NOT_FOUND 
-* MCP:PARSE_ERROR 
-* MCP:REQUEST_TIMEOUT 
+* MCP:CONNECTIVITY  
 * MCP:RETRY_EXHAUSTED 
-* MCP:SERVER_ERROR 
-* MCP:UNKNOWN 
-
 
 [[AddStaticResource]]
 == Add Static Resource
 `<mcp:add-static-resource>`
 
+Dynamically adds a resource by providing its metadata and static content.
 
 === Parameters
 
@@ -343,16 +330,16 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Name a| String |  |  | x
-| Uri a| String |  |  | x
-| Description a| String |  |  | x
-| Mime Type a| String |  |  | x
+| Name a| String | Resource name.  |  | x
+| Uri a| String |Resource URI.  |  | x
+| Description a| String | Resource description. |  | x
+| Mime Type a| String | Resource MIME type. |  | x
 | Resource Content a| One of:
 
 * <<TextResource>>
-* <<BlobResource>> |  |  | x
+* <<BlobResource>> | Resource definition. |  | x
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
-| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  | 
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
 | Reconnection Strategy a| * <<Reconnect>>
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
 |===
@@ -365,17 +352,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 === Throws
 
 * MCP:CONNECTIVITY 
-* MCP:INTERNAL_ERROR 
-* MCP:INVALID_PARAMS 
-* MCP:INVALID_REQUEST 
-* MCP:INVALID_URI 
-* MCP:JSON_RPC_ERROR 
-* MCP:METHOD_NOT_FOUND 
-* MCP:PARSE_ERROR 
-* MCP:REQUEST_TIMEOUT 
 * MCP:RETRY_EXHAUSTED 
-* MCP:SERVER_ERROR 
-* MCP:UNKNOWN 
 
 
 == Sources
@@ -403,6 +380,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 [%autowidth.spread]
 |===
 |Type |<<NewSessionRequest>>
+| Attributes Type | Any
 |===
 
 === For Configurations
@@ -414,6 +392,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 == Resource listener
 `<mcp:resource-listener>`
 
+Exposes a resource which content is generated by the execution of the owning flow. The flow will be executed for every received resources/read request. The user can choose to implement the flow so that the resource content is static or to make it dynamic. For instance, a dynamic resource could be a expenses.csv file, that is actually the result of executing a live DB query. Or a static resource could be a file obtained through Amazon S3 and locally cached using the &lt;ee:cache&gt; component.
 
 === Parameters
 
@@ -421,10 +400,10 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Name a| String |  The resource name |  | x
-| Description a| String |  A detailed enough description for an LLM to determine when this resource should be read |  | x
-| Uri a| String |  The resource URI |  | x
-| Resource Mime Type a| String |  The resource mime type |  | x
+| Name a| String | Name of the resource. |  | x
+| Description a| String | Detailed enough description for an LLM to determine when to read this resource. |  | x
+| Uri a| String |  Resource URI. |  | x
+| Resource Mime Type a| String |  Resource MIME type. |  | x
 | Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  | 
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  | 
@@ -433,7 +412,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 | Resource Content a| One of:
 
 * <<TextResource>>
-* <<BlobResource>> |  |  | x
+* <<BlobResource>> |Defines the resource content and type. These parameters are evaluated when the flow finishes successfully (when the payload and variables available). |  | x
 |===
 
 === Output
@@ -448,10 +427,11 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 
 * <<Server>> 
 
-
 [[ToolListener]]
 == Tool Listener
 `<mcp:tool-listener>`
+
+Exposes a tool which result is generated by the execution of the owning flow. The flow will be executed for every received tools/call request. When triggered, the flow will be executed with a message which payload is a Java map holding the input arguments. The tool response is generated when the flow finishes either successfully or with error. In both cases, the response can include several content items of different types. If no error response is defined, then a text content item holding the error's description will be generated automatically.
 
 
 === Parameters
@@ -473,13 +453,13 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 * <<TextToolResponseContent>>
 * <<ImageToolResponseContent>>
 * <<TextResourceToolResponseContent>>
-* <<BlobResourceToolResponseContent>> |  |  | x
+* <<BlobResourceToolResponseContent>> | Response items when the flow finishes successfully.  |  | x
 | On Error Responses a| Array of One of:
 
 * <<TextToolResponseContent>>
 * <<ImageToolResponseContent>>
 * <<TextResourceToolResponseContent>>
-* <<BlobResourceToolResponseContent>> |  |  | 
+* <<BlobResourceToolResponseContent>> |Content items when the flow finishes in error.  |  | 
 |===
 
 === Output
@@ -487,7 +467,7 @@ Anypoint Connector for Anthropic MCP (Anthropic MCP Connector) uses the Model Co
 [%autowidth.spread]
 |===
 |Type |Object
-| Attributes Type a| <<RequestAttributes>>
+| Attributes Type | <<RequestAttributes>>
 |===
 
 === For Configurations
@@ -579,7 +559,7 @@ Use the method that wasn't specified in the *Prefer Crls* field (the secondary m
 
 * `false`
 
-Do not use the secondary method to check certificate validity. |  | 
+Don't use the secondary method to check certificate validity. |  | 
 | Soft Fail a| Boolean | What to do if the revocation server can't be reached or is busy:
 
 * `true`
@@ -687,16 +667,16 @@ Configures an expiration policy strategy.
 
 ** text
 ** image
-** resource |  |  | x
-| Text a| String |  |  | 
-| Mime Type a| String |  |  | 
-| Data a| Binary |  |  | 
-| Resource a| <<ResourceContent>> |  |  | 
+** resource | Content type.  |  | x
+| Text a| String | Content's payload when type is `text`.  |  | 
+| Mime Type a| String | Content's MIME type.  |  | 
+| Data a| Binary | Content's payload when type is `image`.  |  | 
+| Resource a| <<ResourceContent>> |Content's payload when type is `resource`.  |  | 
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  | 
-| Priority a| Number |  |  | 
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences. |  | 
+| Priority a| Number |Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional.  |  | 
 |===
 
 [[ResourceContent]]
@@ -705,10 +685,10 @@ Configures an expiration policy strategy.
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Uri a| String |  |  | x
-| Mime Type a| String |  |  | x
-| Text a| String |  |  | 
-| Blob a| Binary |  |  | 
+| Uri a| String |Resource URI  |  | x
+| Mime Type a| String | Resource MIME type. |  | x
+| Text a| String |Content of a text resource. Null for BLOB data types.   |  | 
+| Blob a| Binary | Content of a BLOB resource. Null for text data types.|  | 
 |===
 
 [[ErrorMapping]]
@@ -739,10 +719,10 @@ Configures an expiration policy strategy.
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Uri a| String |  |  | x
-| Name a| String |  |  | x
-| Description a| String |  |  | x
-| Mime Type a| String |  |  | x
+| Uri a| String | Resource URI.  |  | x
+| Name a| String | Name of the resource. |  | x
+| Description a| String | Description of the resource. |  | x
+| Mime Type a| String | MIME type of the resource. |  | x
 |===
 
 [[RepeatableInMemoryIterable]]
@@ -751,9 +731,9 @@ Configures an expiration policy strategy.
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Initial Buffer Size a| Number | The amount of instances that is initially be allowed to be kept in memory to consume the stream and provide random access to it. If the stream contains more data than can fit into this buffer, then the buffer expands according to the bufferSizeIncrement attribute, with an upper limit of maxInMemorySize. Default value is 100 instances. |  | 
-| Buffer Size Increment a| Number | This is by how much the buffer size expands if it exceeds its initial size. Setting a value of zero or lower means that the buffer should not expand, meaning that a STREAM_MAXIMUM_SIZE_EXCEEDED error is raised when the buffer gets full. Default value is 100 instances. |  | 
-| Max Buffer Size a| Number | Maximum size of the buffer. If the buffer size exceeds this value, Mule raises a `STREAM_MAXIMUM_SIZE_EXCEEDED` error. A value of less than or equal to `0` means no limit. |  | 
+| Initial Buffer Size a| Number | The amount of memory to allocate to consume the stream and provide random access to it. If the stream contains more data than can fit into this buffer, then the buffer expands according to the Buffer Size Increment value, with an upper limit of the Max In Memory Size value. instances. | 100 | 
+| Buffer Size Increment a| Number | Amount by which the buffer size expands if it exceeds its initial size. Setting a value of `0` or lower specifies that the buffer can't expand. | 100 | 
+| Max Buffer Size a| Number | Maximum size of the buffer. If the buffer size exceeds this value, Mule raises a `STREAM_MAXIMUM_SIZE_EXCEEDED` error. A value of less than or equal to `0` means no limit.  |  | 
 |===
 
 [[RepeatableFileStoreIterable]]
@@ -762,7 +742,7 @@ Configures an expiration policy strategy.
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| In Memory Objects a| Number | The maximum amount of instances to keep in memory. If more than that is required, content on the disk is buffered. |  | 
+| In Memory Objects a| Number | Maximum number of instances to keep in memory. If more than the maximum is required, content on the disk is buffered. |  | 
 | Buffer Unit a| Enumeration, one of:
 
 ** BYTE
@@ -777,9 +757,9 @@ Configures an expiration policy strategy.
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Name a| String |  |  | x
-| Description a| String |  |  | x
-| Input Schema a| String |  |  | x
+| Name a| String | Name of the tool. |  | x
+| Description a| String |A detailed enough description for an LLM to determine when to call this tool. |  | x
+| Input Schema a| String | JSON Schema describing the tool's input parameters.  |  | x
 |===
 
 [[NewSessionRequest]]
@@ -846,8 +826,8 @@ Configures how to identify a redelivered message and how to find out when the me
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  | 
-| Priority a| Number |  |  | 
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content that's useful for multiple audiences. |  | 
+| Priority a| Number | Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  | 
 |===
 
 [[ImageToolResponseContent]]
@@ -856,13 +836,13 @@ Configures how to identify a redelivered message and how to find out when the me
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Data a| Binary |  |  | x
-| Mime Type a| String |  |  | 
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  | 
-| Priority a| Number |  |  | 
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences. |  | 
+| Priority a| Number | Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  | 
+| Data a| Binary | The raw image content, without Base64 encoding. |  | 
+| Mime Type a| String | The image MIME type. |  | 
 |===
 
 [[TextResourceToolResponseContent]]
@@ -871,14 +851,14 @@ Configures how to identify a redelivered message and how to find out when the me
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Uri a| String |  |  | x
-| Mime Type a| String |  | text/plain | 
-| Text a| String |  |  | x
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  | 
-| Priority a| Number |  |  | 
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences.  |  | 
+| Priority a| Number |Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  | 
+| Uri a| String | Resource URI. |  | 
+| Mime Type a| String | The resource MIME type. |  | 
+| Text a| String | Resource text. |  | 
 |===
 
 [[BlobResourceToolResponseContent]]
@@ -887,14 +867,14 @@ Configures how to identify a redelivered message and how to find out when the me
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Blob a| Binary |  |  | x
-| Uri a| String |  |  | x
-| Mime Type a| String |  |  | 
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  | 
-| Priority a| Number |  |  | 
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences. |  | 
+| Priority a| Number | Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  | 
+| Blob a| Binary |The raw resource content, without Base64 encoding.   |  | x
+| Uri a| String | Resource URI. |  | 
+| Mime Type a| String | The resource MIME type. |  |
 |===
 
 [[TextResource]]
@@ -903,7 +883,7 @@ Configures how to identify a redelivered message and how to find out when the me
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Text a| String |  |  | x
+| Text a| String | Text content. |  | x
 |===
 
 [[BlobResource]]
@@ -912,6 +892,12 @@ Configures how to identify a redelivered message and how to find out when the me
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Blob a| Binary |  |  | x
+| Blob a| Binary | The raw resource content, without Base64 encoding.  |  | x
 |===
 
+== See Also
+
+* xref:connectors::introduction/intro-config-use-acb.adoc[]
+* xref:connectors::introduction/intro-config-use-studio.adoc[Using Studio to Configure a Connector]
+* xref:index.adoc[Anthropic MCP Connector Overview]
+* https://help.mulesoft.com[MuleSoft Help Center]
