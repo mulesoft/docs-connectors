@@ -1,0 +1,77 @@
+= Anthropic MCP Connector 1.0 - Examples - Mule 4
+
+
+== Create an MCP Server
+
+In this example scenario, you want to write an Agent that creates purchase orders in SAP Concur. For that, the Agent must select from a list of approved vendors. In this custom implementation, each vendor is assigned with a “product category” mapped in a custom field called “Custom19”.
+
+You want to feed the Agent with a live list of vendors and their assigned categories, while keeping the LLM decoupled from Concur and all its nuances like authentication, custom field setup, and so on.
+
+MCP defines the concept of tools, which are Remote Procedure Calls (RPC), that take a list of input arguments and produce a result.
+
+=== Create the MCP Server Configuration
+
+This example configuration implements an MCP server using the SSE transport on top of an existing `<http:listener-config>`. This configuration not only provides all the configuration options of the HTTP Connector, you can also write applications that serve both MCP and traditional APIs in the same port.
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:listener-config name="HTTP_Listener_config">
+	<http:listener-connection host="0.0.0.0" port="${https.port}" />
+</http:listener-config>
+	
+<mcp:server-config name="MCP_Server"serverName="Mule MCP Server" serverVersion="1.0.0">
+		<mcp:sse-server-connection listenerConfig="HTTP_Listener_config" sseEndpointPath="/sse" messagesPath="/message" />
+</mcp:server-config>
+----
+
+=== Create the Tool
+
+Write a tool that provides a list of vendors, for example:
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="vendorsTool" >
+ <mcp:tool-listener config-ref="MCP_Server" name="get-vendors"> #(1)
+	<mcp:description>Get all approved vendors</mcp:description> #(2)
+	<mcp:parameters-schema ><![CDATA[{ #(3)
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {},
+  "required": []
+}]]></mcp:parameters-schema>
+<mcp:responses> #(4)
+	<mcp:text-tool-response-content text="#[payload.^raw]" />
+	</mcp:responses>
+  </mcp:tool-listener>
+
+  <flow-ref name="getTokenFlow" target="token"/>
+  <mule-sap-concur-connector:get-vendors config-ref="SAP_Concur_Config"/>
+  <ee:transform>
+	<ee:message >
+<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.Vendor filter ($.Approved == "true") map {
+	id: $.ID,
+	name: $.VendorName,
+	country: $.Country,
+	city: $.City,
+	productCategories: $.Custom19		
+}
+]]></ee:set-payload>
+	</ee:message>
+   </ee:transform>
+</flow>
+----
+
+[calloutlist]
+.. The tool is implemented through a flow triggered through the <mcp:tool-listener>.
+.. The tool includes a description that allows the LLM to determine when to use it
+.. Being a very simple tool, this one doesn’t take any input arguments, but per MCP standard it still requires a Json schema to define that.
+.. The tool produces a text response, which in this case is the JSON produced by the flow. The connector does support other types of responses like images and binary objects
+
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
