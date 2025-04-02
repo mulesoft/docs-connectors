@@ -25,7 +25,7 @@ This example configuration implements an MCP server using the SSE transport on t
 </mcp:server-config>
 ----
 
-=== Create the Tool
+=== Write a Tool That Provides a List of Vendors
 
 Write a tool that provides a list of vendors, for example:
 
@@ -67,9 +67,80 @@ payload.Vendor filter ($.Approved == "true") map {
 
 [calloutlist]
 .. The tool is implemented through a flow triggered through the <mcp:tool-listener>.
-.. The tool includes a description that allows the LLM to determine when to use it
-.. Being a very simple tool, this one doesn’t take any input arguments, but per MCP standard it still requires a Json schema to define that.
-.. The tool produces a text response, which in this case is the JSON produced by the flow. The connector does support other types of responses like images and binary objects
+.. The tool includes a description that allows the LLM to determine when to use it.
+.. This is a simple tool that doesn’t take any input arguments, but according to the MCP standard it still requires a JSON schema to define that.
+.. The tool produces a text response, which in this case is the JSON produced by the flow. The connector also supports other types of responses like images and binary objects.
+
+The implementation uses the off-the-shelf SAP Concur Connector to get the vendors and a DataWeave (DW) transformation to filter by approved status and map the custom field to a `productCategories` field.
+
+This is enough for the LLM to access the live data in Concur and to select an appropriate vendor based on city, product category, and other criteria, without the need for additional custom logic.
+
+=== Write a Tool That Creates the Purchase Order
+
+The tool in this example takes input arguments defined in the JSON schema and each of those arguments includes a natural language description. This allows the LLM to map and consume the values. 
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="purchaseOrderTool">
+  <mcp:tool-listener config-ref="MCP_Server" name="create-concur-purchase-order">
+<mcp:description></mcp:description>
+	<mcp:parameters-schema ><![CDATA[{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+  	"name": {
+      "type": "string",
+      "description": "The name for the purchase order"
+    },
+     "description": {
+		"type": "string",
+      	"description": "The purchase order description"
+     },
+     "vendorCode": {
+     	"type": "string",
+      	"description": "The code that identifies the vendor we're purchasing from"
+     },
+     "itemDescription": {
+     	"type": "string",
+      	"description": "The description of the item purchased in this order"
+     },
+     "price": {
+     	"type": "number",
+     	"description": "The purchase order monetary amount"     
+	 },
+	 "currency": {
+	 	"type": "string",
+	 	"description": "The currency code for the purchase order monetary amount"
+    }
+  },
+  "required": ["name", "description", "vendorCode", "itemDescription", "price", "currency"]
+}]]></mcp:parameters-schema>
+  <mcp:responses >
+<mcp:text-tool-response-content text="#['Created Order $(payload.PurchaseOrderNumber)']" />
+  </mcp:responses>
+</mcp:tool-listener>
+		
+<flow-ref name="getTokenFlow" target="token"/>
+<mule-sap-concur-connector:create-purchase-order config-ref="SAP_Concur_Config">
+	<mule-sap-concur-connector:create-purchase-order-request-data ><![CDATA[#[output application/json
+---
+{
+	Name: payload.name,
+	CurrencyCode: payload.currency,
+	Description: payload.description,
+	VendorCode: payload.vendorCode,
+	LineItem: {
+		Description: payload.itemDescription,
+		ApprovedLineItemAmount: payload.price as String,
+		TotalPrice: payload.price as String
+	}
+}]]]></mule-sap-concur-connector:create-purchase-order-request-data>
+		</mule-sap-concur-connector:create-purchase-order>
+	</flow>
+----
+
+The flow then uses the connector to create the order and returns a single text line, including the order’s ID. There’s no need for a formatted response.
+
 
 
 == See Also
