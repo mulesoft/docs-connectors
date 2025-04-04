@@ -1,0 +1,85 @@
+= MCP Connector - Additional Configuration Information - Mule 4
+
+// Add brief introduction
+
+== Server-Side Authentication With On New Session Listener
+
+MCP Connector is open when it comes to authenticating MCP clients. The concept of session is a top-level concern according to the latest update to the MCP specification. Because the SSE connection is stateful, this is when authentication happens. 
+
+This is an example flow that uses the On New Session Listener operation:
+
+[source,xml]
+----
+<flow name="onNewSession">
+   <mcp:on-new-session-listener config-ref="MCP_Server"/>
+   
+   <logger level="INFO" message="#['new session id: $(payload.sessionId)']"/>
+   <logger level="INFO"message="#['http headers:  $(payload.additionalProperties)']"/>
+</flow>
+----
+
+The flow executes each time a new client connects to the MCP server application. The payload contains the auto-generated `sessionId` and the `additionalProperties`, which when using the SSE connection type, maps to the request HTTP headers.
+
+At this point, you can implement your own authentication logic. For instance, the `#[payload.additionalProperties.authorization]` expression gets the HTTP authorization header, which you can validate later.
+
+=== Validate OAuth Access Tokens
+
+Optionally, you can use the xref:api-manager::mule-oauth-provider-landing-page.adoc[Mule OAuth 2.0 Provider] to implement and validate OAuth access tokens. 
+
+In this example flow, the access token is validated using the OAuth provider, and the session is rejected if the token is invalid:
+
+[source,xml]
+----
+<flow name="onNewSession">
+  <mcp:on-new-session-listener config-ref="MCP_Server">
+<mcp:rejection rejectWithStatusCode="#[vars.rejectStatusCode]" rejectWithMessage="#[vars.rejectMessage]" />
+  </mcp:on-new-session-listener>
+  <oauth2-provider:validate-token scopes="#[['PUBLIC_READ']]" config-ref="external-oauth2-provider" accessToken="#[payload.additionalProperties.authorization]"/>
+        <error-handler>
+                <on-error-continue type="OAUTH2-PROVIDER:TOKEN_UNAUTHORIZED">
+                    <set-variable variableName="rejectWithStatusCode" value="401" />
+                    <set-variable variableName="rejectWithMessage" value="#[error.descripion]" />
+                </on-error-continue>
+            </error-handler>
+</flow>
+----
+
+The new session is rejected if one of two things happens:
+
+* The `rejectWithStatusCode` parameter is assigned a non null value (or an expression that resolves to a non null value), or
+* The flow fails, in which case a status code 500 is reported.
+
+In this example, the OAuth validation error is handled so that the status code is mapped to a `401 - UNAUTHORIZED` code.
+
+== Client-Side Authentication
+
+In the client, the authentication parameter accepts all the authentication strategies defined in the HTTP Connector, and the xref:connectors::oauth-module.index.adoc[OAuth Module] if it’s also added to the project.
+
+Operations like *Call Tool* also accept additional properties, which in the case of SSE map to request headers. This makes it possible to add custom authentication headers like API keys, for example:
+
+[source,xml]
+----
+<mcp:call-tool config-ref="MCP_GMaps_Client" toolName="maps_geocode">
+    <mcp:arguments ><![CDATA[#[output application/java
+---
+{
+	address: payload.address
+}]]]></mcp:arguments>
+<mcp:additional-properties ><![CDATA[
+#[output application/java
+---
+{
+	"API_KEY" : p('api.key')
+}]]]>
+</mcp:additional-properties>
+</mcp:call-tool>
+----
+
+== Next Step
+
+After you complete configuring the connector, you can try the xref:connector-template-files-connector-examples.adoc[Examples].
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
