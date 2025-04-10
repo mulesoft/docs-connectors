@@ -4,7 +4,7 @@ These are some examples of how to use existing APIs to build agents using MCP Co
 
 == Create an MCP Server and Tools
 
-Create an MCP server and two specific tools: 
+In this example, you will create an MCP server and two specific tools: 
 
 * One tool provides the agent with a live list of approved vendors categorized by product for the agent to choose from. 
 * The other tool enables the agent to initiate the purchase order creation process with the necessary details. 
@@ -144,9 +144,13 @@ The tool in this example takes input arguments (each including a natural languag
 
 The flow then uses the connector to create the order and returns a single text line, including the order’s ID. There’s no need for a formatted response.
 
-== Use Third-Party MCP Servers
+== Configure the MCP Client to Use Third-Party MCP Servers
 
-There is a growing list of MCP servers that are already implemented and ready to use by configuring the MCP client. For example:
+The previous examples showed you how to write a tool that draws from existing Anypoint Connctors.
+
+By configuring the MCP Client, you can use third-party MCP servers that are already implemented and ready to use. These examples show you how you can integrate your Mule applications with existing third-party MCP servers by configuring the MCP Client and using the *Call Tool* operation.
+
+Here is an example of configuring the MCP Client with the Google Maps MCP server deployed to Heroku: 
 
 [source,xml]
 ----
@@ -156,10 +160,93 @@ There is a growing list of MCP servers that are already implemented and ready to
 </mcp:client-config>
 ----
 
-In this example, the Google Maps MCP server is deployed in Heroku. 
+After the MCP Client configuration is defined, you can use the *Call tool* (`mcp-call-tool`) operation to invoke specific tools exposed by the MCP server. The *Call Tool* operation dynamically retrieves the metadata (including available tools and their arguments) from the target MCP server, providing DataSense auto-completion within your Mule flow.
 
-You can then create an MCP Client configuration to consume it by using the *Call Tool* operation. The *Call Tool* operation automatically fetches all the metadata from the MCP server and shows the existing tools, while also providing DataSense auto-completion on the arguments.
+This example demonstrates how to create an MCP tool that retrieves weather information using the external OpenMeteo API (not an MCP server directly). This illustrates how you can integrate standard HTTP-based services within an MCP tool:
 
+[source,xml]
+----
+<http:request-config basePath="/v1" name="HTTP_Request_configuration">
+        <http:request-connection host="api.open-meteo.com" protocol="HTTPS"></http:request-connection>
+    </http:request-config>
+
+<flow name="getWeatherByCoordinatesToolFlow">
+        <mcp:tool-listener config-ref="MCP_Server" name="get-weather-by-coordinates">
+            <mcp:description>Provides the weather at a given coordinates expressed as latitude and longitude]></mcp:description>
+            <mcp:parameters-schema><![CDATA[{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "latitude": {
+      "type": "number",
+      "description": "The latitude component of a location's coordinates"
+    },
+    "longitude": {
+      "type": "number",
+      "description": "The longitude component of a location's coordinates"
+    }
+  },
+  "required": ["latitude", "longitude"]
+}]]></mcp:parameters-schema>
+            <mcp:responses>
+				<mcp:text-tool-response-content text="#['Current temperature at location is $(payload.current.temperature_2m)']" />
+            </mcp:responses>
+        </mcp:tool-listener>
+		<http:request config-ref="HTTP_Request_configuration" method="GET" path="/forecast">
+            <http:query-params><![CDATA[#[output application/java
+				---
+				{
+					latitude : payload.latitude,
+					longitude : payload.longitude,
+					current: 'temperature_2m'
+				}]]]></http:query-params>
+        </http:request>
+    </flow>
+----
+
+This tool uses the OpenMeteo API to return the forecast at a particular coordinate. 
+
+To handle weather lookups by address instead of coordinates, you can compose a new MCP tool that leverages the Google Maps MCP Server (configured earlier) to get coordinates and then uses the `get-weather-by-coordinates` tool (which internally calls the OpenMeteo API):
+
+[source,xml]
+----
+<flow name="getWeatherByAddressToolFlow">
+  <mcp:tool-listener doc:name="Call Tool Listener" config-ref="MCP_Server" name="get-weather-by-address">
+   <mcp:description>Provides the weather at a specific address</mcp:description>
+  <mcp:parameters-schema ><![CDATA[{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "address": {
+      "type": "string",
+      "description": "The address we want to learn the weather for"
+    }
+  },
+  "required": ["address"]
+}]]></mcp:parameters-schema>
+    <mcp:responses >
+    <mcp:text-tool-response-content text="#[payload.contents[0].text]" />
+</mcp:responses>
+ </mcp:tool-listener>
+ <mcp:call-tool config-ref="MCP_GMaps_Client" toolName="maps_geocode">
+	<mcp:arguments ><![CDATA[#[output application/java
+---
+{
+	address: payload.address
+}]]]>
+</mcp:arguments>
+ </mcp:call-tool>
+ <mcp:call-tool config-ref="MCP_Client" toolName="get-weather-by-coordinates">
+    <mcp:arguments ><![CDATA[#[output application/java
+---
+{
+	latitude: read(payload.contents[0].text!, 'json').location.lat as Number,
+	longitude: read(payload.contents[0].text!, 'json').location.lng as Number
+}]]]>
+</mcp:arguments>
+ </mcp:call-tool>
+</flow>
+----
 
 == See Also
 
