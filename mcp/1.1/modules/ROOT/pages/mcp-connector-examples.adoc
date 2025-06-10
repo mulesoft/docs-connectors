@@ -1,0 +1,282 @@
+= MCP Connector 1.1.0 - Examples 
+
+These are some examples of how to use existing APIs to build agents using MCP Connector. 
+
+== Create an MCP Server and Tools
+
+These examples show you the process of creating an MCP server within your Mule app and defining two distinct tools that the MCP server will expose: one for retrieving a dynamic list of approved vendors with their product categories, and another for initiating the creation of purchase orders with specified details. 
+
+These examples illustrate the concept of MCP tools as invocable Remote Procedure Calls (RPCs).
+
+=== Create the MCP Server Configuration
+
+This example demonstrates how to configure an MCP server within your Mule application using the Server-Sent Events (SSE) transport. This configuration builds upon an existing HTTP Listener configuration, allowing your Mule instance to serve both MCP endpoints and traditional HTTP-based APIs simultaneously on the same port.
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:listener-config name="HTTP_Listener_config">
+	<http:listener-connection host="localhost" port="${https.port}" />
+</http:listener-config>
+	
+<mcp:server-config name="MCP_Server" serverName="Mule MCP Server" serverVersion="1.1.0">
+		<mcp:sse-server-connection listenerConfig="HTTP_Listener_config" sseEndpointPath="/sse" messagesPath="/message" />
+</mcp:server-config>
+
+<configuration-properties file="mule-artifact.properties"/>
+----
+
+=== Create a Tool That Provides a List of Vendors
+
+This example illustrates how to create an MCP tool that retrieves a dynamic list of approved vendors from an external system (in this case, SAP Concur). The example demonstrates how to use the `<mcp:tool-listener>` to define a callable tool and how to process the data to provide the agent with relevant vendor information, including their assigned product category from the `Custom19` field.
+
+First, set up the SAP Concur configuration:
+
+[source,xml,linenums, subs=attributes+]
+----
+<sap-concur:config name="SAP_Concur_Config">
+	<sap-concur:oauth-connection clientId="${concur.client.id}" clientSecret="${concur.client.secret}">
+		<oauth:token-manager-config tokenUrl="${concur.token.url}"/>
+	</sap-concur:oauth-connection>
+</sap-concur:config>
+----
+
+Now, create the main flow that handles vendor retrieval:
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="getVendorsFlow">
+	<mcp:tool-listener config-ref="MCP_Server" name="get-vendors"> #(1)
+		<mcp:description>Get all approved vendors</mcp:description> #(2)
+		<mcp:parameters-schema ><![CDATA[{ #(3)
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {},
+			"required": []
+		}]]></mcp:parameters-schema>
+		<mcp:responses> #(4)
+			<mcp:text-tool-response-content text="#[payload.^raw]" />
+		</mcp:responses>
+	</mcp:tool-listener>
+
+	<sap-concur:get-vendors config-ref="SAP_Concur_Config"/>
+	
+	<ee:transform>
+		<ee:message >
+			<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload.Vendor filter ($.Approved == "true") map {
+	id: $.ID,
+	name: $.VendorName,
+	country: $.Country,
+	city: $.City,
+	productCategories: $.Custom19		
+}
+]]></ee:set-payload>
+		</ee:message>
+	</ee:transform>
+</flow>
+----
+
+[calloutlist]
+.. The tool is implemented through a Mule flow that's triggered through the `<mcp:tool-listener>`.
+.. The `<mcp:description>` provides a natural language explanation of the tool's purpose, enabling the LLM to understand when to use it.
+.. The `<mcp:parameters-schema>` defines the input arguments for the tool. In this simple example, it's an empty JSON schema indicating no input parameters are required.
+.. The `<mcp:responses>` section defines the output of the tool. Here, it specifies that the tool returns a text response containing the raw JSON payload produced by the flow.
+
+=== Create a Tool That Creates Purchase Orders
+
+This example demonstrates the creation of an MCP tool that allows an agent to initiate the creation of a purchase order in SAP Concur. The example highlights how to define input parameters for a tool using a JSON schema, including natural language descriptions for each parameter to help the LLM in understanding and populating the required information.
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="createPurchaseOrderFlow">
+	<mcp:tool-listener config-ref="MCP_Server" name="create-concur-purchase-order">
+		<mcp:description>Create a new purchase order in SAP Concur</mcp:description>
+		<mcp:parameters-schema ><![CDATA[{
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "Name for the purchase order."
+				},
+				"description": {
+					"type": "string",
+					"description": "Purchase order description."
+				},
+				"vendorCode": {
+					"type": "string",
+					"description": "Code that identifies the vendor."
+				},
+				"itemDescription": {
+					"type": "string",
+					"description": "Description of the item purchased in this order."
+				},
+				"price": {
+					"type": "number",
+					"description": "Monetary amount of the purchase order."     
+				},
+				"currency": {
+					"type": "string",
+					"description": "Currency code for the purchase order monetary amount."
+				}
+			},
+			"required": ["name", "description", "vendorCode", "itemDescription", "price", "currency"]
+		}]]></mcp:parameters-schema>
+		<mcp:responses >
+			<mcp:text-tool-response-content text="#['Created Purchase Order: $(payload.PurchaseOrderNumber)']" />
+		</mcp:responses>
+	</mcp:tool-listener>
+		
+	<sap-concur:create-purchase-order config-ref="SAP_Concur_Config">
+		<sap-concur:create-purchase-order-request-data ><![CDATA[#[output application/json
+	---
+	{
+		Name: payload.name,
+		CurrencyCode: payload.currency,
+		Description: payload.description,
+		VendorCode: payload.vendorCode,
+		LineItem: {
+			Description: payload.itemDescription,
+			ApprovedLineItemAmount: payload.price as String,
+			TotalPrice: payload.price as String
+		}
+	}]]></sap-concur:create-purchase-order-request-data>
+	</sap-concur:create-purchase-order>
+</flow>
+----
+
+== Configure the MCP Client to Use Third-Party MCP Servers
+
+The previous examples showed you how to write tools that draw from existing Anypoint Connectors. Now, take a look at how to use third-party MCP servers.
+
+=== Create a Weather Service Using Multiple MCP Servers
+
+This example shows how to integrate your Mule applications with existing third-party MCP servers by configuring the MCP Client and using the *Call Tool* operation.
+
+First, set up the client configurations:
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:request-config name="Weather_API_Config" basePath="/v1">
+	<http:request-connection host="api.open-meteo.com" protocol="HTTPS"/>
+</http:request-config>
+
+<mcp:client-config name="Google_Maps_Client" clientName="Mule MCP Maps Client" clientVersion="1.1.0">
+	<mcp:sse-client-connection serverUrl="http://google-maps-mcp-sse-f5ebe64f8456.herokuapp.com"/>
+</mcp:client-config>
+
+<mcp:server-config name="Weather_MCP_Server" serverName="Weather MCP Server" serverVersion="1.1.0">
+	<mcp:sse-server-connection listenerConfig="HTTP_Listener_config" sseEndpointPath="/weather/sse" messagesPath="/weather/message"/>
+</mcp:server-config>
+----
+
+Now, create the weather service flows:
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="getWeatherByCoordinatesFlow">
+	<mcp:tool-listener config-ref="Weather_MCP_Server" name="get-weather-by-coordinates">
+		<mcp:description>Provides the weather at given coordinates expressed as latitude and longitude</mcp:description>
+		<mcp:parameters-schema><![CDATA[{
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {
+				"latitude": {
+					"type": "number",
+					"description": "The latitude component of a location's coordinates"
+				},
+				"longitude": {
+					"type": "number",
+					"description": "The longitude component of a location's coordinates"
+				}
+			},
+			"required": ["latitude", "longitude"]
+		}]]></mcp:parameters-schema>
+		<mcp:responses>
+			<mcp:text-tool-response-content text="#['Current temperature at location is $(payload.current.temperature_2m)°C']"/>
+		</mcp:responses>
+	</mcp:tool-listener>
+	
+	<http:request config-ref="Weather_API_Config" method="GET" path="/forecast">
+		<http:query-params><![CDATA[#[output application/java
+	---
+	{
+		latitude: payload.latitude,
+		longitude: payload.longitude,
+		current: 'temperature_2m'
+	}]]></http:query-params>
+	</http:request>
+	
+	<error-handler>
+		<on-error-continue type="ANY">
+			<set-payload value="#['Error getting weather: $(error.description)']"/>
+		</on-error-continue>
+	</error-handler>
+</flow>
+
+<flow name="getWeatherByAddressFlow">
+	<mcp:tool-listener config-ref="Weather_MCP_Server" name="get-weather-by-address">
+		<mcp:description>Provides the weather at a specific address</mcp:description>
+		<mcp:parameters-schema><![CDATA[{
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {
+				"address": {
+					"type": "string",
+					"description": "The address we want to learn the weather for"
+				}
+			},
+			"required": ["address"]
+		}]]></mcp:parameters-schema>
+		<mcp:responses>
+			<mcp:text-tool-response-content text="#[payload]"/>
+		</mcp:responses>
+	</mcp:tool-listener>
+	
+	<!-- First get coordinates from Google Maps MCP -->
+	<mcp:call-tool config-ref="Google_Maps_Client" toolName="maps_geocode">
+		<mcp:arguments><![CDATA[#[output application/java
+	---
+	{
+		address: payload.address
+	}]]></mcp:arguments>
+	</mcp:call-tool>
+	
+	<!-- Then get weather using our coordinates tool -->
+	<mcp:call-tool config-ref="Weather_MCP_Server" toolName="get-weather-by-coordinates">
+		<mcp:arguments><![CDATA[#[output application/java
+	---
+	{
+		latitude: read(payload.contents[0].text!, 'json').location.lat as Number,
+		longitude: read(payload.contents[0].text!, 'json').location.lng as Number
+	}]]></mcp:arguments>
+	</mcp:call-tool>
+	
+	<error-handler>
+		<on-error-continue type="ANY">
+			<set-payload value="#['Error getting weather for address: $(error.description)']"/>
+		</on-error-continue>
+	</error-handler>
+</flow>
+----
+
+This example demonstrates how to:
+1. Create a basic weather service that accepts coordinates
+2. Use a third-party MCP server (Google Maps) to convert addresses to coordinates
+3. Compose multiple MCP tools together to create a more user-friendly service
+
+While LLMs can orchestrate these tools directly, there are cases where manual composition in Mule is preferable:
+
+* When you need guaranteed access to all MCP servers
+* When authentication needs to be handled securely
+* When you need strong governance and tracing capabilities
+
+== See Also
+
+* xref:mcp-connector-config-topics.adoc[Applying Security to the MCP Server]
+* xref:mcp-connector-reference.adoc[MCP Connector Reference]
+* https://blogs.mulesoft.com/news/model-context-protocol/[MuleSoft MCP Support: Get Started With Model Context Protocol]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
