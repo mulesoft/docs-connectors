@@ -118,6 +118,93 @@ See xref:mule-runtime::logging-and-debugging.adoc[].
 
 include::connectors::partial$t-studio-partial.adoc[tags=view-app-log]
 
+[[apply-mcp-policies]]
+== Apply MCP Policies
+
+MCP Connector has support for policies to enhance security, monitoring, and governance of your MCP server endpoints. You can apply policies to control access, add authentication, implement rate limiting, and provide additional security layers.
+
+Available MCP policies include:
+
+* *MCP Support Policy*
++
+Adds MCP support to a Flex Gateway MCP server instance. This policy is required for your MCP server instance to function properly.
+* *MCP Schema Validation Policy* 
++
+Validates MCP requests to ensure they conform to the MCP specification
+* *MCP Attribute-Based Access Control Policy*
++
+Controls access to tools, resources, and prompts based on user information such as Tiers, IP, Headers, or Claims
+
+
+=== Configure MCP Policies
+
+To apply policies to your MCP server:
+
+. In Anypoint Studio, open your Mule project.
+. Right-click on your Mule configuration file and select *Anypoint Platform* > *Manage Policies*.
+. In the *Policies* tab, click *Apply Policy*.
+. Select the appropriate policy for your use case.
+. Configure the policy parameters according to your requirements.
+. Save the configuration.
+
+=== Policy Configuration Examples
+
+==== MCP Support Policy (Required)
+
+The MCP Support policy is essential for MCP server functionality:
+
+```yaml
+policies:
+  - mcp-support:
+      enabled: true
+```
+
+==== MCP Schema Validation Policy
+
+```yaml
+policies:
+  - mcp-schema-validation:
+      enabled: true
+      strict: false
+```
+
+==== MCP Attribute-Based Access Control Policy
+
+```yaml
+policies:
+  - mcp-attribute-access-control:
+      enabled: true
+      rules:
+        - resource: "tools/*"
+          allow:
+            - tier: "premium"
+            - ip: "192.168.1.0/24"
+        - resource: "resources/*"
+          allow:
+            - header: "X-API-Key"
+              value: "valid-key"
+```
+
+==== Rate Limiting Policy
+
+```yaml
+policies:
+  - rate-limiting:
+      enabled: true
+      maxRequests: 100
+      timePeriod: 60
+      timeUnit: "SECONDS"
+```
+
+=== Best Practices for MCP Policies
+
+* **Security First**: Always apply authentication policies to production MCP servers
+* **Monitor Usage**: Use logging policies to track MCP client activity
+* **Rate Limiting**: Implement rate limiting to prevent abuse and ensure fair usage
+* **Environment-Specific**: Configure different policies for development, staging, and production environments
+* **Regular Review**: Periodically review and update policy configurations
+
+For more information about available policies and their configuration, see xref:gateway::policies-included-directory.adoc[].
 
 == Next Step
 
@@ -129,3 +216,48 @@ include::connectors::partial$t-studio-partial.adoc[tags=view-app-log]
 include::connectors::partial$t-studio-partial.adoc[tags=see-also]
 * xref:runtime-manager::deployment-strategies.adoc[]
 * xref:gateway::policies-included-directory.adoc[]
+
+## Example Structure:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:mcp="http://www.mulesoft.org/schema/mule/mcp"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/mcp http://www.mulesoft.org/schema/mule/mcp/current/mule-mcp.xsd">
+
+    <http:listener-config name="HTTP_Listener_config">
+        <http:listener-connection host="localhost" port="8081" />
+    </http:listener-config>
+
+    <mcp:server-config name="MCP_Server" serverName="Mule MCP Server" serverVersion="1.0.0">
+        <mcp:streamable-http-server-connection 
+            listenerConfig="HTTP_Listener_config" 
+            mcpEndpointPath="/mcp">
+            <mcp:custom-headers>
+                <mcp:custom-header key="X-API-Version" value="1.0.0"/>
+                <mcp:custom-header key="X-Server-ID" value="${server.id}"/>
+            </mcp:custom-headers>
+        </mcp:streamable-http-server-connection>
+    </mcp:server-config>
+
+    <flow name="my-mcp-flow">
+        <mcp:tool-listener config-ref="MCP_Server" name="example-tool">
+            <mcp:description>Example MCP tool</mcp:description>
+            <mcp:parameters-schema><![CDATA[{
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {},
+                "required": []
+            }]]></mcp:parameters-schema>
+            <mcp:responses>
+                <mcp:text-tool-response-content text="Hello from MCP!" />
+            </mcp:responses>
+        </mcp:tool-listener>
+    </flow>
+
+</mule>
