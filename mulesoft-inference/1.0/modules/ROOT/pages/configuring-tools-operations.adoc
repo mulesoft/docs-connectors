@@ -1,0 +1,205 @@
+= Configuring Tools Operations
+
+== Before You Begin
+
+To use Tools operations, you must create a `tools.config.json` file that includes all the necessary API information for the operation to execute APIs successfully, for example:
+
+[source,json]
+----
+[
+    {
+        "action": "Execute POST requests for API endpoints.",
+        "url": "http://check-inventory-material.cloudhub.io/mmbe",
+        "name": "Check Inventory",
+        "method": "POST",
+        "headers": "Basic XXX",
+        "example-payload": "{\n \"materialNo\": \"paramValue\"}",
+        "query": [
+            "Check inventory in SAP",
+            "Check Stock Overview",
+            "Show product availability for MULETEST0",
+            "Check the inventory for MULETEST0",
+            "Check Stock for 400-110"
+        ],
+        "description": "Check inventory details for material in SAP by providing the materialNo as input for paramValue. Please use the materialNo and not materialNumber. This action applies whenever users' intent is 'Stock overview', 'product availability', 'Inventory', 'available stock'. Use the headers to perform the request."
+    },
+    {
+        "action": "Execute GET requests for API endpoints.",
+        "url": "https://anypoint.mulesoft.com/mocking/api/v1/sources/exchange/assets/612eb739-4266-4f4c-bf2f-29953c153d80/accounts-api/1.0.1/m/accounts",
+        "name": "Show Accounts",
+        "method": "GET",
+        "headers": "",
+        "example-payload": "{}",
+        "query": [
+            "Get all accounts",
+            "Show all accounts from CRM"
+        ],
+        "description": "Get all accounts from a CRM. This action applies whenever users' intent is 'CRM accounts', 'customers', 'customer accounts', 'accounts'."
+    }
+]
+----
+
+Each object in the tools array represents a tool that the autonomous agent can use, so it is important to describe each field as accurately as possible.
+
+* `action`
++
+This field supports the following options:
++
+** `Execute GET` requests for API endpoints.
+** `Execute POST` requests for API endpoints.
+* `url` 
++
+The complete URL to the endpoint, including the resource path.
+* `name` 
++
+The name of the action in natural language.
+* `method` 
++
+The HTTP method for the endpoint. Only POST and GET are supported.
+* `headers` 
++
+The HTTP headers required for authorization to the endpoint. Only Basic Auth is supported.
+* `example-payload` 
++
+The example payload in JSON format.
+* `query` 
++
+Example queries a user might use to invoke this action.
+* `description` 
++
+A detailed description of how to use the tool. The description should be comprehensive enough for the inference provider to understand its purpose and usage.
+
+Ensure that the file path to the `tools.config.json` is accessible to the application at runtime.
+
+== Configure the Tools Native Template Operation
+
+The *Tools native template* operation enables function calling capabilities with your inference provider, allowing the AI to determine when and how to use external tools based on the conversation context.
+
+To configure the *Tools native template* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Prompt*
++
+The user prompt or question that may require tool usage.
+* *Tool Config*
++
+The full file path to the `tools.config.json` file. Ensure the file path is accessible.
+* *System Message*
++
+Optional system message to guide the inference provider's behavior with tools.
+
+You can also use a DataWeave expression for the tool config field, for example: 
+
+[source,dataweave,linenums]
+----
+mule.home ++ "/apps/" ++ app.name ++ "/tools.config.json"
+----
+
+This is the XML configuration for this operation:
+
+[source,xml]
+----
+<ms-inference:tools-native-template 
+  doc:name="Tools native template" 
+  doc:id="910f744f-e359-4e39-afd1-3fb932c5fc53" 
+  config-ref="MuleSoft_Inference_Configuration" 
+  prompt="#[payload.prompt]" 
+  toolConfig='#[mule.home ++ "/apps/" ++ app.name ++ "/tools.config.json"]'
+  systemMessage="#[payload.systemMessage]"
+/>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload that contains the main inference provider response. Additionally, attributes such as token usage and tool usage information are included as part of the attributes.
+
+This is an example response if the prompt is "What is the capital of Switzerland?":
+
+[source,json]
+----
+{
+    "response": "The capital of Switzerland is Bern."
+}
+----
+
+If the prompt requires accessing external data through a tool, for example, "Show me the latest account created in Salesforce", the inference provider uses the configured tool to fetch the information, resulting in:
+
+[source,json]
+----
+{
+    "response": "The latest account created in Salesforce is:\n\n- **Name:** MuleTalks\n- **Id:** 0010600002JKf42AAD\n- **Created Date:** 2024-07-10T20:21:36.000Z\n\nIf you have any further questions or need additional assistance, feel free to ask!"
+}
+----
+
+Along with the JSON payload, the operation returns attributes with tool and token usage information:
+
+[source,json]
+----
+{
+    "tokenUsage": { 
+        "outputCount": 45,
+        "totalCount": 120,
+        "inputCount": 75
+    },
+    "additionalAttributes": { 
+        "toolsUsed": "true",
+        "provider": "openai",
+        "model": "gpt-4-turbo",
+        "functionCalls": 1
+    }
+}
+----
+
+== Configure MCP Tooling
+
+The MuleSoft Inference Connector includes integrated MCP (Model Context Protocol) Client support for connecting to MCP Servers deployed in your ecosystem. MCP Servers must support SSE (Server-Sent Events) over HTTP.
+
+=== MCP Server Requirements
+
+* MCP Server must support SSE Over HTTP
+* Server must be accessible from your Mule application
+* Proper authentication and security configurations
+
+=== MCP Configuration
+
+To configure MCP tooling:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *MCP Server URL*
++
+The URL of your MCP Server endpoint.
+* *Authentication*
++
+Authentication credentials for the MCP Server.
+* *Prompt*
++
+The user prompt that may require MCP tool usage.
+
+This is the XML configuration for MCP tooling:
+
+[source,xml]
+----
+<ms-inference:mcp-tooling
+  doc:name="MCP tooling"
+  doc:id="a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+  config-ref="MuleSoft_Inference_Configuration"
+  mcpServerUrl="#[payload.mcpServerUrl]"
+  authentication="#[payload.authentication]"
+  prompt="#[payload.prompt]">
+</ms-inference:mcp-tooling>
+----
+
+== Provider Support for Tools
+
+* *Native Tools*: Most providers support native tool integration, with some being model-dependent (marked with *)
+* *MCP Tooling*: Supported by most providers, with some being model-dependent
+* *Perplexity*: Does not support tool operations
+* *Stability AI*: Does not support tool operations
+
+== See Also
+
+* xref:connectors::introduction/intro-config-use-acb.adoc[]
+* xref:connectors::introduction/intro-config-use-studio.adoc[Using Studio to Configure a Connector]
+* xref:index.adoc[MuleSoft Inference Connector Overview]
+* xref:mulesoft-inference-connector-reference.adoc[MuleSoft Inference Connector Reference]
+* https://help.mulesoft.com[MuleSoft Help Center] 
