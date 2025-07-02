@@ -8,240 +8,204 @@ These examples show you how to use MuleSoft Inference Connector with the OpenAI 
 Before running these examples, ensure you have:
 
 * Anypoint Studio 7
-*Mule 4.9.4
+* Mule 4.9.4
 * Java 17
 * Valid API keys
 
-== Demo Application Overview
+== Example: Text Generation 
 
-This demo application demonstrates all MuleSoft Inference Connector operations using OpenAI as the inference provider. The application exposes REST endpoints that you can test using tools like Postman or curl.
+This Mule app showcases the use of three distinct text generation operations to interact with OpenAI. Each operation is demonstrated in its own dedicated flow.
 
-=== Available Endpoints
-
-The demo application provides the following endpoints:
-
-* `POST /prompttemplate` - Agent Define Prompt Template
-* `POST /chatprompt` - Chat Answer Prompt  
-* `POST /chatcompletion` - Chat Completions
-* `POST /toolstemplate` - Tools Native Template
-* `POST /mcptooling` - MCP Tooling
-* `POST /readimage` - Image Reading
-* `POST /generateimage` - Image Generation
-* `POST /toxicitydetection` - Toxicity Detection
-
-All endpoints listen on `http://localhost:8081`.
-
-== Configuration Examples
-
-=== Global Configuration
-
-The following configurations are used across multiple operations:
+* *[Agent] Define Prompt Template*
++
+This operation is used to create structured prompts for AI agents. In this example, it's configured to enable an agent to analyze customer feedback and determine appropriate actions based on sentiment, leveraging the configured OpenAI LLM.
+* *[Chat] Answer Prompt*
++
+This operation provides simple, direct question-answering capabilities. The example demonstrates its use by asking the LLM a straightforward factual question: `What is the capital of Germany?`. 
+* *[Chat] Completions*    
++
+This operation facilitates multi-turn, context-aware conversations. The example illustrates this by providing the LLM with an initial conversational context and then asking it to continue the dialogue by asking `What is the capital of Switzerland?`.
 
 [source,xml,linenums]
 ----
-<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
-    <http:listener-connection host="0.0.0.0" port="8081" />
-</http:listener-config>
+<?xml version="1.0" encoding="UTF-8"?>
 
-<mac-inference:text-generation-config name="OpenAI_Text_generation_config" 
-    doc:name="MuleSoft Inference Text generation config">
-    <mac-inference:openai-connection 
-        openAIModelName="${config.llmModel}" 
-        apiKey="${config.apiKey}" 
-        timeout="60000">
-        <mac-inference:mcp-sse-servers>
-            <mac-inference:mcp-sse-server 
-                key="ERP Server" 
-                value="http://mcp-server-demo-b2jb0y.1d6nel.usa-e1.cloudhub.io" />
-        </mac-inference:mcp-sse-servers>
-    </mac-inference:openai-connection>
-</mac-inference:text-generation-config>
+<mule xmlns:mac-inference="http://www.mulesoft.org/schema/mule/mac-inference" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/mac-inference http://www.mulesoft.org/schema/mule/mac-inference/current/mule-mac-inference.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="1d867172-d19a-4ab1-b194-52c2ad455d7f" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
 
-<mac-inference:vision-config name="OpenAIVisionConfig" 
-    doc:name="MuleSoft Inference Vision config">
-    <mac-inference:openai-vision-connection 
-        apiKey="${openai.apiKey}" 
-        openAIModelName="${openai.visionModel}" />
-</mac-inference:vision-config>
+	<mac-inference:text-generation-config name="OpenAI_Text_generation_config" doc:name="MuleSoft Inference Text generation config" doc:id="3c24c806-bb9f-4512-bc9b-a51cda5c710a" >
+		<mac-inference:openai-connection openAIModelName="${config.llmModel}" apiKey="${config.apiKey}" timeout="60000" >
+			<mac-inference:mcp-sse-servers >
+				<mac-inference:mcp-sse-server key="ERP Server" value="http://mcp-server-demo-b2jb0y.1d6nel.usa-e1.cloudhub.io" />
+			</mac-inference:mcp-sse-servers>
+		</mac-inference:openai-connection>
+	</mac-inference:text-generation-config>
 
-<mac-inference:image-generation-config name="OpenAIImageGenConfig" 
-    doc:name="MuleSoft Inference Image generation config">
-    <mac-inference:openai-image-connection 
-        apiKey="${openai.apiKey}" 
-        openAIModelName="${openai.imageGenModel}" />
-</mac-inference:image-generation-config>
+	<flow name="AgentDefinePromptTemplateFlow" doc:id="1ee32ee4-8c15-4636-9a49-0784f782cb98" >
+		<http:listener doc:name="Listener" doc:id="8725c446-5f45-4732-8fca-ea9006aabed6" config-ref="HTTP_Listener_config" path="/prompttemplate"/>
+		<set-variable value='#[%dw 2.0
+			output application/json
+			---
+			{
+			"template": "You are a customer satisfaction agent, who analyses the customer feedback in the dataset. Answer via json output and add a type for the result only with positive or negative as well as the complete answer",
+			"instructions":"If the customer feedback in the dataset is negative, open a service satisfaction case and apologize to the customer. If the customer feedback in the dataset is positive, thank the customer and wish them a nice day. Do not repeat the feedback and be more direct starting the conversation with formal greetings",
+			"dataset": "The training last week was amazing, we learned so much and the trainer was very friendly"
+		}]' doc:name="Set Variable" doc:id="209a7846-c3e3-4a8a-9c63-6ab02a772ec4" variableName="testPayload"/>
+		<mac-inference:agent-define-prompt-template doc:name="[Agent] Define Prompt Template" doc:id="699b48f4-0ac8-46b5-9f3b-418070e7157d" config-ref="OpenAI_Text_generation_config">
+			<mac-inference:template ><![CDATA[#[vars.testPayload.template]]]></mac-inference:template>
+			<mac-inference:instructions ><![CDATA[#[vars.testPayload.instructions]]]></mac-inference:instructions>
+			<mac-inference:data ><![CDATA[#[vars.testPayload.dataset]]]></mac-inference:data>
+		</mac-inference:agent-define-prompt-template>
+	</flow>
 
-<mac-inference:moderation-config name="OpenAIModerationConfig" 
-    doc:name="MuleSoft Inference Moderation config">
-    <mac-inference:openai-moderation-connection 
-        apiKey="${openai.apiKey}" 
-        openAIModelName="${openai.llmModel}"/>
-</mac-inference:moderation-config>
+	<flow name="ChatAnswerPromptFlow" doc:id="698ff181-7968-4294-8f08-51387fbf1dfa" >
+		<http:listener doc:name="Listener" doc:id="3ae26012-7b44-41ee-8d6d-bdb51ed9e39e" config-ref="HTTP_Listener_config" path="/chatprompt"/>
+		<set-variable value='#[%dw 2.0
+			output application/json
+			---
+			{
+			    "prompt": "What is the capital of Germany?"
+			}]' doc:name="Set Variable" doc:id="774dde86-5241-4151-b7fa-b5d7bf412508" variableName="testPayload"/>
+		<mac-inference:chat-answer-prompt doc:name="[CHAT] Answer Prompt" doc:id="53e77f54-95c1-42da-b447-b5703212e9ca" config-ref="OpenAI_Text_generation_config">
+			<mac-inference:prompt ><![CDATA[#[vars.testPayload.prompt]]]></mac-inference:prompt>
+		</mac-inference:chat-answer-prompt>
+	</flow>
+
+	<flow name="ChatCompletionsFlow" doc:id="ae0b651f-950d-40d0-8c98-9ef050779c06" >
+		<http:listener doc:name="Listener" doc:id="a2a68fe6-47da-41b0-954f-3cf51e80d6f2" config-ref="HTTP_Listener_config" path="/chatcompletion"/>
+		<set-variable value='#[%dw 2.0
+			output application/json
+			---
+			[{
+			  "role": "assistant",
+			  "content": "You are a helpful assistant."
+			},
+			{
+			  "role": "user",
+			  "content": "What is the capital of Switzerland!"
+			}
+			]]' doc:name="Set Variable" doc:id="860b37bd-9fa9-4584-90d4-2723b2e00cc5" variableName="testPayload"/>
+		<mac-inference:chat-completions doc:name="[Chat] Completions" doc:id="f2eedc4f-a87b-4579-92a6-4022db9f3c03" config-ref="OpenAI_Text_generation_config">
+			<mac-inference:messages ><![CDATA[#[vars.testPayload]]]></mac-inference:messages>
+		</mac-inference:chat-completions>
+	</flow>
+</mule>
 ----
 
-== Operation Examples
+== Example: Image Generation 
 
-=== Agent Define Prompt Template
-
-This operation creates structured prompts for AI agents to analyze customer feedback and take appropriate actions.
-
-==== Use Case
-Analyze customer feedback and automatically determine if it's positive or negative, then generate appropriate responses.
-
-==== Flow Configuration
+This Mule app showcases the use of the *[Image] Generate* operation to interact with OpenAI. This operation is used to generate images based on a prompt. In this example, it's configured to generate an image of a penguin dancing on the beach being happy with ice cream.
 
 [source,xml,linenums]
 ----
-<flow name="AgentDefinePromptTemplateFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/prompttemplate"/>
-    
-    <set-variable value='#[%dw 2.0
-        output application/json
-        ---
-        {
-            "template": "You are a customer satisfaction agent, who analyses the customer feedback in the dataset. Answer via json output and add a type for the result only with positive or negative as well as the complete answer",
-            "instructions":"If the customer feedback in the dataset is negative, open a service satisfaction case and apologize to the customer. If the customer feedback in the dataset is positive, thank the customer and wish them a nice day. Do not repeat the feedback and be more direct starting the conversation with formal greetings",
-            "dataset": "The training last week was amazing, we learned so much and the trainer was very friendly"
-        }]' 
-        doc:name="Set Variable" 
-        variableName="testPayload"/>
-    
-    <mac-inference:agent-define-prompt-template 
-        doc:name="[Agent] Define Prompt Template" 
-        config-ref="OpenAI_Text_generation_config">
-        <mac-inference:template><![CDATA[#[vars.testPayload.template]]]></mac-inference:template>
-        <mac-inference:instructions><![CDATA[#[vars.testPayload.instructions]]]></mac-inference:instructions>
-        <mac-inference:data><![CDATA[#[vars.testPayload.dataset]]]></mac-inference:data>
-    </mac-inference:agent-define-prompt-template>
-</flow>
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:mac-inference="http://www.mulesoft.org/schema/mule/mac-inference" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/mac-inference http://www.mulesoft.org/schema/mule/mac-inference/current/mule-mac-inference.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="1d867172-d19a-4ab1-b194-52c2ad455d7f" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<mac-inference:image-generation-config name="OpenAIImageGenConfig" doc:name="MuleSoft Inference Image generation config" doc:id="813d08c8-7e6d-4c9e-8259-b80a84093016" >
+		<mac-inference:openai-image-connection apiKey="${openai.apiKey}" openAIModelName="${openai.imageGenModel}" />
+	</mac-inference:image-generation-config>
+
+	<flow name="GenerateImageFlow" doc:id="698ff181-7968-4294-8f08-51387fbf1dfa" >
+		<http:listener doc:name="Listener" doc:id="3ae26012-7b44-41ee-8d6d-bdb51ed9e39e" config-ref="HTTP_Listener_config" path="/generateimage"/>
+		<set-variable value='#[%dw 2.0
+		   output application/json
+		    ---
+			{
+				"prompt" : "Generate a picture of a penguin dancing on the beach being happy with an ice cream."
+			}]' doc:name="Set Variable" doc:id="55ffb06c-d91b-4419-8517-a2d83802413a" variableName="testPayload"/>
+		<mac-inference:generate-image doc:name="[Image] Generate (only Base64)" doc:id="9c849d82-b443-4253-bdbd-1fad73df7a45" config-ref="OpenAIImageGenConfig">
+			<mac-inference:prompt ><![CDATA[#[vars.testPayload.prompt]]]></mac-inference:prompt>
+		</mac-inference:generate-image>
+	</flow>
+</mule>
 ----
 
-==== Expected Response
-[source,json,linenums]
-----
-{
-  "type": "positive",
-  "response": "Good morning! Thank you so much for your positive feedback about last week's training session. We're delighted to hear that you found it valuable and that our trainer made such a positive impression. We appreciate you taking the time to share your experience with us. Have a wonderful day!"
-}
-----
+== Example: Toxicity Detection 
 
-=== Chat Answer Prompt
-
-This operation provides simple question-answering capabilities using conversational AI.
-
-==== Use Case
-Get direct answers to straightforward questions.
-
-==== Flow Configuration
+This Mule app showcases the use of the *[Toxicity] Detection by Text* operation to interact with OpenAI. This operation is used to detect harmful content in a text. In this example, it's configured to detect harmful content in the text `You are fat`.
 
 [source,xml,linenums]
 ----
-<flow name="ChatAnswerPromptFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/chatprompt"/>
-    
-    <set-variable value='#[%dw 2.0
-        output application/json
-        ---
-        {
-            "prompt": "What is the capital of Germany?"
-        }]' 
-        doc:name="Set Variable" 
-        variableName="testPayload"/>
-    
-    <mac-inference:chat-answer-prompt 
-        doc:name="[Chat] Answer Prompt" 
-        config-ref="OpenAI_Text_generation_config">
-        <mac-inference:prompt><![CDATA[#[vars.testPayload.prompt]]]></mac-inference:prompt>
-    </mac-inference:chat-answer-prompt>
-</flow>
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:mac-inference="http://www.mulesoft.org/schema/mule/mac-inference" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/mac-inference http://www.mulesoft.org/schema/mule/mac-inference/current/mule-mac-inference.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="1d867172-d19a-4ab1-b194-52c2ad455d7f" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<mac-inference:moderation-config name="OpenAIInvalidApiKeyModerationConfig" doc:name="MuleSoft Inference Moderation config" doc:id="c28800c5-75d8-4904-8e98-a6b8d965e054" >
+		<mac-inference:openai-moderation-connection apiKey="${openai.apiKey}" openAIModelName="${openai.llmModel}"/>
+	</mac-inference:moderation-config>
+
+	<flow name="ToxicityDetectionFlow" doc:id="1ee32ee4-8c15-4636-9a49-0784f782cb98" >
+		<http:listener doc:name="Listener" doc:id="8725c446-5f45-4732-8fca-ea9006aabed6" config-ref="HTTP_Listener_config" path="/toxicitydetection"/>
+		<set-variable value='#[%dw 2.0
+		   output application/json
+		    ---
+			{
+    			"prompt": "You are fat"
+   			}]' doc:name="Set Variable" doc:id="7ced3e9a-a3ec-4768-85b1-081849fca0fc" variableName="testPayload"/>
+		<mac-inference:toxicity-detection-text doc:name="[Toxicity] Detection by Text" doc:id="cd45c2f9-cb7f-4fe0-8311-2a58cc6c11ac" config-ref="OpenAIInvalidApiKeyModerationConfig">
+			<mac-inference:text ><![CDATA[#[vars.testPayload.prompt]]]></mac-inference:text>
+		</mac-inference:toxicity-detection-text>
+	</flow>
+</mule>
 ----
 
-==== Expected Response
-[source,json,linenums]
-----
-{
-  "response": "The capital of Germany is Berlin.",
-  "attributes": {
-    "tokensUsed": 15,
-    "promptTokens": 8,
-    "completionTokens": 7
-  }
-}
-----
+== Example: Tools 
 
-=== Chat Completions
+This Mule app showcases the use of two distinct tools operations to interact with OpenAI. Each operation is demonstrated in its own dedicated flow.
 
-This operation supports multi-turn conversations with context awareness.
-
-==== Use Case
-Maintain conversational context across multiple exchanges.
-
-==== Flow Configuration
+* *[Tools] Native Template (Reasoning only)*
++
+This operation is used to create autonomous agents that can use external tools whenever a prompt can't be answered directly by the AI model. In this example, it's configured to use the tools to get the current temperature in Zurich in Celsius.
+* *[MCP] Tooling*
++
+This operation is used to create autonomous agents that can use external tools whenever a prompt can't be answered directly by the AI model. In this example, it's configured to use the tools to check inventory for a specific product.
 
 [source,xml,linenums]
 ----
-<flow name="ChatCompletionsFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/chatcompletion"/>
-    
-    <set-variable value='#[%dw 2.0
-        output application/json
-        ---
-        [{
-          "role": "assistant",
-          "content": "You are a helpful assistant."
-        },
-        {
-          "role": "user",
-          "content": "What is the capital of Switzerland!"
-        }]]' 
-        doc:name="Set Variable" 
-        variableName="testPayload"/>
-    
-    <mac-inference:chat-completions 
-        doc:name="[Chat] Completions" 
-        config-ref="OpenAI_Text_generation_config">
-        <mac-inference:messages><![CDATA[#[vars.testPayload]]]></mac-inference:messages>
-    </mac-inference:chat-completions>
-</flow>
-----
+<?xml version="1.0" encoding="UTF-8"?>
 
-==== Expected Response
-[source,json,linenums]
-----
-{
-  "response": "The capital of Switzerland is Bern.",
-  "attributes": {
-    "tokensUsed": 18,
-    "promptTokens": 12,
-    "completionTokens": 6
-  }
-}
-----
+<mule xmlns:mac-inference="http://www.mulesoft.org/schema/mule/mac-inference" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/mac-inference http://www.mulesoft.org/schema/mule/mac-inference/current/mule-mac-inference.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="1d867172-d19a-4ab1-b194-52c2ad455d7f" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
 
-=== Tools Native Template
+	<mac-inference:text-generation-config name="OpenAI_Text_generation_config" doc:name="MuleSoft Inference Text generation config" doc:id="3c24c806-bb9f-4512-bc9b-a51cda5c710a" >
+		<mac-inference:openai-connection openAIModelName="${config.llmModel}" apiKey="${config.apiKey}" timeout="60000" >
+			<mac-inference:mcp-sse-servers >
+				<mac-inference:mcp-sse-server key="ERP Server" value="http://mcp-server-demo-b2jb0y.1d6nel.usa-e1.cloudhub.io" />
+			</mac-inference:mcp-sse-servers>
+		</mac-inference:openai-connection>
+	</mac-inference:text-generation-config>
 
-This operation enables function calling capabilities, allowing the AI to use predefined tools to answer questions.
-
-==== Use Case
-Provide AI with access to external functions for weather information, order tracking, and other services.
-
-==== Flow Configuration
-
-[source,xml,linenums]
-----
-<flow name="ToolsNativeTemplateFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/toolstemplate"/>
-    
-    <set-variable
-        value="#[%dw 2.0
+	<flow name="ToolsNativeTemplateFlow" doc:id="1ee32ee4-8c15-4636-9a49-0784f782cb98" >
+		<http:listener doc:name="Listener" doc:id="8725c446-5f45-4732-8fca-ea9006aabed6" config-ref="HTTP_Listener_config" path="/toolstemplate"/>
+		<set-variable
+				value="#[%dw 2.0
             output application/json
             ---
             {
@@ -307,463 +271,34 @@ Provide AI with access to external functions for weather information, order trac
                     }
                 ]
             }]"
-        doc:name="Set Variable"
-        variableName="testPayload" />
-    
-    <mac-inference:tools-native-template
-        doc:name="[Tools] Native Template (Reasoning only)"
-        config-ref="OpenAI_Text_generation_config">
-        <mac-inference:template><![CDATA[#[vars.testPayload.template]]]></mac-inference:template>
-        <mac-inference:instructions><![CDATA[#[vars.testPayload.instructions]]]></mac-inference:instructions>
-        <mac-inference:data><![CDATA[#[vars.testPayload.dataset]]]></mac-inference:data>
-        <mac-inference:tools><![CDATA[#[vars.testPayload.tools]]]></mac-inference:tools>
-    </mac-inference:tools-native-template>
-</flow>
-----
+				doc:name="Set Variable"
+				doc:id="9b80bd71-922a-4739-804b-29ac2ba7ef7a"
+				variableName="testPayload" />
+		<mac-inference:tools-native-template
+				doc:name="[Tools] Native Template (Reasoning only)"
+				doc:id="e87a2e5e-b19b-4c2d-a4a0-8e991291de97"
+				config-ref="OpenAI_Text_generation_config">
+			<mac-inference:template><![CDATA[#[vars.testPayload.template]]]></mac-inference:template>
+			<mac-inference:instructions><![CDATA[#[vars.testPayload.instructions]]]></mac-inference:instructions>
+			<mac-inference:data><![CDATA[#[vars.testPayload.dataset]]]></mac-inference:data>
+			<mac-inference:tools><![CDATA[#[vars.testPayload.tools]]]></mac-inference:tools>
+		</mac-inference:tools-native-template>
+	</flow>
 
-==== Expected Response (Tools Used)
-[source,json,linenums]
-----
-{
-  "response": "I need to get the current temperature in Zurich for you. Let me check that information.",
-  "toolCalls": [
-    {
-      "name": "get_current_temperature",
-      "arguments": {
-        "location": "Zurich, Switzerland",
-        "unit": "Celsius"
-      }
-    }
-  ],
-  "attributes": {
-    "tokensUsed": 45,
-    "promptTokens": 30,
-    "completionTokens": 15
-  }
-}
-----
-
-=== MCP Tooling
-
-This operation integrates with Model Context Protocol (MCP) servers for extended functionality.
-
-==== Use Case
-Connect to external MCP servers to access specialized tools and services, such as ERP systems.
-
-==== Flow Configuration
-
-[source,xml,linenums]
-----
-<flow name="McpToolingFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/mcptooling"/>
-    
-    <set-variable doc:name="Set Variable" 
-        value='#[%dw 2.0             
-            output application/json
-            ---
-            {
-                "template": "You are an helpful assistant",
-                "instructions":"Answer the request with politeness.",
-                "dataset": "Check Inventory for MULETEST0"
-            }]' 
-        variableName="testPayload"/>
-    
-    <mac-inference:mcp-tools-native-template 
-        doc:name="[MCP] Tooling" 
-        config-ref="OpenAI_Text_generation_config">
-        <mac-inference:template><![CDATA[#[vars.testPayload.template]]]></mac-inference:template>
-        <mac-inference:instructions><![CDATA[#[vars.testPayload.instructions]]]></mac-inference:instructions>
-        <mac-inference:data><![CDATA[#[vars.testPayload.dataset]]]></mac-inference:data>
-    </mac-inference:mcp-tools-native-template>
-</flow>
-----
-
-==== Expected Response
-[source,json,linenums]
-----
-{
-  "response": "I'll check the inventory for MULETEST0. Let me access the ERP system to get this information for you.",
-  "mcpToolsUsed": [
-    {
-      "server": "ERP Server",
-      "tool": "check_inventory",
-      "parameters": {
-        "item_code": "MULETEST0"
-      }
-    }
-  ],
-  "attributes": {
-    "tokensUsed": 35,
-    "promptTokens": 25,
-    "completionTokens": 10
-  }
-}
-----
-
-=== Image Reading
-
-This operation analyzes images provided via URL or Base64 encoding.
-
-==== Use Case
-Extract information from images, describe visual content, or perform image-based analysis.
-
-==== Flow Configuration
-
-[source,xml,linenums]
-----
-<flow name="ReadImageFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/readimage"/>
-    
-    <set-variable value='#[%dw 2.0
-        output application/json
-        ---
-        {
-            "prompt":"What do you see",
-            "imageUrl": "https://tripfixers.com/wp-content/uploads/2019/11/eiffel-tower-with-snow.jpeg"
-        }]' 
-        doc:name="Set Variable" 
-        variableName="testPayload"/>
-    
-    <mac-inference:read-image 
-        doc:name="[Image] Read by (Url or Base64)" 
-        config-ref="OpenAIVisionConfig">
-        <mac-inference:prompt><![CDATA[#[vars.testPayload.prompt]]]></mac-inference:prompt>
-        <mac-inference:image-url><![CDATA[#[vars.testPayload.imageUrl]]]></mac-inference:image-url>
-    </mac-inference:read-image>
-</flow>
-----
-
-==== Expected Response
-[source,json,linenums]
-----
-{
-  "response": "I can see the iconic Eiffel Tower in Paris covered with snow. The image shows the famous iron lattice tower structure against a winter landscape, with snow covering the ground and trees around it. The tower appears to be photographed from ground level, showing its impressive height and architectural details even in the winter weather.",
-  "attributes": {
-    "tokensUsed": 85,
-    "promptTokens": 25,
-    "completionTokens": 60
-  }
-}
-----
-
-=== Image Generation
-
-This operation creates images from text descriptions.
-
-==== Use Case
-Generate custom images for marketing materials, illustrations, or creative content.
-
-==== Flow Configuration
-
-[source,xml,linenums]
-----
-<flow name="GenerateImageFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/generateimage"/>
-    
-    <set-variable value='#[%dw 2.0
-        output application/json
-        ---
-        {
-            "prompt" : "Generate a picture of a penguin dancing on the beach being happy with an ice cream."
-        }]' 
-        doc:name="Set Variable" 
-        variableName="testPayload"/>
-    
-    <mac-inference:generate-image 
-        doc:name="[Image] Generate (only Base64)" 
-        config-ref="OpenAIImageGenConfig">
-        <mac-inference:prompt><![CDATA[#[vars.testPayload.prompt]]]></mac-inference:prompt>
-    </mac-inference:generate-image>
-</flow>
-----
-
-==== Expected Response
-[source,json,linenums]
-----
-{
-  "imageBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
-  "attributes": {
-    "tokensUsed": 20,
-    "promptTokens": 15,
-    "completionTokens": 5
-  }
-}
-----
-
-=== Toxicity Detection
-
-This operation analyzes text content for harmful or inappropriate material.
-
-==== Use Case
-Moderate user-generated content, filter inappropriate messages, or ensure content compliance.
-
-==== Flow Configuration
-
-[source,xml,linenums]
-----
-<flow name="ToxicityDetectionFlow">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/toxicitydetection"/>
-    
-    <set-variable value='#[%dw 2.0
-        output application/json
-        ---
-        {
-            "prompt": "You are fat"
-        }]' 
-        doc:name="Set Variable" 
-        variableName="testPayload"/>
-    
-    <mac-inference:toxicity-detection-text 
-        doc:name="[Toxicity] Detection by Text" 
-        config-ref="OpenAIModerationConfig">
-        <mac-inference:text><![CDATA[#[vars.testPayload.prompt]]]></mac-inference:text>
-    </mac-inference:toxicity-detection-text>
-</flow>
-----
-
-==== Expected Response
-[source,json,linenums]
-----
-{
-  "flagged": true,
-  "categories": {
-    "harassment": true,
-    "harassment/threatening": false,
-    "hate": false,
-    "hate/threatening": false,
-    "self-harm": false,
-    "self-harm/intent": false,
-    "self-harm/instructions": false,
-    "sexual": false,
-    "sexual/minors": false,
-    "violence": false,
-    "violence/graphic": false
-  },
-  "categoryScores": {
-    "harassment": 0.8542,
-    "harassment/threatening": 0.0001,
-    "hate": 0.0234,
-    "hate/threatening": 0.0000,
-    "self-harm": 0.0000,
-    "self-harm/intent": 0.0000,
-    "self-harm/instructions": 0.0000,
-    "sexual": 0.0001,
-    "sexual/minors": 0.0000,
-    "violence": 0.0012,
-    "violence/graphic": 0.0000
-  },
-  "attributes": {
-    "tokensUsed": 5,
-    "promptTokens": 3,
-    "completionTokens": 2
-  }
-}
-----
-
-== Testing the Examples
-
-=== Using Postman
-
-1. Import the following requests into Postman:
-
-==== Agent Define Prompt Template
-[source,http]
-----
-POST http://localhost:8081/prompttemplate
-Content-Type: application/json
-
-{
-  "template": "You are a helpful customer service agent.",
-  "instructions": "Respond professionally and helpfully.",
-  "dataset": "Customer complaint about delayed delivery"
-}
-----
-
-==== Chat Answer Prompt
-[source,http]
-----
-POST http://localhost:8081/chatprompt
-Content-Type: application/json
-
-{
-  "prompt": "Explain quantum computing in simple terms"
-}
-----
-
-==== Chat Completions
-[source,http]
-----
-POST http://localhost:8081/chatcompletion
-Content-Type: application/json
-
-[
-  {
-    "role": "system",
-    "content": "You are a helpful assistant."
-  },
-  {
-    "role": "user",
-    "content": "Tell me about machine learning"
-  }
-]
-----
-
-=== Using cURL
-
-Test the endpoints using cURL commands:
-
-[source,bash,linenums]
-----
-# Test Chat Answer Prompt
-curl -X POST http://localhost:8081/chatprompt \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "What is artificial intelligence?"}'
-
-# Test Image Reading
-curl -X POST http://localhost:8081/readimage \
-  -H "Content-Type: application/json" \
-  -d '{
-    "prompt": "Describe this image",
-    "imageUrl": "https://example.com/image.jpg"
-  }'
-
-# Test Toxicity Detection
-curl -X POST http://localhost:8081/toxicitydetection \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "This is a test message"}'
-----
-
-== Configuration Properties
-
-Create a `mule-app.properties` file with the following configuration:
-
-[source,properties,linenums]
-----
-# OpenAI Configuration
-config.apiKey=your-openai-api-key-here
-config.llmModel=gpt-4
-openai.apiKey=your-openai-api-key-here
-openai.llmModel=gpt-4
-openai.visionModel=gpt-4-vision-preview
-openai.imageGenModel=dall-e-3
-
-# Server Configuration
-http.port=8081
-----
-
-== Best Practices
-
-=== Error Handling
-
-Implement proper error handling in your flows:
-
-[source,xml,linenums]
-----
-<flow name="ChatAnswerPromptFlowWithErrorHandling">
-    <http:listener doc:name="Listener" 
-        config-ref="HTTP_Listener_config" 
-        path="/chatprompt"/>
-    
-    <try doc:name="Try">
-        <mac-inference:chat-answer-prompt 
-            doc:name="[Chat] Answer Prompt" 
-            config-ref="OpenAI_Text_generation_config">
-            <mac-inference:prompt><![CDATA[#[payload.prompt]]]></mac-inference:prompt>
-        </mac-inference:chat-answer-prompt>
-        
-        <error-handler>
-            <on-error-continue enableNotifications="true" logException="true">
-                <set-payload value='#[{
-                    "error": "Failed to process request",
-                    "message": error.description
-                }]' doc:name="Set Error Response"/>
-            </on-error-continue>
-        </error-handler>
-    </try>
-</flow>
-----
-
-=== Input Validation
-
-Validate inputs before processing:
-
-[source,xml,linenums]
-----
-<validation:is-not-empty value="#[payload.prompt]" 
-    message="Prompt cannot be empty"/>
-<validation:matches value="#[payload.prompt]" 
-    regex="^.{1,4000}$" 
-    message="Prompt must be between 1 and 4000 characters"/>
-----
-
-=== Response Transformation
-
-Transform responses to match your application's needs:
-
-[source,xml,linenums]
-----
-<transform doc:name="Transform Response">
-    <dw:set-payload><![CDATA[%dw 2.0
-        output application/json
-        ---
-        {
-            success: true,
-            data: payload.response,
-            metadata: {
-                tokensUsed: payload.attributes.tokensUsed,
-                timestamp: now()
-            }
-        }]]></dw:set-payload>
-</transform>
-----
-
-== Troubleshooting
-
-=== Common Issues
-
-* *Authentication Errors*: Verify your API keys are correct and have sufficient permissions
-* *Model Not Found*: Ensure the specified model name is supported by your provider
-* *Rate Limiting*: Implement retry logic with exponential backoff
-* *Timeout Issues*: Increase timeout values for complex operations
-* *Image Format Issues*: Ensure images are in supported formats (JPEG, PNG, WebP)
-
-=== Debugging Tips
-
-1. Enable DEBUG logging for the connector:
-+
-[source,xml]
-----
-<logger level="DEBUG" message="Request payload: #[payload]"/>
-----
-
-2. Monitor token usage to optimize costs:
-+
-[source,xml]
-----
-<logger level="INFO" message="Tokens used: #[payload.attributes.tokensUsed]"/>
-----
-
-3. Validate configuration properties:
-+
-[source,xml]
-----
-<logger level="INFO" message="Using model: #[p('config.llmModel')]"/>
+	<flow name="McpToolingFlow" doc:id="698ff181-7968-4294-8f08-51387fbf1dfa" >
+		<http:listener doc:name="Listener" doc:id="3ae26012-7b44-41ee-8d6d-bdb51ed9e39e" config-ref="HTTP_Listener_config" path="/mcptooling"/>
+		<set-variable doc:id="670f5911-2f8e-45f6-abb3-730d5db5ae81" doc:name="Set Variable" value='#[%dw 2.0             &#10;output application/json&#10;---&#10;{&#10;    "template": "You are an helpful assistant",&#10;    "instructions":"Answer the request with politeness.",&#10;    "dataset": "Check Inventory for MULETEST0"&#10;&#10;}]' variableName="testPayload"/>
+		<mac-inference:mcp-tools-native-template doc:name="[MCP] Tooling" doc:id="e1999d3c-a852-4ab2-8e82-a9bfadc88344" config-ref="OpenAI_Text_generation_config">
+			<mac-inference:template ><![CDATA[#[vars.testPayload.template]]]></mac-inference:template>
+			<mac-inference:instructions ><![CDATA[#[vars.testPayload.instructions]]]></mac-inference:instructions>
+			<mac-inference:data ><![CDATA[#[vars.testPayload.dataset]]]></mac-inference:data>
+		</mac-inference:mcp-tools-native-template>
+	</flow>
+</mule>
 ----
 
 == See Also
 
+* xref:mulesoft-inference-additional-config.adoc[MuleSoft Inference - Additional Configuration Information]
 * xref:mulesoft-inference-connector-studio.adoc[Using Anypoint Studio to Configure MuleSoft Inference Connector]
 * xref:mulesoft-inference-connector-reference.adoc[MuleSoft Inference Connector Reference]
-* xref:configuring-chat-operations.adoc[Configuring Chat Operations]
-* xref:configuring-image-operations.adoc[Configuring Image Operations]
-* xref:configuring-agent-operations.adoc[Configuring Agent Operations]
-* xref:configuring-tools-operations.adoc[Configuring Tools Operations]
-* xref:configuring-toxicity-operations.adoc[Configuring Toxicity Operations] 
