@@ -183,127 +183,135 @@ The operation also returns other attributes:
 
 == Configure the Store Query All Operation
 
-The *[Store] Query All* operation retrieves all documents from the specified collection without performing similarity search. This operation is useful for collection management and data export scenarios.
+The *[Store] Query All* operation lists all sources into the embedding store.
 
 To configure the *[Store] Query All* operation:
 
 include::connectors::partial$t-configure-operations.adoc[]
-* *Collection Name*
+* *Store Name*
 +
-Enter the name of the collection to retrieve all documents from.
-* *Max Results*
+Enter the name of the collection in the external vector database.
+* *Retrieve Embeddings*
 +
-Enter the maximum number of documents to retrieve. Leave blank to retrieve all documents.
-* *Include Embeddings*
+If true, retrieve embeddings from the store.
 +
-Select whether to include the embedding vectors in the response. Disable for faster retrieval when only text content is needed.
+NOTE: When querying the store along with embeddings using Azure AI Search, the connector might return the `Invalid expression: 'content_vector' is not a retrievable field. Only fields marked as retrievable in the index can be used in $select.\r\nParameter name: $select` error. To resolve the issue, set `content_vector as a retrievable field.
+* *Page Size*
++
+Enter the page size to use when querying the store.
+
 
 This is the XML for this operation:
 [source,xml,linenums, subs=attributes+]
 ----
-<ms-vectors:store-query-all
+<ms-vectors:query-all
   doc:name="[Store] Query All"
-  doc:id="c3d4e5f6-g7h8-9012-cdef-345678901234"
+  doc:id="4ba6854a-0580-46de-9c36-a4843abf6fb7"
   config-ref="MuleSoft_Vectors_Connector_Store_config"
-  collectionName="documents"
-  maxResults="100"
-  includeEmbeddings="false">
-</ms-vectors:store-query-all>
+  storeName="gettingStarted"
+  pageSize="5000"
+  retrieveEmbeddings="false"/>
 ----
 
 === Output Configuration
 
-This operation responds with a JSON payload containing all documents in the collection:
+This operation responds with a JSON payload. This is an example response:
 
 [source,json]
 ----
-{
-  "documents": [
-    {
-      "id": "doc_001",
-      "text": "In the modern world, technological advancements have become essential...",
-      "metadata": {
-        "source": "document.pdf",
-        "type": "text",
-        "index": "0"
-      }
+[
+  {
+    "embeddingId": "81f257c6-6406-4936-8c22-0ae523cce5fd",
+    "text": "E-commerce giants like Amazon and Alibaba have redefined ..",
+    "metadata": {
+        "index": "0",
+        "source": "s3://ms-vectors/invoicesample.pdf",
+        "file_type": "any",
+        "file_name": "invoicesample.pdf"
+        ...
     },
-    {
-      "id": "doc_002",
-      "text": "E-commerce giants like Amazon and Alibaba have redefined retail...",
-      "metadata": {
-        "source": "document.pdf", 
-        "type": "text",
-        "index": "1"
-      }
-    }
-  ],
-  "totalDocuments": 2,
-  "collectionName": "documents",
-  "includeEmbeddings": false
-}
+    "embeddings": [-0.00683132, -0.0033572172, 0.02698761, -0.01291587, ...]
+  }
+]
 ----
 
-* `documents`: List of all documents in the collection.
-** `id`: Unique identifier of the document.
-** `text`: The original text content.
-** `metadata`: Associated metadata for the document.
-** `embedding`: Embedding vector (only included if `includeEmbeddings` is true).
-* `totalDocuments`: Total number of documents in the collection.
-* `collectionName`: Name of the collection that was queried.
-* `includeEmbeddings`: Boolean indicating if embeddings are included in the response.
+* `embeddingId`: The embedding UUID.
+* `text`: The relevant text segment.
+* `metadata`: The metadata key-value pairs.
+** `index`: The segment or chunk number for the uploaded data source.
+** `source`: The source of the text segment.
+** `file_type`: The file type.
+** `file_name`: The name of the file, in which the text segment is found.
+* `embeddings`: The embeddings for the text segment.
+
+The operation also returns other attributes:
+
+* `storeName`: Name of the vector store collection.
 
 == Configure the Store Remove Operation
 
-The *[Store] Remove* operation deletes documents from the vector store based on document IDs or metadata filters. This operation is useful for data cleanup and content management workflows.
+The *[Store] Remove* operation removes all embeddings from the store based on a metadata filter.
 
 To configure the *[Store] Remove* operation:
 
 include::connectors::partial$t-configure-operations.adoc[]
-* *Collection Name*
+* *Store Name*
 +
-Enter the name of the collection to remove documents from.
-* *Document IDs*
+Enter the name of the collection in the external vector database.
+
+These fields are mutually exclusive and optional: 
+
+* *Ids*
 +
-Enter the list of document IDs to remove. Use this for precise document deletion.
-* *Metadata Filter*
+Enter the list of IDs to delete.
+* *Metadata Condition*
 +
-Enter metadata criteria to filter documents for deletion. Use this for bulk deletion based on document properties.
+Enter the condition used for filtering results based on metadata.
++
+It supports SQL-like syntax.
++
+** Comparison operators are `=`, `!=`, `<`, `<=`, `>`, and `>=`.
+** Special operators:
+*** `CONTAINS(field_name, 'value')` - Check if the field contains the value.
+** Logical operators are `AND` and `OR`.
++
+Here is an example: `index=1 AND (CONTAINS(file_name,'example.pdf') OR file_type='any')`
++
+NOTE: `CONTAINS(field_name, 'value') works most of the time same as `field_name LIKE '%value%'`, but the behavior might differ for each store provider. For example, for Azure AI Search, it maps to `search.ismatch('value', field_name)`.
+
 
 This is the XML for this operation:
 [source,xml,linenums, subs=attributes+]
 ----
 <ms-vectors:store-remove
-  doc:name="[Store] Remove"
-  doc:id="d4e5f6g7-h8i9-0123-defg-456789012345"
-  config-ref="MuleSoft_Vectors_Connector_Store_config"
-  collectionName="documents">
-  <ms-vectors:document-ids ><![CDATA[#[["doc_001", "doc_002"]]]]></ms-vectors:document-ids>
-  <ms-vectors:metadata-filter ><![CDATA[#[{"source": "outdated.pdf"}]]]></ms-vectors:metadata-filter>
-</ms-vectors:store-remove>
+  doc:name="Embedding remove documents by filter"
+  doc:id="c6b9ec97-1224-445e-ab02-f598d6fff7d7"
+  config-ref="MAC_Vectors_Config"
+  storeName="mulechaindemo"
+  metadataKey="file_name"
+  filterMethod="isEqualTo"
+  metadataValue="docs-accelerators__accelerators-cim_1.3_modules_ROOT_pages_cim-setup.adoc"
+  embeddingModelName="text-embedding-3-small"/>
 ----
 
 === Output Configuration
 
-This operation responds with a JSON payload indicating the deletion results:
+This operation responds with a JSON payload. This is an example response:
 
 [source,json]
 ----
 {
-  "success": true,
-  "deletedCount": 2,
-  "deletedIds": [
-    "doc_001",
-    "doc_002"
-  ],
-  "collectionName": "documents"
+    "status": "deleted"
 }
 ----
 
-* `success`: Boolean indicating if the operation completed successfully.
-* `deletedCount`: Number of documents successfully deleted.
-* `deletedIds`: List of IDs for the documents that were deleted.
-* `collectionName`: Name of the collection where documents were removed from.
+* `status`: Status of the operation.
+
+The operation also returns other attributes:
+
+* `storeName`: Name of the vector store collection.
+* `ids (Optional)`: IDs of the embeddings to remove.
+* `metadataCondition (Optional)`: Filter condition used to remove embeddings.
 
 == See Also
 
