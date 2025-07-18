@@ -1,0 +1,286 @@
+= Configuring Store Operations
+
+Configure the *[Store] Add*, *[Store] Query*, *[Store] Query All*, and *[Store] Remove* operations. 
+
+== Configure the Store Add Operation
+
+The *[Store] Add* operation adds a document or text into an embedding store.
+
+The *[Store] Add* operation can be preceded by the *[Embedding] Generate from text* operation to ingest the text into a vector store. 
+
+To configure the *[Store] Add* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Store Name*
++
+Enter the name of the collection in the external vector database.
+* *Text Segments and Embeddings*
++
+Enter the text segments and embeddings to ingest into the vector database. It is typically the output of the *[Embedding] Generate from text* operation.
+* *Metadata entries*
++
+Enter a list-item (metadata entry), such as key (custom metadata key) and value (custom metadata value).
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:store-add
+  doc:name="[Store] Add"
+  doc:id="7ca3df80-8cac-44dc-ad49-860a6f682d04"
+  config-ref="MuleSoft_Vectors_Connector_Store_config"
+  storeName="gettingstarted" />
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload. This is an example response:
+
+[source,json]
+----
+{
+  "sourceId": "af44c7ef-4562-4712-af09-4498fc7f29a2",
+  "embeddingIds": [
+    "81f257c6-6406-4936-8c22-0ae523cce5fd",
+    "2127ef9b-08f4-4bfc-b769-1f488cdbf835",
+    "639e9994-f406-4481-a08a-0058ed3d781e"
+  ],
+  "status": "updated"
+}
+----
+
+* `sourceId`: Unique identifier for the source document.
+* `embeddingIds`: List of unique identifiers for the embeddings added to the store.
+* `status`: Status of the operation.
+
+The operation also returns attributes that aren't within the main JSON payload, that include information about token usage, for example:
+
+[source,json]
+----
+{
+  "additionalAttributes": {
+    "storeName": "gettingstarted",
+    "tokenUsage": {
+        "outputCount": 9,
+        "totalCount": 18,
+        "inputCount": 9
+    },
+    "additionalAttributes": {}
+  }
+}
+----
+
+* `storeName`: Name of the vector store collection.
+* `tokenUsage`: Token usage metadata returned as attributes
+** `outputCount`: Number of tokens used to generate the output
+** `totalCount`: Total number of tokens used for input and output.
+** `inputCount`: Number of tokens used to process the input.
+
+== Configure the Store Query Operation
+
+The *[Store] Query* operation retrieves information from the embedding store based on an embedding (previously generated from a text prompt) and optionally a filter on metadata. 
+
+The *[Store] Query* operation can be preceded by the *[Embedding] Generate from text* operation. The plain text to use when querying the store is first processed by the *[Embedding] Generate from text* operation that generates an embedding that can be used to perform the actual query and represents the input for the *[Store] Query* operation.
++
+NOTE: When generating an embedding from text for query purposes, don't provide any segmentation fields. Leave the *Max Segment Size (Characters)* and *Max Overlap Size (Characters)* fields blank.
+
+To configure the *[Store] Query* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Query Embedding*
++
+Enter the embedding vector to use for similarity search. This typically comes from the embedding operation output.
+* *Collection Name*
++
+Enter the name of the collection or index to search against.
+* *Max Results*
++
+Enter the maximum number of results to return from the similarity search.
+* *Min Score*
++
+Enter the minimum similarity score threshold for results.
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:store-query
+  doc:name="[Store] Query"
+  doc:id="b2c3d4e5-f6g7-8901-bcde-f23456789012"
+  config-ref="MuleSoft_Vectors_Connector_Store_config"
+  collectionName="documents"
+  maxResults="5"
+  minScore="0.7">
+  <ms-vectors:query-embedding ><![CDATA[#[payload.embeddings[0]]]]></ms-vectors:query-embedding>
+</ms-vectors:store-query>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload containing the similarity search results:
+
+[source,json]
+----
+{
+  "results": [
+    {
+      "id": "doc_001",
+      "score": 0.95,
+      "text": "In the modern world, technological advancements have become essential...",
+      "metadata": {
+        "source": "document.pdf",
+        "type": "text",
+        "index": "0"
+      }
+    },
+    {
+      "id": "doc_002", 
+      "score": 0.87,
+      "text": "E-commerce giants like Amazon and Alibaba have redefined retail...",
+      "metadata": {
+        "source": "document.pdf",
+        "type": "text", 
+        "index": "1"
+      }
+    }
+  ],
+  "totalResults": 2,
+  "collectionName": "documents"
+}
+----
+
+* `results`: List of matching documents ordered by similarity score.
+** `id`: Unique identifier of the matching document.
+** `score`: Similarity score between 0 and 1.
+** `text`: The original text content.
+** `metadata`: Associated metadata for the document.
+* `totalResults`: Total number of results returned.
+* `collectionName`: Name of the collection that was searched.
+
+== Configure the Store Query All Operation
+
+The *[Store] Query All* operation retrieves all documents from the specified collection without performing similarity search. This operation is useful for collection management and data export scenarios.
+
+To configure the *[Store] Query All* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Collection Name*
++
+Enter the name of the collection to retrieve all documents from.
+* *Max Results*
++
+Enter the maximum number of documents to retrieve. Leave blank to retrieve all documents.
+* *Include Embeddings*
++
+Select whether to include the embedding vectors in the response. Disable for faster retrieval when only text content is needed.
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:store-query-all
+  doc:name="[Store] Query All"
+  doc:id="c3d4e5f6-g7h8-9012-cdef-345678901234"
+  config-ref="MuleSoft_Vectors_Connector_Store_config"
+  collectionName="documents"
+  maxResults="100"
+  includeEmbeddings="false">
+</ms-vectors:store-query-all>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload containing all documents in the collection:
+
+[source,json]
+----
+{
+  "documents": [
+    {
+      "id": "doc_001",
+      "text": "In the modern world, technological advancements have become essential...",
+      "metadata": {
+        "source": "document.pdf",
+        "type": "text",
+        "index": "0"
+      }
+    },
+    {
+      "id": "doc_002",
+      "text": "E-commerce giants like Amazon and Alibaba have redefined retail...",
+      "metadata": {
+        "source": "document.pdf", 
+        "type": "text",
+        "index": "1"
+      }
+    }
+  ],
+  "totalDocuments": 2,
+  "collectionName": "documents",
+  "includeEmbeddings": false
+}
+----
+
+* `documents`: List of all documents in the collection.
+** `id`: Unique identifier of the document.
+** `text`: The original text content.
+** `metadata`: Associated metadata for the document.
+** `embedding`: Embedding vector (only included if `includeEmbeddings` is true).
+* `totalDocuments`: Total number of documents in the collection.
+* `collectionName`: Name of the collection that was queried.
+* `includeEmbeddings`: Boolean indicating if embeddings are included in the response.
+
+== Configure the Store Remove Operation
+
+The *[Store] Remove* operation deletes documents from the vector store based on document IDs or metadata filters. This operation is useful for data cleanup and content management workflows.
+
+To configure the *[Store] Remove* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Collection Name*
++
+Enter the name of the collection to remove documents from.
+* *Document IDs*
++
+Enter the list of document IDs to remove. Use this for precise document deletion.
+* *Metadata Filter*
++
+Enter metadata criteria to filter documents for deletion. Use this for bulk deletion based on document properties.
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:store-remove
+  doc:name="[Store] Remove"
+  doc:id="d4e5f6g7-h8i9-0123-defg-456789012345"
+  config-ref="MuleSoft_Vectors_Connector_Store_config"
+  collectionName="documents">
+  <ms-vectors:document-ids ><![CDATA[#[["doc_001", "doc_002"]]]]></ms-vectors:document-ids>
+  <ms-vectors:metadata-filter ><![CDATA[#[{"source": "outdated.pdf"}]]]></ms-vectors:metadata-filter>
+</ms-vectors:store-remove>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload indicating the deletion results:
+
+[source,json]
+----
+{
+  "success": true,
+  "deletedCount": 2,
+  "deletedIds": [
+    "doc_001",
+    "doc_002"
+  ],
+  "collectionName": "documents"
+}
+----
+
+* `success`: Boolean indicating if the operation completed successfully.
+* `deletedCount`: Number of documents successfully deleted.
+* `deletedIds`: List of IDs for the documents that were deleted.
+* `collectionName`: Name of the collection where documents were removed from.
+
+== See Also
+
+* xref:index.adoc[MuleSoft Vectors Connector Overview]
+* xref:mulesoft-vectors-connector-reference.adoc[MuleSoft Vectors Connector Reference]
+* https://help.mulesoft.com[MuleSoft Help Center]
