@@ -52,32 +52,23 @@ This operation responds with a JSON payload. This is an example response:
 * `embeddingIds`: List of unique identifiers for the embeddings added to the store.
 * `status`: Status of the operation.
 
-The operation also returns attributes that aren't within the main JSON payload, that include information about token usage, for example:
-
-[source,json]
-----
-{
-  "additionalAttributes": {
-    "storeName": "gettingstarted",
-    "tokenUsage": {
-        "outputCount": 9,
-        "totalCount": 18,
-        "inputCount": 9
-    },
-    "additionalAttributes": {}
-  }
-}
-----
+The operation also returns other attributes:
 
 * `storeName`: Name of the vector store collection.
-* `tokenUsage`: Token usage metadata returned as attributes
-** `outputCount`: Number of tokens used to generate the output
-** `totalCount`: Total number of tokens used for input and output.
-** `inputCount`: Number of tokens used to process the input.
 
 == Configure the Store Query Operation
 
-The *[Store] Query* operation retrieves information from the embedding store based on an embedding (previously generated from a text prompt) and optionally a filter on metadata. 
+The *[Store] Query* operation retrieves information from the embedding store based on an embedding (previously generated from a text prompt) and optionally a filter on metadata. It can be used for:
+
+* *Knowledge Management Systems*
++
+Adding new documents to an organizational knowledge base.
+* *Customer Support*
++
+Storing customer interaction documents for quick retrieval and analysis.
+* *Content Management*
++
+Ingesting various types of documents (text, PDF, URL) into a centralized repository for easy access and searchability.
 
 The *[Store] Query* operation can be preceded by the *[Embedding] Generate from text* operation. The plain text to use when querying the store is first processed by the *[Embedding] Generate from text* operation that generates an embedding that can be used to perform the actual query and represents the input for the *[Store] Query* operation.
 +
@@ -86,74 +77,109 @@ NOTE: When generating an embedding from text for query purposes, don't provide a
 To configure the *[Store] Query* operation:
 
 include::connectors::partial$t-configure-operations.adoc[]
-* *Query Embedding*
+* *Store Name*
 +
-Enter the embedding vector to use for similarity search. This typically comes from the embedding operation output.
-* *Collection Name*
+Enter the name of the collection in the external vector database.
+* *Text Segments and Embeddings*
 +
-Enter the name of the collection or index to search against.
+Enter the text segments and embeddings to query into the vector database. It is typically the output of the *[Embedding] Generate from text* operation. Text segments and embeddings must have only one element.
 * *Max Results*
 +
-Enter the maximum number of results to return from the similarity search.
+Enter the maximum number of results to query back.
 * *Min Score*
 +
-Enter the minimum similarity score threshold for results.
+Enter the minimum score for the similarity search (0-1).
+* *Metadata Condition*
++
+Enter the condition used for filtering results based on metadata.
++
+It supports SQL-like syntax.
++
+** Comparison operators are `=`, `!=`, `<`, `<=`, `>`, and `>=`.
+** Special operators:
+*** `CONTAINS(field_name, 'value')` - Check if the field contains the value.
+** Logical operators are `AND` and `OR`.
++
+Here is an example: `index=1 AND (CONTAINS(file_name,'example.pdf') OR file_type='any')`
++
+NOTE: `CONTAINS(field_name, 'value') works most of the time same as `field_name LIKE '%value%'`, but the behavior might differ for each store provider. For example, for Azure AI Search, it maps to `search.ismatch('value', field_name)`.
 
 This is the XML for this operation:
 [source,xml,linenums, subs=attributes+]
 ----
-<ms-vectors:store-query
+<ms-vectors:query
   doc:name="[Store] Query"
-  doc:id="b2c3d4e5-f6g7-8901-bcde-f23456789012"
+  doc:id="b74a5c37-6ea9-42bf-907f-c27183007ec7"
   config-ref="MuleSoft_Vectors_Connector_Store_config"
-  collectionName="documents"
+  storeName="web_pages"
   maxResults="5"
-  minScore="0.7">
-  <ms-vectors:query-embedding ><![CDATA[#[payload.embeddings[0]]]]></ms-vectors:query-embedding>
-</ms-vectors:store-query>
+  minScore="0.85"
+  metadataKey="url"
+  filterMethod="isEqualTo"
+  metadataValue="www.salesforce.com"/>
 ----
 
 === Output Configuration
 
-This operation responds with a JSON payload containing the similarity search results:
+This operation responds with a JSON payload. This is an example response:
 
 [source,json]
 ----
 {
-  "results": [
-    {
-      "id": "doc_001",
-      "score": 0.95,
-      "text": "In the modern world, technological advancements have become essential...",
-      "metadata": {
-        "source": "document.pdf",
-        "type": "text",
-        "index": "0"
-      }
-    },
-    {
-      "id": "doc_002", 
-      "score": 0.87,
-      "text": "E-commerce giants like Amazon and Alibaba have redefined retail...",
-      "metadata": {
-        "source": "document.pdf",
-        "type": "text", 
-        "index": "1"
-      }
-    }
-  ],
-  "totalResults": 2,
-  "collectionName": "documents"
+    "question": "Tell me more about Cloudhub High Availability Feature",
+    "sources": [
+        {
+            "embeddingId": "",
+            "text": "= CloudHub High Availability Features\nifndef::env-site,env-github[]\ninclude::_attributes.adoc[]\nendif::[]\n:page-aliases: runtime-manager::cloudhub-fabric.adoc,\....\n\n== Worker Scale-out",
+            "score": 0.9282029356714594,
+            "metadata": {
+                "source_Id": "c426a871-1a6e-4a47-a8ab-027eec9303e1",
+                "index": "0"
+                "absolute_directory_path": "/Users/<user>/Documents/Downloads/patch 8",
+                "file_name": "docs-runtime-manager__cloudhub_modules_ROOT_pages_cloudhub-fabric.adoc",
+                "full_path": "/Users/<user>/Documents/Downloads/patch 8docs-runtime-manager__cloudhub_modules_ROOT_pages_cloudhub-fabric.adoc",
+                "file_type": "any",
+                "ingestion_datetime": "2024-11-20T20:34:41.691Z",
+                "ingestion_timestamp": "1732134881691"
+            }
+        },
+        {
+          ...
+        },
+        {
+          ...
+        }
+    ]
+    "response": "= CloudHub High Availability Features\.. (...) \..distributes HTTP requests among your assigned workers.\n. Persistent message queues (see below)",
+    "maxResults": 3,
+    "storeName": "gettingstarted",
+    "minimumScore": 0.7
 }
 ----
 
-* `results`: List of matching documents ordered by similarity score.
-** `id`: Unique identifier of the matching document.
-** `score`: Similarity score between 0 and 1.
-** `text`: The original text content.
-** `metadata`: Associated metadata for the document.
-* `totalResults`: Total number of results returned.
-* `collectionName`: Name of the collection that was searched.
+* `question`: The question of the request.
+* `sources`: The sources identified by the similarity search.
+** `embeddingId`: The embedding UUID.
+** `text`: The relevant text segment.
+** `score`: The score of the similarity search based on the question.
+** `metadata`: The metadata key-value pairs.
+** `source_id`: The UUID for the uploaded data source.
+** `index`: The segment or chunk number for the uploaded data source.
+** `absolute_directory_path`: The full path to the file that contains relevant text segment.
+** `file_name`: The name of the file, in which the text segment is found.
+** `full_path`: The full path to the file.
+** `file_Type`: The file type.
+** `ingestion_datetime`: The ingestion date and time in ISO 8601 format (UTC).
+** `ingestion_timestamp`: The ingestion time in milliseconds.
+* `response`: The collected response of all relevant text segment. This is the response will is sent to the LLM.
+* `maxResults`: The maximum number of text segments considered.
+* `storeName`: The name of the vector store.
+* `minimumScore`: The minimum score for the result. 
+
+The operation also returns other attributes:
+
+* `storeName`: Name of the vector store collection.
+* `metadataCondition (Optional): Filter condition used to query embeddings.
 
 == Configure the Store Query All Operation
 
