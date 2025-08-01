@@ -104,29 +104,29 @@ You can paste this code into the Studio XML editor to quickly load the flow for 
 		<set-variable value="#[payload.id]" doc:name="Set Task Id" doc:id="3b1702ea-88c1-4c06-a4ef-971ef8138504" variableName="task_id"/> #(3)
 		<set-variable value='#[(payload.sessionId) default ""]' doc:name="Set Session Id" doc:id="d0790291-fb71-4a10-a953-1b68fa8bbb47" variableName="session_id"/> #(4)
 		<set-variable value="#[payload.message.parts[0].text]" doc:name="Set task user prompt" doc:id="0f017d97-1761-4fc7-8b6b-13f3557a4b28" variableName="user_prompt"/> #(5)
-		<mac-inference:mcp-tools-native-template doc:name="[MCP] Tooling" doc:id="55e0960a-5795-4223-adf4-dfb23365dc3e" config-ref="MuleSoft_Inference_Text_generation_config"> 
-			<mac-inference:template ><![CDATA[You are a specialized assistant that performs financial analysis based on stock market data using stock market symbols]]></mac-inference:template> #(6)
-			<mac-inference:instructions ><![CDATA[Your sole purpose is to use the tools “get_company_symbol” and “get_company_financials" to answer financial questions about US based companies. If the user asks about anything other than stock market or financial aspects of public US companies, politely state that you cannot help with that topic and can only assist with companies financial data. Do not attempt to answer unrelated questions or use tools for other purposes.
+		<ms-inference:mcp-tools-native-template doc:name="[MCP] Tooling" doc:id="55e0960a-5795-4223-adf4-dfb23365dc3e" config-ref="MuleSoft_Inference_Text_generation_config"> 
+			<ms-inference:template ><![CDATA[You are a specialized assistant that performs financial analysis based on stock market data using stock market symbols]]></ms-inference:template> #(6)
+			<ms-inference:instructions ><![CDATA[Your sole purpose is to use the tools “get_company_symbol” and “get_company_financials" to answer financial questions about US based companies. If the user asks about anything other than stock market or financial aspects of public US companies, politely state that you cannot help with that topic and can only assist with companies financial data. Do not attempt to answer unrelated questions or use tools for other purposes.
 
 Response Format: should be a JSON with 3 properties message, status (consist of "input_required", "completed", “error”) and sentiment with values (“Buy”, “Sell” or “Hold”) and reasoning (indicating in 2-3 sentences as to how the sentiment was decided)
 
-Example queries: “Should I buy CRM stock?”, “Should I sell MSFT?”, “How is AAPL doing?”]]></mac-inference:instructions> 
-			<mac-inference:data ><![CDATA[#[payload.message.parts[0].text]]]></mac-inference:data> 
-		</mac-inference:mcp-tools-native-template>
+Example queries: “Should I buy CRM stock?”, “Should I sell MSFT?”, “How is AAPL doing?”]]></ms-inference:instructions> 
+			<ms-inference:data ><![CDATA[#[payload.message.parts[0].text]]]></ms-inference:data> 
+		</ms-inference:mcp-tools-native-template>
 		<set-variable value="#[payload.response]" doc:name="MCP Tooling Response" doc:id="60810200-5643-477c-8a45-76f1e0dcc9e0" variableName="mcp_tooling_results"/> #(7)
-		<mac-inference:agent-define-prompt-template doc:name="Finance Agent" doc:id="b25e375b-f3be-45c1-a545-4f93690f98ce" config-ref="MuleSoft_Inference_Text_generation_config"> #(8)
-			<mac-inference:template ><![CDATA[#["You are a specialized assistant for performing financial analysis based on stock market data using stock market symbols.
+		<ms-inference:agent-define-prompt-template doc:name="Finance Agent" doc:id="b25e375b-f3be-45c1-a545-4f93690f98ce" config-ref="MuleSoft_Inference_Text_generation_config"> #(8)
+			<ms-inference:template ><![CDATA[#["You are a specialized assistant for performing financial analysis based on stock market data using stock market symbols.
 
 Use the following context to answer
 
-Context: $(vars.mcp_tooling_results)"]]]></mac-inference:template>
-			<mac-inference:instructions ><![CDATA[Your sole purpose is to answer questions about the financial information of US based companies. If the user asks anything other than stock market or financial aspects of public companies, politely state that you cannot help with that topic and can only assist with companies financial data. Do not attempt to answer unrelated questions or use tools for other purposes.
+Context: $(vars.mcp_tooling_results)"]]]></ms-inference:template>
+			<ms-inference:instructions ><![CDATA[Your sole purpose is to answer questions about the financial information of US based companies. If the user asks anything other than stock market or financial aspects of public companies, politely state that you cannot help with that topic and can only assist with companies financial data. Do not attempt to answer unrelated questions or use tools for other purposes.
 
 Response Format: Should be JSON with 3 properties, including message, status ("input_required", "completed", “error”), and sentiment with values (“Buy”, “Sell” or “Hold”) and reasoning (tell in 2-3 sentences how the sentiment was decided)
 
-Example queries: “Should I buy CRM stock?”, “Should I sell MSFT?”, “How is AAPL doing?”]]></mac-inference:instructions>
-			<mac-inference:data ><![CDATA[#[vars.user_prompt]]]></mac-inference:data>
-		</mac-inference:agent-define-prompt-template>
+Example queries: “Should I buy CRM stock?”, “Should I sell MSFT?”, “How is AAPL doing?”]]></ms-inference:instructions>
+			<ms-inference:data ><![CDATA[#[vars.user_prompt]]]></ms-inference:data>
+		</ms-inference:agent-define-prompt-template>
 		<ee:transform doc:name="Transform Message" doc:id="32fd4cee-9380-4f0a-839d-880a7f25ea7f"> #(9)
 			<ee:message>
 				<ee:set-payload><![CDATA[%dw 2.0
@@ -173,9 +173,9 @@ output application/json
 .. The `set-variable` component extracts the ID from the incoming payload (the task received in step 1) and stores it in a flow variable named `task_id`.
 .. Another `set-variable` component extracts the `sessionId` from the payload. If `sessionId` isn't present, it defaults to an empty string. This value is stored in a flow variable named `session_id`.
 .. This `set-variable` extracts the actual user query from the payload. Specifically, it takes the text from the first part of the message within the payload and stores it in a flow variable named `user_prompt`.
-.. The `mac-inference:mcp-tools-native-template` configures an LLM to act as a specialized financial analysis assistant.
-.. This `set-variable` component takes the response generated by the `mac-inference:mcp-tools-native-template` (from step 6) and stores it in a flow variable named `mcp_tooling_results`. 
-.. The `mac-inference:agent-define-prompt-template` component processes the results from the previous AI interaction to generate a user-friendly response.
+.. The `ms-inference:mcp-tools-native-template` configures an LLM to act as a specialized financial analysis assistant.
+.. This `set-variable` component takes the response generated by the `ms-inference:mcp-tools-native-template` (from step 6) and stores it in a flow variable named `mcp_tooling_results`. 
+.. The `ms-inference:agent-define-prompt-template` component processes the results from the previous AI interaction to generate a user-friendly response.
 .. The `ee:transform` (DataWeave transformation) component takes the `payload.response` from the previous AI interaction and transforms it into a structured JSON output.
 
 == Configure the A2A Client to Call Other A2A Agents
