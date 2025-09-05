@@ -5,6 +5,7 @@ The examples in this section show application flows that:
 * <<send-receive,Sends messages to and receives messages>> from Azure Service Bus
 * <<send-listen-ack, Sends and listens>> for messages and receives an acknowledgment using the `MANUAL` acknowledgment type
 * <<batch-send-receive,Sends and receives batch messages>>
+* <<send-receive-session-ids,Sends and receives messages using session IDs for session-aware queues>>
 * <<using-aad-connector, Using Azure Active Directory connector provider>>
 
 These examples use variables for some field values. You can either:
@@ -17,8 +18,7 @@ For more information about using a properties file, see xref:mule-runtime::mule-
 == Before You Begin
 
 * Java 8
-* Anypoint Studio 7.1.0 or later
-* Mule Runtime 4.2.x EE or later
+* Mule runtime 4.3.0 or later
 * Creation of a new queue for testing purpose on Azure Portal
 
 == Create a Mule Project
@@ -357,6 +357,158 @@ attributes]]></ee:set-payload>
 		<logger level="INFO" doc:name="Log Attributes" doc:id="94e7254c-a197-4fa2-b437-b64719acb23d" message="#[payload]"/>
 		<azure-service-bus-messaging:complete-message doc:name="Ack of Message" doc:id="6aa7238b-3bc9-4a61-a39b-e1bd260ee7c5" config-ref="Azure_Service_Bus_Messaging_Connector_Config" lockToken="#[attributes.lockToken]" />
 		<logger level="INFO" doc:name="Log Lock Token" doc:id="a91eea3e-231a-4675-9457-b6c7366ab647" message='#["LockToken = " ++ payload.lockToken]'/>
+	</flow>
+</mule>
+----
++
+. When you are prompted to regenerate `doc:id` values, click *Yes*.
+. Save the project.
+. Right-click in the Studio canvas and select *Run project <project-name>* to run the project.
+
+[[send-receive-session-ids]]
+== Send and Receive Messages Using Session IDs for Session-Aware Queues Example
+
+This application flow uses the *Send* operation and *Message Listener* source. The flow is configured to use session IDs for session-aware queues.
+
+image::azure-service-bus-session-id-1.png["Four flows that have Scheduler, Set Payload, and Send operations"]
+
+image::azure-service-bus-session-id-2.png["Flow that has first Message listener, Logger, Matches regex, another Logger, and error handling"]
+
+image::azure-service-bus-session-id-3.png["Flow that has second Message listener, Logger, Matches regex, another Logger, and error handling"]
+
+image::azure-service-bus-session-id-4.png["Flow that has third Message listener, Logger, Matches regex, another Logger, and error handling"]
+
+To create this flow:
+
+. In the Studio canvas, click *Configuration XML*.
+. Delete all the contents after the line `<?xml version="1.0" encoding="UTF-8"?>`.
+. Copy and paste the following XML after the line `<?xml version="1.0" encoding="UTF-8"?>`:
++
+[source,xml,linenums]]
+----
+<mule xmlns:json="http://www.mulesoft.org/schema/mule/json"
+	  xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:azure-service-bus-messaging="http://www.mulesoft.org/schema/mule/azure-service-bus-messaging"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	  xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/azure-service-bus-messaging http://www.mulesoft.org/schema/mule/azure-service-bus-messaging/current/mule-azure-service-bus-messaging.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
+
+	<configuration-properties file="mule-app.properties" />
+
+	<!-- HTTP Listener Config for triggering send -->
+	<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<!-- Azure Service Bus Messaging Connector Config -->
+	<azure-service-bus-messaging:config name="Azure_Service_Bus_Messaging_Connector_Config">
+		<azure-service-bus-messaging:sas-connection namespace="${azure.namespace}" sharedAccessKeyName="${azure.keyname}" sharedAccessKey="${azure.key}" />
+	</azure-service-bus-messaging:config>
+
+	<!-- Flow to send a message with sessionId -->
+	<flow name="send-session-message-flow-1">
+		<scheduler doc:name="Scheduler" doc:id="85660b9c-19a0-4cb2-9dc0-1f07590d9e65" >
+			<scheduling-strategy >
+				<fixed-frequency frequency="30" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<set-payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10; currentTime: now(),&#10; session: "${session.id1}",&#10;}]' doc:name="Set Payload" doc:id="390220c9-9480-47d0-838b-6d9ba921bddc" mimeType="application/json"/>
+		<azure-service-bus-messaging:send
+				config-ref="Azure_Service_Bus_Messaging_Connector_Config"
+				destinationName="${queue.name}"
+				sessionId="${session.id1}">
+		</azure-service-bus-messaging:send>
+	</flow>
+
+	<!-- Flow to receive messages with sessionId -->
+	<flow name="send-session-message-flow-2" doc:id="20d400a8-fbb4-4fbf-b7de-662e0c96bc08">
+		<scheduler doc:name="Scheduler">
+			<scheduling-strategy>
+				<fixed-frequency frequency="30" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<set-payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10; currentTime: now(),&#10; session: "${session.id2}",&#10;}]' doc:name="Set Payload" doc:id="2490c774-3e34-4e11-8931-5feb1f8f6ac7" mimeType="application/json" />
+		<azure-service-bus-messaging:send destinationName="${queue.name}" doc:name="Send" doc:id="a12f8163-3260-411f-ae43-2dfc3b01a3eb" config-ref="Azure_Service_Bus_Messaging_Connector_Config" sessionId="${session.id2}" />
+	</flow>
+
+	<flow name="send-session-message-flow-3" doc:id="38c54914-a253-4d4c-ad81-166b8cde6eeb">
+		<scheduler doc:name="Scheduler">
+			<scheduling-strategy>
+				<fixed-frequency frequency="30" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<set-payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10; currentTime: now(),&#10; session: "${session.id3}",&#10;}]' doc:name="Set Payload" doc:id="439e969a-ec0c-447d-ae7a-636526e3871d" mimeType="application/json" />
+		<azure-service-bus-messaging:send destinationName="${queue.name}" doc:name="Send" doc:id="0e6d84ff-8ec2-488f-8ac7-cb7a8ac1844b" config-ref="Azure_Service_Bus_Messaging_Connector_Config" sessionId="${session.id3}" />
+	</flow>
+
+
+	<flow name="send-session-message-flow-4" doc:id="0f0ca780-444d-448f-8abf-5c63d3ec42a7">
+		<scheduler doc:name="Scheduler" doc:id="e3605391-476d-486a-b183-341fd84f4dbe">
+			<scheduling-strategy>
+				<fixed-frequency frequency="30" timeUnit="SECONDS" />
+			</scheduling-strategy>
+		</scheduler>
+		<set-payload value='#[%dw 2.0&#10;output application/json&#10;---&#10;{&#10; currentTime: now(),&#10; session: "${session.id4}",&#10;}]' doc:name="Set Payload" doc:id="9ec14ba0-3fe9-48e2-b493-f6414b601064" mimeType="application/json" />
+		<azure-service-bus-messaging:send destinationName="${queue.name}" doc:name="Send" doc:id="5347dc2f-f93c-4095-8c10-6f56fd8342c8" config-ref="Azure_Service_Bus_Messaging_Connector_Config" sessionId="${session.id4}" />
+	</flow>
+	<flow name="fifo-listener-1">
+		<azure-service-bus-messaging:message-listener
+				config-ref="Azure_Service_Bus_Messaging_Connector_Config"
+				ackMode="AUTO" doc:name="Message listener-1" sessionID="${session.id1}" numberOfConsumers="1" destinationName="${queue.name}">
+			<reconnect-forever />
+			<azure-service-bus-messaging:response timeToLive="1" timeToLiveTimeUnit="HOURS" messageId="1" correlationId="1">
+			</azure-service-bus-messaging:response>
+		</azure-service-bus-messaging:message-listener>
+		<try doc:name="Try">
+			<logger level="INFO" doc:name="Logger" doc:id="24c6b101-b7d3-4b7d-bbc5-f352617eee17" message='"listener1: #[payload]"' />
+			<validation:matches-regex doc:name="Matches regex1" doc:id="5810c860-a570-42bd-91cd-282150fea2c7" value="#[payload.session]" regex="${session.id1}" message="Error on ${session.id1}" />
+			<logger level="INFO" doc:name="Logger1" doc:id="0a0d03fa-1a8e-41be-a747-62fab5924d0c" message="#[payload]" />
+		</try>
+		<error-handler>
+			<on-error-continue>
+				<raise-error type="VALIDATION1:VALIDATION_ERROR1" doc:name="Raise Error">
+				</raise-error>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="fifo-listener-2" doc:id="4d3e547e-77c2-4760-b760-6930d8b93c9e">
+		<azure-service-bus-messaging:message-listener ackMode="AUTO" destinationName="${queue.name}" doc:name="Message listener-2" doc:id="01832bbd-d2eb-4fb9-8ed1-a90587874a8b" config-ref="Azure_Service_Bus_Messaging_Connector_Config" numberOfConsumers="1" sessionID="${session.id2}">
+			<reconnect-forever />
+		</azure-service-bus-messaging:message-listener>
+		<try doc:name="Try">
+			<logger level="INFO" doc:name="Logger1" doc:id="cf0e243b-5188-4418-abc1-a60275915adc" message='"listener2: #[payload]"' />
+			<validation:matches-regex doc:name="Matches regex" doc:id="05e5c2df-cf96-4bfe-a7b6-da22f09dd238" value="#[payload.session]" regex="${session.id2}" message="Error on ${session.id2}"/>
+			<logger level="INFO" doc:name="Logger" doc:id="54b7b482-9c24-416e-8c46-c717af00acb0" message="#[payload]" />
+		</try>
+		<error-handler>
+			<on-error-continue>
+				<raise-error type="VALIDATION2:VALIDATION_ERROR2" doc:name="Raise Error">
+				</raise-error>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="fifo-listener-3" doc:id="3ecafefc-c19d-485a-8c6a-45d79c7b5cad">
+		<azure-service-bus-messaging:message-listener ackMode="AUTO" destinationName="${queue.name}" doc:name="Message listener-3" doc:id="3b6fa3d6-f8cf-4191-bbb2-29208aae7d5b" config-ref="Azure_Service_Bus_Messaging_Connector_Config" numberOfConsumers="1" sessionID="${session.id3}">
+			<reconnect-forever />
+		</azure-service-bus-messaging:message-listener>
+		<try doc:name="Try">
+			<logger level="INFO" doc:name="Logger1" doc:id="6b9ee655-0395-44f7-8322-36b0e77643b9" message='"listener3: #[payload]"' />
+			<validation:matches-regex doc:name="Matches regex" doc:id="de2db011-3a58-48e0-8dcf-222d5da01a22" value="#[payload.session]" regex="${session.id3}" message="Error on ${session.id3}"/>
+			<logger level="INFO" doc:name="Logger" doc:id="fd1ad726-ff8f-4cff-9daa-726cb5e5d014" message="#[payload]" />
+		</try>
+		<error-handler>
+			<on-error-continue>
+				<raise-error type="VALIDATION3:VALIDATION_ERROR3" doc:name="Raise Error">
+				</raise-error>
+			</on-error-continue>
+		</error-handler>
 	</flow>
 </mule>
 ----
