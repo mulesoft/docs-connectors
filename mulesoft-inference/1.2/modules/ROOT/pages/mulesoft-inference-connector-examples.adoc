@@ -276,62 +276,21 @@ http://www.mulesoft.org/schema/mule/ms-inference http://www.mulesoft.org/schema/
 
 == Example: MCP Tools
 
- This Mule application showcases the use of the *[MCP] Tooling* operation to interact with OpenAI via the MCP connector. This operation is used to create autonomous agents that can use external tools whenever a prompt can't be answered directly by the AI model. This operation is configured to execute the tool defined in the payload and includes the tool's response in the final output. In this example, it's configured to use a tool to get the current stock price for a given ticker.
+ This Mule application showcases the use of the *[MCP] Tooling* operation to interact with OpenAI via the MCP connector. This operation enables you to select and run tools based on prompts without manual input via MCP tooling operation. In this example, it is configured to use the tools to check the inventory status for a specific part number, MULETEST0. 
 
 [source,xml,linenums]
 ----
-<flow name="TestMcpToolExecutionFlow">
-	<http:listener path="/mcp-tool-execution" doc:name="Listener" doc:id="zecmdx" config-ref="HTTP_Listener_config" />
-	<set-variable doc:id="7edeecec-4d47-4bfe-a699-23987b60ac14" doc:name="Set Variable" variableName="testPayload">
-		<value><![CDATA[#[%dw 2.0
+<flow name="TestNewInferenceFlow2">
+	<http:listener path="path" doc:name="Listener" doc:id="zecmdx" config-ref="HTTP_Listener_config" />
+	<set-variable doc:id="7edeecec-4d47-4bfe-a699-23987b60ac14" doc:name="Set Variable" value="#[%dw 2.0
 			output application/java
 			---
 			{
-				'template': 'You are a helpful financial assistant',
-				'instructions':'Use the available tools to answer the request. If the tool is called, you must include the tool execution result in your final answer.',
-				'dataset': 'What is the current stock price for GOOG?',
-				'tools': [
-                    {
-                        'type': 'function',
-                        'function': {
-                            'name': 'get_stock_price',
-                            'description': 'Gets the latest market price for a given stock ticker.',
-                            'parameters': {
-                                'type': 'object',
-                                'properties': {
-                                    'ticker': {
-                                        'type': 'string',
-                                        'description': 'The stock ticker symbol, e.g., GOOG'
-                                    }
-                                },
-                                'required': ['ticker']
-                            }
-                        }
-                    },
-                    {
-                        'type': 'function',
-                        'function': {
-                            'name': 'get_financial_report',
-                            'description': 'Retrieves a summary of a company\'s annual financial report.',
-                            'parameters': {
-                                'type': 'object',
-                                'properties': {
-                                    'ticker': {
-                                        'type': 'string',
-                                        'description': 'The stock ticker symbol.'
-                                    },
-                                    'year': {
-                                        'type': 'string',
-                                        'description': 'The reporting year.'
-                                    }
-                                },
-                                'required': ['ticker', 'year']
-                            }
-                        }
-                    }
-                ]
-			}]]]></value>
-	</set-variable>
+				'template': 'You are an helpful assistant',
+				'instructions':'Answer the request with politeness.',
+				'dataset': 'Check Inventory for MULETEST0'
+
+			}]" variableName="testPayload" />
 	<ms-inference:mcp-tools-native-template doc:name="[MCP] Tooling" doc:id="6783c672-bc72-49c7-bf3a-3f3379e3c9a9" config-ref="Text-generation-config">
 		<ms-inference:mcp-config-references>
 			<ms-inference:mcp-config mcpClientConfigRef="MCP_Client_SSE_ERP" />
@@ -346,24 +305,36 @@ http://www.mulesoft.org/schema/mule/ms-inference http://www.mulesoft.org/schema/
 		<ms-inference:data>
 			<![CDATA[#[vars.testPayload.dataset]]]>
 		</ms-inference:data>
-		<ms-inference:tools>
-			<![CDATA[#[vars.testPayload.tools]]]>
-		</ms-inference:tools>
 	</ms-inference:mcp-tools-native-template>
 	<ee:transform doc:id="8eda33bd-db2f-412a-b448-dc633d326a39" doc:name="Transform Message">
 		<ee:message>
 			<ee:set-payload>
 				<![CDATA[%dw 2.0
-                output application/json
-                ---
-                {
-                    payload: payload,
-                    attributes: attributes
-                }]]>
+                output application/json
+                ---
+                {
+                    payload: payload,
+                    attributes: attributes
+                }]]>
 			</ee:set-payload>
 		</ee:message>
 	</ee:transform>
 </flow>
+
+<!-- MCP client configs -->
+<mcp:client-config name="MCP_Client_SSE_ERP" doc:name="MCP Client" doc:id="fd3bb75d-82e1-4aed-a1e3-f7c7ca6e28fb" clientName="MCP_Client_SSE_ERP" clientVersion="1.0.0">
+        <mcp:sse-client-connection requestTimeout="60" serverUrl="${mcp.erpServer}" />
+ </mcp:client-config>
+    
+
+<mcp:client-config name="MCP_Client_HTTP" doc:name="MCP Client" doc:id="163c2f4f-86bd-4860-b3b1-5606259f324f" clientName="MCP_Client_HTTP" clientVersion="1.0.0">
+        <mcp:streamable-http-client-connection serverUrl="${mcp.httpServer}">
+            <mcp:default-request-headers>
+                <mcp:default-request-header key="client_id" value="${mcp.httpServer.clientId}" />
+                <mcp:default-request-header key="client_secret" value="${mcp.httpServer.clientSecret}" />
+            </mcp:default-request-headers>
+        </mcp:streamable-http-client-connection>
+    </mcp:client-config>
 ----
 
 == See Also
