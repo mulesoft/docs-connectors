@@ -336,6 +336,31 @@ a|
 
 If the output shows AES128 or SHA1, it means the protection wasn't correctly applied, and the key isn't FIPS-compliant. In that case, repeat the migration process or consider using the next alternative approach.
 
+
+Note that SHA1 protection can still appear in GPG output due to the v4 packet format, even when SHA256 is used for the hash algorithm. For example:
+----
+iter+salt S2K, algo: 9, SHA1 protection, hash: 8
+----
+In this case, `algo: 9` indicates AES256 encryption and `hash: 8` indicates SHA256 hashing. The "SHA1 protection" text refers to the packet format version, not the actual hash algorithm used.
+==== FIPS Support Matrix
+[%header%autowidth.spread]
+|===
+| Operation | FIPS Support | Notes
+| PGP Encrypt |  Not supported — blocked by BCFIPS since RSA PKCS#1 v1.5 encryption is disallowed. | OpenPGP limitation in FIPS environments
+| PGP Decrypt | Supported | For legacy data compatibility
+| PGP Sign | Supported | With AES256 and SHA256 protection
+| PGP Validate | Supported | For legacy data compatibility
+|===
+PGP Encrypt remains unsupported in FIPS environments by design due to OpenPGP limitations. However, PGP Decrypt and Validate operations are supported for processing legacy data.
+==== GPG Behavior by Version
+[%header%autowidth.spread]
+|===
+| GPG Version | Key Generation Command | Output Behavior
+| GPG 2.0 and lower | `--gen-key` | Output correctly shows AES-256 cipher and SHA-256 hash, but secret key packet still displays "SHA1 protection" field
+| GPG 2.1 and higher | `--full-generate-key` | Output correctly shows AES-256 cipher and SHA-256 hash, but secret key packet still displays "SHA1 protection" field
+|===
+For both GPG versions, the "SHA1 protection" field in the secret key packet refers to the packet format version, not the actual protection algorithms used.
+
 === Export Secret and Public Key
 
 After migrating the keys to AES, export the secret and public keys:
@@ -566,6 +591,10 @@ In FIPS environments, JKS can only store certificates and can’t hold private o
 `org.bouncycastle.jca.enable_jks=true``
 
 JKS is no longer the default keystore type. You must explicitly select the keystore type. In FIPS environments, BCFKS is required.
+
+== Scope and Limitations (FIPS)
+The *PGP Encrypt** operation is not supported in FIPS environments due to a limitation in the OpenPGP standard (RFC 4880). OpenPGP mandates the use of RSAES-PKCS1-v1_5 for session key encryption, which is explicitly disallowed in FIPS-approved mode. This limitation exists regardless of how the keyring is generated, whether with GPG 2.0 and lower, GPG 2.1 and higher, or BC-FIPS.
+The <<troubleshoot-key-protection-issues>> section doesn't work in FIPS environments because of this OpenPGP limitation with PGP Encrypt operations.
 
 
 == See Also
