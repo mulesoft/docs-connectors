@@ -2,11 +2,6 @@
 
 Anypoint Connector for Agent2Agent (A2A) (A2A Connector) provides A2A protocol support for LLM agents, enabling your agents to talk to other agents.
 
-[NOTE]
-====
-Anypoint Connector for Agent2Agent (A2A) is a beta connector that is subject to the Beta Services Terms at https://www.salesforce.com/company/legal/agreements/[Agreements - Salesforce.com] or a written Unified Pilot Agreement if executed by Customer, and the Non-GA Gen AI and Non-GA Credit Consumption terms in the https://ptd.salesforce.com/?_ga=2.247987783.1372150065.1709219475-629000709.1639001992[Product Terms Directory]. Use of this beta connector with external systems or services consumes xref:general::usage-metrics.adoc[Mule messages] and is at the Customer's sole discretion. 
-====
-
 == Configurations
 
 [[Client]]
@@ -62,7 +57,9 @@ The application or AI system that initiates requests and consumes services offer
 * <<GetTask>> 
 * <<ListPushNotificationConfigs>> 
 * <<SendMessage>> 
+* <<SendStreamMessage>> 
 * <<SetPushNotificationConfig>> 
+* <<TaskResubscribe>> 
 
 ---
 [[Server]]
@@ -77,9 +74,10 @@ The A2A server acts as a remote agent that exposes an HTTP(S) endpoint and imple
 | Name | Type | Description | Default Value | Required
 |Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| <<ServerConnection, Connection>> | The connection types to provide to this configuration. | | x
-| Card a| <<AgentCard>> |  |  | x
 | Name a| String | ID used to reference this configuration. |  | x
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+| Card Json a| String |  Agent card as a JSON string. |  | 
+| Card Path a| String |  The location of a file to load the agent card. The file can point to a resource on the classpath or on a disk. |  | 
 | Task History Enabled a| Boolean | Set to `true` to enable retrieval of task history. Task history is stored as message objects. |  false | 
 | Default Max History Length a| Number | Maximum number of task history objects to store.  |  | 
 | Task Repository Object Store a| ObjectStore |  |  | 
@@ -97,17 +95,22 @@ The A2A server acts as a remote agent that exposes an HTTP(S) endpoint and imple
 |===
 | Name | Type | Description | Default Value | Required
 | Listener Config a| String |  Reference to the `<http:listener-config>` used to expose the inbound endpoint. |  | x
-| Agent Path a| String | URL where the Agent Card is located. |  | x
+| Agent Path a| String | Path at which the agent is available. |  | x
 | Tls Context Ref a| String |  |  |
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  | 
 |===
 
+==== Associated Operations
+* <<UpdateTaskArtifact>> 
+* <<UpdateTaskStatus>> 
+
 ==== Associated Sources
 * <<PushNotificationConfigListener>> 
 * <<TaskListener>> 
+* <<TaskStreamListener>> 
 
 [[CancelTask]]
-== Cancel Task
+== A2A Client - Cancel Task
 `<a2a:cancel-task>`
 
 Cancels the task specified by its unique identifier. It's used to stop a previously initiated task.
@@ -152,12 +155,13 @@ Cancels the task specified by its unique identifier. It's used to stop a previou
 * A2A:REQUEST_TIMEOUT 
 * A2A:RETRY_EXHAUSTED 
 * A2A:SERVER_ERROR 
-* A2A:TASK_ALREADY_COMPLETED 
+* A2A:TASK_NOT_CANCELABLE 
 * A2A:TASK_NOT_FOUND
 * A2A:UNAUTHORIZED 
+* A2A:UNSUPPORTED_OPERATION 
 
 [[DeletePushNotificationConfig]]
-== Delete Push Notification Config
+== A2A Client - Delete Push Notification Config
 `<a2a:delete-push-notification-config>`
 
 Deletes an associated push notification configuration for a task.
@@ -203,12 +207,13 @@ Deletes an associated push notification configuration for a task.
 * A2A:REQUEST_TIMEOUT
 * A2A:RETRY_EXHAUSTED
 * A2A:SERVER_ERROR
-* A2A:TASK_ALREADY_COMPLETED
+* A2A:TASK_NOT_CANCELABLE
 * A2A:TASK_NOT_FOUND
 * A2A:UNAUTHORIZED
+* A2A:UNSUPPORTED_OPERATION
 
 [[GetCard]]
-== Get Card
+== A2A Client - Get Card
 `<a2a:get-card>`
 
 Gets the agent card.
@@ -250,7 +255,7 @@ Gets the agent card.
 * A2A:UNAUTHORIZED 
 
 [[GetPushNotificationConfig]]
-== Get Push Notification Config
+== A2A Client - Get Push Notification Config
 `<a2a:get-push-notification-config>`
 
 Retrieves the current push notification configuration for a specified task. 
@@ -296,12 +301,13 @@ Retrieves the current push notification configuration for a specified task.
 * A2A:REQUEST_TIMEOUT
 * A2A:RETRY_EXHAUSTED
 * A2A:SERVER_ERROR
-* A2A:TASK_ALREADY_COMPLETED
+* A2A:TASK_NOT_CANCELABLE
 * A2A:TASK_NOT_FOUND
 * A2A:UNAUTHORIZED
+* A2A:UNSUPPORTED_OPERATION
 
 [[GetTask]]
-== Get Task
+== A2A Client - Get Task
 `<a2a:get-task>`
 
 Retrieves information about a task based on a provided query. This enables you to fetch the status or details of a task from another agent.
@@ -346,12 +352,13 @@ Retrieves information about a task based on a provided query. This enables you t
 * A2A:REQUEST_TIMEOUT 
 * A2A:RETRY_EXHAUSTED 
 * A2A:SERVER_ERROR 
-* A2A:TASK_ALREADY_COMPLETED 
+* A2A:TASK_NOT_CANCELABLE 
 * A2A:TASK_NOT_FOUND 
 * A2A:UNAUTHORIZED 
+* A2A:UNSUPPORTED_OPERATION 
 
 [[ListPushNotificationConfigs]]
-== List Push Notification Configs
+== A2A Client - List Push Notification Configs
 `<a2a:list-push-notification-configs>`
 
 Retrieves the associated push notification configurations for a specified task.
@@ -397,12 +404,13 @@ Retrieves the associated push notification configurations for a specified task.
 * A2A:REQUEST_TIMEOUT
 * A2A:RETRY_EXHAUSTED
 * A2A:SERVER_ERROR
-* A2A:TASK_ALREADY_COMPLETED
+* A2A:TASK_NOT_CANCELABLE
 * A2A:TASK_NOT_FOUND
 * A2A:UNAUTHORIZED
+* A2A:UNSUPPORTED_OPERATION
 
 [[SendMessage]]
-== Send Message
+== A2A Client - Send Message
 `<a2a:send-message>`
 
 Sends a message.
@@ -447,13 +455,67 @@ Sends a message.
 * A2A:REQUEST_TIMEOUT 
 * A2A:RETRY_EXHAUSTED 
 * A2A:SERVER_ERROR 
-* A2A:TASK_ALREADY_COMPLETED 
+* A2A:TASK_NOT_CANCELABLE 
 * A2A:TASK_NOT_FOUND 
 * A2A:UNAUTHORIZED 
+* A2A:UNSUPPORTED_OPERATION
+
+
+[[SendStreamMessage]]
+== A2A Client - Send Stream Message
+`<a2a:send-stream-message>`
+
+Sends a message to the A2A agent and establishes an SSE streaming connection to receive real-time status updates, artifacts, and error notifications as the agent processes the request.
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Stream Message a| Any | Message to send (MessageSendParams schema). |  #[payload] | 
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Additional Properties a| Object | Additional properties to include with the request. Use this field to specify custom key-value pairs that are sent with the A2A connector request. This field is optional and null-safe. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  | 
+| Target Value a| String |  Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] | 
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+|Type |Any
+| Attributes Type a| <<StreamingResponseAttributes>>
+|===
+
+=== For Configurations
+
+* <<Client>> 
+
+=== Throws
+
+* A2A:CONNECTIVITY 
+* A2A:INTERNAL_ERROR 
+* A2A:INVALID_PARAMS 
+* A2A:INVALID_REQUEST 
+* A2A:JSON_RPC_ERROR 
+* A2A:METHOD_NOT_FOUND 
+* A2A:PARSE_ERROR 
+* A2A:PUSH_NOTIFICATION_UNSUPPORTED 
+* A2A:REQUEST_TIMEOUT 
+* A2A:RETRY_EXHAUSTED 
+* A2A:SERVER_ERROR 
+* A2A:TASK_NOT_CANCELABLE 
+* A2A:TASK_NOT_FOUND 
+* A2A:UNAUTHORIZED 
+* A2A:UNSUPPORTED_OPERATION
 
 
 [[SetPushNotificationConfig]]
-== Set Push Notification Config
+== A2A Client - Set Push Notification Config
 `<a2a:set-push-notification-config>`
 
 Sets or updates the push notification configuration for a specified task. 
@@ -499,14 +561,151 @@ Sets or updates the push notification configuration for a specified task.
 * A2A:REQUEST_TIMEOUT
 * A2A:RETRY_EXHAUSTED
 * A2A:SERVER_ERROR
-* A2A:TASK_ALREADY_COMPLETED
+* A2A:TASK_NOT_CANCELABLE
 * A2A:TASK_NOT_FOUND
 * A2A:UNAUTHORIZED
+* A2A:UNSUPPORTED_OPERATION
+
+[[TaskResubscribe]]
+== A2A Client - Task Resubscribe
+`<a2a:task-resubscribe>`
+
+Reconnects to an existing SSE streaming session for an ongoing task to receive buffered events and continue receiving real-time updates from where the connection was lost.
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Task Id Params a| Any | Task ID to resubscribe to (TaskIdParams schema). |  #[payload] | 
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Additional Properties a| Object | Additional properties to include with the request. Use this field to specify custom key-value pairs that are sent with the A2A connector request. This field is optional and null-safe. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  | 
+| Target Value a| String |  Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] | 
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+|Type |Any
+| Attributes Type a| <<StreamingResponseAttributes>>
+|===
+
+=== For Configurations
+
+* <<Client>> 
+
+=== Throws
+
+* A2A:CONNECTIVITY 
+* A2A:INTERNAL_ERROR 
+* A2A:INVALID_PARAMS 
+* A2A:INVALID_REQUEST 
+* A2A:JSON_RPC_ERROR 
+* A2A:METHOD_NOT_FOUND 
+* A2A:PARSE_ERROR 
+* A2A:PUSH_NOTIFICATION_UNSUPPORTED 
+* A2A:REQUEST_TIMEOUT 
+* A2A:RETRY_EXHAUSTED 
+* A2A:SERVER_ERROR 
+* A2A:TASK_NOT_CANCELABLE 
+* A2A:TASK_NOT_FOUND 
+* A2A:UNAUTHORIZED 
+* A2A:UNSUPPORTED_OPERATION
+
+[[UpdateTaskArtifact]]
+== A2A Server - Update Task Artifact
+`<a2a:update-task-artifact>`
+
+Updates a task artifact and broadcasts the update to all connected SSE clients.
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Artifact Update Content a| Any | TaskArtifactUpdateEvent content following A2A specification. |  #[payload] | 
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
+|===
+
+
+=== For Configurations
+
+* <<Server>> 
+
+=== Throws
+
+* A2A:CONNECTIVITY 
+* A2A:INTERNAL_ERROR 
+* A2A:INVALID_PARAMS 
+* A2A:INVALID_REQUEST 
+* A2A:JSON_RPC_ERROR 
+* A2A:METHOD_NOT_FOUND 
+* A2A:PARSE_ERROR 
+* A2A:PUSH_NOTIFICATION_UNSUPPORTED 
+* A2A:REQUEST_TIMEOUT 
+* A2A:RETRY_EXHAUSTED 
+* A2A:SERVER_ERROR 
+* A2A:TASK_NOT_CANCELABLE 
+* A2A:TASK_NOT_FOUND 
+* A2A:UNAUTHORIZED 
+* A2A:UNSUPPORTED_OPERATION
+
+[[UpdateTaskStatus]]
+== A2A Server - Update Task Status
+`<a2a:update-task-status>`
+
+Updates a task status and broadcasts the update to all connected SSE clients.
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Status Update Content a| Any | TaskStatusUpdateEvent content following A2A specification. |  #[payload] | 
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
+|===
+
+
+=== For Configurations
+
+* <<Server>> 
+
+=== Throws
+
+* A2A:CONNECTIVITY 
+* A2A:INTERNAL_ERROR 
+* A2A:INVALID_PARAMS 
+* A2A:INVALID_REQUEST 
+* A2A:JSON_RPC_ERROR 
+* A2A:METHOD_NOT_FOUND 
+* A2A:PARSE_ERROR 
+* A2A:PUSH_NOTIFICATION_UNSUPPORTED 
+* A2A:REQUEST_TIMEOUT 
+* A2A:RETRY_EXHAUSTED 
+* A2A:SERVER_ERROR 
+* A2A:TASK_NOT_CANCELABLE 
+* A2A:TASK_NOT_FOUND 
+* A2A:UNAUTHORIZED 
+* A2A:UNSUPPORTED_OPERATION
 
 == Sources
 
 [[PushNotificationConfigListener]]
-== On Push Notification Set Listener
+== A2A Server - On Push Notification Set Listener
 `<a2a:push-notification-config-listener>`
 
 Validates the push notification configuration before routing the request to the *Task Listener* source.
@@ -524,8 +723,8 @@ Validates the push notification configuration before routing the request to the 
 * <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
 | Additional Headers a| Object | Additional HTTP headers to include with each request. |  |
 | Authentication a| HttpRequestAuthentication |  |  |
-| Response Timeout a| Number | Sets the duration to wait for server responses before timing out requests. |  10 |
-| Response Timeout Unit a| Enumeration, one of:
+| Push notification request timeout a| Number |  |  60 | 
+| Request Timeout Unit a| Enumeration, one of:
 
 ** NANOSECONDS
 ** MICROSECONDS
@@ -533,7 +732,7 @@ Validates the push notification configuration before routing the request to the 
 ** SECONDS
 ** MINUTES
 ** HOURS
-** DAYS |  Time unit for the *Response Timeout* field. |  SECONDS |
+** DAYS |  Time unit for the *Push notification request timeout* field. |  SECONDS |
 | Proxy Config a| HttpProxyConfig | Proxy configuration. |  |
 |===
 
@@ -550,7 +749,7 @@ Validates the push notification configuration before routing the request to the 
 * <<Server>> 
 
 [[TaskListener]]
-== Task Listener
+== A2A Server - Task Listener
 `<a2a:task-listener>`
 
 Allows a Mule application to listen for and receive incoming A2A protocol-compliant requests from other AI agents, enabling the Mule-based agent to act as an A2A server and respond to tasks.
@@ -575,6 +774,40 @@ Allows a Mule application to listen for and receive incoming A2A protocol-compli
 [%autowidth.spread]
 |===
 |Type |Any
+| Attributes Type a| <<RequestAttributes>>
+|===
+
+=== For Configurations
+
+* <<Server>> 
+
+
+[[TaskStreamListener]]
+== A2A Server - On Task Stream Listener
+`<a2a:task-stream-listener>`
+
+Server-side listener for streaming task requests. Activated when clients send streaming requests (messages/stream) to trigger server-side flows and enable real-time SSE event delivery.
+
+This source is a prerequisite for applications to support streaming. This source is to be used in conjunction with <<TaskListener>>.
+
+=== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Primary Node Only a| Boolean | Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  | 
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  | 
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  | 
+|===
+
+=== Output
+
+[%autowidth.spread]
+|===
+|Type |String
 | Attributes Type a| <<RequestAttributes>>
 |===
 
@@ -761,6 +994,9 @@ Configures an expiration policy strategy.
 [[ResponseAttributes]]
 === Response Attributes
 
+
+In A2A Connector 1.0 and later, this represents the HTTP response attributes for an A2A request. This type encapsulates HTTP response metadata, including status code, headers, and reason phrase, that are sent as part of an A2A protocol response.
+
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
@@ -791,108 +1027,38 @@ Configures an expiration policy strategy.
 | Target a| String |  |  | x
 |===
 
-[[AgentCard]]
-=== Agent Card
+[[StreamingResponseAttributes]]
+=== Streaming Response Attributes
+
+In A2A Connector 1.0 and later, this represents the HTTP response attributes for A2A streaming operations (SSE). This specialized type extends ResponseAttributes with streaming-specific metadata, including information about final events received during the SSE session. This final event information is not related to the A2A protocol final event, but the connector's.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Name a| String | Name for the agent. |  | x
-| Url a| String | Base URL endpoint for the agent's A2A service. Must be an absolute HTTPS URL for production. |  | x
-| Version a| String | Version for the agent. |  | x
-| Description a| String | Description for the agent. |  | 
-| Skills a| Array of <<AgentSkill>> |  |  | x
-| Capabilities a| <<AgentCapabilities>> |  |  | 
-| Provider a| <<AgentProvider>> |  |  | 
-| Documentation Url a| String | URL of the agent's documentation.  |  | 
-| Default Input Modes a| Array of String | Array of MIME types the agent accepts as input across all skills. |  | 
-| Default Output Modes a| Array of String | Array of MIME types the agent produces as output across all skills.  |  | 
-| Security a| Array of <<SecurityRequirement>> | Security. |  | 
-| Security Schemes a| Array of one of:
-
-* <<HttpSecurityScheme>>
-* <<ApiKeySecurityScheme>>
-* <<Oauth2SecurityScheme>>
-* <<OpenIdConnectSecurityScheme>> | Security schemes. |  | 
-| Icon Url a| String | URL of the agent's icon. |  | 
-| Protocol Version a| String | Protocol Version indicates the A2A specification version the agent is running on. |  | x
-|===
-
-[[AgentSkill]]
-=== Agent Skill
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Id a| String | Unique identifier for this skill within the context of this agent. |  | x
-| Name a| String | Name of the skill. |  | x
-| Description a| String | Description of what the skill does.  |  | 
-| Tags a| Array of String | Keywords or categories for discoverability of the agent. |  | 
-| Examples a| Array of String | Example prompts, inputs, or use cases. Examples help clients and agents formulate requests for this skill. |  | 
-| Input Modes a| Array of String | Overrides Agent Card *Default Input Modes* for this specific skill. |  | 
-| Output Modes a| Array of String | Overrides Agent Card *Default Output Modes* for this specific skill. |  | 
-|===
-
-[[AgentCapabilities]]
-=== Agent Capabilities
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Streaming a| Boolean | Set to `true` to support SSE streaming methods. | false | 
-| Push Notifications a| Boolean | Set to `true` to support push notification methods. | true | 
-| State Transition History a| Boolean |  | false | 
-| Extensions a| Array of <<AgentExtension>> | Extensions. |  | 
-|===
-
-[[AgentExtension]]
-=== Agent Extension
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Uri a| String | URI of the extension. |  | x
-| Description a| String | Description of the extension. |  | 
-| Required a| Boolean | Whether the extension is required. | false | 
-| Params a| Object | Parameters of the extension. |  | 
-|===
-
-[[AgentProvider]]
-=== Agent Provider
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Organization a| String | Name of the organization or entity. |  | x
-| Url a| String | URL of the provider's website. |  | 
-|===
-
-[[SecurityRequirement]]
-=== Security Requirement
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Security Scheme Name a| String | Name of the security scheme. |  | 
-| Scopes a| Array of String | Scopes. |  | 
+| Final Event Found a| Boolean | Whether a final event was found during SSE session. | false | 
+| Status Code a| Number | HTTP status code of the response. |  | x
+| Headers a| Object | Map of HTTP headers in the message. |  | x
+| Reason Phrase a| String | HTTP reason phrase of the response. |  | 
 |===
 
 [[RequestAttributes]]
 === Request Attributes
 
+In A2A Connector 1.0 and later, this represents the HTTP request attributes for an A2A incoming request. This type encapsulates the HTTP request metadata, including query parameters and headers, that are received as part of an A2A protocol request.
+
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Task Id a| String | Task ID. |  | x
-| Context Id a| String | Context ID. |  | x
-| Query Params a| Object |  |  | x
-| Headers a| Object | Map of HTTP headers in the message. |  | x
-| Version a| String | HTTP version. |  | x
-| Scheme a| String | HTTP scheme. |  | x
-| Method a| String | HTTP method. |  | x
-| Local Address a| String | Local address. |  | x
-| Remote Address a| String | Remote address. |  | x
-| Client Certificate a| <<CertificateData>> | Client certificate. |  | 
+| Task Id a| String | The ID assigned to this task, either provided by the client or auto-generated by the connector.|  | x
+| Context Id a| String | The context ID assigned to this task, either provided by the client or auto-generated by the connector. |  | x
+| Query Params a| Object | The query parameters received in the HTTP request. |  | x
+| Headers a| Object | The HTTP headers received in the request. |  | x
+| Version a| String | HTTP version of the request. Former `http.version`. |  | x
+| Scheme a| String | HTTP scheme of the request. Former `http.scheme`. |  | x
+| Method a| String | HTTP method of the request. Former `http.method`. |  | x
+| Local Address a| String | Local host address from the server. |  | x
+| Remote Address a| String | Remote host address from the sender. Former `http.remote.address`. |  | x
+| Client Certificate a| <<CertificateData>> | Client certificate (if 2 way TLS is enabled). Former `http.client.cert`. |  | 
 |===
 
 [[CertificateData]]
@@ -1015,127 +1181,6 @@ Configures how to identify a redelivered message and how to find out when the me
 | Field | Type | Description | Default Value | Required
 | Use Secure Hash a| Boolean | If `true`, Mule uses a secure hash algorithm to identify a redelivered message. |  | 
 | Id Expression a| String | One or more expressions that determine when a message was redelivered. You can set this property only if the *Use Secure Hash* field is `false`. |  | 
-|===
-
-[[HttpSecurityScheme]]
-=== Http Security Scheme
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Scheme a| Enumeration, one of:
-
-** BASIC
-** BEARER
-** DIGEST | HTTP security scheme type. |   | x
-| Bearer Format a| String | Format of the bearer token. |  | 
-| Security Scheme Name a| String | Name of the security scheme. |  | x
-| Description a| String | Description of the security scheme. |  | 
-|===
-
-[[ApiKeySecurityScheme]]
-=== Api Key Security Scheme
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Name a| String | Name of the API key. |  | x
-| In a| Enumeration, one of:
-
-** QUERY
-** HEADER
-** COOKIE | API key location. |  | x
-| Security Scheme Name a| String | Name of the security scheme. |  | x
-| Description a| String | Description of the security scheme. |  | 
-|===
-
-[[Oauth2SecurityScheme]]
-=== Oauth2 Security Scheme
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Flows a| <<Oauth2Flows>> | Oauth2 flows. |  | x
-| Security Scheme Name a| String | Name of the security scheme. |  | x
-| Description a| String | Description of the security scheme. |  | 
-|===
-
-[[Oauth2Flows]]
-=== Oauth2 Flows
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Implicit a| <<ImplicitOauth2Flows>> | Implicit OAuth2 flow. |  | 
-| Password a| <<PasswordOauth2Flows>> | Password OAuth2 flow. |  | 
-| Client Credentials a| <<ClientCredentialsOauth2Flows>> | Client credentials OAuth2 flow. |  | 
-| Authorization Code a| <<AuthorizationCodeOauth2Flows>> | Authorization code OAuth2 flow. |  | 
-|===
-
-[[ImplicitOauth2Flows]]
-=== Implicit Oauth2 Flows
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Authorization Url a| String | Authorization URL. |  | x
-| Refresh Url a| String | Refresh URL. |  | 
-| Oauth2 Scopes a| Array of <<Oauth2Scope>> | OAuth2 scopes. |  | 
-|===
-
-[[Oauth2Scope]]
-=== Oauth2 Scope
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Name a| String | Name of the OAuth2 scope. |  | x
-| Description a| String | Description of the OAuth2 scope. |  | x
-|===
-
-[[PasswordOauth2Flows]]
-=== Password Oauth2 Flows
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Token Url a| String | Token URL. |  | x
-| Refresh Url a| String | Refresh URL. |  | 
-| Oauth2 Scopes a| Array of <<Oauth2Scope>> | OAuth2 scopes. |  | 
-|===
-
-[[ClientCredentialsOauth2Flows]]
-=== Client Credentials Oauth2 Flows
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Token Url a| String | Token URL. |  | x
-| Refresh Url a| String | Refresh URL. |  | 
-| Oauth2 Scopes a| Array of <<Oauth2Scope>> | OAuth2 scopes. |  | 
-|===
-
-[[AuthorizationCodeOauth2Flows]]
-=== Authorization Code Oauth2 Flows
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Authorization Url a| String | Authorization URL. |  | x
-| Token Url a| String | Token URL. |  | x
-| Refresh Url a| String | Refresh URL. |  | 
-| Oauth2 Scopes a| Array of <<Oauth2Scope>> | OAuth2 scopes. |  | 
-|===
-
-[[OpenIdConnectSecurityScheme]]
-=== Open Id Connect Security Scheme
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Open Id Connect Url a| String | Open ID Connect URL. |  | x
-| Security Scheme Name a| String | Name of the security scheme. |  | x
-| Description a| String | Description of the security scheme. |  | 
 |===
 
 == See Also
