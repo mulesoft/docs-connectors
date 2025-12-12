@@ -1,0 +1,209 @@
+= Configuring FIPS 140-3 for Snowflake Connector
+
+Snowflake Connector supports FIPS 140-3 compliant cryptographic operations through integration with BouncyCastle FIPS (BCFIPS) security provider. Learn how to configure the connector for FIPS-compliant environments.
+
+== Before You Begin
+
+Make sure you meet these prerequisites for the configuration:
+
+* Mule Runtime 4.10.0 or later
+* Snowflake Connector version 1.4.0 or later
+* BouncyCastle FIPS libraries v2 or later
+* Java 17 or later with FIPS-capable JVM
+* Snowflake JDBC Driver - FIPS Edition (required for FIPS environments)
+
+[WARNING]
+====
+FIPS-Certified JDBC driver required:
+
+Snowflake provides a separate FIPS-certified JDBC driver specifically designed for FIPS 140-3 compliant environments. If you operate in a FIPS environment, you must use the FIPS-certified driver instead of the standard Snowflake JDBC driver.
+
+* Standard driver +
+`snowflake-jdbc-<version>.jar` (for non-FIPS environments)
+* FIPS driver +
+`snowflake-jdbc-fips-<version>.jar` (for FIPS environments)
+
+The FIPS driver is built with FIPS-certified cryptographic libraries and is validated for use in regulated environments. Using the standard driver in a FIPS environment doesn't meet compliance requirements.
+
+For more information on obtaining the FIPS-certified driver, review the https://docs.snowflake.com/en/developer-guide/jdbc/jdbc[Snowflake JDBC Driver documentation].
+====
+
+== Understanding FIPS Mode Detection
+
+Snowflake Connector automatically detects FIPS mode by checking the `mule.security.model` system property. When this property is set to a value starting with `fips140` (for example, `fips140-3`), the connector operates in FIPS mode with enhanced security controls.
+
+Example:
+[source,bash]
+----
+-Dmule.security.model=fips140-3
+----
+
+== Configure BCFIPS with the Snowflake Connector
+
+Configure BCFIPS using one of these options:
+
+* <<configure-bcfips-in-java-security, Configure BCFIPS in Java Security>>
+* <<enable-auto-registration, Enable Auto-Registration>>
+
+[[configure-bcfips-in-java-security]]
+=== Configure BCFIPS in Java Security (Recommended)
+
+Use this option for production environments because it:
+
+* Manages security configuration from a central location
+* Applies consistently across all applications
+* Avoids runtime modifications to security infrastructure
+* Follows enterprise security governance practices
+
+Follow these steps:
+
+. Locate your Java security configuration file:
++
+----
+$JAVA_HOME/jre/lib/security/java.security
+----
+
+. Add the BCFIPS provider to the security provider list. Insert it at an appropriate position (typically position 1 or 2):
++
+[source,properties]
+----
+security.provider.1=org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider
+security.provider.2=sun.security.provider.Sun
+# ... other providers
+----
+
+. Make sure the BCFIPS JAR is available in the JVM classpath or the Mule application's shared libraries.
+
+. Restart your Mule runtime.
+
+
+[[enable-auto-registration]]
+=== Enable Auto-Registration 
+
+Use this option for environments where modifying `java.security` is not feasible, the connector can automatically register BCFIPS at runtime.
+
+[WARNING]
+====
+Important security considerations:
+
+* Modifies the JVM-wide security provider configuration
+* May conflict with existing security providers
+* Requires explicit approval from your security or compliance team
+* Should only be used when <<configure-bcfips-in-java-security, configuring BCFIPS in Java Security>> is not possible
+====
+
+Follow these steps:
+
+. Set the auto-registration system property:
++
+[source,bash]
+----
+-Dmule.snowflake.fips.bcfips.autoregister=true
+----
+
+. Make sure FIPS mode is enabled:
++
+[source,bash]
+----
+-Dmule.security.model=fips140-3
+----
+
+. The connector automatically registers BCFIPS when establishing the first connection.
+
+Example Mule runtime startup:
+[source,bash]
+----
+java -Dmule.security.model=fips140-3 \
+     -Dmule.snowflake.fips.bcfips.autoregister=true \
+     -Dorg.bouncycastle.fips.approved_only=true \
+     -jar mule-standalone.jar
+----
+
+[NOTE]
+====
+FIPS approved algorithms only:
+
+Regardless of which configuration option you choose, you must configure the system property `org.bouncycastle.fips.approved_only=true` to ensure that the BCFIPS security provider operates exclusively with FIPS-approved algorithms.
+
+The connector doesn't set this property automatically. This is a JVM-wide configuration that affects all applications and processes running in the JVM. The system administrator must set this property manually or through your Mule runtime configuration.
+
+Example:
+[source,bash]
+----
+-Dorg.bouncycastle.fips.approved_only=true
+----
+
+Without this property, BCFIPS may allow non-FIPS-approved algorithms, which could violate compliance requirements in regulated environments.
+====
+
+== Understanding Standard (Non-FIPS) Mode
+
+In standard mode (when `mule.security.model` is not set or does not start with `fips140`), the connector automatically handles BCFIPS registration without requiring additional configuration. This ensures seamless operation for non-regulated environments.
+
+== System Properties Reference
+
+[%header%autowidth.spread]
+|===
+| Property | Description | Values | Default | Scope
+| `mule.security.model` | Enables FIPS mode detection | `fips140-3`, `fips140-2`, or any value starting with `fips140` | Not set (standard mode) | Connector
+| `mule.snowflake.fips.bcfips.autoregister` | Enables automatic BCFIPS registration in FIPS mode | `true`, `false` | `false` | Connector
+| `org.bouncycastle.fips.approved_only` | *REQUIRED for FIPS compliance.* Restricts BCFIPS to use only FIPS-approved algorithms | `true`, `false` | `false` | *JVM-wide*
+|===
+
+[WARNING]
+====
+The `org.bouncycastle.fips.approved_only` property affects the entire JVM and all applications running in it. This property isn't set by the connector and the system administrator must configure it manually.
+====
+
+== Migrate Existing Deployments
+
+You need to assess the current configuration and choose the appropriate configuration method.
+
+=== Non-FIPS Environments
+
+No action required. The connector maintains full backward compatibility and automatically handles BCFIPS registration.
+
+=== For FIPS Environments
+
+. Assess the current configuration: +
+
+* Verify if BCFIPS is already configured in `java.security`
+* Check for existing BouncyCastle provider registrations
+* Identify the Snowflake JDBC driver in use (standard versus FIPS-certified)
+
+. Choose the configuration method: +
+
+* Recommended: <<configure-bcfips-in-java-security, Configure BCFIPS in `java.security`>>
+* Alternative: <<enable-auto-registration, Enable auto-registration>>
+
+. Configure FIPS-certified components: +
+
+* Replace standard Snowflake JDBC driver with FIPS-certified driver (`snowflake-jdbc-fips`)
+* Make sure BouncyCastle FIPS libraries version 2.x are available
+
+. Update system properties: +
+
+* Add `-Dmule.security.model=fips140-3` (enables FIPS mode detection)
+* Add `-Dorg.bouncycastle.fips.approved_only=true` (Required for FIPS compliance)
+* If using auto-registration, add `-Dmule.snowflake.fips.bcfips.autoregister=true`
+
+. Test in Non-Production: +
+
+* Deploy to development or staging environment
+* Verify connectivity and operations
+* Review logs for any security-related warnings
+
+. Production deployment: +
+
+* Schedule maintenance window
+* Deploy configuration changes
+* Monitor logs for successful FIPS initialization
+* Validate all Snowflake operations
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:snowflake-connector-studio.adoc[Using Anypoint Studio to Configure Snowflake Connector]
+* xref:snowflake-connector-reference.adoc[Snowflake Connector Reference]
+* https://help.mulesoft.com[MuleSoft Help Center]
+
