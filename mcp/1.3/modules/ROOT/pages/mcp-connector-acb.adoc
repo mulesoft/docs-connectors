@@ -1,0 +1,215 @@
+= Using Anypoint Code Builder to Configure {connector-name} Connector {version} 
+:exchange-search-name: mcp
+:connector-name: MCP
+:version: 1.3
+:lc-connector-name: mcp
+:studio-connector-name: MCP
+
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-connector-config-intro"]
+
+== Create a New Integration Project
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-create-integration-project"]
+
+== Add the Connector to Your Integration Project
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-add-connector-to-project"]
+
+[[configure-source]]
+== Configure a Source For the Flow
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-configure-source"]
+
+For complete source configuration details, see the xref:mcp-connector-reference.adoc[MCP Connector Reference].
+
+=== Example: Configure a Tool Listener Source
+
+A common use case is exposing operations as tools that MCP clients can invoke. In the XML editor, add a *Tool Listener* source to your flow:
+
+[source,xml,linenums]
+----
+<flow name="my-tool-flow">
+    <mcp:tool-listener 
+        config-ref="MCP_Server_Config" 
+        name="get-user-info">
+        <mcp:description><![CDATA[Retrieves user information by ID]]></mcp:description>
+        <mcp:parameters-schema><![CDATA[{
+            "type": "object",
+            "properties": {
+                "userId": {"type": "string"}
+            },
+            "required": ["userId"]
+        }]]></mcp:parameters-schema>
+    </mcp:tool-listener>
+</flow>
+----
+
+[[configure-connection]]
+== Configure an MCP Connection
+
+MCP Connector supports both client and server configurations with different connection types.
+
+[[configure-client]]
+=== Configure an MCP Client Connection
+
+Use client configurations to connect your Mule application to external MCP servers.
+
+==== Streamable HTTP Client
+
+The Streamable HTTP client connection enables load-balanced, scalable connections to MCP servers:
+
+[source,xml,linenums]
+----
+<mcp:client-config name="MCP_Client_Config" clientName="MCP Client" clientVersion="1.0.0">
+    <mcp:streamable-http-client-connection
+        serverUrl="https://mcp-server.example.com"
+        mcpEndpointPath="/mcp"
+        requestTimeout="30"
+        requestTimeoutUnit="SECONDS">
+        <mcp:default-request-headers>
+            <mcp:default-request-header key="Authorization" value="Bearer ${api.token}"/>
+        </mcp:default-request-headers>
+    </mcp:streamable-http-client-connection>
+</mcp:client-config>
+----
+
+==== SSE Client Connection (Deprecated)
+
+The SSE (Server-Sent Events) client enables persistent, server-push connections:
+
+[source,xml,linenums]
+----
+<mcp:client-config name="MCP_SSE_Client_Config">
+    <mcp:sse-client-connection
+        serverUrl="https://mcp-server.example.com"
+        sseEndpointPath="/sse"
+        requestTimeout="30"
+        reconnectionDelay="500"
+        reconnectionDelayUnit="MILLISECONDS">
+    </mcp:sse-client-connection>
+</mcp:client-config>
+----
+
+[[configure-server]]
+=== Configure an MCP Server Connection
+
+Use server configurations to expose your Mule application as an MCP server.
+
+==== Streamable HTTP Server
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Config">
+    <http:listener-connection host="0.0.0.0" port="8081"/>
+</http:listener-config>
+
+<mcp:server-config name="MCP_Server_Config" 
+    serverName="My MCP Server" 
+    serverVersion="1.0.0">
+    <mcp:streamable-http-server-connection
+        listenerConfig="HTTP_Listener_Config"
+        mcpEndpointPath="/mcp"
+        requestTimeout="10"
+        requestTimeoutUnit="SECONDS">
+    </mcp:streamable-http-server-connection>
+</mcp:server-config>
+----
+
+==== SSE Server Connection (Deprecated)
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_Config">
+    <http:listener-connection host="0.0.0.0" port="8081"/>
+</http:listener-config>
+
+<mcp:server-config name="MCP_Server_Config" 
+    serverName="My MCP Server" 
+    serverVersion="1.0.0">
+    <mcp:sse-server-connection
+        listenerConfig="HTTP_Listener_Config"
+        sseEndpointPath="/sse"
+        messagesPath="/message"
+        requestTimeout="10"
+        requestTimeoutUnit="SECONDS">
+    </mcp:sse-server-connection>
+</mcp:server-config>
+----
+
+[[configure-authentication]]
+== Configure Authentication
+
+MCP Connector client connections support standard HTTP authentication methods including Basic, Digest, NTLM, and OAuth. For detailed authentication and security configuration, see xref:mcp-connector-config-topics.adoc[Applying Security to the MCP Server].
+
+[[add-operations]]
+== Add Operations to Your Project
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-add-components-to-project"]
+
+For a complete list of operations and their configurations, see xref:mcp-connector-reference.adoc#supported-operations[Supported Operations].
+
+=== Example: Using Operations
+
+After you configure a connection, you can add operations to interact with MCP servers (when configured as a client) or handle requests (when configured as a server).
+
+Example of calling a tool on an MCP server:
+
+[source,xml,linenums]
+----
+<mcp:call-tool config-ref="MCP_Client_Config" name="get-user-info">
+    <mcp:arguments><![CDATA[#[{
+        "userId": payload.userId
+    }]]]></mcp:arguments>
+</mcp:call-tool>
+----
+
+Example of reading a resource from an MCP server:
+
+[source,xml,linenums]
+----
+<mcp:read-resource config-ref="MCP_Client_Config" uri="file:///documents/report.txt"/>
+----
+
+For detailed information on each operation's parameters and usage, see the xref:mcp-connector-reference.adoc[MCP Connector Reference].
+
+== Configure TLS for Secure Connections
+
+To secure connections with TLS:
+
+[source,xml,linenums]
+----
+<tls:context name="TLS_Context">
+    <tls:trust-store 
+        path="truststore.jks" 
+        password="${tls.truststore.password}"/>
+    <tls:key-store 
+        path="keystore.jks" 
+        password="${tls.keystore.password}"
+        keyPassword="${tls.key.password}"/>
+</tls:context>
+
+<mcp:client-config name="MCP_Client_Config">
+    <mcp:streamable-http-client-connection 
+        serverUrl="https://secure-mcp-server.example.com"
+        tlsContext="TLS_Context">
+    </mcp:streamable-http-client-connection>
+</mcp:client-config>
+----
+
+== Create a New Configuration XML File
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-create-config-file-acb"]
+
+[[debug]]
+== Debug the App
+
+Debug your Mule application using the embedded debugger in Anypoint Code Builder.
+
+See xref:anypoint-code-builder::int-debug-mule-apps.adoc[].
+
+include::connectors::partial$mcp-connector-partial.adoc[tags=deploy-app]
+
+== See Also
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-template-see-also"]
