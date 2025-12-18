@@ -1,0 +1,187 @@
+= To Publish Messages
+:keywords: jms, connector, publish
+:page-aliases: connectors::ibm/ibm-mq-publish.adoc
+
+
+
+This operation allows you to create a new JMS Message and send it to the
+specified destination, be it a Queue or a Topic. With it, you can configure not
+only the content of the message but also all the headers that may be needed.
+
+== Sending a Message to a Queue
+
+When used in its default form, the connector will publish whatever is in the payload:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish destination="invoiceQueue" config-ref="IBM_MQ_config"/>
+----
+
+But what happens if the payload is not in the correct format, and you need to
+make a transformation? You could place a DataWeave transformation before
+the `publish` operation, but that would cause the message payload to change and
+impact the operation placed after the `publish` operation.
+
+To avoid this undesired impact, you can now place the transformation inside the
+`publish` operation:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish destination="invoiceQueue" config-ref="IBM_MQ_config">
+  <ibm-mq:message>
+    <ibm-mq:body>#[%dw 2.0
+   output application/json
+   ---
+   payload.payments
+   ]</ibm-mq:body>
+  </ibm-mq:message>
+</ibm-mq:publish>
+----
+
+Now, the transformation can be used for generating the content that will be
+published, without producing a side effect on the message in transit.
+
+== Publishing a Message to a Topic
+
+The `publish` operation can also be used to publish a Message to a given Topic
+destination.
+All the configurations of the operation and the Message are identical, but the
+`destinationType` parameter has to be declared as a `TOPIC` destination:
+
+For the same example seen before, if instead of sending a message to the Queue
+we want to publish it to a Topic, we`ll do:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish destination="invoiceEvents" destinationType="TOPIC" config-ref="IBM_MQ_config">
+  <ibm-mq:message>
+    <ibm-mq:body>#[%dw 2.0
+   output application/json
+   ---
+   payload.payments
+   ]</ibm-mq:body>
+  </ibm-mq:message>
+</ibm-mq:publish>
+----
+
+
+== Customizing Message Delivery
+
+Each JMS Message has a set of headers that enables you to communicate metadata like the time to live, or the priority of the Message. This kind of metadata regarding the Message being published can be configured from the `publish` operation parameters.
+
+=== Implementing a Priority Queue
+
+In order to implement a priority queue, we need to assign a priority different than the default to some messages. We can do so using the `priority` parameter in the operation:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish priority="#[attributes.queryParams.priority]" destination="priorityQueue" config-ref="IBM_MQ_config"/>
+----
+
+=== How to Control Message Time To Live
+
+Every JMS Message being published is sent with a timeToLive header that declares
+for how long the Message should be available for someone to consume it before
+it evicts. The `timeToLive` and `timeToLiveUnit` parameters in the `publish`
+operation allow you to configure the value of that JMS header for each
+Message published:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish  timeToLive="#[vars.timeToLive]" timeToLiveUnit="SECONDS"
+              destination="#[vars.destination]" config-ref="IBM_MQ_config"/>
+----
+
+If you are using JMS 2.0, you can also control the `deliveryDelay` of the Message,
+which is how long to wait before making the Message available to consumers:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish  deliveryDelay="${msgInitialDelay}" deliveryDelayUnit="MILLISECONDS"
+              destination="#[vars.destination]" config-ref="IBM_MQ_config"/>
+----
+
+
+== Declaring a Reply Destination
+
+For the cases where you need an asynchronous reply to the Message being sent,
+the JMS `publish` operation allows us to declare any `reply-to` destination.
+This destination will be communicated as a JMS Header to the consumer of the
+Message and is the destination where is expected a reply to be sent.
+
+To declare the `reply-to` destination, we add it to the Message definition:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish config-ref="IBM_MQ_config" destination="#[vars.invoiceProcessorDestination]">
+    <ibm-mq:message>
+        <ibm-mq:reply-to destination="${completionEventsDestination}" destinationType="TOPIC"/>
+    </ibm-mq:message>
+</ibm-mq:publish>
+----
+
+== Propagating The Correlation ID
+
+The `publish` operation allows you to configure what is the `correlationId` for the outgoing Message.
+
+First, you need to configure whether or not you want to send the `correlationId`
+when publishing the Message using the `sendCorrelationId` parameter.
+This parameter can be set to `ALWAYS` (always send the header), `NEVER`
+(never send the header) or `AUTO` (the default, use the application configuration).
+Then, you can either use the `correlationId` of the Event that is sending the
+ Message, or you can configure your own custom `correlationId` in the message builder:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish config-ref="IBM_MQ_config" sendCorrelationId="ALWAYS" destination="#[attributes.headers.replyTo.destination]">
+    <ibm-mq:message correlationId="#[attributes.headers.correlationId]"/>
+</ibm-mq:publish>
+----
+
+== Configuring Message Properties
+
+Every JMS Message can have a set of properties, which can be used in many
+different ways, like to provide compatibility with other messaging systems or
+create custom message selectors.
+Some of these properties are well-known JMS standards, but others depend on the
+implementation or custom user configurations. The `publish` operation allows you
+to configure all these properties directly in the Message.
+
+=== Setting User Properties
+
+Whenever you need to set a property for an outgoing Message, all you have to do
+is use the `properties` element in the Message and do an inline declaration of
+a Map using DataWeave:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish config-ref="IBM_MQ_config" destination="${bridgeDestination}" destinationType="TOPIC">
+    <ibm-mq:message>
+        <ibm-mq:body>#["bridged_" ++ payload]</ibm-mq:body>
+        <ibm-mq:properties>#[{
+            AUTH_TYPE: 'jwt'
+            AUTH_TOKEN: attributes.queryParams.token
+        }]</ibm-mq:properties>
+    </ibm-mq:message>
+</ibm-mq:publish>
+----
+
+=== Setting JMSX Properties
+
+The JMSX properties are a set of well-known properties defined in the JMS spec,
+containing metadata regarding the Message. In order to configure this properties,
+you can declare them inline as part of the Message element:
+
+[source,xml,linenums]
+----
+<ibm-mq:publish config-ref="IBM_MQ_config" destination="${bridgeDestination}" destinationType="TOPIC">
+    <ibm-mq:message>
+        <ibm-mq:body>#["bridged_" ++ payload]</ibm-mq:body>
+        <ibm-mq:jmsx-properties jmsxGroupID="#[vars.currentGroup]" jmsxUserID="${username}"/>
+    </ibm-mq:message>
+</ibm-mq:publish>
+----
+
+== See Also
+
+xref:ibm-mq-publish-consume.adoc[To Listen For A Reply]
