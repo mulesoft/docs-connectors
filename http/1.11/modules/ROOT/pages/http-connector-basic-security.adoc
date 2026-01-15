@@ -12,23 +12,88 @@ The following example illustrates how to configure the *Basic Security Filter* o
 
 image::http-basic-security.png[HTTP Basic Security Filter configuration window in Anypoint Studio]
 
-In the *Configuration XML*, the configuration looks like this:
+== Configuring Username and Password
+
+The *Basic Security Filter* validates credentials against a Mule security manager. The username and password are configured in the security manager, not directly in the Basic Security Filter. The security provider specified in the Basic Security Filter references the security manager that contains the user credentials.
+
+To configure username and password for basic authentication, you must:
+
+. Define a security manager in your Mule configuration that stores user credentials.
+. Reference the security provider name in the *Basic Security Filter* operation.
+
+This example shows a complete configuration using Spring Security as the security manager:
+
 [source,xml,linenums]
 ----
- <http:listener-config name="HTTP_Listener_config" >
-		<http:listener-connection host="0.0.0.0" port="8081" />
-	</http:listener-config>
-	<flow name="testFlow1">
-		<http:listener config-ref="HTTP_Listener_config" path="/test"/>
-		<http:basic-security-filter realm="MuleRealm">
-			<http:security-providers >
-				<http:security-provider value="test" />
-			</http:security-providers>
-		</http:basic-security-filter>
-        <!-- Add your API logic here -->
-    </flow>
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:spring="http://www.mulesoft.org/schema/mule/spring"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core
+        http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http
+        http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/spring
+        http://www.mulesoft.org/schema/mule/spring/current/mule-spring.xsd">
 
+  <!-- Configure Spring Security Manager with username/password -->
+  <spring:security-manager>
+    <spring:delegate-security-provider
+      name="test"
+      delegate-ref="authenticationManager" />
+  </spring:security-manager>
+
+  <spring:config name="springConfig" files="security-config.xml" />
+
+  <http:listener-config name="HTTP_Listener_config">
+    <http:listener-connection host="0.0.0.0" port="8081" />
+  </http:listener-config>
+
+  <flow name="testFlow1">
+    <http:listener config-ref="HTTP_Listener_config" path="/test"/>
+    <http:basic-security-filter realm="MuleRealm">
+      <http:security-providers>
+        <http:security-provider value="test" />
+      </http:security-providers>
+    </http:basic-security-filter>
+    <!-- Add your API logic here -->
+  </flow>
+</mule>
 ----
+
+The security manager references a Spring configuration file (`security-config.xml`) that defines the authentication manager with user credentials:
+
+[source,xml,linenums]
+----
+<beans xmlns="http://www.springframework.org/schema/beans"
+      xmlns:ss="http://www.springframework.org/schema/security"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-current.xsd
+        http://www.springframework.org/schema/security
+        http://www.springframework.org/schema/security/spring-security-4.2.xsd">
+
+  <ss:authentication-manager alias="authenticationManager">
+    <ss:authentication-provider>
+      <ss:user-service>
+        <ss:user name="admin" password="admin" authorities="ROLE_USER" />
+        <ss:user name="user1" password="password123" authorities="ROLE_USER" />
+      </ss:user-service>
+    </ss:authentication-provider>
+  </ss:authentication-manager>
+</beans>
+----
+
+In this example:
+* The security manager defines a delegate security provider named `test`.
+* The Basic Security Filter references this provider using `<http:security-provider value="test" />`.
+* The username and password are configured in the Spring authentication manager within the `security-config.xml` file.
+* When a client sends a request with basic authentication headers, the Basic Security Filter validates the credentials against the users defined in the security manager.
+
+[NOTE]
+====
+If you use Spring Framework 5.x with plain text passwords, prefix the password value with `{noop}`. For example, use `{noop}admin` instead of `admin`.
+====
 
 == See Also
 
