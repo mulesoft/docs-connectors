@@ -13,18 +13,18 @@ While some statements in the bulk operation can be successfully executed, some c
 
 == Type Coercion Behavior
 
-Database Connector performs type coercion to construct proper JDBC parameter types. The failure point depends on Java type conversion strictness—strict conversions (String to BigDecimal) fail at the connector level, while lenient conversions (String to Integer) may allow invalid values to reach the database. 
+Database Connector performs type coercion to construct proper JDBC parameter types. The validation point depends on Java type conversion strictness—strict conversions (String to BigDecimal) are validated at the connector level, while lenient conversions (String to Integer) may pass through to the database for validation. 
 
-Database drivers handle validation differently, which affects when errors occur and whether partial data might be committed. These sections describe the two validation types:
+Database drivers handle validation differently, which affects when validation occurs and whether partial data might be committed. These sections describe the two validation types:
 
 * Connector-Level Validation
 
-When the connector performs strict type conversion, validation failures occur before data is sent to the database:
+When the connector performs strict type conversion, validation occurs before data is sent to the database:
 
-* DECIMAL/NUMERIC: Non-numeric strings fail BigDecimal conversion
-* DATE/TIMESTAMP: Invalid date formats fail date parsing
+* DECIMAL/NUMERIC: Non-numeric strings cannot be converted to BigDecimal
+* DATE/TIMESTAMP: Invalid date formats cannot be parsed
 
-Result: Zero records are committed because the error occurs before the database operation runs.
+Result: Zero records are committed because validation occurs before the database operation runs.
 
 * Database-Level Validation
 
@@ -34,11 +34,13 @@ When the connector performs lenient type conversion or no conversion is required
 * VARCHAR: No conversion required, so values pass through as-is
 * Constraint violations: Always validated at the database level
 
-Result: Records before the failure may be committed depending on how the database driver handles errors. Some drivers continue processing after an error (partial success), while others stop on the first error (all records rejected).
+Result: Records processed before validation issues are detected may be committed depending on how the database driver handles validation. Some drivers continue processing after a validation issue (partial success), while others stop on the first validation issue (all records rejected).
 
 * Preventing Partial Commits
 
-To ensure all-or-nothing behavior and prevent partial commits across all database platforms, wrap bulk operations in a transactional scope. This approach manages transactions at the Mule flow level and handles both connector-side failures (catches exceptions before database interaction) and database-side failures (rolls back partial commits). For example, use a Try scope with `transactionalAction="ALWAYS_BEGIN"` or `"BEGIN_OR_JOIN"`.
+To ensure all-or-nothing behavior and prevent partial commits across all database platforms, wrap bulk operations in a transactional scope. 
+
+This approach manages transactions at the Mule flow level and handles both connector-side validation issues (catches exceptions before database interaction) and database-side validation issues (rolls back partial commits). For example, use a Try scope with `transactionalAction="ALWAYS_BEGIN"` or `"BEGIN_OR_JOIN"`.
 
 == Execute Bulk Operations Examples
 
