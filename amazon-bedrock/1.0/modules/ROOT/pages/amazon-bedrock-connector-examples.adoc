@@ -1,0 +1,459 @@
+= Amazon Bedrock Connector 1.0 Examples
+
+This example shows how to use Amazon Bedrock Connector operations in a Mule app.
+
+This Mule app uses these operations:
+
+* *CHAT Answer Prompt*
+* *AGENT Define Prompt Template*
+* *SENTIMENT Analyze*
+* *IMAGE Generate*
+* *FOUNDATIONAL Model Details*
+
+== Before You Begin
+
+Ensure you have:
+
+* Amazon Bedrock Connector installed in your project
+* Valid AWS credentials with access to Amazon Bedrock
+* Anypoint Studio 7.x or later
+
+== Configure Your Application
+
+Configure `/src/main/resources/llm.properties` with these properties:
+
+[source,properties]
+----
+aws_access_key={YOUR_AWS_ACCESS_KEY}
+aws_secret_key={YOUR_AWS_SECRET_KEY}
+llm_image_gen_model_name={model that supports image generation, for example: amazon.nova-canvas-v1:0}
+llm_model_name={model that supports text generation, for example: anthropic.claude-3-7-sonnet-20250219-v1:0}
+llm_region={region, for example: us-east-1}
+----
+
+== XML Configuration
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:mac-inference="http://www.mulesoft.org/schema/mule/mac-inference" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:mac-bedrock="http://www.mulesoft.org/schema/mule/mac-bedrock"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/mac-bedrock http://www.mulesoft.org/schema/mule/mac-bedrock/current/mule-mac-bedrock.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/mac-inference http://www.mulesoft.org/schema/mule/mac-inference/current/mule-mac-inference.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="0ef4d378-0351-4d56-b283-174e28676c17" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<mac-bedrock:config name="Amazon_Bedrock_Config" doc:name="Amazon Bedrock Config" doc:id="af9d02bc-7b43-41ff-8f23-2c2fe5381355" awsAccessKeyId="${aws_acces_key}" awsSecretAccessKey="${aws_secret_key}" />
+	<configuration-properties doc:name="Configuration properties" doc:id="b403a9b5-04cf-485b-8fcc-750a0062f718" file="llm.properties" />
+	<flow name="mule-amazon-bedrock-connector-testFlow" doc:id="5f7ee97f-30f9-481e-9516-9beb8b23624b" >
+		<http:listener doc:name="Listener" doc:id="f9c1be39-d470-412b-89c6-e30a479c4611" config-ref="HTTP_Listener_config" path="/bedrock"/>
+		<choice doc:name="Choice" doc:id="3d613b19-1375-4be8-a997-3ccfcc9a0306" >
+			<when expression='#[attributes.queryParams.operation == "prompt"]' >
+				<mac-bedrock:chat-answer-prompt doc:name="Chat answer prompt" doc:id="cda31fe3-d232-4dbc-b85f-91a256d37389" config-ref="Amazon_Bedrock_Config" prompt="#[payload.prompt]" modelName="${llm_model_name}" region="${llm_region}" guardrailIdentifier="2dt172kvk2x0"/>
+			</when>
+			<when expression='#[attributes.queryParams.operation == "imageGenerate"]' >
+				<mac-bedrock:image-generate doc:name="Image generate" doc:id="ad1ac413-f426-46cb-9a83-c03403fe7a29" config-ref="Amazon_Bedrock_Config" TextToImage="#[payload.prompt]" AvoidInImage="#[payload.avoid]" fullPathOutput='#["/Users/chiew.lee/Downloads/imageGen.png"]' modelName="${llm_image_gen_model_name}" region="${llm_region}"/>
+			</when>
+			<when expression='#[attributes.queryParams.operation == "modelDetails"]'>
+				<mac-bedrock:foundational-model-details doc:name="Foundational model details" doc:id="d5031c31-002f-47ac-a48a-77378a326240" config-ref="Amazon_Bedrock_Config" modelName="#[payload.modelName]"/>
+			</when>
+			<when expression='#[attributes.queryParams.operation == "promptTemplate"]' >
+				<mac-bedrock:agent-define-prompt-template doc:name="Agent define prompt template" doc:id="25d8ff38-659e-4f2f-82c2-7bccfa3e47b6" config-ref="Amazon_Bedrock_Config" template="#[payload.template]" instructions="#[payload.instructions]" dataset="#[payload.dataset]" modelName="${llm_model_name}" region="${llm_region}" />
+			</when>
+			<when expression='#[attributes.queryParams.operation == "sentimentAnalyse"]' >
+				<mac-bedrock:sentiment-analyze doc:name="Sentiment analyze" doc:id="22bf8aa2-b1f9-43ae-82a2-ea786c9bb984" config-ref="Amazon_Bedrock_Config" TextToAnalyze="#[payload.text]" modelName="mistral.mistral-7b-instruct-v0:2"/>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="8ef1a178-eb21-4d16-9d4d-ba98cd5561d6" message="Do nothing...."/>
+			</otherwise>
+		</choice>
+	</flow>
+</mule>
+----
+
+== Test the Operations
+
+Use this Postman collection to test the different operations. Import the JSON into Postman and run the requests against your locally running Mule app.
+
+[source,json,linenums]
+----
+{
+	"info": {
+		"_postman_id": "09b5322f-5209-4955-87c7-9b61db68c878",
+		"name": "Amazon-Bedrock",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "915932",
+		"_collection_link": "https://interstellar-crater-482967.postman.co/workspace/MAC-workspace~02af7a19-39d7-412d-93ff-fcf7e207bdb9/collection/915932-09b5322f-5209-4955-87c7-9b61db68c878?action=share&source=collection_link&creator=915932"
+	},
+	"item": [
+		{
+			"name": "Chat-AnswerPrompt",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var template = `",
+							"<style type=\"text/css\">",
+							"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}",
+							"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}",
+							"    .tftable tr {background-color:#ffffff;}",
+							"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}",
+							"    .tftable tr:hover {background-color:#e0ffff;}",
+							"</style>",
+							"",
+							"<table class=\"tftable\" border=\"1\">",
+							"    <tr>",
+							"        <th>Response</th>",
+							"    </tr>",
+							"    <tr>",
+							"        <td>{{response}}</td>",
+							"    </tr>",
+							"</table>",
+							"`;",
+							"",
+							"function constructVisualizerPayload() {",
+							"    return {response: pm.response.json().response}",
+							"}",
+							"",
+							"pm.visualizer.set(template, constructVisualizerPayload());"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\n    \"prompt\": \"What is Penang famous free? i only have 48 hours.\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8081/bedrock?operation=prompt",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8081",
+					"path": [
+						"bedrock"
+					],
+					"query": [
+						{
+							"key": "operation",
+							"value": "prompt"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "image generate",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var template = `",
+							"<style type=\"text/css\">",
+							"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}",
+							"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}",
+							"    .tftable tr {background-color:#ffffff;}",
+							"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}",
+							"    .tftable tr:hover {background-color:#e0ffff;}",
+							"</style>",
+							"",
+							"<table class=\"tftable\" border=\"1\">",
+							"    <tr>",
+							"        <th>Response</th>",
+							"    </tr>",
+							"    <tr>",
+							"        <td>{{response}}</td>",
+							"    </tr>",
+							"</table>",
+							"`;",
+							"",
+							"function constructVisualizerPayload() {",
+							"    return {response: pm.response.json().response}",
+							"}",
+							"",
+							"pm.visualizer.set(template, constructVisualizerPayload());"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\n    \"prompt\": \"A small island in the middle of a blue lake with a golf hole on it. There's a green patch of grass with a red flag, and a wooden bridge that connects the island to the land. A few palm trees are around the green, and the sky is sunny with a few clouds. The water is calm and clear, and the whole place feels peaceful and tropical.\",\n    \"avoid\": \"snake\"\n\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8081/bedrock?operation=imageGenerate",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8081",
+					"path": [
+						"bedrock"
+					],
+					"query": [
+						{
+							"key": "operation",
+							"value": "imageGenerate"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Agent Prompt Template",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var template = `",
+							"<style type=\"text/css\">",
+							"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}",
+							"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}",
+							"    .tftable tr {background-color:#ffffff;}",
+							"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}",
+							"    .tftable tr:hover {background-color:#e0ffff;}",
+							"</style>",
+							"",
+							"<table class=\"tftable\" border=\"1\">",
+							"    <tr>",
+							"        <th>Response</th>",
+							"    </tr>",
+							"    <tr>",
+							"        <td>{{response}}</td>",
+							"    </tr>",
+							"</table>",
+							"`;",
+							"",
+							"function constructVisualizerPayload() {",
+							"    return {response: pm.response.json().response}",
+							"}",
+							"",
+							"pm.visualizer.set(template, constructVisualizerPayload());"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\n    \"template\": \"You are an agent for the county\\\\'s performing and fine arts program. You help students decide what course they will take during the summer.\",\n    \"instructions\": \"Please follow these guidelines.\\n\\n1. DO NOT HALLUCINATE.\\n2. Use only English.\\n3. Output a short letter to the student with your recommendation.\\n4. Use a fun, motivational tone.\\n5. Congratulate the student, whether it is for continuing with a certain discipline or trying something new.\\n6. Empower them about developing as an artist, making them feel good about their summer plans.\\n7. Include a greeting and sign-off that lean into the fun and motivational persona.\\n8. Do not use the internet.\\n9. Follow each step, one at a time.\\n\\nStep 1: Decide which art the student likes from 2 choices: \\\"Performing Arts\\\" or \\\"Fine Arts.\\\"\\n1a. If they answer \\\"Performing Arts,\\\" move to step 2.\\n1b. If they answer \\\"Fine Arts,\\\" move to step 3.\\n\\nStep 2:\\n2a. In this section, if the student has taken Theater 1A, make a recommendation that they enroll in Theater 2A.\\n2b. If the student has taken Theater 2A, make a recommendation to enroll in Theater 3B.\\n\\nStep 3:\\n3a. Decide which option the student likes the most: Photography, Sculpting, or Painting\\n3b. If they are interested in \\\"Photography,\\\" move to step 4.\\n3c. If they are interested in \\\"Sculpting,\\\" move to step 5.\\n3d. If they are interested in \\\"Painting,\\\" move to step 6.\\n\\nStep 4: For \\\"Photography,\\\" suggest the course Photography 1A: Stills.\\n\\nStep 5. For \\\"Sculpting,\\\" suggest the course Sculpture Garden 1A.\\n\\nStep 6: For \\\"Painting,\\\" suggest Self-Portrait Oils 1A.\",\n    \"dataset\": \"I am interested in Performing Arts. I have taken Theater 1A.\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8081/bedrock?operation=promptTemplate",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8081",
+					"path": [
+						"bedrock"
+					],
+					"query": [
+						{
+							"key": "operation",
+							"value": "promptTemplate"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "GET model details",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var template = `",
+							"<style type=\"text/css\">",
+							"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}",
+							"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}",
+							"    .tftable tr {background-color:#ffffff;}",
+							"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}",
+							"    .tftable tr:hover {background-color:#e0ffff;}",
+							"</style>",
+							"",
+							"<table class=\"tftable\" border=\"1\">",
+							"    <tr>",
+							"        <th>Response</th>",
+							"    </tr>",
+							"    <tr>",
+							"        <td>{{response}}</td>",
+							"    </tr>",
+							"</table>",
+							"`;",
+							"",
+							"function constructVisualizerPayload() {",
+							"    return {response: pm.response.json().response}",
+							"}",
+							"",
+							"pm.visualizer.set(template, constructVisualizerPayload());"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\n    \"modelName\": \"amazon.nova-canvas-v1:0\"\n\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8081/bedrock?operation=modelDetails",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8081",
+					"path": [
+						"bedrock"
+					],
+					"query": [
+						{
+							"key": "operation",
+							"value": "modelDetails"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Sentiment-Analyse",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var template = `",
+							"<style type=\"text/css\">",
+							"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}",
+							"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}",
+							"    .tftable tr {background-color:#ffffff;}",
+							"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}",
+							"    .tftable tr:hover {background-color:#e0ffff;}",
+							"</style>",
+							"",
+							"<table class=\"tftable\" border=\"1\">",
+							"    <tr>",
+							"        <th>Response</th>",
+							"    </tr>",
+							"    <tr>",
+							"        <td>{{response}}</td>",
+							"    </tr>",
+							"</table>",
+							"`;",
+							"",
+							"function constructVisualizerPayload() {",
+							"    return {response: pm.response.json().response}",
+							"}",
+							"",
+							"pm.visualizer.set(template, constructVisualizerPayload());"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n\n    \"text\": \"I’ve contacted your support team three times this week and still haven’t received a proper response. This is extremely frustrating and disappointing.\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:8081/bedrock?operation=sentimentAnalyse",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8081",
+					"path": [
+						"bedrock"
+					],
+					"query": [
+						{
+							"key": "operation",
+							"value": "sentimentAnalyse"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
+----
+
+== See Also
+
+* xref:index.adoc[]
+* xref:amazon-bedrock-connector-reference.adoc[]
