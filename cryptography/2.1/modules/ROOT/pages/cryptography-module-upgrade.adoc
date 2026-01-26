@@ -1,0 +1,605 @@
+= Upgrading and Migrating Cryptography Module 2.1 
+
+Upgrade Cryptography Module to version 2.x.x.
+
+== Supported Upgrade Paths
+
+[%header,cols="50a,50a"]
+|===
+|From Version | To Version
+|1.3.x |2.1.0
+|===
+
+== Changes in This Release
+
+This release contains these changes:
+
+* Changes to default values for connector operations
+* Migrating your PGP Keyring to AES-Encrypted keys when operating in FIPS mode
+* Using different key pairs for Sign, Encrypt, and Decrypt operations to enhance security
+* Using password-based encryption
+* Using BCFKS as the required keystore and truststore type
+* Specifying algorithms dynamically
+* Registering the XMLDSig Security Provider
+* Enabling compatibility for Decrypt or Validate operations without KDF parameters
+
+
+[NOTE]
+Every reference to Federal Information Processing Standards (FIPS) in this guide pertains to FIPS version 140-2 or 140-3.
+
+The minimum supported Mule runtime engine version is 4.4.x to use Cryptography Module 2.1.0. Make sure compatibility with FIPS compliance and supported runtime environments.  Upgrade your Mule runtime if you use an older version.
+
+== Scope and Limitations (FIPS)
+
+The *PGP Encrypt* operation is not supported in FIPS environments due to a limitation in the OpenPGP standard (RFC 4880). OpenPGP mandates the use of RSAES-PKCS1-v1_5 for session key encryption, which is explicitly disallowed in FIPS-approved mode. This limitation exists regardless of how the keyring is generated, whether with GPG 2.0 and lower, GPG 2.1 and higher, or BC-FIPS.
+The <<troubleshoot-key-protection-issues>> section doesn't work in FIPS environments because of this OpenPGP limitation with PGP Encrypt operations.
+
+== Upgrade Steps
+
+Follow these steps to perform the upgrade:
+
+. In Anypoint Studio, create a Mule project.
+. In *Mule Palette*, click *Search in Exchange*.
+. In *Add Dependencies to Project*, enter `cryptography module` in the search field.
+. In *Available modules*, select *Cryptography Module* and click *Add*.
+. Click *Finish*.
+. Verify that the  mule-cryptography-module`  dependency version is 2.1.0 in the `pom.xml` file in the Mule project.
+
+Studio upgrades the connector automatically.
+
+== Post Upgrade Steps
+
+After upgrading Cryptography Module, the module no longer bundles security providers.
+If your environment already has the security providers (such as those in the MuleSoft Government Cloud environment), you must not do any additional configuration. The existing environment offers ‌the security providers.
+Otherwise, add the dependencies for either Bouncy Castle (BC) or Bouncy Castle FIPS (BCFIPS) to your Mule app project configuration by including them as xref:mule-runtime::mmp-concept.adoc#configure-plugin-dependencies[Additional Plugin Dependencies] or as xref:mule-runtime::mmp-concept.adoc#configure-shared-libraries[Shared Libraries] in your `pom.xml` file of your Mule app. This ensures the module has access to the required security providers for its operations.
+
+BCFIPS dependency:
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bc-fips</artifactId>
+    <version>${bc-fips.version}</version>
+</dependency>
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcpg-fips</artifactId>
+    <version>${bcpg-fips.version}</version>
+</dependency>
+----
+
+BC dependency:
+
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcpg-jdk18on</artifactId>
+    <version>${bcpg.version}</version>
+</dependency>
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcprov-jdk18on</artifactId>
+    <version>${bcprov.version}</version>
+</dependency>
+----
+
+=== Using Bouncy Castle JDK 18 on Dependencies Version 1.80
+
+Starting from Bouncy Castle version 1.80, the project version underwent a significant internal reorganization, which affects how you must include the libraries when using JDK18on artifacts, for example `bcprov-jdk18on`, `bcpg-jdk18on`.
+
+In prior versions to version 1.80, for example 1.79 or earlier, to enable full functionality for PGP operations and password-based encryption (PBE) features, it was sufficient to add only the `bcprov-jdk18on` or `bcpg-jdk18on` libraries.
+
+These additional libraries are mandatory because:
+
+* `bcpkix-jdk18on` contains essential cryptographic protocol classes, for example ASN.1 structures used in PGP operations.
+* `bcutil-jdk18on` includes utility classes that are now referenced by low-level operations in the other modules.
+
+If you don’t add these dependencies, you can encounter runtime errors such as:
+
+* java.lang.ClassNotFoundException: org.bouncycastle.bcpg.ArmoredOutputStream
+* java.lang.NoClassDefFoundError: org.bouncycastle.asn1.cryptlib.CryptlibObjectIdentifiers
+* java.lang.IllegalArgumentException: Attempt to override lookup strategy ParentFirstLookupStrategy for package: org.bouncycastle.asn1.nist
+
+Therefore, if you use BC version 1.80 or higher with Cryptography Module 2.1.0 in non-FIPS mode, make sure you include these libraries in your Mule app:
+
+* `bcprov-jdk18on`
+* `bcpg-jdk18on`
+* `bcpkix-jdk18on`
+* `Bcutil-jdk18on`
+
+If you prefer a FIPS-compliant environment, use the `bc-fips` and `bcpg-fips` libraries.
+
+Example of Mule Maven Plugin configuration for Cryptography Module using Bouncy Castle JDK 18 on Dependencies Version 1.80:
+
+[source,xml,linenums]
+----
+<plugin>
+    <!-- Mule Maven Plugin configuration -->
+    <groupId>org.mule.tools.maven</groupId>
+    <artifactId>mule-maven-plugin</artifactId>
+    <version>${mule.maven.plugin.version}</version>
+    <configuration>
+        <!-- Plugin dependencies configuration-->
+        <additionalPluginDependencies>
+            <!-- The connector for which the dependency is defined -->
+            <plugin>
+                <groupId>com.mulesoft.modules</groupId>
+                <artifactId>mule-cryptography-module</artifactId>
+                <!-- Dependencies definition for the connector -->
+                <additionalDependencies>
+                    <!-- Bouncy Castle OpenPGP -->
+                    <dependency>
+						<groupId>org.bouncycastle</groupId>
+						<artifactId>bcprov-jdk18on</artifactId>
+						<version>1.80</version>
+					</dependency>
+					<dependency>
+						<groupId>org.bouncycastle</groupId>
+						<artifactId>bcpg-jdk18on</artifactId>
+						<version>1.80</version>
+					</dependency>
+					<dependency>
+						<groupId>org.bouncycastle</groupId>
+						<artifactId>bcpkix-jdk18on</artifactId>
+						<version>1.80</version>
+					</dependency>
+					<dependency>
+						<groupId>org.bouncycastle</groupId>
+						<artifactId>bcutil-jdk18on</artifactId>
+						<version>1.80</version>
+					</dependency>
+                </additionalDependencies>
+            </plugin>
+        </additionalPluginDependencies>
+    </configuration>
+</plugin>
+----
+
+== Verify the Upgrade
+
+After you install the latest version of the module, verify the upgrade:
+
+. In Studio, verify that there are no errors in the *Problems* or *Console* views.
+. Verify that there are no problems in the project's `pom.xml` file.
+. Test the connection to verify that the operations work.
+
+== Reverting the Upgrade
+
+If you must revert to the previous version of Cryptography Module, go to Anypoint Studio and do the following:
+
+. In the project’s `pom.xml file`, change the `mule-cryptography-module` dependency version 2.1.0 to the previous version, and delete the dependencies used from the <dependencies> section.
+. Return to the *Execute* tab, and in the *Engine* section, select one of the default engines.
+. In the *Configuration XML* tab, confirm the selected engine name also changed.
+
+== Changes to Default Values for Connector Operations
+
+To improve the security posture of the Cryptography Module, many default values for operations and configuration parameters are updated in version 2.1.0. These changes reflect the adoption of more secure algorithm stacks and modern cryptographic practices.
+
+When migrating from a previous version, declare the default values you relied on in version 1.x. This ensures compatibility and avoids unexpected results due to default value changes in the new version.
+
+This table provides the default values that changed in version 2.1.0:
+
+[%header%autowidth.spread]
+.Default values summary table
+|===
+| Component | Dafault in version 1.x | Dafault in version 2.1.0
+| XML Signature Digest Algorithm | `SHA1` | `SHA512`
+| JCE PBE Signature Algorithm | `PBEWithHmacSHA256` | `PBKDF2withHmacSHA512`
+| JCE PBE Encryption/Decryption Algorithm | `PBEWithHmacSHA256AndAES_128` | `PBKDF2withHmacSHA512__AES256__CBC__PKCS5Padding`
+| Checksum Algorithm | `SHA_256` | `SHA_512`
+| Keystore Type | `JKS` | None, must be explicitly provided; BCFKS required in FIPS.
+|===
+
+== Migrate PGP Keyring to AES-Encrypted Keys for FIPS
+
+To ensure your Mule app adheres to FIPS when performing PGP operations, you must migrate your PGP keyrings to utilize Advanced Encryption Standard (AES) encryption. 
+
+The default PGP key generation employs the CAST5 cipher, which isn’t FIPS-compliant. Using non-compliant ciphers can lead to runtime exceptions, such as `org.mule.runtime.api.exception.MuleRuntimeException` indicating issues with the signed content format and a failure in the signing operation. This exception can happen if the `InputStream` returned by the PGP operation is empty or corrupted.
+
+To achieve FIPS compliance for PGP signatures, follow this process:
+
+. Create keyrings and keys
+. Migrate keys to AES
+. Export secret and public keys
+. Configure the Cryptography Module to use the keyring
+
+=== Create Keyrings and Keys
+
+[NOTE]
+Create a backup of your keyrings and keys in case you must perform a rollback.
+
+To create a keyring from scratch, perform ‌these steps using GNU GPG:
+
+. Create a new keyring by running this command:
+
+[source,xml,linenums]
+----
+gpg --no-default-keyring --keyring example.kbx --fingerprint
+gpg: keybox '/Users/youruser/.gnupg/example.kbx' created
+----
+
+[start=2]
+. Save the new keybox location to use it later.
+. Create your PGP keys for signing or validating by running this command and following the instructions returned. (Select RSA as your cipher, because DSA isn't FIPS-compliant.)
+
+
+[source,xml,linenums]
+----
+gpg --no-default-keyring --keyring example.kbx --full-generate-key
+gpg (GnuPG/MacGPG2) 2.2.41; Copyright (C) 2022 g10 Code GmbH
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+Please select what kind of key you want:
+   (1) RSA and RSA (default)
+   (2) DSA and Elgamal
+   (3) DSA (sign only)
+   (4) RSA (sign only)
+  (14) Existing key from card
+Your selection? 1
+RSA keys may be between 1024 and 4096 bits long.
+What keysize do you want? (3072) 4096
+Requested keysize is 4096 bits
+Please specify how long the key should be valid.
+         0 = key does not expire
+      <n>  = key expires in n days
+      <n>w = key expires in n weeks
+      <n>m = key expires in n months
+      <n>y = key expires in n years
+Key is valid for? (0) 0
+Key does not expire at all
+Is this correct? (y/N) y
+GnuPG needs to construct a user ID to identify your key.
+Real name: Test
+Name must be at least 5 characters long
+Real name: TestName
+Email address: test@example.com
+Comment:
+You selected this USER-ID:
+    "TestName <test@example.com>"
+Change (N)ame, (C)omment, (E)mail or (O)kay/(Q)uit? O
+We need to generate a lot of random bytes. It is a good idea to perform
+some other action (type on the keyboard, move the mouse, utilize the
+disks) during the prime generation; this gives the random number
+generator a better chance to gain enough entropy.
+gpg: revocation certificate stored as '/Users/youruser/.gnupg/openpgp-revocs.d/991F7216B03C0B2B088AB20D5F46261934B56AF2.rev'
+public and secret key created and signed.
+pub   rsa4096 2024-12-26 [SC]
+      991F7216B03C0B2B088AB20D5F46261934B56AF2
+uid                      TestName <test@example.com>
+sub   rsa4096 2024-12-26 [E]
+----
+
+[start=4]
+. List your keys to find out their fingerprints before migrating them to AES by running this command:
+
+[source,xml,linenums]
+----
+gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --list-secret-keys --keyid-format=long --fingerprint
+/Users/youruser/.gnupg/example.kbx
+-----------------------------------
+sec   rsa4096/5F46261934B56AF2 2024-12-26 [SC]
+      Key fingerprint = 991F 7216 B03C 0B2B 088A  B20D 5F46 2619 34B5 6AF2
+uid                 [ultimate] TestName <test@example.com>
+ssb   rsa4096/E7C647D222B1F1C1 2024-12-26 [E]
+----
+
+=== Migrate Keys to AES
+
+Migrate each key to AES with SHA256 to make them FIPS compliant:
+
+. Copy the key to migrate fingerprint.
+. Paste the key in this ‌command without spaces. Note that running this command enables a command line:
+
+[source,xml,linenums]
+----
+gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --s2k-cipher-algo AES256 --s2k-digest-algo SHA256 --s2k-mode 3 --s2k-count 65000000 --edit-key [KEYID]
+----
+
+[start=3]
+. Enter the passwd command to change the key password. You can use the same password. A prompt requires the current password first and then the new one:
+
+[source,xml,linenums]
+----
+passwd
+----
+
+[start=4]
+. Exit the gpg prompt by pressing Comand+C (macOS) or Ctrl+C on other operating systems.
+. Repeat this procedure for each of the listed keys in your keybox.
+
+==== Verify Key Protection
+
+After creating or migrating a key, validate that the expected protection algorithms, AES-256 and SHA-256 are correctly applied.
+
+Run this command to inspect the actual protection applied to the secret key:
+
+[source,xml,linenums]
+----
+gpg --export-secret-keys [KEYID] | gpg --list-packets
+----
+
+. In the output, look for a line similar to:
+
+----
+iter+salt S2K, algo: 9, SHA256 protection, hash: 8
+----
+
+Use this reference to interpret the values:
+
+[%header%autowidth.spread]
+|===
+| Algorithm | Hash Function
+a|
+* `algo: 9` → AES256
+* `algo: 7` → AES128
+a|
+* `hash: 8` → SHA256
+* `hash: 2` → SHA1
+|===
+
+If the output shows AES128 or SHA1, it means the protection wasn't correctly applied, and the key isn't FIPS-compliant. In that case, repeat the migration process or consider using the next alternative approach.
+
+
+Note that SHA1 protection can still appear in GPG output due to the v4 packet format, even when SHA256 is used for the hash algorithm. For example:
+----
+iter+salt S2K, algo: 9, SHA1 protection, hash: 8
+----
+In this case, `algo: 9` indicates AES256 encryption and `hash: 8` indicates SHA256 hashing. The "SHA1 protection" text refers to the packet format version, not the actual hash algorithm used.
+==== FIPS Support Matrix
+[%header%autowidth.spread]
+|===
+| Operation | FIPS Support | Notes
+| PGP Encrypt |  Not supported — blocked by BCFIPS since RSA PKCS#1 v1.5 encryption is disallowed. | OpenPGP limitation in FIPS environments
+| PGP Decrypt | Supported | For legacy data compatibility
+| PGP Sign | Supported | With AES256 and SHA256 protection
+| PGP Validate | Supported | For legacy data compatibility
+|===
+PGP Encrypt remains unsupported in FIPS environments by design due to OpenPGP limitations. However, PGP Decrypt and Validate operations are supported for processing legacy data.
+==== GPG Behavior by Version
+[%header%autowidth.spread]
+|===
+| GPG Version | Key Generation Command | Output Behavior
+| GPG 2.0 and lower | `--gen-key` | Output correctly shows AES-256 cipher and SHA-256 hash, but secret key packet still displays "SHA1 protection" field
+| GPG 2.1 and higher | `--full-generate-key` | Output correctly shows AES-256 cipher and SHA-256 hash, but secret key packet still displays "SHA1 protection" field
+|===
+For both GPG versions, the "SHA1 protection" field in the secret key packet refers to the packet format version, not the actual protection algorithms used.
+
+=== Export Secret and Public Key
+
+After migrating the keys to AES, export the secret and public keys:
+
+. Export the secret keys in a secret keyring to be used by the `mule-cryptography-module` module by running this command. This prompts you to enter the password for each of the secret keys in the keybox:
+
+[source,xml,linenums]
+----
+gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --export-secret-keys > secring_example_aes.gpg
+----
+
+. Export the public keys if needed:
+
+[source,xml,linenums]
+----
+gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --export > pubring_example_aes.gpg
+----
+
+=== Troubleshoot Key Protection Issues
+
+In some cases, even after executing:
+
+[source,xml,linenums]
+----
+gpg --s2k-cipher-algo AES256 --s2k-digest-algo SHA256 --s2k-mode 3 --s2k-count 65000000 --edit-key [KEYID]
+----
+
+The key may still appear protected with AES128 and SHA1. This is due to a change introduced in GPG 2.1 and later: secret key protection is no longer managed directly by `gpg`, but by `gpg-agent`.
+
+In GPG 2.1 and later, `gpg` isn't directly responsible for encrypting secret keys at rest, and options such as `--s2k-cipher-algo` have no effect. Instead, `gpg-agent` is solely responsible and it provides no interface to change the cipher or digest algorithms in use.  For details, refer to https://www.google.com/url?q=https://dev.gnupg.org/T1800&sa=D&source=docs&ust=1748032101600550&usg=AOvVaw1WU8BTGl-579opeNkbOlL0[Allow s2k options for gpg --export-secret-key] and  https://www.reddit.com/r/GnuPG/comments/1dj4vo8/s2k_do_not_work_help/?rdt=57819[S2K don't work HELP]
+
+In practice:
+
+* S2K parameters passed on the command line or stored in `gpg.conf` aren't applied  when generating or editing keys in GPG 2.1+.
+
+* `gpg-agent` uses internal defaults — typically AES128 and SHA1 — with no configuration interface to change them.
+
+==== Alternative: Programmatic Key Generation with Bouncy Castle
+
+If you want to make secret keys protected with certain algorithms, like AES256 and SHA256, use Java and Bouncy Castle to make them directly.
+
+This approach gives you full control over:
+
+* Encryption algorithm: AES-256
+* Hash digest: SHA-256
+* S2K mode: Iterated and Salted (mode 3)
+* Iteration count: e.g., 65,000,000
+
+Example:
+
+[source,xml,linenums]
+----
+new JcePBESecretKeyEncryptorBuilder(PGPEncryptedData.AES_256, sha256Calc)
+  .setProvider("BC")
+  .build(password.toCharArray());
+----
+
+This method ensures FIPS-compliant protection and is suitable for automated or controlled environments.
+
+=== Configure the Cryptography Module to Use the Keyring
+
+Configure the Cryptography Module to use the generated keyring for signature and validation. 
+
+. Copy the `secring_example.aes.gpg` and `pubring_example_aes.gpg` to your Mule project’s `src/main/resources` folder or to the ‌location inside your on-premises server.
+. Create a pop configuration like this to be used by the Cryptography Module PGP operations:
+
+[source,xml,linenums]
+----
+<crypto:pgp-config name="pgpConfig-aes" publicKeyring="pubring_example_aes.gpg" privateKeyring="secring_example_aes.gpg">
+        <crypto:pgp-key-infos>
+            <crypto:pgp-asymmetric-key-info keyId="validation" fingerprint="5F46261934B56AF2" passphrase="mule1234"/>
+            <crypto:pgp-asymmetric-key-info keyId="signature"
+                                            principal="TestName &lt;test@example.com&gt;"/>
+        </crypto:pgp-key-infos>
+    </crypto:pgp-config>
+----
+
+Notes for Cryptography Module PGP operations:
+
+* The fingerprint used for validation can be the complete value or the last 16 characters, as shown in the previous example.
+* The org.mule.runtime.api.exception.MuleRuntimeException may be thrown at runtime in FIPS environments if the sign operation fails to generate the signed content. This can occur if the InputStream is empty or corrupted, or if a non-compliant cipher is configured in the keyrings or generated PGP keys. Make sure your keyring and keys follow the guidelines in this migration guide.
+* DSA encryption isn't allowed because DSA isn't a FIPS-compliant cipher.
+* ECDSA or RSA PKCS v1.5 algorithms are no longer allowed for encryption in FIPS environments. If you use the PGP Encrypt operation with these algorithms, you can get these errors:
+** "RSA PKCS#1 v1.5 encryption disallowed"
+** "Can’t use ECDSA for encryption"
+** "ElGamal KeyFactory not available"
+* RSA encryption using PKCS#1 v1.5 is also disabled in FIPS mode. While you can reenable it using the system property `-Dorg.bouncycastle.rsa.allow_pkcs15_enc=true`, don't enable it so you can maintain strict FIPS compliance. Enable it only if necessary and you understand the security implications.
+
+== Use Different Key Pair for Sign, Encrypt, and Decrypt Operations
+If you use the same key pair, especially when using Bouncy Castle FIPS as a security provider or running your Mule app on MuleSoft Government Cloud, you can get this error:
+
+[source,xml,linenums]
+----
+org.mule.runtime.api.component.execution.ComponentExecutionException:
+org.bouncycastle.crypto.IllegalKeyException: Attempt to sign/verify with RSA modulus already used for encrypt/decrypt
+----
+
+Therefore, use different key pairs for Sign, Encrypt, and Decrypt operations. 
+
+==  Use Password-Based Encryption 
+When using a FIPS-enabled environment, password-based encryption (PBE) algorithms starting with PBEWith are no longer supported because of security limits. For example:
+
+* `PBEWithSHA1AndRC2_40`
+* `PBEWithSHA1AndRC2_128`
+* `PBEWithSHA1AndRC4_128`
+* `PBEWithSHA1AndRC4_40`
+* `PBEWithMD5AndDES`
+* `PBEWithMD5AndTripleDES`
+* `PBEWithSHA1AndDESede`
+
+To ensure compliance, all password-based encryption implementations in FIPS mode follow these rules:
+
+* Your password must be at least 16 characters long.
+* A password SALT is mandatory for all PBE operations. This password must be at least 16 characters long. Furthermore, for enhanced security, you must change the password SALT for each configured operation.
+* For sign or validate, the default algorithm is PBKDF2withHmacSHA512.
+* For encrypt or decrypt, the default algorithm is PBKDF2withHmacSHA512__AES256__CBC__PKCS5Padding
+* JCE PBE operations in FIPS environments require both a password SALT and an iteration count. You must update the module configurations to provide these values for all PBE operations. If you have data that was encrypted without a SALT and iteration count, you have these options:
+** Decrypt it outside of FIPS mode.
+** Temporarily enable the `com.mulesoft.crypto.allow-default-kdf-params` system property to decrypt it within FIPS, and then re-encrypt it using the new configuration. Also, in a FIPS environment, you must enable the `com.mulesoft.crypto.allow-sun-pbe-in-fips`` system property to allow the use of SUN algorithms.
+
+== Specify Algorithms Dynamically
+Cryptography Module version 2.1.0 supports dynamic algorithm definitions, offering great flexibility by removing the dependency of a predefined list of available values shown in the value provider.
+
+You can specify dynamic algorithm definitions in two ways:
+
+* As a complete transformation string available in your environment’s registered security providers (for example `PBEWithHmacSHA256AndAES_128`, `PBEwithSHA1and3-KeyDESede`, and so on).
+* As a custom algorithm format introduced in version 2.1.0, which is detailed in the next section.
+
+[NOTE]
+Algorithms not present in your Mule runtime's `Security.getProviders()` list result in runtime errors. If needed, make sure you include the required cryptographic providers, for example BouncyCastle FIPS, BC non-FIPS, in your Mule app’s classpath or security configuration.
+
+=== Use Custom Algorithm Format
+
+To enable better support for modern cryptographic configurations, especially in FIPS environments, Cryptography Module version 2.1.0 introduces a custom algorithm format that separates key derivation and encryption components.
+
+Format:
+`PBKDF2withHmac<digest>__AES<keyLength>__<mode>__<padding>`
+
+Example:
+`PBKDF2withHmacSHA512__AES256__CBC__PKCS5Padding`
+
+This format:
+
+* Ensures full compatibility with FIPS-approved cryptographic profiles.
+* Provides explicit definition of key length, block mode, and padding.
+* Enables support for future extensions without requiring changes to the connector code or Studio configuration.
+
+You must define all four components. Defaults aren't assumed. If a component is missing or malformed, ‌validation fails.
+
+[%header%autowidth.spread]
+|===
+| Component| Description
+| PBKDF2withHmac<digest> | Key derivation function (KDF) using HMAC + SHA512
+| AES<keyLength> | Cipher algorithm with key size (128, 192, 256)
+| mode | Cipher block mode (for example CBC, GCM)
+| padding | Padding scheme (for example PKCS5Padding, NoPadding)
+|===
+
+Additionally, the default algorithm values are updated for stronger cryptographic guarantees:
+
+
+[%header%autowidth.spread]
+|===
+| Operation| Default value Cryptography Module version 1.x | Default value Cryptography Module version 2.x
+| *Encrypt* or *Decrypt*| `PBEWithHmacSHA256AndAES_128` | `PBKDF2withHmacSHA512__AES256__CBC__PKCS5Padding`
+| *Sign* or *Validate* | `PBEWithHmacSHA256` | `PBKDF2withHmacSHA512
+|===
+
+== Register the XMLDSig Security Provider
+
+Cryptographic operations involving XML signatures (for example XML Sign, XML Encrypt, XML Decrypt, and XML Validate) require the XMLDSig security provider  (org.jcp.xml.dsig.internal.dom.XMLDSigRI), commonly provided by Apache Santuario.
+
+In FIPS-compliant environments, this provider might not be available or registered by default due to stricter security policies.
+
+To enable these XML-related cryptographic operations, the module can register the provider if you explicitly set this system property:
+
+`-Dcom.mulesoft.connectors.allow-registration-of-xmldsig-provider-in-fips``
+
+This action registers the provider at the JVM level, making it globally available to all Mule apps running on the same JVM. Only use this setting if your Mule app explicitly requires XML signature or encryption support and the provider isn't already present.
+
+== Enable Compatibility for Decrypt or Validate Operations without KDF Parameters
+
+In Cryptography Module version 2.1, password-based encryption operations now enforce the configuration of both SALT  and `iterationCount` parameters for enhanced security.
+
+To make sure your Mule app still decrypts or validates data that was encrypted or signed using Cryptography Module version 1.x, where SALT  and `iterationCount` weren't mandatory, activate these system properties:
+
+[source,xml,linenums]
+----
+com.mulesoft.crypto.allow-default-kdf-params=true
+com.mulesoft.crypto.allow-sun-pbe-in-fips=true  (only necessary when running in a FIPS-enabled environment)
+----
+
+Activating these system properties enables ‌compatibility mode under these conditions:
+
+* The operation is either Decrypt or Validate.
+* The encryption algorithm is based on Sun's PBE schemes, for example, `PBEWithHmacSHA1AndAES_128`.
+* Neither SALT nor `iterationCount` parameters are explicitly provided (null or empty).
+
+If you provide a value for either SALT or `iterationCount` parameters, the module targets version 2.x compatibility and intentionally fails the operation to avoid inconsistent behavior.
+
+This compatibility mode is intended as a temporary solution to handle existing data. For all new data, make sure you configure both SALT and `iterationCount` as required by Cryptography Module version 2.x for optimal security and behavior.
+
+== Use BCFKS as the Required Keystore and Truststore Type 
+
+To enhance security compliance, the Bouncy Castle FIPS Keystore (BCFKS) type is mandatory for all Mule apps running in FIPS mode. You must migrate your existing Java KeyStore (JKS) or Public-Key Cryptography Standards #12 (PKCS12) keystores and truststores to BCFKS and update your mule-cryptography-module configurations to reference these new files:
+
+. Download Bouncy Castle FIPS Provider:
+
+[source,xml,linenums]
+----
+curl -o $JAVA_HOME/jre/lib/ext/bc-fips-1.0.2.5.jar https://repo1.maven.org/maven2/org/bouncycastle/bc-fips/1.0.2.5/bc-fips-1.0.2.5.jar
+----
+
+[start=2]
+. For JKS Keystores execute this keytool command, replacing `<keystore_password>` with your current keystore password and adjusting the file paths accordingly:
+
+
+[source,xml,linenums]
+----
+sudo /absolute/path/to/keytool_command/keytool -importkeystore -srckeystore /absolut/path/to/your/keystore/keystore.jks -srcstoretype JKS -srcstorepass changeit -destkeystore /absolute/path/to/new/keystore/keystore.bcfks -storepass <keystore_password> -deststoretype BCFKS -providerclass org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider -providerpath /absolut/path/to/bcfips-1.0.2.5.jar
+----
+
+For PKCS12 Keystores if your current keystore is in PKCS12 format, simply replace -srcstoretype JKS with -srcstoretype PKCS12 in the previous command.
+
+[NOTE]
+In FIPS environments, JKS can only store certificates and can’t hold private or secret keys. JKS isn't enabled by default in Bouncy Castle FIPS. To use JKS, enable it by setting the system property:
+
+`org.bouncycastle.jca.enable_jks=true``
+
+JKS is no longer the default keystore type. You must explicitly select the keystore type. In FIPS environments, BCFKS is required.
+
+
+
+
+== See Also
+
+* xref:cryptography-module-reference.adoc[]
