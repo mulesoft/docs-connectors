@@ -12,17 +12,13 @@ Upgrade Cryptography Module to version 2.x.x.
 
 == Changes in This Release
 
-[IMPORTANT FOR FIPS]
-====
-FIPS-first: Read this before continuing
+[FIPS Compatibility Notice for PGP Operations]
 
-* *PGP Encrypt is not supported in FIPS environments* (including MuleSoft Government Cloud and other strict FIPS runtimes).
-  OpenPGP (RFC 4880) mandates RSAES-PKCS1-v1_5 for encrypting the session key, and that mechanism is blocked in FIPS approved mode.
+PGP Encrypt is unsupported in FIPS environments because the OpenPGP standard (RFC 4880) mandates a session key encryption mechanism that is strictly prohibited in FIPS-approved runtimes like MuleSoft Government Cloud.
 
-* This guide includes PGP keyring migration steps for *PGP Sign/Validate* and for *PGP Decrypt of legacy data*.
-  These steps *do not enable PGP Encrypt under FIPS*.
+The keyring migration steps in this guide are for operations such as PGP Sign/Validate and PGP Decrypt for legacy data only, which does not enable PGP encryption functionality under FIPS.
 
-If your requirement is to *encrypt new payloads using PGP while remaining strictly FIPS compliant*, there is no supported configuration to achieve that today.
+No FIPS-compliant configuration for PGP encryption exists for projects requiring the encryption of new payloads while maintaining strict compliance.
 ====
 
 
@@ -45,14 +41,12 @@ The minimum supported Mule runtime engine version is 4.4.x to use Cryptography M
 
 == Scope and Limitations (FIPS)
 
-*PGP Encrypt* is not supported in FIPS environments due to a limitation in the OpenPGP standard (RFC 4880).
-OpenPGP mandates the use of RSAES-PKCS1-v1_5 for encrypting the session key, which is blocked in FIPS approved mode.
-This limitation exists regardless of how the keyring is generated, whether with GPG 2.0 and lower, GPG 2.1 and higher, or BC-FIPS.
+*PGP Encrypt* is not supported in FIPS environments because the OpenPGP standard (RFC 4880) mandates the use of RSAES-PKCS1-v1_5, which is strictly prohibited in FIPS mode. This protocol-level limitation applies regardless of how you generate your keyring (GPG 2.0, GPG 2.1+, or BC-FIPS).
 
-This means:
+Consequently:
 
-* You *cannot* encrypt new payloads using *PGP Encrypt* and remain strictly FIPS compliant.
-* You *can* use *PGP Sign/Validate* (with AES-protected secret keys) and *PGP Decrypt* for processing legacy data, provided the underlying algorithms are FIPS-allowed.
+* You can't encrypt new payloads using the PGP Encrypt operation while maintaining strict FIPS compliance.
+* You can still use PGP Sign/Validate and PGP Decrypt for legacy data, provided the underlying algorithms are FIPS-compliant and secret keys are AES-protected.
 
 The <<troubleshoot-key-protection-issues>> section does not apply to enabling *PGP Encrypt* in FIPS environments.
 It only helps you diagnose key protection settings for operations that remain supported (for example, signing/validation and legacy decrypt scenarios).
@@ -717,7 +711,7 @@ Notes for Cryptography Module PGP operations:
 * The fingerprint used for validation can be the complete value or the last 16 characters, as shown in the previous example.
 * The org.mule.runtime.api.exception.MuleRuntimeException may be thrown at runtime in FIPS environments if the sign operation fails to generate the signed content. This can occur if the InputStream is empty or corrupted, or if a non-compliant cipher is configured in the keyrings or generated PGP keys. Make sure your keyring and keys follow the guidelines in this migration guide.
 * DSA encryption isn't allowed because DSA isn't a FIPS-compliant cipher.
-* ECDSA or RSA PKCS v1.5 algorithms are blocked for encryption in FIPS environments. **If you attempt to use PGP Encrypt in a FIPS runtime** (which is not supported), you will encounter errors such as:
+* ECDSA or RSA PKCS v1.5 algorithms are blocked for encryption in FIPS environments. If you attempt to use PGP Encrypt in a FIPS runtime, which is not supported, you can encounter errors such as:
 ** "RSA PKCS#1 v1.5 encryption disallowed"
 ** "Can’t use ECDSA for encryption"
 ** "ElGamal KeyFactory not available"
@@ -728,26 +722,19 @@ These errors occur because OpenPGP (RFC 4880) relies on RSAES-PKCS1-v1_5 for enc
 [IMPORTANT]
 ====
 
-**Not Supported Workaround – Breaks FIPS Compliance**
+Unsupported Workaround: Enabling PKCS#1 v1.5 Breaks FIPS Compliance
 
-BCFIPS exposes the following system property:
+The underlying BCFIPS provider includes a system property, `-Dorg.bouncycastle.rsa.allow_pkcs15_enc=true`, designed to re-enable RSA PKCS#1 v1.5 encryption for backward compatibility.
 
-`-Dorg.bouncycastle.rsa.allow_pkcs15_enc=true`
+Enabling this flag explicitly allows a prohibited mechanism and immediately invalidates the FIPS 140-2 / FIPS 140-3 compliance of your application.
 
-This property re-enables RSA PKCS#1 v1.5 encryption for backward-compatibility purposes.
-However, **enabling this flag allows a non-FIPS-approved mechanism and therefore breaks FIPS compliance for the application**.
+* Activating this flag immediately terminates the FIPS-compliant status of the application.
+* Deploying this configuration in FIPS-bound environments like MuleSoft Government Cloud is strictly forbidden.
+* MuleSoft provides no official support or recommendation for using this system property in FIPS runtimes.
 
-As a result:
+Executing the operation remains non-compliant by definition because the OpenPGP standard mandates a mechanism that FIPS prohibits.
 
-* The application is **no longer FIPS 140-2 / FIPS 140-3 compliant**.
-* This configuration **must not be used** in FIPS-bound environments, including GovCloud.
-* MuleSoft **does not recommend or support** the use of this property in FIPS environments.
-* Even when the flag is enabled, the operation remains non-compliant by definition, because OpenPGP (RFC 4880) mandates RSA PKCS#1 v1.5 for session key encryption, which is disallowed in FIPS approved mode.
-
-This property is documented here **for completeness only**, as it exists in the underlying cryptographic provider.
-It **must not be interpreted as a supported workaround** for enabling PGP Encrypt in FIPS environments.
-
-If PGP encryption is required, the encryption step must be performed **outside the FIPS boundary**, for example by using a separate non-FIPS application or service.
+This property is documented here for technical completeness only. It is not a supported workaround. If your workflow requires PGP encryption, you must perform the encryption step outside of the FIPS boundary using a separate, non-FIPS service.
 ====
 
 == Use Different Key Pair for Sign, Encrypt, and Decrypt Operations
@@ -872,42 +859,41 @@ Prepare Bouncy Castle FIPS Provider for KeyStore Migration
 
 [IMPORTANT]
 ====
-**Java 9+ (includes Java 11, 17, 21, and later)**
+Java 9+, includes Java 11, 17, 21, and later.
 
-Do **not** copy Bouncy Castle or BCFIPS JAR files into the JDK or JRE installation directories (for example, `lib/ext`).
+Don't copy Bouncy Castle or BCFIPS JAR files into the JDK or JRE installation directories, for example, `lib/ext`.
 
 Starting with Java 9, the Java Extension Mechanism is no longer supported. Manually placing cryptographic providers inside the JDK leads to classloading issues and unsupported runtime behavior.
 
-This step applies **only** to on-premise deployments or standalone tooling used to generate or migrate keystores.
-It does **not** apply to CloudHub, GovCloud, or other managed Mule runtimes, where cryptographic providers are already included and must not be modified.
+This step applies only to on-premise deployments or standalone tooling used to generate or migrate keystores.
+It doesn't*apply to CloudHub, GovCloud, or other managed Mule runtimes, where cryptographic providers are already included and must not be modified.
 ====
 
-When migrating keystores to BCFKS, use one of the following supported approaches:
+When migrating keystores to BCFKS, use one of these supported approaches:
 
-* **Standalone Java tooling**
+* Standalone Java tooling +
  Perform keystore migration outside the Mule runtime using a standalone Java application or command-line tooling that includes the required Bouncy Castle FIPS dependencies on its classpath.
 
-* **On-premise Mule deployments**
- Ensure the Bouncy Castle FIPS provider is available on the application or runtime classpath and referenced explicitly by supported Java mechanisms (for example, `java.security` or `java.security.properties`).
+* On-premise Mule deployments +
+ Ensure the Bouncy Castle FIPS provider is available on the application or runtime classpath and referenced explicitly by supported Java mechanisms, for example, `java.security` or `java.security.properties`.
 
 If you need to generate or migrate keystores programmatically, MuleSoft recommends performing these steps outside the Mule runtime and then referencing the resulting BCFKS files from your Mule application.
 
 [NOTE]
 ====
-**Java 8 (legacy)**
 
-Java 8 supports the `lib/ext` mechanism, but modifying the JDK installation is **not recommended**.
+Java 8 (legacy)  supports the `lib/ext` mechanism, but modifying the JDK installation isn't recommended.
 Use classpath-based configuration instead to ensure portability and predictable behavior.
 ====
 
 === Obtaining the Bouncy Castle FIPS JAR
 
-For the keytool migration commands below, you need the BC FIPS provider JAR file. Download it to a temporary location:
+For these keytool migration commands, you need the BC FIPS provider JAR file. Download it to a temporary location:
 
 [NOTE]
 ====
 The BCFIPS version to use for keystore migration depends on your target runtime and compliance policy.
-Use the same BCFIPS version mandated by your environment. The commands below use `1.0.2.5` as an example.
+Use the same BCFIPS version mandated by your environment. These commands  use `1.0.2.5` as an example.
 ====
 
 *On Windows (PowerShell):*
@@ -934,9 +920,9 @@ curl -o /tmp/bc-fips-1.0.2.5.jar https://repo1.maven.org/maven2/org/bouncycastle
 
 [IMPORTANT]
 ====
-Do **not** place this JAR in `$JAVA_HOME/lib/ext` or any JDK installation directory.
+Don't place this JAR in `$JAVA_HOME/lib/ext` or any JDK installation directory.
 
-Use it only as a temporary file for the `-providerpath` parameter in the keytool commands below. After completing the keystore migration, you can delete this file.
+Use it only as a temporary file for the `-providerpath` parameter in the next keytool commands. After completing the keystore migration, you can delete this file.
 ====
 
 === Migrate Existing Keystores to BCFKS

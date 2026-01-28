@@ -27,7 +27,9 @@ To begin troubleshooting the Cryptography module, enable debug logging to see th
 [start=6]
 . Save your changes.
 . Click the project name in *Package Explorer* and then click *Run* > *Run As* > *Mule Application*.
-
+[NOTE]
+In FIPS-enabled environments, not all PGP operations are equally supported.
+Refer to the Cryptography Module migration guide for a full FIPS support matrix by operation.
 == Understand PGP Encryption and Decryption Configuration
 
 During PGP encryption, the sender of the message must encrypt its content using the receiver’s _public key_. To encrypt messages in your Mule app using someone else’s public key, in the *Crypto Pgp* global configuration add the _receiver_ public keyring file in the *Public keyring* field.
@@ -37,21 +39,7 @@ During PGP decryption, the receiver of the message must use its _private key_ to
 .Crypto Pgp Global configuration with Public keyring and Private keyring fields
 image::mruntime-crypto-pgp-global-config.png["Global element properties for Crypto PGP with keyring details"]
 
-[NOTE]
-====
-**Error: "RSA PKCS#1 v1.5 encryption disallowed"**
 
-**Applies to:** Cryptography Module 2.1.0 and later, FIPS-enabled environments.
-
-This error indicates that a *PGP Encrypt* operation attempted to use RSA PKCS#1 v1.5 for session key encryption.
-This mechanism is mandated by the OpenPGP standard (RFC 4880) and is explicitly disallowed in FIPS approved mode.
-
-This is not a configuration issue.
-There is no supported workaround to enable PGP Encrypt in FIPS environments.
-PGP *Decrypt* and *Validate* operations can still be used in FIPS environments for processing legacy data, as long as the underlying key material and algorithms are FIPS-approved.
-
-If PGP encryption is mandatory, the encryption step must be performed outside the FIPS boundary.
-====
 
 == Understand PGP Signature Configuration
 
@@ -79,7 +67,17 @@ Generates a single document file that contains both the signature and the origin
 Generates a single document file that contains only the signature, which is stored and transmitted separately from the document the signature signs.
 
 Currently, the Cryptography module supports validation of detached signatures only.
+== Troubleshoot RSA PKCS#1 v1.5 Encryption Disallowed Error
 
+The error `RSA PKCS#1 v1.5 encryption disallowed` applies to Cryptography Module 2.1.0 and later versions in FIPS-enabled environments.
+
+The PGP `Encrypt` operation triggers this error when attempting to use RSA PKCS#1 v1.5 for session key encryption. While the OpenPGP standard (RFC 4880) mandates this specific mechanism, FIPS-approved mode explicitly disallows it due to security constraints. Some key considerations:
+
+* PGP `Encrypt` operations are unsupported in FIPS mode because the mandated OpenPGP mechanism violates FIPS security constraints.
+* No configuration workarounds exist to enable PGP encryption within a FIPS boundary due to protocol-level limitations.
+* PGP `Decrypt` and `Validate` operations remain functional for legacy data as long as the underlying cryptographic material complies with FIPS standards.
+
+If your integration requires PGP encryption, you must perform the encryption step outside of the FIPS-compliant boundary.
 == Understand Common Throws
 
 [NOTE]
@@ -90,82 +88,91 @@ Refer to the Cryptography Module migration guide for a full FIPS support matrix 
 
 Here is a list of common throw messages and how to interpret them:
 
-* **CRYPTO:PARAMETERS**
+* CRYPTO:PARAMETERS
 
-  The operation is configured using invalid parameters. This typically occurs when:
-  - Invalid algorithm names are provided
-  - Invalid transformation strings are used
-  - Required parameters are missing or have incorrect values
-  - Element paths in XML operations are invalid or blank
+  The operation is configured using invalid parameters. This typically occurs when: 
+  
+  ** Invalid algorithm names are provided
+  ** Invalid transformation strings are used
+  ** Required parameters are missing or have incorrect values
+  ** Element paths in XML operations are invalid or blank
 
-* **CRYPTO:KEY**
+* CRYPTO:KEY
 
   General key-related problems. This is a parent error type that encompasses more specific key errors.
 
-* **CRYPTO:MISSING_KEY**
+* CRYPTO:MISSING_KEY
 
   A key required for the operation was not found. This typically occurs when:
-  - The specified key alias does not exist in the keystore
-  - The keyId referenced in the operation is not configured
-  - The keystore file cannot be found or loaded
-  - The key identifier (fingerprint, principal, etc.) does not match any key in the keyring
+  
+   ** The specified key alias does not exist in the keystore
+   ** The keyId referenced in the operation is not configured
+   ** The keystore file cannot be found or loaded
+   ** The key identifier (fingerprint, principal, etc.) does not match any key in the keyring
 
-* **CRYPTO:PASSPHRASE**
+* CRYPTO:PASSPHRASE
 
-  The unlocking password is invalid. This typically occurs when:
-  - The password provided for a private key is incorrect
-  - The keystore password is wrong
-  - The passphrase for a PGP key is incorrect
+  The unlocking password is invalid. This typically occurs when: 
+ 
+   ** The password provided for a private key is incorrect
+   ** The keystore password is wrong
+   ** The passphrase for a PGP key is incorrect
 
-* **CRYPTO:CHECKSUM**
+* CRYPTO:CHECKSUM
 
   An error occurred during an attempt to calculate a checksum. This typically occurs when:
-  - The checksum algorithm is not supported
-  - The input data is invalid or corrupted
-  - There are issues with the underlying cryptographic provider
+  
+   ** The checksum algorithm is not supported
+   ** The input data is invalid or corrupted
+   ** There are issues with the underlying cryptographic provider
 
-* **CRYPTO:ENCRYPTION**
+* CRYPTO:ENCRYPTION
 
   An error occurred during an attempt to encrypt data. This typically occurs when:
-  - The encryption algorithm is not supported or invalid
-  - The key provided is not suitable for encryption
-  - The key size is incompatible with the algorithm
-  - The payload data is invalid or corrupted
-  - Issues with the cryptographic provider configuration
+  
+   ** The encryption algorithm is not supported or invalid
+   ** The key provided is not suitable for encryption
+   ** The key size is incompatible with the algorithm
+   ** The payload data is invalid or corrupted
+   ** Issues with the cryptographic provider configuration
 
-* **CRYPTO:DECRYPTION**
+* CRYPTO:DECRYPTION
 
   An error occurred during an attempt to decrypt data. This typically occurs when:
-  - The decryption algorithm does not match the encryption algorithm used
-  - The key provided is incorrect or not suitable for decryption
-  - The encrypted data is corrupted or invalid
-  - The initialization vector (IV) is missing or incorrect
-  - Issues with the cryptographic provider configuration
+  
+   ** The decryption algorithm does not match the encryption algorithm used
+   ** The key provided is incorrect or not suitable for decryption
+   ** The encrypted data is corrupted or invalid
+   ** The initialization vector (IV) is missing or incorrect
+   ** Issues with the cryptographic provider configuration
 
-* **CRYPTO:TRANSFORMATION**
+* CRYPTO:TRANSFORMATION
 
   An error occurred during an attempt to transform binary to ASCII to build the ASCII Armor file. This typically occurs when:
-  - Issues converting PGP binary data to armored format
-  - Problems with Base64 encoding/decoding
-  - Data corruption during transformation
+  
+   ** Issues converting PGP binary data to armored format
+   ** Problems with Base64 encoding/decoding
+   ** Data corruption during transformation
 
-* **CRYPTO:SIGNATURE**
+* CRYPTO:SIGNATURE
 
   An error occurred during an attempt to create a signature. This typically occurs when:
-  - The signature algorithm is not supported or invalid
-  - The key provided is not suitable for signing
-  - The key is missing or not accessible
-  - Issues with the cryptographic provider configuration
-  - The key type does not match the signature algorithm requirements
+  
+   ** The signature algorithm is not supported or invalid
+   ** The key provided is not suitable for signing
+   ** The key is missing or not accessible
+   ** Issues with the cryptographic provider configuration
+   ** The key type does not match the signature algorithm requirements
 
-* **CRYPTO:VALIDATION**
+* CRYPTO:VALIDATION
 
   The signature cannot be validated against the data. This typically occurs when:
-  - The signature is invalid or corrupted
-  - The data has been modified after signing
-  - The public key used for validation does not match the private key used for signing
-  - The signature algorithm does not match
-  - The certificate has expired or is not yet valid
+  
+   ** The signature is invalid or corrupted
+   ** The data has been modified after signing
+   ** The public key used for validation does not match the private key used for signing
+   ** The signature algorithm does not match
+   ** The certificate has expired or is not yet valid
 
 == See Also
 
