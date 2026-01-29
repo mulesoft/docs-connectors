@@ -1,4 +1,4 @@
-= Upgrading and Migrating Cryptography Module 2.1 
+= Upgrading and Migrating Cryptography Module 2.x
 
 Upgrade Cryptography Module to version 2.x.x.
 
@@ -7,16 +7,27 @@ Upgrade Cryptography Module to version 2.x.x.
 [%header,cols="50a,50a"]
 |===
 |From Version | To Version
-|1.3.x |2.1.0
+|1.3.x |2.x
 |===
 
 == Changes in This Release
 
+[IMPORTANT]
+====
+FIPS Compatibility Notice for PGP Operations +
+PGP Encrypt is unsupported in FIPS environments because the OpenPGP standard (RFC 4880) mandates a session key encryption mechanism that is strictly prohibited in FIPS-approved runtimes like MuleSoft Government Cloud.
+
+The keyring migration steps in this guide are for operations such as PGP Sign/Validate and PGP Decrypt for legacy data only, which does not enable PGP encryption functionality under FIPS.
+
+No FIPS-compliant configuration for PGP encryption exists for projects requiring the encryption of new payloads while maintaining strict compliance.
+====
+
+
 This release contains these changes:
 
 * Changes to default values for connector operations
-* Migrating your PGP Keyring to AES-Encrypted keys when operating in FIPS mode
-* Using different key pairs for Sign, Encrypt, and Decrypt operations to enhance security
+* Migrating your PGP keyrings to AES-encrypted secret keys for FIPS-compatible PGP operations (for example, Sign/Validate and legacy Decrypt scenarios)
+* Using different key pairs for PGP Sign and PGP Decrypt operations to enhance security and avoid key-usage restrictions in FIPS providers
 * Using password-based encryption
 * Using BCFKS as the required keystore and truststore type
 * Specifying algorithms dynamically
@@ -27,12 +38,19 @@ This release contains these changes:
 [NOTE]
 Every reference to Federal Information Processing Standards (FIPS) in this guide pertains to FIPS version 140-2 or 140-3.
 
-The minimum supported Mule runtime engine version is 4.4.x to use Cryptography Module 2.1.0. Make sure compatibility with FIPS compliance and supported runtime environments.  Upgrade your Mule runtime if you use an older version.
+The minimum supported Mule runtime engine version is 4.4.x to use Cryptography Module 2.x. Make sure compatibility with FIPS compliance and supported runtime environments.  Upgrade your Mule runtime if you use an older version.
 
 == Scope and Limitations (FIPS)
 
-The *PGP Encrypt* operation is not supported in FIPS environments due to a limitation in the OpenPGP standard (RFC 4880). OpenPGP mandates the use of RSAES-PKCS1-v1_5 for session key encryption, which is explicitly disallowed in FIPS-approved mode. This limitation exists regardless of how the keyring is generated, whether with GPG 2.0 and lower, GPG 2.1 and higher, or BC-FIPS.
-The <<troubleshoot-key-protection-issues>> section doesn't work in FIPS environments because of this OpenPGP limitation with PGP Encrypt operations.
+*PGP Encrypt* is not supported in FIPS environments because the OpenPGP standard (RFC 4880) mandates the use of RSAES-PKCS1-v1_5, which is strictly prohibited in FIPS mode. This protocol-level limitation applies regardless of how you generate your keyring (GPG 2.0, GPG 2.1+, or BC-FIPS).
+
+Consequently:
+
+* You can't encrypt new payloads using the PGP Encrypt operation while maintaining strict FIPS compliance.
+* You can still use PGP Sign/Validate and PGP Decrypt for legacy data, provided the underlying algorithms are FIPS-compliant and secret keys are AES-protected.
+
+The <<troubleshoot-key-protection-issues>> section does not apply to enabling *PGP Encrypt* in FIPS environments.
+It only helps you diagnose key protection settings for operations that remain supported (for example, signing/validation and legacy decrypt scenarios).
 
 == Upgrade Steps
 
@@ -43,7 +61,7 @@ Follow these steps to perform the upgrade:
 . In *Add Dependencies to Project*, enter `cryptography module` in the search field.
 . In *Available modules*, select *Cryptography Module* and click *Add*.
 . Click *Finish*.
-. Verify that the  mule-cryptography-module`  dependency version is 2.1.0 in the `pom.xml` file in the Mule project.
+. Verify that the  `mule-cryptography-module` dependency version is 2.x in the `pom.xml` file in the Mule project.
 
 Studio upgrades the connector automatically.
 
@@ -83,7 +101,21 @@ BC dependency:
     <artifactId>bcprov-jdk18on</artifactId>
     <version>${bcprov.version}</version>
 </dependency>
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcpkix-jdk18on</artifactId>
+    <version>${bcpkix.version}</version>
+</dependency>
 ----
+
+[IMPORTANT]
+====
+For PGP operations, you must include `bcpkix-jdk18on` (or `bcpkix-fips` for FIPS environments) in addition to `bcpg-jdk18on` and `bcprov-jdk18on`. Without `bcpkix-jdk18on`, you may encounter runtime errors such as:
+* `java.lang.ClassNotFoundException: org.bouncycastle.openpgp.PGPPublicKey`
+* `java.lang.NoClassDefFoundError: org.bouncycastle.openpgp.PGPSecretKey`
+
+The `bcpkix-jdk18on` library contains essential classes for PGP key handling and cryptographic protocol structures.
+====
 
 === Using Bouncy Castle JDK 18 on Dependencies Version 1.80
 
@@ -102,12 +134,12 @@ If you don’t add these dependencies, you can encounter runtime errors such as:
 * java.lang.NoClassDefFoundError: org.bouncycastle.asn1.cryptlib.CryptlibObjectIdentifiers
 * java.lang.IllegalArgumentException: Attempt to override lookup strategy ParentFirstLookupStrategy for package: org.bouncycastle.asn1.nist
 
-Therefore, if you use BC version 1.80 or higher with Cryptography Module 2.1.0 in non-FIPS mode, make sure you include these libraries in your Mule app:
+Therefore, if you use BC version 1.80 or higher with Cryptography Module 2.x in non-FIPS mode, make sure you include these libraries in your Mule app:
 
 * `bcprov-jdk18on`
 * `bcpg-jdk18on`
 * `bcpkix-jdk18on`
-* `Bcutil-jdk18on`
+* `bcutil-jdk18on`
 
 If you prefer a FIPS-compliant environment, use the `bc-fips` and `bcpg-fips` libraries.
 
@@ -175,16 +207,16 @@ If you must revert to the previous version of Cryptography Module, go to Anypoin
 
 == Changes to Default Values for Connector Operations
 
-To improve the security posture of the Cryptography Module, many default values for operations and configuration parameters are updated in version 2.1.0. These changes reflect the adoption of more secure algorithm stacks and modern cryptographic practices.
+To improve the security posture of the Cryptography Module, many default values for operations and configuration parameters are updated in version 2.x. These changes reflect the adoption of more secure algorithm stacks and modern cryptographic practices.
 
 When migrating from a previous version, declare the default values you relied on in version 1.x. This ensures compatibility and avoids unexpected results due to default value changes in the new version.
 
-This table provides the default values that changed in version 2.1.0:
+This table provides the default values that changed in version 2.x:
 
 [%header%autowidth.spread]
 .Default values summary table
 |===
-| Component | Dafault in version 1.x | Dafault in version 2.1.0
+| Component | Default in version 1.x | Default in version 2.x
 | XML Signature Digest Algorithm | `SHA1` | `SHA512`
 | JCE PBE Signature Algorithm | `PBEWithHmacSHA256` | `PBKDF2withHmacSHA512`
 | JCE PBE Encryption/Decryption Algorithm | `PBEWithHmacSHA256AndAES_128` | `PBKDF2withHmacSHA512__AES256__CBC__PKCS5Padding`
@@ -224,8 +256,16 @@ gpg: keybox '/Users/youruser/.gnupg/example.kbx' created
 . Save the new keybox location to use it later.
 . Create your PGP keys for signing or validating by running this command and following the instructions returned. (Select RSA as your cipher, because DSA isn't FIPS-compliant.)
 
+*On Windows:*
 
-[source,xml,linenums]
+[source,cmd,linenums]
+----
+gpg --no-default-keyring --keyring C:\Users\youruser\AppData\Roaming\gnupg\example.kbx --full-generate-key
+----
+
+*On Linux/macOS:*
+
+[source,bash,linenums]
 ----
 gpg --no-default-keyring --keyring example.kbx --full-generate-key
 gpg (GnuPG/MacGPG2) 2.2.41; Copyright (C) 2022 g10 Code GmbH
@@ -274,7 +314,22 @@ sub   rsa4096 2024-12-26 [E]
 [start=4]
 . List your keys to find out their fingerprints before migrating them to AES by running this command:
 
-[source,xml,linenums]
+*On Windows:*
+
+[source,cmd,linenums]
+----
+gpg --no-default-keyring --keyring C:\Users\youruser\AppData\Roaming\gnupg\example.kbx --list-secret-keys --keyid-format=long --fingerprint
+C:\Users\youruser\AppData\Roaming\gnupg\example.kbx
+---------------------------------------------------
+sec   rsa4096/5F46261934B56AF2 2024-12-26 [SC]
+      Key fingerprint = 991F 7216 B03C 0B2B 088A  B20D 5F46 2619 34B5 6AF2
+uid                 [ultimate] TestName <test@example.com>
+ssb   rsa4096/E7C647D222B1F1C1 2024-12-26 [E]
+----
+
+*On Linux/macOS:*
+
+[source,bash,linenums]
 ----
 gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --list-secret-keys --keyid-format=long --fingerprint
 /Users/youruser/.gnupg/example.kbx
@@ -287,12 +342,26 @@ ssb   rsa4096/E7C647D222B1F1C1 2024-12-26 [E]
 
 === Migrate Keys to AES
 
+[WARNING]
+====
+This migration process may not work reliably with GPG 2.1 and later versions due to `gpg-agent` limitations. If the migration fails, use the <<alternative-programmatic-key-generation,programmatic Bouncy Castle approach>> instead.
+====
+
 Migrate each key to AES with SHA256 to make them FIPS compliant:
 
 . Copy the key to migrate fingerprint.
 . Paste the key in this ‌command without spaces. Note that running this command enables a command line:
 
-[source,xml,linenums]
+*On Windows:*
+
+[source,cmd,linenums]
+----
+gpg --no-default-keyring --keyring C:\Users\youruser\AppData\Roaming\gnupg\example.kbx --s2k-cipher-algo AES256 --s2k-digest-algo SHA256 --s2k-mode 3 --s2k-count 65000000 --edit-key [KEYID]
+----
+
+*On Linux/macOS:*
+
+[source,bash,linenums]
 ----
 gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --s2k-cipher-algo AES256 --s2k-digest-algo SHA256 --s2k-mode 3 --s2k-count 65000000 --edit-key [KEYID]
 ----
@@ -300,13 +369,16 @@ gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --s2k-ciph
 [start=3]
 . Enter the passwd command to change the key password. You can use the same password. A prompt requires the current password first and then the new one:
 
-[source,xml,linenums]
+[source,bash,linenums]
 ----
 passwd
 ----
 
 [start=4]
-. Exit the gpg prompt by pressing Comand+C (macOS) or Ctrl+C on other operating systems.
+. Exit the gpg prompt:
+** On Windows: Press `Ctrl+C`
+** On macOS: Press `Command+C`
+** On Linux: Press `Ctrl+C`
 . Repeat this procedure for each of the listed keys in your keybox.
 
 ==== Verify Key Protection
@@ -368,18 +440,36 @@ For both GPG versions, the "SHA1 protection" field in the secret key packet refe
 
 === Export Secret and Public Key
 
-After migrating the keys to AES, export the secret and public keys:
+After migrating the keys to AES (or generating them programmatically), export the secret and public keys:
 
 . Export the secret keys in a secret keyring to be used by the `mule-cryptography-module` module by running this command. This prompts you to enter the password for each of the secret keys in the keybox:
 
-[source,xml,linenums]
+*On Windows:*
+
+[source,cmd,linenums]
+----
+gpg --no-default-keyring --keyring C:\Users\youruser\AppData\Roaming\gnupg\example.kbx --export-secret-keys > secring_example_aes.gpg
+----
+
+*On Linux/macOS:*
+
+[source,bash,linenums]
 ----
 gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --export-secret-keys > secring_example_aes.gpg
 ----
 
 . Export the public keys if needed:
 
-[source,xml,linenums]
+*On Windows:*
+
+[source,cmd,linenums]
+----
+gpg --no-default-keyring --keyring C:\Users\youruser\AppData\Roaming\gnupg\example.kbx --export > pubring_example_aes.gpg
+----
+
+*On Linux/macOS:*
+
+[source,bash,linenums]
 ----
 gpg --no-default-keyring --keyring /Users/youruser/.gnupg/example.kbx --export > pubring_example_aes.gpg
 ----
@@ -403,6 +493,7 @@ In practice:
 
 * `gpg-agent` uses internal defaults — typically AES128 and SHA1 — with no configuration interface to change them.
 
+[[alternative-programmatic-key-generation]]
 ==== Alternative: Programmatic Key Generation with Bouncy Castle
 
 If you want to make secret keys protected with certain algorithms, like AES256 and SHA256, use Java and Bouncy Castle to make them directly.
@@ -414,16 +505,163 @@ This approach gives you full control over:
 * S2K mode: Iterated and Salted (mode 3)
 * Iteration count: e.g., 65,000,000
 
-Example:
+This method ensures FIPS-compliant protection and is suitable for automated or controlled environments. 
+
+===== Complete Java Example for Programmatic Key Generation
+
+Create a Java class to generate FIPS-compliant PGP keys. This example creates a complete key pair with proper AES-256 and SHA-256 protection:
+
+[source,java,linenums]
+----
+import org.bouncycastle.bcpg.ArmoredOutputStream;
+import org.bouncycastle.bcpg.HashAlgorithmTags;
+import org.bouncycastle.bcpg.sig.Features;
+import org.bouncycastle.bcpg.sig.KeyFlags;
+import org.bouncycastle.crypto.generators.RSAKeyPairGenerator;
+import org.bouncycastle.crypto.params.RSAKeyGenerationParameters;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openpgp.*;
+import org.bouncycastle.openpgp.operator.PBESecretKeyEncryptorBuilder;
+import org.bouncycastle.openpgp.operator.PGPDigestCalculator;
+import org.bouncycastle.openpgp.operator.bc.BcPBESecretKeyEncryptorBuilder;
+import org.bouncycastle.openpgp.operator.bc.BcPGPContentSignerBuilder;
+import org.bouncycastle.openpgp.operator.bc.BcPGPDigestCalculatorProvider;
+import org.bouncycastle.openpgp.operator.bc.BcPGPKeyPair;
+
+import java.io.*;
+import java.math.BigInteger;
+import java.security.SecureRandom;
+import java.security.Security;
+import java.util.Date;
+
+public class PGPKeyGenerator {
+    
+    static {
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+    }
+    
+    public static void generateKeyPair(
+            String identity,
+            String passphrase,
+            String secretKeyringPath,
+            String publicKeyringPath,
+            int keySize) throws Exception {
+        
+        // Generate RSA key pair
+        RSAKeyPairGenerator keyPairGenerator = new RSAKeyPairGenerator();
+        RSAKeyGenerationParameters keyGenParams = new RSAKeyGenerationParameters(
+            BigInteger.valueOf(0x10001), new SecureRandom(), keySize, 12);
+        keyPairGenerator.init(keyGenParams);
+        
+        // Create PGP key pair
+        BcPGPKeyPair signingKeyPair = new BcPGPKeyPair(
+            PGPPublicKey.RSA_SIGN, keyPairGenerator.generateKeyPair(), new Date());
+        BcPGPKeyPair encryptionKeyPair = new BcPGPKeyPair(
+            PGPPublicKey.RSA_ENCRYPT, keyPairGenerator.generateKeyPair(), new Date());
+        
+        // Create key ring generator
+        PGPKeyRingGenerator keyRingGen = new PGPKeyRingGenerator(
+            PGPSignature.POSITIVE_CERTIFICATION,
+            signingKeyPair,
+            identity,
+            new BcPGPDigestCalculatorProvider().get(HashAlgorithmTags.SHA256),
+            null,
+            null,
+            new BcPGPContentSignerBuilder(
+                signingKeyPair.getPublicKey().getAlgorithm(),
+                HashAlgorithmTags.SHA256),
+            createKeyEncryptor(passphrase));
+        
+        // Add encryption subkey
+        keyRingGen.addSubKey(encryptionKeyPair);
+        
+        // Generate secret key ring
+        PGPSecretKeyRing secretKeyRing = keyRingGen.generateSecretKeyRing();
+        try (FileOutputStream fos = new FileOutputStream(secretKeyringPath);
+             ArmoredOutputStream aos = new ArmoredOutputStream(fos)) {
+            secretKeyRing.encode(aos);
+        }
+        
+        // Generate public key ring
+        PGPPublicKeyRing publicKeyRing = keyRingGen.generatePublicKeyRing();
+        try (FileOutputStream fos = new FileOutputStream(publicKeyringPath);
+             ArmoredOutputStream aos = new ArmoredOutputStream(fos)) {
+            publicKeyRing.encode(aos);
+        }
+    }
+    
+    private static PBESecretKeyEncryptorBuilder createKeyEncryptor(String passphrase) {
+        PGPDigestCalculator sha256Calc = new BcPGPDigestCalculatorProvider()
+            .get(HashAlgorithmTags.SHA256);
+        
+        return new BcPBESecretKeyEncryptorBuilder(
+            PGPEncryptedData.AES_256, sha256Calc)
+            .setProvider("BC")
+            .setIterationCount(65000000);
+    }
+    
+    public static void main(String[] args) throws Exception {
+        generateKeyPair(
+            "TestName <test@example.com>",
+            "your-secure-passphrase",
+            "secring_example_aes.gpg",
+            "pubring_example_aes.gpg",
+            4096);
+    }
+}
+----
+
+===== Maven Dependencies Required
+
+Add these dependencies to your `pom.xml` to compile and run the key generation code:
 
 [source,xml,linenums]
 ----
-new JcePBESecretKeyEncryptorBuilder(PGPEncryptedData.AES_256, sha256Calc)
-  .setProvider("BC")
-  .build(password.toCharArray());
+<dependencies>
+    <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcpg-jdk18on</artifactId>
+        <version>1.80</version>
+    </dependency>
+    <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId>
+        <version>1.80</version>
+    </dependency>
+    <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcpkix-jdk18on</artifactId>
+        <version>1.80</version>
+    </dependency>
+    <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcutil-jdk18on</artifactId>
+        <version>1.80</version>
+    </dependency>
+</dependencies>
 ----
 
-This method ensures FIPS-compliant protection and is suitable for automated or controlled environments.
+===== Compile and Run
+
+*On Windows:*
+
+[source,cmd,linenums]
+----
+javac -cp "bcpg-jdk18on-1.80.jar;bcprov-jdk18on-1.80.jar;bcpkix-jdk18on-1.80.jar;bcutil-jdk18on-1.80.jar" PGPKeyGenerator.java
+java -cp ".;bcpg-jdk18on-1.80.jar;bcprov-jdk18on-1.80.jar;bcpkix-jdk18on-1.80.jar;bcutil-jdk18on-1.80.jar" PGPKeyGenerator
+----
+
+*On Linux/macOS:*
+
+[source,bash,linenums]
+----
+javac -cp "bcpg-jdk18on-1.80.jar:bcprov-jdk18on-1.80.jar:bcpkix-jdk18on-1.80.jar:bcutil-jdk18on-1.80.jar" PGPKeyGenerator.java
+java -cp ".:bcpg-jdk18on-1.80.jar:bcprov-jdk18on-1.80.jar:bcpkix-jdk18on-1.80.jar:bcutil-jdk18on-1.80.jar" PGPKeyGenerator
+----
+
+This generates `secring_example_aes.gpg` and `pubring_example_aes.gpg` files with FIPS-compliant AES-256 and SHA-256 protection.
 
 === Configure the Cryptography Module to Use the Keyring
 
