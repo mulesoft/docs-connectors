@@ -1,0 +1,212 @@
+= A2A Connector 1.0 - Examples
+
+This A2A server configuration uses an agent card JSON file that contains metadata about the agent. Client A2A agents use this information to determine:
+
+* When to use the agent (based on description and skills)
+* Where to contact the agent (based on the url property)
+
+== Configure an A2A Server 
+
+This is an example A2A server configuration:
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="9fd53f88-b7c5-4175-9480-db313b27f9fd">
+    <http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+
+<a2a:server-config name="A2A_Server_config" doc:name="A2A Server config">
+    <a2a:connection listenerConfig="HTTP_Listener_config" agentPath="/" />
+    <a2a:agent-card file="/Users/mule.user/Downloads/agent-card.json" />
+</a2a:server-config>
+----
+
+[calloutlist]
+.. `a2a:server-config` defines the A2A server configuration.
+.. `a2a:connection` specifies the path to use to listen for requests.
+.. `a2a:agent-card` specifies the agent card. Use the `file` attribute to point to a JSON file on the classpath or on disk. 
+
+== A2A Request Format
+
+When sending requests to the *A2A Server - Task Listener* source from external clients (such as Postman or other A2A agents), you must use the correct JSON-RPC format. Incorrectly formatted requests result in unmarshalling errors such as:
+
+[source,text]
+----
+Error unmarshalling string json payload into type io.a2a.spec.SendMessageRequest. Cause: Invalid params
+----
+
+The minimum required JSON-RPC request format for the `message/send` method is:
+
+[source,json,linenums]
+----
+{
+    "jsonrpc": "2.0",
+    "method": "message/send",
+    "id": "test-001",
+    "params": {
+        "message": {
+            "kind": "message",
+            "messageId": "550e8400-e29b-41d4-a716-446655440000",
+            "role": "user",
+            "parts": [
+                {
+                    "kind": "text",
+                    "text": "Hello, this is my message"
+                }
+            ]
+        }
+    }
+}
+----
+
+You can use metadata types in Anypoint Studio to ensure your payloads conform to the A2A schema. The connector includes JSON schema definitions for `MessageSendParams` and other A2A objects. For additional schema references, see the https://github.com/a2aproject/a2a-java[A2A Java SDK].
+
+== Write a Listener That Receives the A2A Request
+
+This example shows how a listener is created. The user prompt that's sent from the client agent is extracted to a variable `user_prompt`:
+
+[source,xml,linenums]
+----
+<flow name="a2sfinancialagent" doc:id="fcd9c8be-94c2-4543-9eff-7f3e2b2f58fb" >
+<a2a:task-listener doc:name="Task Listener" doc:id="c86ea98a-ae50-43be-a7ae-7bb60df17f8e" config-ref="A2A_Server">
+	</a2a:task-listener>
+
+	<set-variable value="#[payload.message.parts[0].text]" doc:name="Set task user prompt" doc:id="0f017d97-1761-4fc7-8b6b-13f3557a4b28" variableName="user_prompt"/>
+</flow>
+----
+
+=== Example Response 
+
+The response is formatted as an A2A task, which is then returned to the client:
+
+[source,xml,linenums]
+----
+<ee:transform doc:name="Transform Message" doc:id="32fd4cee-9380-4f0a-839d-880a7f25ea7f">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+var generatedId = uuid()
+---
+{
+  "contextId": correlationId,
+  "history": [
+    {
+      "contextId": correlationId,
+      "kind": "message",
+      "messageId": payload.message.messageId,
+      "metadata": {},
+      "parts": payload.message.parts,
+      "role": "user",
+      "taskId": generatedId
+    }
+  ],
+  "id": generatedId,
+  "kind": "task",
+  "status": {
+    "state": "submitted"
+  },
+  "validation_errors": []
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+----
+
+== Mule App Example
+
+This example shows how a financial A2A agent Mule app that can answer queries related to US companies and their financial standings listens to A2A requests and passes the user prompt to an LLM using MuleSoft Inference Connector. 
+
+You can paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="sranana2aconnectorFlow" doc:id="fcd9c8be-94c2-4543-9eff-7f3e2b2f58fb" >
+		<a2a:task-listener doc:name="Task Listener" doc:id="c86ea98a-ae50-43be-a7ae-7bb60df17f8e" config-ref="A2A_Server">
+		</a2a:task-listener> #(1)
+		<logger level="INFO" doc:name="Logger" doc:id="08d7c476-ed04-4775-be88-ed2c143851e6" message="Triggering MCP Tools"/> #(2)
+		<set-variable value="#[payload.id]" doc:name="Set Task Id" doc:id="3b1702ea-88c1-4c06-a4ef-971ef8138504" variableName="task_id"/> #(3)
+		<set-variable value='#[(payload.sessionId) default ""]' doc:name="Set Session Id" doc:id="d0790291-fb71-4a10-a953-1b68fa8bbb47" variableName="session_id"/> #(4)
+		<set-variable value="#[payload.message.parts[0].text]" doc:name="Set task user prompt" doc:id="0f017d97-1761-4fc7-8b6b-13f3557a4b28" variableName="user_prompt"/> #(5)
+		<ms-inference:mcp-tools-native-template doc:name="[MCP] Tooling" doc:id="55e0960a-5795-4223-adf4-dfb23365dc3e" config-ref="MuleSoft_Inference_Text_generation_config"> 
+			<ms-inference:template ><![CDATA[You are a specialized assistant that performs financial analysis based on stock market data using stock market symbols]]></ms-inference:template> #(6)
+			<ms-inference:instructions ><![CDATA[Your sole purpose is to use the tools “get_company_symbol” and “get_company_financials" to answer financial questions about US based companies. If the user asks about anything other than stock market or financial aspects of public US companies, politely state that you cannot help with that topic and can only assist with companies financial data. Do not attempt to answer unrelated questions or use tools for other purposes.
+
+Response Format: should be a JSON with 3 properties message, status (consist of "input_required", "completed", “error”) and sentiment with values (“Buy”, “Sell” or “Hold”) and reasoning (indicating in 2-3 sentences as to how the sentiment was decided)
+
+Example queries: “Should I buy CRM stock?”, “Should I sell MSFT?”, “How is AAPL doing?”]]></ms-inference:instructions> 
+			<ms-inference:data ><![CDATA[#[payload.message.parts[0].text]]]></ms-inference:data> 
+		</ms-inference:mcp-tools-native-template>
+		<set-variable value="#[payload.response]" doc:name="MCP Tooling Response" doc:id="60810200-5643-477c-8a45-76f1e0dcc9e0" variableName="mcp_tooling_results"/> #(7)
+		<ms-inference:agent-define-prompt-template doc:name="Finance Agent" doc:id="b25e375b-f3be-45c1-a545-4f93690f98ce" config-ref="MuleSoft_Inference_Text_generation_config"> #(8)
+			<ms-inference:template ><![CDATA[#["You are a specialized assistant for performing financial analysis based on stock market data using stock market symbols.
+
+Use the following context to answer
+
+Context: $(vars.mcp_tooling_results)"]]]></ms-inference:template>
+			<ms-inference:instructions ><![CDATA[Your sole purpose is to answer questions about the financial information of US based companies. If the user asks anything other than stock market or financial aspects of public companies, politely state that you cannot help with that topic and can only assist with companies financial data. Do not attempt to answer unrelated questions or use tools for other purposes.
+
+Response Format: Should be JSON with 3 properties, including message, status ("input_required", "completed", “error”), and sentiment with values (“Buy”, “Sell” or “Hold”) and reasoning (tell in 2-3 sentences how the sentiment was decided)
+
+Example queries: “Should I buy CRM stock?”, “Should I sell MSFT?”, “How is AAPL doing?”]]></ms-inference:instructions>
+			<ms-inference:data ><![CDATA[#[vars.user_prompt]]]></ms-inference:data>
+		</ms-inference:agent-define-prompt-template>
+		<ee:transform doc:name="Transform Message" doc:id="32fd4cee-9380-4f0a-839d-880a7f25ea7f"> #(9)
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+    "id": vars.task_id,
+    "contextId": "context-" ++ vars.task_id,
+    "status": {
+      "state": "completed"
+    },
+    "artifacts": [
+      {
+        "name": "Answer",
+        "artifactId": "artifact-" ++ vars.task_id,
+        "parts": [
+          {
+            "kind": "text",
+            "text": payload.response
+          }
+        ]
+      }
+    ],
+    "kind": "task"
+  }]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+----
+
+[calloutlist]
+
+.. The `a2a:task-listener` component acts as the entry point, waiting to receive a task from an A2A server. This task contains a user's query about stock market data.
+.. The `logger` component outputs an informational message `Triggering MCP Tools` to the MuleSoft logs. 
+.. The `set-variable` component extracts the ID from the incoming payload (the task received in step 1) and stores it in a flow variable named `task_id`.
+.. Another `set-variable` component extracts the `sessionId` from the payload. If `sessionId` isn't present, it defaults to an empty string. This value is stored in a flow variable named `session_id`.
+.. This `set-variable` extracts the actual user query from the payload. Specifically, it takes the text from the first part of the message within the payload and stores it in a flow variable named `user_prompt`.
+.. The `ms-inference:mcp-tools-native-template` configures an LLM to act as a specialized financial analysis assistant.
+.. This `set-variable` component takes the response generated by the `ms-inference:mcp-tools-native-template` (from step 6) and stores it in a flow variable named `mcp_tooling_results`. 
+.. The `ms-inference:agent-define-prompt-template` component processes the results from the previous AI interaction to generate a user-friendly response.
+.. The `ee:transform` (DataWeave transformation) component takes the `payload.response` from the previous AI interaction and transforms it into a structured JSON output.
+
+== Configure the A2A Client to Call Other A2A Agents
+
+[source,xml,linenums]
+----
+<flow name="sranana2aconnectorFlow1" doc:id="973b8e26-66e6-449e-809d-9ae42125c693" >
+	<a2a:task-listener doc:name="Task Listener" doc:id="974a49ae-98a7-4f1c-a216-1b66f0a77b71" config-ref="A2A_Server"/>
+	<a2a:send-message doc:name="Send Message to A2A Agent" doc:id="1814db20-45b7-43e2-81e0-68211f1ae9af" config-ref="A2A_Client">
+		<a2a:message ><![CDATA[#[payload]]]></a2a:message>
+	</a2a:send-message>
+</flow>
+----
+
+
+== See Also
+
+* xref:a2a-connector-reference.adoc[A2A Connector Reference]
+* https://github.com/MuleSoft-AI-Chain-Project/mule-inference-connector[MuleSoft Inference Connector]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
