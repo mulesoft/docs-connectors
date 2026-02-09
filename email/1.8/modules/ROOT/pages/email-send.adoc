@@ -26,7 +26,7 @@ Accept a PDF, MS Word document, and JSON file (for example, an incident report) 
 Poll or list files on an SFTP server and send them as email attachments to a function or mailbox.
 
 [[understanding-attachments]]
-== Understand Attachments and the Attachments Map
+== Understand Attachments
 
 This section explains when to use fixed vs dynamic attachments, and what the *Attachments* parameter expects.
 
@@ -50,6 +50,24 @@ The *Attachments* parameter of the *Send* operation expects a DataWeave expressi
 * Map structure: Each key is the **attachment filename** (as shown in the email client). Each value is the attachment content (Binary, String, or a stream).
 * Content type: The map itself does not have a single content type. Each value is the raw content; the connector uses the content as-is. When the value comes from a Mule message (for example, `payload` or `vars.x`) that has a MIME type (for example from an HTTP multipart part or a File read), that type is used for the attachment. For inline DataWeave content you can control the type by using `read()` with a MIME type or by ensuring the value is the correct type (for example, `output application/octet-stream` for binary).
 * Example: `{ 'report.pdf' : payload }` uses the current payload as the content of `report.pdf`; if `payload` was read from a file or HTTP part, its existing MIME type is used.
+
+=== Understanding Binary Attachments
+
+Files such as Portable Document Format (PDF), Portable Network Graphics (PNG), Word documents, or any non-text binary must be sent as binary content in the attachments map. SMTP transports text; binary data is encoded for transport (for example, Base64). 
+
+* Pass the file content as binary. Do not convert binary data to String (for example, don't use a string representation or a character encoding like UTF-8 for the bytes); that can corrupt the file. When you use the File Connector *Read* operation, HTTP *Listener* multipart parts, or SFTP *Read*, the payload (or part content) is already binary and has the appropriate MIME type (for example, `application/pdf`, `image/png`). Use that value directly in the attachments map.
+* Email Connector encodes non-text attachments for transport. The default is *Base64*, which is appropriate for PDF, PNG, and other binary formats. You don't need to Base64-encode the value yourself; the connector applies the encoding. To use a different encoding (for example, QUOTED-PRINTABLE, 8BIT, 7BIT, or BINARY), configure the *Content Transfer Encoding* parameter on the *Send* operation.
+* If you build the attachment from a path or classpath resource, use DataWeave `read()` with the correct MIME type so the value stays Binary and the attachment is sent with the right type. For example:
++
+[source,dataweave,linenums]
+----
+{
+  'disclaimer.pdf' : read('classpath://disclaimer.pdf', 'application/pdf'),
+  'logo.png'      : read('classpath://logo.png', 'image/png')
+}
+----
++
+This keeps the content as binary and sets the MIME type for each attachment. The connector then applies Content-Transfer-Encoding (default Base64) when sending.
 
 [[send-email]]
 == Send Emails
@@ -421,7 +439,7 @@ A common use case is accepting files (for example a PDF, an MS Word document, an
 An HTTP *Listener* (path for example, `/api/support/ticket`) receives the multipart request. The payload is a multipart message; use `payload.parts.<name>` to access each part. Build an attachments map from the parts (using each part’s content and optionally filename from `Content-Disposition`), then call Email *Send* with that map and the desired *To* address (for example, support@company.com).
 
 * Attachments map from multipart
-Each part’s content is available as `payload.parts.<partName>.content`. The filename (if present) is in `payload.parts.<partName>.headers.'Content-Disposition'.filename`. Use a DataWeave expression to build a map: keys = attachment names (for example, original filename or a fixed name), values = part content. The connector uses the part’s content type when available.
+Each part’s content is available as `payload.parts.<partName>.content`. The filename (if present) is in `payload.parts.<partName>.headers.'Content-Disposition'.filename`. Use a DataWeave expression to build a map: keys = attachment names (for example, original filename or a fixed name), values = part content. The connector uses the part’s content type when available. Binary parts (PDF, PNG, Word, and so on) are already Binary; the connector applies Content-Transfer-Encoding (default Base64) for transport, so you do not need to encode them yourself.
 
 === Example: PDF, Word, and JSON incident to support
 
