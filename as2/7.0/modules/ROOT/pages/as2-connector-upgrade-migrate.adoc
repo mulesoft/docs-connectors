@@ -1,153 +1,398 @@
-= Upgrading and Migrating AS2 Connector to Version 6.x 
+= Upgrading and Migrating AS2 Connector to Version 7.x
 :page-aliases: connectors::as2/as2-connector-upgrade-migrate.adoc
 
-Upgrade Anypoint Connector for AS2 (AS2 Connector) from version 5.x to 6.x to take advantage of new features and functionality.
+Upgrade Anypoint Connector for AS2 (AS2 Connector) from version 6.x to 7.x to take advantage of FIPS-compliant cryptographic support and other improvements.
 
 == Supported Upgrade Paths
+
+Supported upgrade paths as per below table.
 
 [%header,cols="50a,50a"]
 |===
 |From Version | To Version
-|5.x |6.x
+|6.x |7.x
 |===
 
-== Changes
+== Before You Begin
 
-=== 6.9
+Make sure you meet these prerequisites before upgrading to AS2 Connector 7.x:
 
-The connector now supports MDN Signatures that are Base64-encoded and have lines that exceed 76 characters.
+* Mule Runtime 4.4.0 or later (see Mule runtime release notes for FIPS support by version)
+* AS2 Connector version 7.0.0 or later
+* AS2 Support Libraries version 3.0.0 or later
+* For Non FIPS mode: Bouncy Castle Java Cryptography Extension (JCE) provider, designed for JDK 1.8 and higher. Uses bcprov-jdk18on, bcpkix-jdk18on libraries. Recommended version are 1.82.
+* For FIPS modes: Bouncy Castle FIPS (BCFIPS) libraries as required by your Mule runtime and security model
+* For FIPS 140-3: Java 17 or later with FIPS-capable JVM when required by your deployment
 
-=== 6.8
+== Understanding Security Modes
 
-Additional validations are now performed on the keystore and algorithm usage to address reported security vulnerabilities.
+AS2 Connector 7.x supports three security modes, controlled by the `mule.security.model` system property:
 
-=== 6.7
+* **non-fips (default)** – This is the default mode and the connector uses the standard cryptographic libraries (bcprov-jdk18on, bcpkix-jdk18on) that are not FIPS compliant. The system property should not be set for default mode.
+* **fips140-2** – FIPS 140-2 compliant mode. The connector uses FIPS 140-2 approved cryptographic providers when this value is set.
+* **fips140-3** – FIPS 140-3 compliant mode. The connector uses FIPS 140-3 approved cryptographic providers when this value is set.
 
-When using the *AS2 Listener* source, you can now use a different alias to sign the MDN than the alias used for decryption.
-To support this functionality, the release contains two new fields: *Use different Alias for MDN Signature* and *Alias For MDN Signature*.
+When `mule.security.model` is set to a value starting with `fips140-` (for example, `fips140-2` or `fips140-3`), the connector operates in FIPS mode with the corresponding security controls.
 
-For more information, see the xref:connectors::as2/as2-connector-reference.adoc#ListenerConfig[Listener Config section] in the AS2 Connector Reference.
+Example for FIPS 140-3:
 
+[source,bash]
+----
+-Dmule.security.model=fips140-3
+----
 
-=== 6.6
+== Understanding External Libs Configurations
 
-When using the *Send with Sync Mdn* operation, you can now use a different alias to validate the MDN signature than the alias used for encryption.
- To support this functionality, the release contains two new fields: *Use different Alias for MDN Signature Validation* and *x509 Alias For MDN Signature*.
+Every Mule application that uses AS2 Connector will now require a Connector Configuration Global Element to include the necessary dependent AS2 Support libraries and cryptographic libraries allowed for each security mode. The following table lists the global configuration and required libraries for each security mode. Use exactly one row (one mode) per application.
 
-For more information, see the xref:as2-connector-reference#send-config[Send Config section] in the AS2 Connector Reference.
+[%header%autowidth]
+|===
+|Security mode | Global configuration | Default Name | Required libraries (Maven coordinates)
+|Non-FIPS | AS2 Connector External Libs - Non FIPS | AS2_Connector_External_Libs___Non_FIPS | `com.mulesoft.connectors:as2-bc-non-fips-impl:3.0.0`, `org.bouncycastle:bcpkix-jdk18on:1.82`, `org.bouncycastle:bcprov-jdk18on:1.82`
+|FIPS 140-2 | AS2 Connector External Libs - FIPS 140-2 | AS2_Connector_External_Libs___FIPS_140_2 | `com.mulesoft.connectors:as2-bc1-fips-impl:3.0.0`
+|FIPS 140-3 | AS2 Connector External Libs - FIPS 140-3 | `AS2_Connector_External_Libs___FIPS_140_3` | `com.mulesoft.connectors:as2-bc2-fips-impl:3.0.0`
+|===
 
-=== 6.5
+For FIPS modes, the Mule runtime and BCFIPS requirements still apply; the table lists the AS2-specific libraries.
 
-AS2 Connector 6.5 contains new functionality that enables you to check for duplicate incoming messages when using the *As 2 listener* source. This new functionality includes the use of a MuleSoft object store, which stores received messages.
+Look at the snapshot for the Connector Configurations listed above that can be used for creating Global Elemets.
+image::as2-connector-global-element-config.png[Create Connector Configurations Global Element]
 
-To support this new functionality, the release contains a new *Advanced* tab in the *As 2 listener* source global configuration. To see field descriptions for this tab, see the xref:as2-connector-reference.adoc#listener-config-advanced[Listener Config's Advanced Parameters section] in the AS2 Connector Reference.
-
-=== 6.4
-
-AS2 Connector 6.4 contains the following changes:
-
-* You can now configure the *As 2 listener* to send the MDN at the end of the flow by using the *Mdn mode* option `AUTO`.
-* You can now configure retries to ensure the delivery of the MDN by using the *Retry interval* and *Retry count* fields in the *Async MDN Connection Provider* global configuration.
-* A new field named *Validate certificate date* enables you to enable or disable the certificate date validation.
-* The connector logs a warning message in the console when a certificate is near its expiration date or if it is expired. You can use the new *Warning before (days)* field in the *Listener Config*, *MDN Listener Config*, and *KeyStore Config* *Send Config* configurations to configure when the warning message is logged.
-
-For more information, see the xref:as2-connector-reference.adoc[AS2 Connector Reference].
-
-=== 6.3
-
-AS2 Connector 6.3 contains the following changes:
-
-* You can now configure a single AS2 listener endpoint to receive messages from multiple partners.
-+
-To implement this feature, a new tab named *Partners* was added to the *As 2 listener* and *As 2 mdn listener* global elements. This tab contains fields that were moved from the *Partner Config* section of the *General* tab, as well as some new fields.
-+
-The value of the *Listener Mode* field determines whether the listener can receive messages from one partner only (*Dedicated Mode*) or from multiple partners (*Shared mode*).
-+
-* You can now pass custom headers on outbound AS2 messages by using the new *Custom headers* field when configuring the *Send with Sync MDN* and *Send with Async MDN* operations.
-
-For more information, see the xref:as2-connector-reference.adoc[AS2 Connector Reference] and xref:as2-connector-examples.adoc[AS2 Connector Examples] topics.
-
-=== 6.2
-
-AS2 Connector 6.2 contains the following new fields:
-
-* The *Custom Message ID* field enables you to specify a custom message ID for AS2 *Send* operations.
-* The *Propagate Content Transfer Encoding* field enables you to define whether to propagate the content transfer encoding on the AS2 message sent to the partner.
-
-Both of these fields are on the *General* tab.
-
-=== 6.1
-
-AS2 Connector 6.1 also contains the following changes:
-
-The *Transfer Mode Configuration* Field was added to the `Send Config` class so that you can enable and disable chunked transfer of data when using the *Send* operation.
-* Digitally signed copies of outgoing and received messages and their corresponding receipts can be saved for non-repudiation purposes as long as they are configured and enabled on AS2 Connector operations and sources.
-* The new Mule source `Non repudiation listener` must be user-configured to persist the non-repudiation information provided by any of the AS2 Connector
-operations and sources via a user-defined persistence strategy.
-* Certain attribute object fields are renamed and deprecated fields are removed. +
-These changes are outlined in <<upgrade-steps,Upgrade Steps>>.
-
-== Requirements
-
-Ensure that you meet the following requirements before you migrate:
-
-* Mule 4.3.0 or later
-* Java 8
-
-[[upgrade-steps]]
 == Upgrade Steps
 
-Follow these steps to perform the upgrade to AS2 version 6.x:
+Follow the steps below to upgrade from AS2 Connector 6.x to 7.x. Configuration depends on the security mode you use: non-fips, fips140-2, or fips140-3.
 
-. Download AS2 Connector 6.x.x from Exchange.
-. Place the appropriate source or operation in the Mule flow you are upgrading.
+=== Step 1: Update the Connector Dependency
 
-=== Changes for AS2 Listener and AS2 MDN Listener
+. Update your project's `pom.xml` to use AS2 Connector 7.x:
 
-There are no changes to the way AS2 Listener and AS2 MDN Listener are used or configured.
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>com.mulesoft.connectors</groupId>
+    <artifactId>mule-as2-connector</artifactId>
+    <version>7.0.0</version>
+    <classifier>mule-plugin</classifier>
+</dependency>
+----
 
-=== Changes for Send with Sync MDN and Send with Async MDN operations
+.  Rebuild the project and resolve any API or configuration changes reported by the build.
 
-The `Send with Sync MDN` and `Send with Async MDN` operations have the following changes:
+=== Step 2: Add a Connector Configuration Global Element
 
-* An attribute object of type `com.mulesoft.connector.as2.api.AS2MdnAttributes` is changed in version 6.1.0: +
-The field `com.mulesoft.connector.as2.api.AS2SendAttributes.as2MdnAttributes` is of type `com.mulesoft.connector.as2.api.AS2MdnAttributes`.
-* The MultiMap `dispositionContent` is converted into an object called `DispositionNotification` that splits the information of the disposition-notification part of the MDN into parameters. +
-The `DispositionNotification` is in the `DispositionNotificationReport` object.
+In 7.x, the application must include *exactly one* AS2 Connector External Libs global configuration. Add it as described below for chosen mode.
 
-Amend Mule flows that are using these attributes accordingly.
+==== Non-FIPS
 
-=== Changes in AS2 MDN Attributes
+Use this configuration when you are *not* running in a FIPS-regulated environment. Add the External Libs global configuration, do not set the runtime property explicitly.
 
-[%header%autowidth.spread]
+**Requirements:**
+
+* BouncyCastle jdk18on libraries v1.82 must be available to add them as external libraries.
+
+**Mule app:**
+
+* **In Anypoint Studio:**
+. In the *Package Explorer* or *Canvas*, open your Mule flow or configuration.
+. Click *Global Elements* (or *Create global element* / the plus icon next to Global Elements).
+. Click *Create*, search for *AS2* or *External Libs*, and select: *AS2 Connector External Libs - Non FIPS*.
+. Name the configuration and add the *Required libraries* for the chosen mode (see the table Understanding External Libs Configurations) by clicking *Configure* and *Add recommended libraries* before clicking *OK*. The libraries will be included as `dependencies` and `sharedLibraries` in the Mule application `pom.xml` file.
+. Ensure your project has the required dependencies for that mode (add them via Maven if not pulled in automatically).
+
+Below is a screenshot of the Connector Configuration Global Element along with configurations to perform for non-fips mode:
+image::as2-connector-upgrade-non-fips-config.png[Non-FIPS (default) configuration]
+
+* **In XML (Maven or standalone):**
+. Open your main Mule configuration file (for example, `src/main/mule/` or `src/main/resources/`).
+. Add global element `as2-mule4:external-libs-non-fips-config` manually in Mule configuration file.
+. Add dependencies and sharedLibraries manually as explained below. 
+. Add the AS2 Connector External Libs - Non FIPS global configuration to your Mule configuration file:
+
+[source,xml,subs=attributes+]
+----
+<as2-mule4:external-libs-non-fips-config name="AS2_External_Libs_Non_FIPS" />
+----
+
+. Add the required Maven dependencies for your chosen mode to `pom.xml` (see the table Understanding External Libs Configurations).
+
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcpkix-jdk18on</artifactId>
+    <version>${bouncy.castle.jdk18on.version}</version>
+</dependency>
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcprov-jdk18on</artifactId>
+    <version>${bouncy.castle.jdk18on.version}</version>
+</dependency>
+<dependency>
+    <groupId>com.mulesoft.connectors</groupId>
+    <artifactId>as2-bc-non-fips-impl</artifactId>
+    <version>${as2.support.library.version}</version>
+</dependency>
+----
+
+. Add the configuration for `mule-maven-plugin` by including the `sharedLibraries` under build -> plugins -> plugin section of pom.xml.
+
+[source,xml,subs=attributes+]
+----
+<configuration>
+  <sharedLibraries>
+    <sharedLibrary>
+      <groupId>com.mulesoft.connectors</groupId>
+      <artifactId>as2-bc-non-fips-impl</artifactId>
+    </sharedLibrary>
+    <sharedLibrary>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcpkix-jdk18on</artifactId>
+    </sharedLibrary>
+    <sharedLibrary>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+    </sharedLibrary>
+  </sharedLibraries>
+</configuration>
+----
+
+
+==== FIPS 140-2
+
+Use this configuration when your environment requires FIPS 140-2 compliant cryptography. Add the External Libs global configuration first, then set the runtime property.
+
+**Requirements:**
+
+* BouncyCastle FIPS (BCFIPS) must be available as required by your Mule runtime for FIPS 140-2.
+* Ensure BCFIPS is configured in Java Security or via Mule runtime FIPS documentation for your version.
+
+**Mule app:** 
+
+* **In Anypoint Studio:**
+. In the *Package Explorer* or *Canvas*, open your Mule flow or configuration.
+. Click *Global Elements* (or *Create global element* / the plus icon next to Global Elements).
+. Click *Create*, search for *AS2* or *External Libs*, and select: *AS2 Connector External Libs - FIPS 140-2*.
+. Name the configuration and add the *Required libraries* for the chosen mode (see the table Understanding External Libs Configurations) by clicking *Configure* and *Add recommended libraries* before clicking *OK*. The libraries will be included as `dependencies` and `sharedLibraries` in the Mule application `pom.xml` file.
+. Ensure your project has the required dependencies for that mode (add them via Maven if not pulled in automatically).
+
+Below is a screenshot of the Connector Configuration Global Element along with configurations to perform for fips140-2 mode. 
+image::as2-connector-upgrade-fips140-2-config.png[FIPS 140-2 configuration]
+
+* **In XML (Maven or standalone):**
+. Open your main Mule configuration file (for example, `src/main/mule/` or `src/main/resources/`).
+. Add global element `as2-mule4:external-libs-fips140-2-config` manually in Mule configuration xml file.
+. Add dependencies and sharedLibraries manually as explained below. 
+. Add the AS2 Connector External Libs - FIPS 140-2 global configuration to your Mule configuration file:
+
+[source,xml,subs=attributes+]
+----
+<as2-mule4:external-libs-fips140-2-config name="AS2_External_Libs_FIPS_140_2" />
+----
+
+. Add the required Maven dependencies for your chosen mode to `pom.xml` (see the table below).
+
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>com.mulesoft.connectors</groupId>
+    <artifactId>as2-bc1-fips-impl</artifactId>
+    <version>${as2.support.library.version}</version>
+</dependency>
+----
+
+. Add the configuration for `mule-maven-plugin` by including the sharedLibraries under build -> plugins -> plugin section of pom.xml.
+
+[source,xml,subs=attributes+]
+----
+<configuration>
+  <sharedLibraries>
+    <sharedLibrary>
+      <groupId>com.mulesoft.connectors</groupId>
+      <artifactId>as2-bc1-fips-impl</artifactId>
+    </sharedLibrary>
+  </sharedLibraries>
+</configuration>
+----
+
+**JVM / Mule runtime:** Set the security model to FIPS 140-2:
+
+[source,bash]
+----
+-Dmule.security.model=fips140-2
+----
+
+**Optional (if required by your runtime):** For BCFIPS to use only FIPS-approved algorithms:
+
+[source,bash]
+----
+-Dorg.bouncycastle.fips.approved_only=true
+----
+
+**Example Mule runtime startup (FIPS 140-2):**
+
+[source,bash]
+----
+java -Dmule.security.model=fips140-2 \
+  -Dorg.bouncycastle.fips.approved_only=true \
+  -jar mule-standalone.jar
+----
+
+==== FIPS 140-3
+
+Use this configuration when your environment requires FIPS 140-3 compliant cryptography. Add the External Libs global configuration first, then set the runtime property.
+
+**Requirements:**
+
+* Mule Runtime and Java version that support FIPS 140-3 (see Mule runtime and JDK documentation).
+* BouncyCastle FIPS (BCFIPS) v2 or later as required by your Mule runtime for FIPS 140-3.
+* Java 17 or later when required for FIPS 140-3 support in your deployment.
+
+**Mule app:** 
+
+* **In Anypoint Studio:**
+. In the *Package Explorer* or *Canvas*, open your Mule flow or configuration.
+. Click *Global Elements* (or *Create global element* / the plus icon next to Global Elements).
+. Click *Create*, search for *AS2* or *External Libs*, and select: *AS2 Connector External Libs - FIPS 140-3*.
+. Name the configuration and add the *Required libraries* for the chosen mode (see the table Understanding External Libs Configurations) by clicking *Configure* and *Add recommended libraries* before clicking *OK*. The libraries will be included as `dependencies` and `sharedLibraries` in the Mule application `pom.xml` file.
+. Ensure your project has the required dependencies for that mode (add them via Maven if not pulled in automatically).
+
+Below is a screenshot of the Connector Configuration Global Element along with configurations to perform  for fips140-3 mode.
+image::as2-connector-upgrade-fips140-3-config.png[FIPS 140-3 configuration]
+
+* **In XML (Maven or standalone):**
+. Open your main Mule configuration file (for example, `src/main/mule/` or `src/main/resources/`).
+. Add global element `as2-mule4:external-libs-fips140-3-config` manually in Mule configuration xml file.
+. Add dependencies and sharedLibraries manually as explained below. 
+. Add the AS2 Connector External Libs - FIPS 140-3 global configuration to your Mule configuration file:
+
+[source,xml,subs=attributes+]
+----
+<as2-mule4:external-libs-fips140-3-config name="AS2_External_Libs_FIPS_140_3" />
+----
+
+. Add the required Maven dependencies for your chosen mode to `pom.xml` (see the table below).
+
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>com.mulesoft.connectors</groupId>
+    <artifactId>as2-bc2-fips-impl</artifactId>
+    <version>${as2.support.library.version}</version>
+</dependency>
+----
+
+. Add the configuration for `mule-maven-plugin` by including the sharedLibraries under build -> plugins -> plugin section of pom.xml.
+
+[source,xml,subs=attributes+]
+----
+<configuration>
+  <sharedLibraries>
+    <sharedLibrary>
+      <groupId>com.mulesoft.connectors</groupId>
+      <artifactId>as2-bc2-fips-impl</artifactId>
+    </sharedLibrary>
+  </sharedLibraries>
+</configuration>
+----
+
+**JVM / Mule runtime:** Set the security model to FIPS 140-3:
+
+[source,bash]
+----
+-Dmule.security.model=fips140-3
+----
+
+**Required for FIPS compliance:** Restrict BCFIPS to FIPS-approved algorithms only:
+
+[source,bash]
+----
+-Dorg.bouncycastle.fips.approved_only=true
+----
+
+**Example Mule runtime startup (FIPS 140-3):**
+
+[source,bash]
+----
+java -Dmule.security.model=fips140-3 \
+  -Dorg.bouncycastle.fips.approved_only=true \
+  -jar mule-standalone.jar
+----
+
+The `org.bouncycastle.fips.approved_only` property is JVM-wide and must be set by your system or runtime configuration when running in FIPS mode.
+
+=== Step 3: Keystore and Algorithm Compatibility
+
+* Ensure keystores and certificates are compatible with the security mode (FIPS modes may require FIPS-approved algorithms).
+* If you use BCFIPS in FIPS mode, key and algorithm restrictions apply; refer to Mule and BCFIPS documentation for approved algorithms.
+
+=== Step 4: Verify Connector Usage in Flows
+
+* Ensure partner certificates and algorithms are compatible with the chosen security mode and verify if the Connector Configuration exists in the Mule if AS2 Connector operations are used in any of the flows. 
+
+== External Libs Configuration and Startup Validations
+
+When any AS2 source or operation starts (AS2 Listener, AS2 MDN Listener, or Send operations), the connector runs validations to ensure the External Libs configuration and runtime settings are correct. Understanding these checks helps you resolve startup errors.
+
+=== Validations Performed at Startup
+
+The connector performs the following checks and fails deployment of the Mule application when operations (Listener, MDN Listener, or Send config) are included in the Mule app:
+
+* **Exactly one configuration** – The application must have exactly one External Libs configuration. You see an error if none is added or if multiple are added.
+* **System property alignment** – The `mule.security.model` system property must match the chosen External Libs configuration:
+** *Non-FIPS:* `mule.security.model` must not be set. If it is set, the connector reports that you must remove the property for non-fips mode.
+** *FIPS 140-2:* `mule.security.model` must be `fips140-2`. Otherwise the connector reports that you must set `-Dmule.security.model=fips140-2`.
+** *FIPS 140-3:* `mule.security.model` must be `fips140-3`. Otherwise the connector reports that you must set `-Dmule.security.model=fips140-3`.
+* **Classpath alignment** – The implementation library for the chosen mode must be on the classpath. If the expected library is missing (for example, `as2-bc-non-fips-impl` for Non-FIPS, `as2-bc1-fips-impl` for FIPS 140-2, or `as2-bc2-fips-impl` for FIPS 140-3), startup fails with an error. A warning recommending to remove conflicting libraries from the classpath will also be shown in the logs.
+* **Crypto implementation instantiation** – The connector instantiates the cryptographic implementation for the selected mode at startup. If this fails (for example, due to missing or incompatible libraries), the application fails fast with an error that includes the security profile and the cause.
+
+
+== System Properties Reference
+
 |===
-|5.x Field Name| 6.x Field Name | 5.x Type | 6.x Type
-|dispositionContent |dispositionContent | MultiMap<String, String> | DispositionNotificationReport
-|mdnMic | DispositionNotificationReport.DispositionNotification.receivedContentMic | String | String
-|mdnMicAlg | DispositionNotificationReport.DispositionNotification.receivedContentMicAlgorithm | HashAlgorithm | HashAlgorithm
-|mdnProcessed | DispositionNotificationReport.DispositionNotification.dispositionType | boolean | String
-|originalAS2MessageId |  DispositionNotificationReport.DispositionNotification.originalMessageID | String | String
-|reportText | Field Removed | String | Field Removed
+|Property | Description | Values | Default | Scope
+|`mule.security.model` | Security mode used by the connector | `fips140-2` or `fips140-3` | `non-fips` (when not set) | Runtime / JVM
+|`org.bouncycastle.fips.approved_only` | Restricts BCFIPS to FIPS-approved algorithms only. Required for FIPS compliance when using BCFIPS. | `true`, `false` | `false` | JVM-wide
 |===
 
-=== Post Upgrade Steps
+The `org.bouncycastle.fips.approved_only` property affects the entire JVM. It is not set by the AS2 Connector; when running in FIPS mode, the system administrator must configure it according to Mule and BCFIPS documentation.
 
-After you perform the upgrade steps, follow these steps to complete the upgrade:
+== Migrate Existing Deployments
 
-. Verify that the connector is working by making sure there are no exceptions on startup and test it against your AS2 partner.
-. Notify your partners of any new URL (port) configurations that correspond to the HTTP Listener you are using.
+AS2 Connector 7.x introduces a Global Connector Configuration and support for configurable security mode (non-FIPS, FIPS 140-2, FIPS 140-3) via the `mule.security.model` system property. Follow the Upgrade Steps section for changes to be done to the Mule application; cryptographic behavior aligns with the global configuration that adds the required libraries and the runtime security model. Existing flows and configurations from 6.x continue to work without any other code changes.
+
+=== FIPS Environments (140-2 or 140-3)
+
+. Verify that BCFIPS and any FIPS-related settings are configured for your Mule runtime version (see Mule documentation for FIPS).
+. Set `mule.security.model` to `fips140-2` or `fips140-3` as appropriate for your compliance requirement.
+. Set `org.bouncycastle.fips.approved_only=true` when required for compliance.
+. Test in a non-production environment: run flows with AS2 Listener, MDN Listener, and Send operations.
+. Deploy to production and monitor logs for successful startup and AS2 message exchange.
+
+== Post-Upgrade Steps
+
+. Verify that the application starts without errors and that the AS2 Connector initializes correctly for your chosen security mode.
+. Test AS2 Listener, MDN Listener, and Send operations against your AS2 partner(s).
+. Confirm that certificates and algorithms are accepted in FIPS mode if applicable.
+. Notify partners of any URL or port changes if you modified the HTTP Listener configuration.
 
 == Troubleshooting
 
-If there are problems with caching the parameters and caching the metadata, try restarting Studio.
+* **"AS2 Connector requires at least one External Libs configuration":** Add exactly one External Libs global configuration to your application (AS2 Connector External Libs - Non FIPS, AS2 Connector External Libs - FIPS 140-2, or AS2 Connector External Libs - FIPS 140-3). See <<External Libs Configuration and Startup Validations>>.
+* **"Only one External Libs configuration is allowed per application":** Remove the extra External Libs configuration(s) so that only one of the three (Non-FIPS, FIPS 140-2, or FIPS 140-3) remains.
+* **"Detected 'as2-bc-non-fips-impl' but system property 'mule.security.model' is ...":** For Non-FIPS mode, do not set `mule.security.model`, or remove it from JVM arguments or runtime configuration.
+* **"Detected 'as2-bc1-fips-impl' but system property ... Set -Dmule.security.model=fips140-2":** Add `-Dmule.security.model=fips140-2` when using AS2 Connector External Libs - FIPS 140-2.
+* **"Detected 'as2-bc2-fips-impl' but system property ... Set -Dmule.security.model=fips140-3":** Add `-Dmule.security.model=fips140-3` when using AS2 Connector External Libs - FIPS 140-3.
+* **"External Libs - ... configuration selected, but '...' is not on the classpath":** Add the correct implementation dependency for your chosen mode (or ensure the External Libs configuration pulls it in). Remove any other AS2 crypto implementation libraries for the other modes from the classpath if the connector warns about them.
+* **Startup or crypto errors in FIPS mode:** Ensure `mule.security.model` matches your runtime FIPS setup and that BCFIPS is correctly installed and registered. Set `org.bouncycastle.fips.approved_only=true` when required.
+* **Tests or flows that relied on Non-FIPS behavior:** When running with `mule.security.model=fips140-2` or `fips140-3`, some algorithms or key usages may be restricted; align keystores and partner expectations with FIPS-approved algorithms.
+* **Caching or metadata issues:** If Studio or Design Center shows stale configuration, try restarting the IDE or clearing caches.
 
 == Revert the Upgrade
 
-If it is necessary to revert to the previous version of as2MdnAttributes Connector, change the `as2-connector` dependency version in the project's `pom.xml` file to the previous version.
-
-You must update the project's `pom.xml` file in Anypoint Studio.
+To revert to AS2 Connector 6.x, change the `mule-as2-connector` dependency in your project's `pom.xml` back to the desired 6.x version. Remove the Global Element (AS2 Connector External Libs - Non FIPS, AS2 Connector External Libs - FIPS 140-2, or AS2 Connector External Libs - FIPS 140-3). Remove the libraries that are added as `dependencies` and `sharedLibraries` from the `pom.xml` file. Remove or adjust any 7.x-specific system properties (such as `mule.security.model`) if they are not used by other components.
 
 == See Also
 
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:as2-connector-reference.adoc[AS2 Connector Reference]
 * https://help.mulesoft.com[MuleSoft Help Center]
