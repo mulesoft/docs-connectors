@@ -1,0 +1,124 @@
+= Redis Connector 5.4 Additional Configuration Information
+
+Redis Connector contributes an Object Store implementation. Although Redis offers flexible eviction and persistence, you must understand how the Mule Redis-backed Object Store is designed to work when Redis is shared across multiple applications or systems. Learn key design constraints, eviction behavior, and best practices for using Redis as an Object Store in Mule applications, with a focus on avoiding deserialization and eviction-related failures.
+
+== Redis as a Mule Object Store
+
+When Redis is configured as an Object Store in Mule:
+
+* Mule serializes payloads before storing them in Redis.
+* Object Store operations (retrieve, remove, expire) require successful deserialization of stored values.
+
+As a result, the Redis Object Store is designed to manage only entries that it created and can deserialize.
+
+== Common Deployment Patterns
+
+In some architectures, Redis is deployed as a shared service and accessed by:
+
+* Multiple Mule applications
+* External (non-Mule) applications
+* Operational or administrative scripts that insert or delete keys
+
+This pattern is valid for Redis itself but introduces important considerations when Redis is used specifically as a Mule Object Store.
+
+== Examples of Object Store Behavior
+
+Here are some scenarios to illustrate how the Redis Object Store behaves when Redis is shared across multiple applications or systems.
+
+=== In-Memory Object Store per Application
+
+image::redis-scenario-1.png["Shows two separate applications, App A and App B, each connecting to its own cloud service and dedicated database to store unique access and refresh tokens."]
+
+Setup
+
+* Application A and Application B each use an in-memory Object Store.
+
+Outcome
+
+* Each application maintains its own isolated store.
+* No key collisions or deserialization issues occur.
+* Expiration and invalidation are fully controlled per application.
+
+This is the safest and most isolated configuration.
+
+=== Shared External Object Store (Not Redis)
+
+image::redis-scenario-2.png["Shows App A and App B sharing a single database that stores multiple sets of access and refresh tokens."]
+
+Setup
+
+* Application A and Application B use a common external Object Store.
+* Identical object IDs (for example, access_token) are used.
+
+Outcome
+
+* Redis Object Store implementation prevents overwriting entries created by another application.
+* This behavior is intentional to prevent data corruption.
+
+Cross-application data ownership is restricted by design.
+
+=== Redis as a Shared External Object Store
+
+image::redis-scenario-3.png["shows App A and App B both connecting to a centralized Redis database while also maintaining individual connections to Salesforce and ServiceNow."]
+
+Setup
+
+* Redis is configured as a shared external Object Store.
+* Mule Application A, Application B, and external systems write to the same Redis instance.
+* Stored data includes:
+** Java-serialized objects (via Mule Object Store)
+** Plain text or JSON (via direct Redis operations)
+
+Outcome
+
+* During eviction or expiration, the Mule Object Store may encounter entries it can't deserialize.
+* This can result in errors such as:
++
+[source,text]
+----
+org.mule.runtime.api.store.ObjectStoreException: Could not deserialize object
+Caused by: java.lang.ClassNotFoundException
+----
+
+Eviction or cleanup fails when Redis contains entries not owned by the current application or classloader.
+
+== Expectation vs. Actual Behavior
+
+[%header%autowidth.spread]
+|===
+| Expectation | Actual Behavior
+| Redis Object Store can be freely shared across applications | Each application can only deserialize objects created within its own classloader
+| Expiration task cleans all excess entries | Expiration fails when encountering unknown or incompatible entries
+| Non-Mule data can coexist in Redis | Non-serialized data can cause Object Store failures
+| Cache Scope can be invalidated across applications | Cache invalidation is application-bound
+|===
+
+== Why This Behavior Is by Design
+
+The Redis Object Store follows strict safety and isolation principles:
+
+[%header%autowidth.spread]
+|===
+| Design Principle | Explanation
+| Data Ownership | The Object Store only manages data it owns
+| Data Integrity | Prevents accidental deletion of external or foreign data
+| Classloader Isolation | Mule applications can't safely deserialize objects from other apps
+| Fail-Safe Operation | Fails safely instead of performing destructive deletes
+|===
+
+This ensures predictable behavior and avoids unintended side effects in shared environments.
+
+== Redis Eviction and Mule Object Store
+
+Redis eviction policies operate at the Redis level, not at the Mule Object Store level. Mule Object Store expiration deserializes values even during expiration. As a result, Mule Object Store expiration can fail if incompatible entries exist.
+
+== Recommended Best Practices
+
+* *Separate Object Store and Generic Redis Usage*
++
+** Use Object Store APIs only for Mule-managed, serialized data stored in Redis Object Store. 
+**Use Redis Connector operations for plain text, JSON, or external data.
+
+* *Namespace Keys Explicitly*
++
+** For shared Redis Object Store, ensure Object Store keys don't overlap with externally managed Redis keys.
