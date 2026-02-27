@@ -1,0 +1,265 @@
+= Salesforce Pub/Sub Connector 1.2 Examples
+
+The following examples show several Mule flows for Salesforce Pub/Sub Connector:
+
+* <<publish-an-event>>
+* <<publish-request>>
+* <<subscribe-to-a-channel>>
+
+
+== Configure a Connection
+
+To secure connections, you must specify the connection field
+values. To do this:
+
+* <<create-config-file, Create a configuration file for a connection.>>
+* <<configure-conn, Configure the connection global elements.>>
+* <<configure-global, Configure a global element for the properties file.>>
+
+[[create-config-file]]
+=== Create a Configuration File for a Connection
+
+Create a configuration file that includes properties for a connection:
+
+. Create a file named `mule-app.properties` in the `/src/main/resources/` folder.
+. In the `mule-app.properties` file, create a set of properties for the connection,
+similar to the ones that follow, replacing the bracketed text (including the brackets)
+with the correct values for your configuration:
++
+----
+m4-config.username=<username within Salesforce Pub/Sub system>
+m4-config.password=<password for the username within Salesforce Pub/Sub system>
+m4-config.securityToken=<security token within Salesforce Pub/Sub system>
+m4-config.url=<endpoint representing your development environment>
+----
++
+The properties used vary depending on the selected connection configuration.
+
+For more information about creating a properties file, refer to xref:mule-runtime::mule-app-properties-to-configure.adoc[Configuring Property Placeholders].
+
+[[configure-conn]]
+=== Configure the Connection Global Elements
+
+Configure global elements for connection:
+
+. Create a new Mule project.
+. In the *Mule Palette* view, click *Search in Exchange* and enter `Salesforce Pub/Sub`.
+. Add *Salesforce Pub/Sub Connector* to the *Selected modules* section and click *Finish*.
+. Click the *Global Elements* tab and click *Create*.
+. Select *Connector Configuration > Salesforce Pub/Sub Config* and click *OK*.
+. Enter the values to configure either Basic Authentication, OAuth v2.0, OAuth JWT, OAuth Username Password, or OAuth SAML. Note that the `Basic Authentication` connection type is only supported for Salesforce API v64.0 and earlier versions.
+. Click the *Test Connection* button to ensure there is connectivity with the Salesforce Pub/Sub API. A successful message should pop up.
+. Click *OK*.
+. Open the HTTPS Listener config in *Global Element Configuration*.
+. Click the *TLS* tab and select *TLS Configuration > Edit inline*.
+. Specify the *Key Store Configuration* with the generated keystore details to enable HTTPS on this configuration.
+. Click *OK*.
+
+[[configure-global]]
+=== Configure a Global Element for the Properties File
+
+Configure a global element for the `mule-app.properties` file so that Mule knows
+where to find it:
+
+. Click the *Global Elements* tab and click *Create*.
+. In the *Choose Global Type* dialog, select *Configuration properties* and click *OK*.
+. In the *File* field, enter `mule.app.properties`.
+. Click *OK*.
+
+
+[[publish-an-event]]
+== Publish an Event
+
+This example Mule flow publishes an event and uses the following operations:
+
+* *HTTP Listener* +
+Accepts data from HTTP requests.
+* *Transform Message* +
+Outputs the data in Java.
+* *Publish event* +
+Publishes the given list of events to the specified event topic. Only high-volume platform events, including real-time event monitoring events and change data capture events, are allowed.
++
+Enter the following values:
++
+[%header,cols="30s,70a"]
+|===
+|Field |Value
+|Topic| Name of the topic used for message publishing, for example, `/event/gRPCMunitTestDoNotDelete__e`
+|Job Id| `payload`
+|===
+
+image::publish-an-event.png["Studio flow for the Publish event operation"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:salesforce-pub-sub="http://www.mulesoft.org/schema/mule/salesforce-pub-sub" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce-pub-sub http://www.mulesoft.org/schema/mule/salesforce-pub-sub/current/mule-salesforce-pub-sub.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<configuration-properties file="mule-app.properties"/>
+
+	<salesforce-pub-sub:pubsub-config name="Salesforce_PubSub_Config" >
+		<salesforce-pub-sub:basic-connection username="${m4-config.username}" password="${m4-config.password}" securityToken="${m4-config.securityToken}" url="${m4-config.url}"/>
+	</salesforce-pub-sub:pubsub-config>
+
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3805c5f1-0f01-476a-a619-a03f34dadfdd" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+<flow name="mule-salesforce-pubsub-connector-publish-event-demo" doc:id="9e2df8f5-1b47-4a76-ac62-941c989cd93b" >
+  <http:listener doc:name="Listener" doc:id="6e06a214-3112-40ef-8720-f730121aa5e0" config-ref="HTTP_Listener_config" path="/publish-event"/>
+  <ee:transform>
+    <ee:message>
+      <ee:set-payload><![CDATA[%dw 2.0
+        output application/java
+        ---
+        [{
+          CreatedDate: 12334455,
+          CreatedById: "123",
+          Desc__c: "Something"
+        },{
+          CreatedDate: 12334456,
+          CreatedById: "1234",
+          Desc__c: "Something2"
+        }
+        ]]]>
+      </ee:set-payload>
+    </ee:message>
+  </ee:transform>
+
+  <salesforce-pub-sub:publish-event config-ref="Salesforce_PubSub_Config" topic="/event/gRPCMunitTestDoNotDelete__e"/>
+</flow>
+</mule>
+----
+
+
+[[publish-request]]
+== Configure Publish Request Timeout
+
+This example shows how to configure the *Publish Request Timeout* and *Publish Request Time Unit* parameters to control the timeout behavior for publish operations. This is useful when you want to ensure that publish requests don't wait indefinitely and have specific timeout requirements. This example Mule flow configures timeout settings.
+
+The key timeout configuration parameters are:
+
+[%header,cols="30s,70a"]
+|===
+|Field |Value
+|Publish Request Timeout| `60` (60 units of time before timeout)
+|Publish Request Time Unit| `SECONDS` (timeout unit specification)
+|===
+
+image::salesforce-pub-publish-timeout.png["Global element properties window for the Publish event operation with timeout configuration"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:os="http://www.mulesoft.org/schema/mule/os"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce-pub-sub="http://www.mulesoft.org/schema/mule/salesforce-pub-sub" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce-pub-sub http://www.mulesoft.org/schema/mule/salesforce-pub-sub/current/mule-salesforce-pub-sub.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<salesforce-pub-sub:pubsub-config name="insecureSalesforce_PubSub_Config" doc:name="Salesforce PubSub Config"  >
+		<salesforce-pub-sub:oauth-user-pass-connection consumerKey="&lt;CONSUMER_KEY&gt;" consumerSecret="&lt;CONSUMER_SECRET&gt;" username="&lt;USERNAME&gt;" password="&lt;USERNAME&gt;" securityToken="&lt;SECURITY_TOKEN&gt;" tokenEndpoint="&lt;TOKEN_ENDPOINT&gt;" host="&lt;GRPC_HOST&gt;" port="0000" publishRequestTimeout="60" >
+		</salesforce-pub-sub:oauth-user-pass-connection>
+	</salesforce-pub-sub:pubsub-config>
+	
+	<os:object-store name="replayObjectStore" doc:name="Object store"  entryTtlUnit="DAYS" expirationIntervalUnit="DAYS" entryTtl="1"/>
+
+	
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config"  >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="ytaoka-salesforce-pubsublistenerFlow1"  initialState="started">
+		<http:listener doc:name="Listener"  config-ref="HTTP_Listener_config" path="/publish"/>
+	
+	 <logger level="INFO" doc:name="Logger"  message="Before Publish" />
+		<salesforce-pub-sub:publish-event config-ref="insecureSalesforce_PubSub_Config" topic="/event/gRPCMunitTestDoNotDelete__e">
+        </salesforce-pub-sub:publish-event>
+		<logger level="INFO" doc:name="Logger"  message="After Publish"/>
+	</flow>
+</mule>
+
+----
+
+
+
+
+[[subscribe-to-a-channel]]
+== Subscribe to a Channel
+
+This example Mule flow subscribes to a channel and uses the following operations:
+
+* *Subscribe channel listener* +
+Subscribes to a streaming channel. This source provides channel-related notification settings for new events that occur after you subscribe.
++
+NOTE: A channel must be published to Salesforce before a subscription to the channel is created.
++
+Enter the following values:
++
+[%header,cols="30s,70a"]
+|===
+|Field |Value
+|Channel name| Name of the streaming channel to subscribe to, for example, `/event/gRPCMunitTestDoNotDelete__e`
+|Replay option| One of the given implementations, for example, `Earliest`. For more information on how to use `Replay id from object store` in *Replay option*, refer to xref:salesforce-pubsub-connector-studio.adoc#store-objectstore[Store the Replay ID in the Object Store].
+|Batch events size| Total number of events included in a server batch. Lower values indicate small memory footprint with more server calls, while bigger values indicate bigger memory footprint with fewer API calls. A new batch of events is requested by the connector after the flow consumes the existing events, for example, `1000`
+|===
+* *Logger* +
+Shows the HTTP response from the *Subscribe channel listener* source
+
+image::subscribe-to-a-channel.png["Studio flow for the Subscribe channel listener source"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:salesforce-pub-sub="http://www.mulesoft.org/schema/mule/salesforce-pub-sub" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce-pub-sub http://www.mulesoft.org/schema/mule/salesforce-pub-sub/current/mule-salesforce-pub-sub.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+	<configuration-properties file="mule-app.properties"/>
+
+	<salesforce-pub-sub:pubsub-config name="Salesforce_PubSub_Config" >
+		<salesforce-pub-sub:basic-connection username="${m4-config.username}" password="${m4-config.password}" securityToken="${m4-config.securityToken}" url="${m4-config.url}"/>
+	</salesforce-pub-sub:pubsub-config>
+
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="3805c5f1-0f01-476a-a619-a03f34dadfdd" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+
+	<flow name="mule-salesforce-pubsub-connector-subscribe-channel-demo" doc:id="4faf2bf8-e2af-43bc-bba8-d336761800dd" >
+		<salesforce-pub-sub:subscribe-channel-listener channelName="/event/gRPCMunitTestDoNotDelete__e" config-ref="Salesforce_PubSub_Config" eventBatchSize="1000">
+			<salesforce-pub-sub:replay-option >
+				<salesforce-pub-sub:earliest />
+			</salesforce-pub-sub:replay-option>
+		</salesforce-pub-sub:subscribe-channel-listener>
+		<logger level="INFO" doc:name="Logger" doc:id="21652e14-de84-4752-a9b9-871dc346befb" message="#[payload]"/>
+	</flow>
+</mule>
+----
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
