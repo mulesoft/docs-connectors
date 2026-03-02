@@ -2,10 +2,16 @@
 :keywords: email, connector, configuration, smtp, send, smtps
 :page-aliases: connectors::email/email-send.adoc
 
-Use Anypoint Connector for Email (Email Connector) to send messages over SMTP and SMTPS servers by using the *Send* operation. The following examples show how to configure Email Connector to send emails and attachments, in both Anypoint Studio and the XML editor:
+Use Anypoint Connector for Email (Email Connector) to send messages over SMTP and SMTPS servers by using the *Send* operation. These examples show how to configure Email Connector to send emails and attachments.
+
+* <<understanding-attachments,Understanding Attachments and the Attachments Map>> +
+Understand when to use fixed or dynamic attachments, what the *Attachments* parameter expects (DataWeave expression returning a map), and how content types work.
 
 * <<send-email,Send Emails>> +
 Configure the Email Connector *Send* operation to send emails over an SMTPS server.
+
+* <<truststore-keystore,Configure TLS: Truststore and Keystore>> +
+Configure truststore and keystore files for SMTPS
 
 * <<send-attachments,Send an Attachment>> +
 Configure the File Connector *Read* operation to read a JSON file and the Email Connector *Send* operation to send the file as an attachment over an SMTP server.
@@ -13,13 +19,63 @@ Configure the File Connector *Read* operation to read a JSON file and the Email 
 * <<send-multiple-attachments,Send Multiple Attachments>> +
 Configure *Set Variable* components to define multiple media type attachments, and send these attachments using the Email Connector *Send* operation. Then log the result message using a *Logger* component.
 
+* <<send-attachments-from-api,Send Attachments Received from a REST API>> +
+Accept a PDF, MS Word document, and JSON file (for example, an incident report) via multipart REST API, and forward them to a support function by email.
+
+* <<send-sftp-files-by-email,Send Files from an SFTP Server by Email>> +
+Poll or list files on an SFTP server and send them as email attachments to a function or mailbox.
+
+[[understanding-attachments]]
+== Understand Attachments
+
+This section explains when to use fixed vs dynamic attachments, and what the *Attachments* parameter expects.
+
+=== Using Fixed vs Dynamic Attachments
+
+* Fixed attachments +
+These are useful when the same file is always sent with certain emails, for example:
+** A legal disclaimer or terms document (PDF) attached to every outgoing contract email
+** A cover letter or template (for example, a Word or PDF) that is the same for a batch of notifications
+** A static report template or form that recipients always need
++
+In these cases you typically read the file once (for example, from classpath or a fixed path) or set it in a variable, then reference it in the *Attachments* map.
+
+* Dynamic attachments +
+These are built from runtime data: payload from a flow (File read, HTTP multipart, SFTP read), variables set earlier in the flow, or DataWeave expressions that produce binary or string content. The examples in this page show both patterns.
+
+=== Understanding Attachments Expectations
+
+The *Attachments* parameter of the *Send* operation expects a DataWeave expression that evaluates to an object (a map). It isn't a Java type nor raw JSON configured in the UI; you write a DataWeave expression (for example, in the XML `email:attachments` element or in the Studio *Attachments* field) that produces the map.
+
+* Map structure: Each key is the **attachment filename** (as shown in the email client). Each value is the attachment content (Binary, String, or a stream).
+* Content type: The map itself does not have a single content type. Each value is the raw content; the connector uses the content as-is. When the value comes from a Mule message (for example, `payload` or `vars.x`) that has a MIME type (for example, from an HTTP multipart part or a File read), that type is used for the attachment. For inline DataWeave content, you can control the type by using `read()` with a MIME type or by ensuring the value is the correct type (for example, `output application/octet-stream` for binary).
+* Example: `{ 'report.pdf' : payload }` uses the current payload as the content of `report.pdf`; if `payload` was read from a file or HTTP part, its existing MIME type is used.
+
+=== Understanding Binary Attachments
+
+Files such as Portable Document Format (PDF), Portable Network Graphics (PNG), Word documents, or any non-text binary must be sent as binary content in the attachments map. SMTP transports text; binary data is encoded for transport (for example, Base64). 
+
+* Pass the file content as binary. Do not convert binary data to String (for example, don't use a string representation or a character encoding like UTF-8 for the bytes); that can corrupt the file. When you use the File Connector *Read* operation, HTTP *Listener* multipart parts, or SFTP *Read*, the payload (or part content) is already binary and has the appropriate MIME type (for example, `application/pdf`, `image/png`). Use that value directly in the attachments map.
+* Email Connector encodes non-text attachments for transport. The default is *Base64*, which is appropriate for PDF, PNG, and other binary formats. You don't need to Base64-encode the value yourself; the connector applies the encoding. To use a different encoding (for example, QUOTED-PRINTABLE, 8BIT, 7BIT, or BINARY), configure the *Content Transfer Encoding* parameter on the *Send* operation.
+* If you build the attachment from a path or classpath resource, use DataWeave `read()` with the correct MIME type so the value stays Binary and the attachment is sent with the right type. For example:
++
+[source,dataweave,linenums]
+----
+{
+  'disclaimer.pdf' : read('classpath://disclaimer.pdf', 'application/pdf'),
+  'logo.png'      : read('classpath://logo.png', 'image/png')
+}
+----
++
+This keeps the content as binary and sets the MIME type for each attachment. The connector then applies Content-Transfer-Encoding (default Base64) when sending.
+
 [[send-email]]
 == Send Emails
 
-The following example illustrates how to send emails over the SMTPS server. The flow initiates with a *Scheduler* component, and then the *Send* operation sends the email.
+This example illustrates how to send emails over the SMTPS server. The flow initiates with a *Scheduler* component, and then the *Send* operation sends the email.
 The SMTPS connection type enables SSL or TLS encryption and sends encrypted messages over the secured version of the SMTP server.
 
-The following screenshot shows the app flow for this example:
+This screenshot shows the app flow for this example:
 
 image::email-send-flow.png[Email Connector Send messages over SMTPS flow]
 
@@ -42,7 +98,7 @@ This source initiates a flow when a time-based condition is met.
 . In the *TLS Configuration* section, select *Edit inline*.
 . In the *Trust Store Configuration* section, complete these fields:
 +
-* *Path* `trustore path`
+* *Path* `truststore path`
 * *Password* `passwordtrust`
 +
 [start=9]
@@ -114,11 +170,69 @@ http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/
 </mule>
 ----
 
+[[truststore-keystore]]
+== Configuring TLS: Truststore and Keystore
+
+When you use SMTPS Connection, you must configure Transport Layer Security (TLS) encryption. The *Trust Store* and optionally *Key Store* settings tell the connector which certificates to use. 
+
+=== Locating the Path
+
+The *Path* in *Trust Store* and *Key Store* setting is resolved relative to (in order):
+
+* The current classpath (for example, files under `src/main/resources` in your project)
+* The file system (relative to the app runtime or absolute path)
+
+Typical locations:
+
+* Project resource: `src/main/resources/truststore.jks` — use path `truststore.jks` or `classpath:truststore.jks`
+* Absolute path: `/etc/mule/truststore.jks` (ensure the runtime has read access)
+
+=== Configuring Trust Store
+
+The *Trust Store* holds certificates of servers (or CAs) that your app trusts. For SMTPS, the client uses it to verify the mail server’s certificate.
+
+For SMTPS you almost always need a truststore so the connector can validate the server’s certificate (unless you use *Insecure* for development only).
+
+* If your server uses a public CA (for example Gmail, Office 365): You can use the JVM’s default truststore (often not required to set one) or export it and point *Path* to that file. Some setups use a custom truststore that contains only the CA or server cert they need.
+* Creating or updating a truststore with keytool (Java’s `keytool` is usually under `JAVA_HOME/bin`):
+* Import a CA or server certificate into a new truststore:
++
+[source,bash,linenums]
+----
+keytool -importcert -alias smtpserver -file server.cer -keystore truststore.jks -storepass changeit -noprompt
+----
+* Replace `server.cer` with the path to the server’s certificate or the CA certificate, and `truststore.jks` with the path where you want the truststore file. Use a strong password in production instead of `changeit`.
+* In the Email Connector TLS configuration, set *Path* to the path of this trust store and *Password* to the truststore password.
+
+=== Configuring Keystore
+
+The *Key Store* holds your app’s private key and certificate (client identity). Use it when the SMTPS server requires client certificate authentication (mutual TLS).
+
+Use it only if the mail server is configured to require a client certificate. Many SMTPS servers (for example, Gmail with user or password) don't require a keystore; they only need the truststore to verify the server.
+
+* Creating a keystore with keytool (for testing or when you need to generate a key and self-signed cert):
++
+[source,bash,linenums]
+----
+keytool -genkeypair -alias muleclient -keyalg RSA -keysize 2048 -keystore keystore.jks -storepass changeit -validity 365 -dname "CN=MyApp, OU=IT, O=MyOrg, L=City, ST=State, C=US"
+----
+* For production you typically import an existing key and certificate (for example, from your PKI) into a keystore; use `keytool -importcert` or import a PKCS12 file.
+* In the Email Connector TLS configuration, set *Path* to the keystore file, *Password* to the keystore password, and *Key Password* if the private key has a different password. Use *Alias* if the keystore contains multiple keys.
+
+=== Summary
+
+|===
+| Purpose | Store | When to use
+| Trust the mail server’s certificate | Truststore | Required for SMTPS (unless using insecure mode)
+| Prove client identity to the server | Keystore | Only when the server requires client certificate authentication
+|===
+
+For full parameter details (Path, Password, Type, Algorithm, Insecure), see the xref:email-documentation.adoc#TrustStore[Truststore] and xref:email-documentation.adoc#KeyStore[Keystore] sections in the Email Connector Reference.
 
 [[send-attachments]]
 == Send an Attachment
 
-The following example illustrates how to send emails and attachments over the SMTP server. Use DataWeave to manage the attachments. The flow reads a JSON file using the File Connector *Read* operation and then uses the Email Connector *Send* operation to send the content of the file as an attachment:
+This example illustrates how to send emails and attachments over the SMTP server. Use DataWeave to manage the attachments. The flow reads a JSON file using the File Connector *Read* operation and then uses the Email Connector *Send* operation to send the content of the file as an attachment:
 
 The following screenshot shows the Anypoint Studio app flow for this example:
 
@@ -194,7 +308,7 @@ http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/em
                 <email:content ><![CDATA[#["<h1>Hello this is an important message</h1>"]]]></email:content>
             </email:body>
             <email:attachments >#[{
-          'json-attachment' : "payload"
+          'json-attachment' : payload
         }]</email:attachments>
         </email:send>
 	</flow>
@@ -204,9 +318,9 @@ http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/em
 [[send-multiple-attachments]]
 == Send Multiple Attachments
 
-The following example illustrates how to send emails and multiple attachments over the SMTP server. The flow initiates with a *Scheduler* component. Then, *Set Variable* components define each attachment media type JSON, text and file. Subsequently, the Email Connector *Send* operation sends the attachments in the email, after which you the result message using a *Logger* component.
+This  example illustrates how to send emails and multiple attachments over the SMTP server. The flow initiates with a *Scheduler* component. Then, *Set Variable* components define each attachment media type JSON, text and file. Subsequently, the Email Connector *Send* operation sends the attachments in the email, after which you the result message using a *Logger* component.
 
-The following screenshot shows the Anypoint Studio app flow for this example:
+This screenshot shows the Anypoint Studio app flow for this example:
 
 .Email Connector Multiple attachments
 image::email-multipleattachment-flow.png[Email Connector Multiple attachments]
@@ -315,6 +429,121 @@ http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/em
 
 </mule>
 ----
+
+[[send-attachments-from-api]]
+== Send Attachments Received from a REST API
+
+A common use case is accepting files (for example, a PDF, an MS Word document, and a JSON file describing an incident) through a REST API and forwarding them to a support function by email. The client sends a `multipart/form-data` POST request; each part is a file or a field (for example, an incident description as JSON).
+
+* Flow outline +
+An HTTP *Listener* (path for example, `/api/support/ticket`) receives the multipart request. The payload is a multipart message; use `payload.parts.<name>` to access each part. Build an attachments map from the parts (using each part’s content and optionally filename from `Content-Disposition`), then call Email *Send* with that map and the desired *To* address (for example, support@company.com).
+
+* Attachments map from multipart +
+Each part’s content is available as `payload.parts.<partName>.content`. The filename (if present) is in `payload.parts.<partName>.headers.'Content-Disposition'.filename`. Use a DataWeave expression to build a map: keys = attachment names (for example, original filename or a fixed name), values = part content. The connector uses the part’s content type when available. Binary parts (PDF, PNG, Word, and so on) are already Binary; the connector applies Content-Transfer-Encoding (default Base64) for transport, so you do not need to encode them yourself.
+
+=== Example: PDF, Word, and JSON Incident to Support
+
+Assume the API expects three parts: `documentPdf`, `documentWord`, and `incidentJson`. This example flow receives the request and sends the three as email attachments to support.
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+		http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<email:smtp-config name="Email_SMTP">
+		<email:smtp-connection host="smtp.example.com" port="587" user="noreply@example.com" password="${smtp.password}" />
+	</email:smtp-config>
+	<http:listener-config name="HTTP_Listener_config">
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="support-ticket-api">
+		<http:listener path="/api/support/ticket" config-ref="HTTP_Listener_config" allowedMethods="POST" />
+		<email:send config-ref="Email_SMTP" fromAddress="noreply@example.com" subject="Support ticket: incident report">
+			<email:to-addresses>
+				<email:to-address value="support@example.com" />
+			</email:to-addresses>
+			<email:body contentType="text/plain">
+				<email:content><![CDATA[#["Incident report received. See attachments: PDF, Word document, and JSON details."]]]></email:content>
+			</email:body>
+			<email:attachments><![CDATA[#[
+				{
+					(payload.parts.documentPdf.headers.'Content-Disposition'.filename default 'document.pdf') : payload.parts.documentPdf.content,
+					(payload.parts.documentWord.headers.'Content-Disposition'.filename default 'document.docx') : payload.parts.documentWord.content,
+					(payload.parts.incidentJson.headers.'Content-Disposition'.filename default 'incident.json') : payload.parts.incidentJson.content
+				}
+			]]]></email:attachments>
+		</email:send>
+		<set-payload value="#['Ticket received']" />
+	</flow>
+</mule>
+----
+
+The client must POST to `/api/support/ticket` with `Content-Type: multipart/form-data` and three parts named `documentPdf`, `documentWord`, and `incidentJson`. Each part’s content type (for example, `application/pdf`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `application/json`) is preserved from the request and used for the corresponding email attachment.
+
+[[send-sftp-files-by-email]]
+== Send Files from an SFTP Server by Email
+
+You may need to scan an SFTP directory and send the found files as email attachments to a function or mailbox (for example a shared inbox or a processing service). There are two common patterns you can follow:
+
+* Use an *On New or Updated File* (SFTP Connector) to trigger a flow when a new or updated file appears; read that file and send it (or a batch) by email.
+* Use a *Scheduler* and SFTP *List* to poll a directory, then for each file (or for the whole list), read the file(s) and send one or more emails with attachments.
+
+In both cases, build the *Attachments* map from the file content. For a single file, the map can be `{ filename : payload }` after an SFTP *Read*. For multiple files, collect them (for example, in a *For Each* with *Set Variable* or a DataWeave transform) into a map of filename and content and pass that map to *Attachments*.
+
+=== Example: Poll SFTP Directory and Email Files as Attachments
+
+This example uses a *Scheduler* and SFTP *List* to list a directory, then a *For Each* to process each item. For each file (non-directory), it reads the file and sends one email with that file as a single attachment. The attachment name is taken from the file path (or attributes).
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:email="http://www.mulesoft.org/schema/mule/email"
+	xmlns:sftp="http://www.mulesoft.org/schema/mule/sftp"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+		http://www.mulesoft.org/schema/mule/sftp http://www.mulesoft.org/schema/mule/sftp/current/mule-sftp.xsd">
+	<email:smtp-config name="Email_SMTP">
+		<email:smtp-connection host="smtp.example.com" port="587" user="noreply@example.com" password="${smtp.password}" />
+	</email:smtp-config>
+	<sftp:config name="SFTP_Config">
+		<sftp:connection host="${sftp.host}" port="${sftp.port}" username="${sftp.user}" password="${sftp.password}" />
+	</sftp:config>
+	<flow name="sftp-to-email-flow">
+		<scheduler>
+			<scheduling-strategy><fixed-frequency frequency="60" timeUnit="SECONDS" /></scheduling-strategy>
+		</scheduler>
+		<sftp:list config-ref="SFTP_Config" directoryPath="${sftp.directoryPath}" />
+		<foreach>
+			<choice>
+				<when expression="#[!attributes.directory]">
+					<set-variable variableName="filePath" value="#[payload]" />
+					<sftp:read config-ref="SFTP_Config" path="#[payload]" />
+					<email:send config-ref="Email_SMTP" fromAddress="noreply@example.com" subject="File from SFTP: #[vars.filePath]">
+						<email:to-addresses>
+							<email:to-address value="${email.recipient}" />
+						</email:to-addresses>
+						<email:body contentType="text/plain">
+							<email:content><![CDATA[#["File received from SFTP: " ++ vars.filePath]]]></email:content>
+						</email:body>
+						<email:attachments><![CDATA[#[( (vars.filePath splitBy "/")[-1] default 'attachment' ) : payload]]]></email:attachments>
+					</email:send>
+				</when>
+			</choice>
+		</foreach>
+	</flow>
+</mule>
+----
+
+To send all listed files in a single email, first iterate to read each file and collect the name and content into a variable (for example, using *Set Variable* with a DataWeave expression that merges the current map with the new attachment), then call *Send* once with that variable as the attachments map. The previous pattern sends one email per file for simplicity.
 
 == See Also
 
