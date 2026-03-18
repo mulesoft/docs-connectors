@@ -1,0 +1,218 @@
+= Using Anypoint Code Builder to Configure gRPC Connector 1.0
+:exchange-search-name: grpc
+:connector-name: gRPC
+:version: 1.0
+:lc-connector-name: grpc
+:studio-connector-name: gRPC Connector
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-connector-config-intro"]
+
+== Create a New Integration Project
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-create-integration-project"]
+
+== Add the Connector to Your Integration Project
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-add-connector-to-project"]
+
+== Configure the Source For the Flow
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-configure-source"]
+
+== Add Components to Your Project
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-add-components-to-project"]
+
+== Configure the Component Attributes
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-configure-attributes"]
+
+
+=== Client Configuration
+
+[source,xml]
+----
+<grpc:client-config name="GRPC_Client_Config">
+    <grpc:connection host="localhost" port="50051">
+        <grpc:idl-definition>
+            <grpc:single-binary-protobuf protobufDescriptorFile="path/to/service.desc" />
+        </grpc:idl-definition>
+    </grpc:connection>
+</grpc:client-config>
+----
+
+=== Server Configuration
+
+[source,xml]
+----
+<grpc:config name="GRPC_Server_Config">
+    <grpc:connection>
+        <grpc:grpc-server listenerConfig="HTTP_Listener_config">
+            <grpc:idl-definition>
+                <grpc:single-binary-protobuf protobufDescriptorFile="path/to/service.desc" />
+            </grpc:idl-definition>
+        </grpc:grpc-server>
+    </grpc:connection>
+</grpc:config>
+----
+
+=== Client Operations
+
+==== [Client] Bidirectional Stream Message
+
+[source,xml]
+----
+<grpc:bidirectional-streaming
+    config-ref="GRPC_Client_Config"
+    method="ServiceName/BidiStreamingMethod"
+    routingId="#[vars.routingId]"
+    requestId="#[vars.requestId]">
+    <grpc:content>#[payload]</grpc:content>
+</grpc:bidirectional-streaming>
+----
+
+==== [Client] Client Streaming Call
+
+[source,xml]
+----
+<grpc:client-streaming
+    config-ref="GRPC_Client_Config"
+    method="ServiceName/ClientStreamingMethod"
+    requestId="#[vars.requestId]">
+    <grpc:content>#[payload]</grpc:content>
+</grpc:client-streaming>
+----
+
+==== [Client] Server Stream Message
+
+[source,xml]
+----
+<grpc:server-streaming-call-with-delegation
+    config-ref="GRPC_Client_Config"
+    method="ServiceName/StreamingMethod"
+    routingId="#[vars.routingId]">
+    <grpc:content>
+        #[payload]
+    </grpc:content>
+</grpc:server-streaming-call-with-delegation>
+----
+
+==== [Client] Iterate Server Stream Message
+
+[source,xml]
+----
+<grpc:server-streaming-call-with-response
+    config-ref="GRPC_Client_Config"
+    method="ServiceName/StreamingMethod">
+    <grpc:content>
+        #[payload]
+    </grpc:content>
+</grpc:server-streaming-call-with-response>
+----
+
+==== [Client] Unary Message
+
+[source,xml]
+----
+<grpc:unary-call config-ref="GRPC_Client_Config" method="ServiceName/MethodName">
+    <grpc:content>
+        #[%dw 2.0
+        output application/x-protobuf messageType='package.MessageType', descriptorUrl="path/to/service.desc"
+        ---
+        {
+            field1: "value1",
+            field2: 123
+        }]
+    </grpc:content>
+</grpc:unary-call>
+----
+
+=== Client Sources
+
+==== [Client] Bidirectional Stream Listener
+
+[source,xml]
+----
+<grpc:bidi-streaming-listener
+    config-ref="GRPC_Client_Config"
+    routingId="#[vars.routingId]"/>
+----
+
+==== [Client] Server Stream Listener
+
+[source,xml]
+----
+<grpc:server-streaming-delegated-listener
+    config-ref="GRPC_Client_Config"
+    routingId="#[vars.routingId]"/>
+----
+
+==== [Client] Server Stream Subscriber
+
+[source,xml]
+----
+<grpc:server-streaming-subscriber-source
+    config-ref="GRPC_Client_Config"
+    method="ServiceName/StreamingMethod"
+    filePath="path/to/request.bin"/>
+----
+
+=== Server Operations
+
+==== [Server] End Stream
+
+[source,xml]
+----
+<grpc:end-stream config-ref="GRPC_Server_Config" attributes="#[attributes]"/>
+----
+
+==== [Server] Respond Server Stream Message
+
+[source,xml]
+----
+<grpc:send-stream-message config-ref="GRPC_Server_Config" attributes="#[attributes]" streamMessage="#[payload]"/>
+----
+
+=== Server Sources
+
+==== [Server] Bidirectional Streaming Listener
+
+[source,xml]
+----
+<grpc:bidirectional-streaming-method config-ref="GRPC_Server_Config" methodName="ServiceName/BidiStreamingMethod">
+    <grpc:response-bidi streamStates="#[vars.updatedStreamStates]"/>
+</grpc:bidirectional-streaming-method>
+----
+
+==== [Server] Client Stream Listener
+
+[source,xml]
+----
+<grpc:client-streaming-method config-ref="GRPC_Server_Config" methodName="ServiceName/ClientStreamingMethod"/>
+----
+
+==== [Server] Server Stream Listener
+
+[source,xml]
+----
+<flow name="ServerStreamingFlow">
+  <grpc:server-streaming-method config-ref="GRPC_Server_Config" methodName="ServiceName/StreamingMethod"/>
+  <grpc:send-stream-message config-ref="GRPC_Server_Config" attributes="#[attributes]" streamMessage="#[payload]"/>
+  <grpc:end-stream config-ref="GRPC_Server_Config" attributes="#[attributes]"/>
+</flow>
+----
+
+==== [Server] Unary Listener
+
+[source,xml]
+----
+<grpc:unary-method config-ref="GRPC_Server_Config" methodName="ServiceName/MethodName" responseUnary="#[payload]"/>
+----
+
+== Create a New Configuration XML File
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-create-config-file-acb"]
+
+== See Also
+
+include::connectors::partial$configure-acb-connectors-partial.adoc[tag="acb-template-see-also"]
