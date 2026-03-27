@@ -470,6 +470,199 @@ Use this sample as a starting point for cards that advertise both SSE streaming 
 }
 ----
 
+== Complete Mule App Example for Non-Streaming Tasks and Push Notifications
+
+Use this full example when you want request-response processing with `message/send` and optional push notification callbacks, without SSE streaming.
+
+[NOTE]
+====
+This pattern complements, but does not replace, the <<Configure On Task Stream Listener (SSE) End to End>> section. Use this section for non-streaming flows, and the SSE section for incremental stream updates.
+====
+
+[source,xml,linenums, subs=attributes+]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule
+	xmlns:test="http://www.mulesoft.org/schema/mule/test"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:a2a="http://www.mulesoft.org/schema/mule/a2a"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/a2a http://www.mulesoft.org/schema/mule/a2a/current/mule-a2a.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/test http://www.mulesoft.org/schema/mule/test/current/mule-test.xsd">
+
+	<http:listener-config name="HTTP_Listener_config" basePath="/v1">
+		<http:listener-connection host="0.0.0.0" port="${http.port}" />
+	</http:listener-config>
+
+	<a2a:server-config name="A2A_Server">
+		<a2a:connection listenerConfig="HTTP_Listener_config" agentPath="/stock-summarizer" />
+		<a2a:agent-card>
+			<a2a:json><![CDATA[{
+  "name": "Stock Summarizer Agent",
+  "url": "http://localhost:8082/v1/stock-summarizer",
+  "version": "1.2.0",
+  "protocolVersion": "0.3.0",
+  "description": "Summarizes stock-related questions and supports task push notifications.",
+  "skills": [
+    {
+      "id": "stock-summary",
+      "name": "Stock Earnings Summary",
+      "description": "Summarizes stock earnings and financial highlights.",
+      "inputModes": ["application/json", "text/plain"],
+      "outputModes": ["application/json", "text/plain"]
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": true,
+    "stateTransitionHistory": false
+  },
+  "provider": {
+    "organization": "MuleSoft",
+    "url": "https://www.mulesoft.com"
+  },
+  "defaultInputModes": ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json", "text/plain"]
+}]]></a2a:json>
+		</a2a:agent-card>
+	</a2a:server-config>
+
+	<http:request-config name="HTTP_Request_configuration" basePath="/v1">
+		<http:request-connection host="api.openai.com" port="443" protocol="HTTPS" />
+	</http:request-config>
+
+	<a2a:client-config name="A2A_Client">
+		<a2a:client-connection serverUrl="http://localhost:8082/v1/stock-summarizer" />
+	</a2a:client-config>
+
+	<flow name="a2a-serverFlow">
+		<a2a:task-listener config-ref="A2A_Server">
+			<a2a:response>
+				<a2a:response><![CDATA[#[payload]]]></a2a:response>
+				<a2a:response-headers><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+  "Content-Type": "application/json"
+}]]]></a2a:response-headers>
+			</a2a:response>
+		</a2a:task-listener>
+
+		<ee:transform doc:name="Chat Request Transformer">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  model: "gpt-4.1",
+  messages: [
+    { role: "user", content: payload.message.parts[0].text }
+  ]
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="taskId"><![CDATA[attributes.taskId]]></ee:set-variable>
+				<ee:set-variable variableName="contextId"><![CDATA[attributes.contextId]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+
+		<http:request method="POST" config-ref="HTTP_Request_configuration" path="/chat/completions" responseTimeout="20000">
+			<http:headers><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+  Authorization: "Bearer " ++ p("secure::openai.token")
+}]]]></http:headers>
+		</http:request>
+
+		<ee:transform doc:name="A2A Task Response Transformer">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+import * from dw::Runtime
+output application/json
+---
+{
+  id: vars.taskId,
+  contextId: vars.contextId,
+  status: {
+    state: "completed",
+    message: {
+      role: "agent",
+      parts: [
+        {
+          kind: "text",
+          text: payload.choices[0].message.content
+        }
+      ],
+      messageId: uuid(),
+      kind: "message"
+    }
+  },
+  artifacts: [
+    {
+      artifactId: uuid(),
+      parts: [
+        {
+          kind: "text",
+          text: payload.choices[0].message.content
+        }
+      ],
+      index: 0
+    }
+  ],
+  kind: "task"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+
+	<flow name="pushNotificationValidationFlow">
+		<a2a:push-notification-config-listener doc:name="On Push Notification Set Listener" config-ref="A2A_Server" />
+		<logger level="INFO" message="Push notification config payload: #[payload]" />
+	</flow>
+
+	<flow name="pushNotificationFlow">
+		<http:listener config-ref="HTTP_Listener_config" path="/update/notification" />
+		<logger level="INFO" message="Push notification update received: #[payload]" />
+	</flow>
+
+	<flow name="a2a-clientSendTaskFlow">
+		<http:listener config-ref="HTTP_Listener_config" path="stock/summarize" />
+		<a2a:send-message config-ref="A2A_Client">
+			<a2a:message><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  message: {
+    role: "user",
+    kind: "message",
+    messageId: uuid(),
+    parts: [
+      {
+        kind: "text",
+        text: "Summarize the stock earnings for " ++ attributes.queryParams.stock ++ " in Q4 2024"
+      }
+    ]
+  },
+  configuration: {
+    pushNotificationConfig: {
+      url: "http://localhost:8082/v1/update/notification"
+    }
+  }
+}]]></a2a:message>
+		</a2a:send-message>
+	</flow>
+
+</mule>
+----
+
 == See Also
 
 * xref:a2a-connector-troubleshooting.adoc[A2A Connector Troubleshooting]
