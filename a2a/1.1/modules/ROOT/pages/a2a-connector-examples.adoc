@@ -224,8 +224,6 @@ Use this pattern when your A2A server must return incremental task updates throu
 
 === Server Configuration for Streaming
 
-Make sure your server config is enabled and your app has a flow with `a2a:task-stream-listener`:
-
 [source,xml,linenums, subs=attributes+]
 ----
 <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
@@ -240,7 +238,7 @@ Make sure your server config is enabled and your app has a flow with `a2a:task-s
 
 === Streaming Flow Example
 
-This flow receives a stream request, emits an intermediate status event, emits an artifact event, and closes the stream with a final status event:
+The streaming process first emits a Task event, then emits intermediate status and artifact events, and finally closes the stream with a final status event.
 
 [source,xml,linenums]
 ----
@@ -251,17 +249,17 @@ This flow receives a stream request, emits an intermediate status event, emits a
     <set-variable variableName="contextId" value="#[(payload.contextId) default ('context-' ++ vars.taskId)]" />
 
     <a2a:update-task-status doc:name="Update Task Status - Working" config-ref="A2A_Server_config">
-        <a2a:status-update-content><![CDATA[#[{
+        <a2a:status-content><![CDATA[#[{
             id: vars.taskId,
             contextId: vars.contextId,
             kind: "status-update",
             status: { state: "working", message: { kind: "text", text: "Task accepted and processing started" } },
             final: false
-        }]]]></a2a:status-update-content>
+        }]]]></a2a:status-content>
     </a2a:update-task-status>
 
     <a2a:update-task-artifact doc:name="Update Task Artifact" config-ref="A2A_Server_config">
-        <a2a:artifact-update-content><![CDATA[#[{
+        <a2a:artifact-content><![CDATA[#[{
             id: vars.taskId,
             contextId: vars.contextId,
             kind: "artifact-update",
@@ -270,34 +268,34 @@ This flow receives a stream request, emits an intermediate status event, emits a
                 name: "partial-answer",
                 parts: [{ kind: "text", text: "Here is an incremental result chunk." }]
             }
-        }]]]></a2a:artifact-update-content>
+        }]]]></a2a:artifact-content>
     </a2a:update-task-artifact>
 
     <a2a:update-task-status doc:name="Update Task Status - Final" config-ref="A2A_Server_config">
-        <a2a:status-update-content><![CDATA[#[{
+        <a2a:status-content><![CDATA[#[{
             id: vars.taskId,
             contextId: vars.contextId,
             kind: "status-update",
             status: { state: "completed" },
             final: true
-        }]]]></a2a:status-update-content>
+        }]]]></a2a:status-content>
     </a2a:update-task-status>
 </flow>
 ----
 
 === Expected SSE Event Format
 
-The stream is delivered as standard server-sent events. Each event contains a JSON payload in `data:`:
+The stream is delivered as standard server-sent events. Each event contains a JSON payload in `data:`.  
 
 [source,text]
 ----
-event: task-status-update
-data: {"id":"task-123","contextId":"context-task-123","kind":"status-update","status":{"state":"working"},"final":false}
+event: task
+data: {"id":"task-123","contextId":"context-task-123","kind":"task","status":{"state":"working"},"final":false}
 
-event: task-artifact-update
+event: artifact-update
 data: {"id":"task-123","contextId":"context-task-123","kind":"artifact-update","artifact":{"artifactId":"artifact-task-123","name":"partial-answer","parts":[{"kind":"text","text":"Here is an incremental result chunk."}]}}
 
-event: task-status-update
+event: status-update
 data: {"id":"task-123","contextId":"context-task-123","kind":"status-update","status":{"state":"completed"},"final":true}
 ----
 
@@ -425,17 +423,6 @@ In server flows, Mule payload fields map directly to task structures:
 * `payload.message` carries the incoming user message.
 * `payload.message.parts` contains content segments for extraction (for example, `payload.message.parts[0].text`).
 * `payload.status` and `payload.artifacts` are used to build task updates in responses.
-
-=== Required Versus Optional Fields
-
-Use these baseline rules when constructing request payloads:
-
-* Required for JSON-RPC envelope: `jsonrpc`, `id`, `method`, `params`.
-* Required in `params.message`: `kind`, `messageId`, `role`, `parts`.
-* Required for text content: at least one part where `kind="text"` and non-null `text`.
-* Optional but recommended: `contextId`, `metadata`, and `history` when correlation is needed across turns.
-
-If `parts` is present but contains null or malformed content, request unmarshalling can fail depending on expected type binding.
 
 == Sample `agent-card.json` for Streaming and Push Notifications
 
