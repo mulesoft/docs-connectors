@@ -1,0 +1,100 @@
+= Define Object Stores Examples 
+:page-aliases: connectors::object-store/object-store-to-define-a-new-os.adoc
+
+You can define an object store globally in the app so that it can be referenced by name and shared between multiple components, or you can create an object store for one particular component.
+
+All object store operations can reference a global object store. For example, for an audit flow that verifies whether certain users are currently authorized, you can reference the object store that you defined in the app:
+
+`<os:contains id="#[userId]" objectStore="tokensStore" />`
+
+[[global_os]]
+== Defining a Global Object Store
+
+Using a global object store is ideal for:
+
+* Sharing state across components
++
+Because the object store is referenced by name, more than one component can use it. Suppose you have two instances of Salesforce Connector that are configured slightly differently. You can use the same token for both Salesforce Connector instances to avoid the need to reauthenticate.
+* Sharing state across cluster nodes
++
+Use Mule in cluster mode to make information available to every node in the cluster. 
+* Using information in your app's logic
++
+Object Store Connector can manipulate the object store as well as define it.
+
+Global object stores are defined as a top-level element with a name that other components can reference. The following example creates an object store named `tokensStore` to store access tokens:
+
+[source,xml,linenums]
+----
+<os:object-store name="tokensStore"
+  entryTtl="1"
+  entryTtlUnit="HOURS"
+  maxEntries="100"
+  persistent="true"
+  expirationInterval="30"
+  expirationIntervalUnit="MINUTES" />
+----
+
+This example is for an in-memory object store and doesn't provide a recommended configuration for an object store that stores access tokens.
+
+* Persistence (`persistent="true"`)
++
+Values are stored on disk and can survive a system restart. Setting `persistent` to `false` results in a transient store that stores information only in memory.
+* Expiration (`expirationInterval`)
++
+An expiration thread runs every 30 minutes and discards the elements that exceed their time to live (TTL) or their `maxEntries` limit.
+* TTL (`entryTtl`) of 1 hour
++ 
+Because access tokens are highly sensitive, you might not want to retain them for more than an hour. Every entry that exceeds the value given in `entryTtl` is automatically deleted.
+* Size limit (`maxEntries`)
++
+Each entry over the limit of 100 entries is discarded when the expiration thread runs.
+
+In xref:object-store::index.adoc[Object Store v2], unlimited keys are allowed. 
+
+[[authentication-oauth]]
+== Configuring Authentication through OAuth
+
+This example configures Salesforce Connector authentication through OAuth, and then stores the token in the object store created in the <<global_os,previous example>> (`tokensStore`):
+
+[source,xml,linenums]
+----
+<sfdc:config-with-oauth name="salesforce-oauth"
+  consumerKey="${salesforce.consumerKey}"
+  consumerSecret="${salesforce.consumerSecret}">
+    <sfdc:oauth-callback-config domain="localhost" localPort="8082"
+      remotePort="8082" path="callback" connector-ref="HTTP_HTTPS" />
+    <sfdc:oauth-store-config objectStore="tokensStore" />
+</sfdc:config-with-oauth>
+----
+
+[[private_os]]
+== Defining a Private Object Store
+
+Use a private object store when:
+
+* The shared state is a security risk.
+* You don't want anyone to manipulate the object store from the connector level. For example, to avoid the risk that someone changes the configuration of a *Clear* operation so that it deletes all of your authorization data.
+
+The following example defines a private object store that does not have a referable name:
+
+[source,xml,linenums]
+----
+<idempotent-message-validator idExpression="#[payload]"
+  valueExpression="#[payload]">
+    <os:private-object-store
+                entryTtl="20"
+                entryTtlUnit="MILLISECONDS"
+                maxEntries="20"
+                persistent="false"
+                expirationInterval="20"
+                expirationIntervalUnit="MILLISECONDS"/>
+</idempotent-message-validator>
+----
+
+The example provides the idempotent message validator with a custom store that only the validator can access.
+
+== See Also
+
+* https://help.salesforce.com[Salesforce Help]
+* xref:object-store-connector-reference.adoc[Object Store Connector Reference]
