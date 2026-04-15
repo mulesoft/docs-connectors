@@ -207,6 +207,8 @@ output application/json
 
 == Configure the A2A Client to Call Other A2A Agents
 
+This minimal flow listens for an A2A task and forwards the same payload to a remote agent using your A2A client configuration.
+
 [source,xml,linenums]
 ----
 <flow name="sranana2aconnectorFlow1" doc:id="973b8e26-66e6-449e-809d-9ae42125c693" >
@@ -217,9 +219,453 @@ output application/json
 </flow>
 ----
 
+[[configure-on-task-stream-listener-sse-end-to-end]]
+== Configure On Task Stream Listener (SSE) End to End
+
+Use this pattern when your A2A server must return incremental task updates through SSE (`message/stream`) instead of a single response (`message/send`).
+
+=== Server Configuration for Streaming
+
+Use the same HTTP listener and A2A server pattern as non-streaming setups, with an agent card path appropriate for your deployment (for example `${app.home}/agent-card.json` on CloudHub).
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+
+<a2a:server-config name="A2A_Server_config" doc:name="A2A Server config">
+    <a2a:connection listenerConfig="HTTP_Listener_config" agentPath="/" />
+    <a2a:agent-card file="${app.home}/agent-card.json" />
+</a2a:server-config>
+----
+
+=== Streaming Flow Example
+
+The streaming process first emits a Task event, then emits intermediate status and artifact events, and finally closes the stream with a final status event.
+
+[source,xml,linenums]
+----
+<flow name="a2aStreamFlow">
+    <a2a:task-stream-listener doc:name="On Task Stream Listener" config-ref="A2A_Server_config" />
+
+    <set-variable variableName="taskId" value="#[(payload.id) default uuid()]" />
+    <set-variable variableName="contextId" value="#[(payload.contextId) default ('context-' ++ vars.taskId)]" />
+
+    <a2a:update-task-status doc:name="Update Task Status - Working" config-ref="A2A_Server_config">
+        <a2a:status-content><![CDATA[#[{
+            id: vars.taskId,
+            contextId: vars.contextId,
+            kind: "status-update",
+            status: { state: "working", message: { kind: "text", text: "Task accepted and processing started" } },
+            final: false
+        }]]]></a2a:status-content>
+    </a2a:update-task-status>
+
+    <a2a:update-task-artifact doc:name="Update Task Artifact" config-ref="A2A_Server_config">
+        <a2a:artifact-content><![CDATA[#[{
+            id: vars.taskId,
+            contextId: vars.contextId,
+            kind: "artifact-update",
+            artifact: {
+                artifactId: "artifact-" ++ vars.taskId,
+                name: "partial-answer",
+                parts: [{ kind: "text", text: "Here is an incremental result chunk." }]
+            }
+        }]]]></a2a:artifact-content>
+    </a2a:update-task-artifact>
+
+    <a2a:update-task-status doc:name="Update Task Status - Final" config-ref="A2A_Server_config">
+        <a2a:status-content><![CDATA[#[{
+            id: vars.taskId,
+            contextId: vars.contextId,
+            kind: "status-update",
+            status: { state: "completed" },
+            final: true
+        }]]]></a2a:status-content>
+    </a2a:update-task-status>
+</flow>
+----
+
+=== Expected SSE Event Format
+
+The stream is delivered as standard server-sent events. Each event contains a JSON payload in `data:`.  
+
+[source,text]
+----
+event: task
+data: {"id":"task-123","contextId":"context-task-123","kind":"task","status":{"state":"working"},"final":false}
+
+event: artifact-update
+data: {"id":"task-123","contextId":"context-task-123","kind":"artifact-update","artifact":{"artifactId":"artifact-task-123","name":"partial-answer","parts":[{"kind":"text","text":"Here is an incremental result chunk."}]}}
+
+event: status-update
+data: {"id":"task-123","contextId":"context-task-123","kind":"status-update","status":{"state":"completed"},"final":true}
+----
+
+[NOTE]
+====
+To close the SSE stream gracefully, set `final: true` on the last status update. If `final` isn't emitted, clients can remain subscribed waiting for additional events.
+====
+
+=== Error Handling Pattern for Streaming Flows
+
+Wrap stream-processing logic in error handling and always send a terminal status update on failures:
+
+[source,xml,linenums]
+----
+<flow name="a2aStreamFlowWithErrors">
+    <a2a:task-stream-listener doc:name="On Task Stream Listener" config-ref="A2A_Server_config" />
+
+    <try>
+        <!-- Business logic -->
+        <raise-error type="A2A:INTERNAL_ERROR" description="Simulated downstream failure" />
+        <error-handler>
+            <on-error-continue enableNotifications="true" logException="true">
+                <a2a:update-task-status config-ref="A2A_Server_config">
+                    <a2a:status-update-content><![CDATA[#[{
+                        id: (payload.id default uuid()),
+                        contextId: (payload.contextId default "context-error"),
+                        kind: "status-update",
+                        status: { state: "failed", message: { kind: "text", text: error.description default "Unexpected server error" } },
+                        final: true
+                    }]]]></a2a:status-update-content>
+                </a2a:update-task-status>
+            </on-error-continue>
+        </error-handler>
+    </try>
+</flow>
+----
+
+== JSON-RPC 2.0 Request and Response Patterns
+
+The snippets below illustrate JSON-RPC for `message/send` and `message/stream`, a sample completed-task result, and how fields map to Mule task payloads.
+
+=== Non-Streaming Request
+
+Clients send this when invoking `message/send` and expecting one task result (not an SSE stream).
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-1001",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "kind": "message",
+      "messageId": "550e8400-e29b-41d4-a716-446655440000",
+      "role": "user",
+      "parts": [
+        {
+          "kind": "text",
+          "text": "Summarize the latest task status."
+        }
+      ]
+    }
+  }
+}
+----
+
+=== Non-Streaming Response (Task Shape)
+
+The JSON-RPC `result` object follows the A2A task structure, including `status`, `artifacts`, and optional `history`.
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-1001",
+  "result": {
+    "id": "task-1001",
+    "contextId": "context-task-1001",
+    "kind": "task",
+    "status": {
+      "state": "completed"
+    },
+    "artifacts": [
+      {
+        "artifactId": "artifact-task-1001",
+        "name": "answer",
+        "parts": [
+          {
+            "kind": "text",
+            "text": "Task completed successfully."
+          }
+        ]
+      }
+    ],
+    "history": []
+  }
+}
+----
+
+=== Streaming Request (`message/stream`)
+
+Clients use this method and parameters when they open an SSE stream and consume multiple task, artifact, and status events.
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-stream-2001",
+  "method": "message/stream",
+  "params": {
+    "message": {
+      "kind": "message",
+      "messageId": "6f4e31f8-5a4d-4a54-9fa3-31c9c0d10a1b",
+      "role": "user",
+      "parts": [
+        {
+          "kind": "text",
+          "text": "Generate a step-by-step answer."
+        }
+      ]
+    }
+  }
+}
+----
+
+=== Mapping JSON-RPC Payload to `io.a2a.spec.Task`
+
+In server flows, Mule payload fields map directly to task structures:
+
+* `payload.id` maps to task ID.
+* `payload.contextId` maps to context ID.
+* `payload.message` carries the incoming user message.
+* `payload.message.parts` contains content segments for extraction (for example, `payload.message.parts[0].text`).
+* `payload.status` and `payload.artifacts` are used to build task updates in responses.
+
+== Sample `agent-card.json` for Streaming and Push Notifications
+
+Use this sample as a starting point for cards that advertise both SSE streaming and push notification support:
+
+[source,json,linenums]
+----
+{
+  "name": "Finance Streaming Agent",
+  "description": "Handles financial analysis tasks with streaming progress updates and push notifications.",
+  "url": "https://example.org/a2a",
+  "provider": {
+    "organization": "Example Org"
+  },
+  "version": "1.0.0",
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true
+  },
+  "skills": [
+    {
+      "id": "financial-analysis",
+      "name": "Financial Analysis",
+      "description": "Analyzes public company financial performance."
+    }
+  ],
+  "defaultInputModes": [
+    "text"
+  ],
+  "defaultOutputModes": [
+    "text"
+  ]
+}
+----
+
+== Complete Mule App Example for Non-Streaming Tasks and Push Notifications
+
+Use this full example when you want request-response processing with `message/send` and optional push notification callbacks, without SSE streaming.
+
+[NOTE]
+====
+This pattern complements, but does not replace, the <<configure-on-task-stream-listener-sse-end-to-end>> section. Use this section for non-streaming flows, and the SSE section for incremental stream updates.
+====
+
+[source,xml,linenums, subs=attributes+]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule
+	xmlns:test="http://www.mulesoft.org/schema/mule/test"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:a2a="http://www.mulesoft.org/schema/mule/a2a"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/a2a http://www.mulesoft.org/schema/mule/a2a/current/mule-a2a.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/test http://www.mulesoft.org/schema/mule/test/current/mule-test.xsd">
+
+	<http:listener-config name="HTTP_Listener_config" basePath="/v1">
+		<http:listener-connection host="0.0.0.0" port="${http.port}" />
+	</http:listener-config>
+
+	<a2a:server-config name="A2A_Server">
+		<a2a:connection listenerConfig="HTTP_Listener_config" agentPath="/stock-summarizer" />
+		<a2a:agent-card>
+			<a2a:json><![CDATA[{
+  "name": "Stock Summarizer Agent",
+  "url": "http://localhost:8082/v1/stock-summarizer",
+  "version": "1.2.0",
+  "protocolVersion": "0.3.0",
+  "description": "Summarizes stock-related questions and supports task push notifications.",
+  "skills": [
+    {
+      "id": "stock-summary",
+      "name": "Stock Earnings Summary",
+      "description": "Summarizes stock earnings and financial highlights.",
+      "inputModes": ["application/json", "text/plain"],
+      "outputModes": ["application/json", "text/plain"]
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": true,
+    "stateTransitionHistory": false
+  },
+  "provider": {
+    "organization": "MuleSoft",
+    "url": "https://www.mulesoft.com"
+  },
+  "defaultInputModes": ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json", "text/plain"]
+}]]></a2a:json>
+		</a2a:agent-card>
+	</a2a:server-config>
+
+	<http:request-config name="HTTP_Request_configuration" basePath="/v1">
+		<http:request-connection host="api.openai.com" port="443" protocol="HTTPS" />
+	</http:request-config>
+
+	<a2a:client-config name="A2A_Client">
+		<a2a:client-connection serverUrl="http://localhost:8082/v1/stock-summarizer" />
+	</a2a:client-config>
+
+	<flow name="a2a-serverFlow">
+		<a2a:task-listener config-ref="A2A_Server">
+			<a2a:response>
+				<a2a:response><![CDATA[#[payload]]]></a2a:response>
+				<a2a:response-headers><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+  "Content-Type": "application/json"
+}]]]></a2a:response-headers>
+			</a2a:response>
+		</a2a:task-listener>
+
+		<ee:transform doc:name="Chat Request Transformer">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  model: "gpt-4.1",
+  messages: [
+    { role: "user", content: payload.message.parts[0].text }
+  ]
+}]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="taskId"><![CDATA[attributes.taskId]]></ee:set-variable>
+				<ee:set-variable variableName="contextId"><![CDATA[attributes.contextId]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+
+		<http:request method="POST" config-ref="HTTP_Request_configuration" path="/chat/completions" responseTimeout="20000">
+			<http:headers><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+  Authorization: "Bearer " ++ p("secure::openai.token")
+}]]]></http:headers>
+		</http:request>
+
+		<ee:transform doc:name="A2A Task Response Transformer">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+import * from dw::Runtime
+output application/json
+---
+{
+  id: vars.taskId,
+  contextId: vars.contextId,
+  status: {
+    state: "completed",
+    message: {
+      role: "agent",
+      parts: [
+        {
+          kind: "text",
+          text: payload.choices[0].message.content
+        }
+      ],
+      messageId: uuid(),
+      kind: "message"
+    }
+  },
+  artifacts: [
+    {
+      artifactId: uuid(),
+      parts: [
+        {
+          kind: "text",
+          text: payload.choices[0].message.content
+        }
+      ],
+      index: 0
+    }
+  ],
+  kind: "task"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+
+	<flow name="pushNotificationValidationFlow">
+		<a2a:push-notification-config-listener doc:name="On Push Notification Set Listener" config-ref="A2A_Server" />
+		<logger level="INFO" message="Push notification config payload: #[payload]" />
+	</flow>
+
+	<flow name="pushNotificationFlow">
+		<http:listener config-ref="HTTP_Listener_config" path="/update/notification" />
+		<logger level="INFO" message="Push notification update received: #[payload]" />
+	</flow>
+
+	<flow name="a2a-clientSendTaskFlow">
+		<http:listener config-ref="HTTP_Listener_config" path="stock/summarize" />
+		<a2a:send-message config-ref="A2A_Client">
+			<a2a:message><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  message: {
+    role: "user",
+    kind: "message",
+    messageId: uuid(),
+    parts: [
+      {
+        kind: "text",
+        text: "Summarize the stock earnings for " ++ attributes.queryParams.stock ++ " in Q4 2024"
+      }
+    ]
+  },
+  configuration: {
+    pushNotificationConfig: {
+      url: "http://localhost:8082/v1/update/notification"
+    }
+  }
+}]]></a2a:message>
+		</a2a:send-message>
+	</flow>
+
+</mule>
+----
 
 == See Also
 
+* xref:a2a-connector-troubleshooting.adoc[A2A Connector Troubleshooting]
 * xref:a2a-connector-reference.adoc[A2A Connector Reference]
 * https://github.com/MuleSoft-AI-Chain-Project/mule-inference-connector[MuleSoft Inference Connector]
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
