@@ -1,0 +1,317 @@
+= Configuring Store Operations
+
+Configure the *[Store] Add*, *[Store] Query*, *[Store] Query All*, and *[Store] Remove* operations. 
+
+== Configure the Store Add Operation
+
+The *[Store] Add* operation adds a document or text into an embedding store.
+
+The *[Store] Add* operation must be preceded by the *[Embedding] Generate from text* operation to ingest the text into a vector store. 
+
+To configure the *[Store] Add* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Store Name*
++
+Enter the name of the collection in the external vector database.
+* *Text Segments and Embeddings*
++
+Enter the text segments and embeddings to ingest into the vector database. It is typically the output of the *[Embedding] Generate from text* operation.
+* *Metadata entries*
++
+Enter a list-item (metadata entry), such as key (custom metadata key) and value (custom metadata value).
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:store-add
+  doc:name="[Store] Add"
+  doc:id="7ca3df80-8cac-44dc-ad49-860a6f682d04"
+  config-ref="MuleSoft_Vectors_Connector_Store_config"
+  storeName="gettingstarted" />
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload. This is an example response:
+
+[source,json]
+----
+{
+  "sourceId": "af44c7ef-4562-4712-af09-4498fc7f29a2",
+  "embeddingIds": [
+    "81f257c6-6406-4936-8c22-0ae523cce5fd",
+    "2127ef9b-08f4-4bfc-b769-1f488cdbf835",
+    "639e9994-f406-4481-a08a-0058ed3d781e"
+  ],
+  "status": "updated"
+}
+----
+
+* `sourceId`: Unique identifier for the source document.
+* `embeddingIds`: List of unique identifiers for the embeddings added to the store.
+* `status`: Status of the operation.
+
+The operation also returns other attributes:
+
+* `storeName`: Name of the vector store collection.
+
+== Configure the Store Query Operation
+
+The *[Store] Query* operation retrieves information from the embedding store based on an embedding (previously generated from a text prompt) and optionally a filter on metadata. It can be used for:
+
+* *Knowledge Management Systems*
++
+Retrieving documents from an organizational knowledge base.
+* *Customer Support*
++
+Storing customer interaction documents for quick retrieval and analysis.
+* *Content Management*
++
+Ingesting various types of documents (text, PDF, URL) into a centralized repository for easy access and searchability.
+
+The *[Store] Query* operation can be preceded by the *[Embedding] Generate from text* operation. The plain text to use when querying the store is first processed by the *[Embedding] Generate from text* operation that generates an embedding that can be used to perform the actual query and represents the input for the *[Store] Query* operation.
+
+NOTE: When generating an embedding from text for query purposes, don't provide any segmentation fields. Leave the *Max Segment Size (Characters)* and *Max Overlap Size (Characters)* fields blank.
+
+To configure the *[Store] Query* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Store Name*
++
+Enter the name of the collection in the external vector database.
+* *Text Segments and Embeddings*
++
+Enter the text segments and embeddings to query into the vector database. It is typically the output of the *[Embedding] Generate from text* operation. Text segments and embeddings must have only one element.
+* *Max Results*
++
+Enter the maximum number of results to query back.
+* *Min Score*
++
+Enter the minimum score for the similarity search (0-1).
+* *Metadata Condition*
++
+Enter the condition used for filtering results based on metadata.
++
+It supports SQL-like syntax.
++
+** Comparison operators are `=`, `!=`, `<`, `<=`, `>`, and `>=`.
+** Special operators:
+*** `CONTAINS(field_name, 'value')` - Check if the field contains the value.
+** Logical operators are `AND` and `OR`.
++
+Here is an example: `index=1 AND (CONTAINS(file_name,'example.pdf') OR file_type='any')`
++
+NOTE: Both `CONTAINS(field_name, 'value')` and `field_name LIKE '%value%'` work most of the time, but the behavior might differ for each store provider. For example, for Azure AI Search, it maps to `search.ismatch('value', field_name)`.
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:query
+  doc:name="[Store] Query"
+  doc:id="b74a5c37-6ea9-42bf-907f-c27183007ec7"
+  config-ref="MuleSoft_Vectors_Connector_Store_config"
+  storeName="web_pages"
+  maxResults="5"
+  minScore="0.85"
+  metadataKey="url"
+  filterMethod="isEqualTo"
+  metadataValue="www.salesforce.com"/>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload. This is an example response:
+
+[source,json]
+----
+{
+    "question": "Tell me more about Cloudhub High Availability Feature",
+    "sources": [
+        {
+            "embeddingId": "",
+            "text": "= CloudHub High Availability Features\nifndef::env-site,env-github[]\ninclude::_attributes.adoc[]\nendif::[]\n:page-aliases: runtime-manager::cloudhub-fabric.adoc,\....\n\n== Worker Scale-out",
+            "score": 0.9282029356714594,
+            "metadata": {
+                "source_Id": "c426a871-1a6e-4a47-a8ab-027eec9303e1",
+                "index": "0"
+                "absolute_directory_path": "/Users/<user>/Documents/Downloads/patch 8",
+                "file_name": "docs-runtime-manager__cloudhub_modules_ROOT_pages_cloudhub-fabric.adoc",
+                "full_path": "/Users/<user>/Documents/Downloads/patch 8docs-runtime-manager__cloudhub_modules_ROOT_pages_cloudhub-fabric.adoc",
+                "file_type": "any",
+                "ingestion_datetime": "2024-11-20T20:34:41.691Z",
+                "ingestion_timestamp": "1732134881691"
+            }
+        },
+        {
+          ...
+        },
+        {
+          ...
+        }
+    ]
+    "response": "= CloudHub High Availability Features\.. (...) \..distributes HTTP requests among your assigned workers.\n. Persistent message queues (see below)",
+    "maxResults": 3,
+    "storeName": "gettingstarted",
+    "minimumScore": 0.7
+}
+----
+
+* `question`: The question of the request.
+* `sources`: The sources identified by the similarity search.
+** `embeddingId`: The embedding UUID.
+** `text`: The relevant text segment.
+** `score`: The score of the similarity search based on the question.
+** `metadata`: The metadata key-value pairs.
+** `source_id`: The UUID for the uploaded data source.
+** `index`: The segment or chunk number for the uploaded data source.
+** `absolute_directory_path`: The full path to the file that contains relevant text segment.
+** `file_name`: The name of the file, in which the text segment is found.
+** `full_path`: The full path to the file.
+** `file_Type`: The file type.
+** `ingestion_datetime`: The ingestion date and time in ISO 8601 format (UTC).
+** `ingestion_timestamp`: The ingestion time in milliseconds.
+* `response`: The collected response of all relevant text segment. This is the response will is sent to the LLM.
+* `maxResults`: The maximum number of text segments considered.
+* `storeName`: The name of the vector store.
+* `minimumScore`: The minimum score for the result. 
+
+The operation also returns other attributes:
+
+* `storeName`: Name of the vector store collection.
+* `metadataCondition` (Optional): Filter condition used to query embeddings.
+
+== Configure the Store Query All Operation
+
+The *[Store] Query All* operation lists all sources into the embedding store.
+
+To configure the *[Store] Query All* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Store Name*
++
+Enter the name of the collection in the external vector database.
+* *Retrieve Embeddings*
++
+If true, retrieve embeddings from the store.
++
+NOTE: When querying the store along with embeddings using Azure AI Search, the connector might return the `Invalid expression: 'content_vector' is not a retrievable field. Only fields marked as retrievable in the index can be used in $select.\r\nParameter name: $select` error. To resolve the issue, set `content_vector as a retrievable field.
+* *Page Size*
++
+Enter the page size to use when querying the store.
+
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:query-all
+  doc:name="[Store] Query All"
+  doc:id="4ba6854a-0580-46de-9c36-a4843abf6fb7"
+  config-ref="MuleSoft_Vectors_Connector_Store_config"
+  storeName="gettingStarted"
+  pageSize="5000"
+  retrieveEmbeddings="false"/>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload. This is an example response:
+
+[source,json]
+----
+[
+  {
+    "embeddingId": "81f257c6-6406-4936-8c22-0ae523cce5fd",
+    "text": "E-commerce giants like Amazon and Alibaba have redefined ..",
+    "metadata": {
+        "index": "0",
+        "source": "s3://ms-vectors/invoicesample.pdf",
+        "file_type": "any",
+        "file_name": "invoicesample.pdf"
+        ...
+    },
+    "embeddings": [-0.00683132, -0.0033572172, 0.02698761, -0.01291587, ...]
+  }
+]
+----
+
+* `embeddingId`: The embedding UUID.
+* `text`: The relevant text segment.
+* `metadata`: The metadata key-value pairs.
+** `index`: The segment or chunk number for the uploaded data source.
+** `source`: The source of the text segment.
+** `file_type`: The file type.
+** `file_name`: The name of the file, in which the text segment is found.
+* `embeddings`: The embeddings for the text segment.
+
+The operation also returns other attributes:
+
+* `storeName`: Name of the vector store collection.
+
+== Configure the Store Remove Operation
+
+The *[Store] Remove* operation removes all embeddings from the store based on a metadata filter.
+
+To configure the *[Store] Remove* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Store Name*
++
+Enter the name of the collection in the external vector database.
+* *Ids*
++
+Enter the list of IDs to delete.
+* *Metadata Condition*
++
+Enter the condition used for filtering results based on metadata.
++
+It supports SQL-like syntax.
++
+** Comparison operators are `=`, `!=`, `<`, `<=`, `>`, and `>=`.
+** Special operators:
+*** `CONTAINS(field_name, 'value')` - Check if the field contains the value.
+** Logical operators are `AND` and `OR`.
++
+Here is an example: `index=1 AND (CONTAINS(file_name,'example.pdf') OR file_type='any')`
++
+NOTE: Both `CONTAINS(field_name, 'value')` and `field_name LIKE '%value%'` work most of the time, but the behavior might differ for each store provider. For example, for Azure AI Search, it maps to `search.ismatch('value', field_name)`.
+
+
+This is the XML for this operation:
+[source,xml,linenums, subs=attributes+]
+----
+<ms-vectors:store-remove
+  doc:name="Embedding remove documents by filter"
+  doc:id="c6b9ec97-1224-445e-ab02-f598d6fff7d7"
+  config-ref="MAC_Vectors_Config"
+  storeName="mulechaindemo"
+  metadataKey="file_name"
+  filterMethod="isEqualTo"
+  metadataValue="docs-accelerators__accelerators-cim_1.3_modules_ROOT_pages_cim-setup.adoc"
+  embeddingModelName="text-embedding-3-small"/>
+----
+
+=== Output Configuration
+
+This operation responds with a JSON payload. This is an example response:
+
+[source,json]
+----
+{
+    "status": "deleted"
+}
+----
+
+* `status`: Status of the operation.
+
+The operation also returns other attributes:
+
+* `storeName`: Name of the vector store collection.
+* `ids` (Optional): IDs of the embeddings to remove.
+* `metadataCondition` (Optional): Filter condition used to remove embeddings.
+
+== See Also
+
+* xref:index.adoc[MuleSoft Vectors Connector Overview]
+* xref:mulesoft-vectors-connector-reference.adoc[MuleSoft Vectors Connector Reference]
+* https://help.salesforce.com[Salesforce Help]
