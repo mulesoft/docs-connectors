@@ -226,7 +226,7 @@ Validation is managed by the MCP SDK. The connector doesn't perform its own vali
 | Configuration | String | Name of the configuration to use. | | Yes
 | Tool Name a| String | Name of the tool to invoke. |  | Yes
 | Arguments a| Object | The tool's input arguments.  |  #[payload] |
-| Extract Structured Content a| Boolean |  When false, the payload is the full CallToolResponse (old behavior). When true, the payload is the structured object when present. |  true |
+| Extract Structured Content a| Boolean | Controls how the payload is exposed when a tool returns structured content. When `false`, the payload is the full `CallToolResponse` object (previous behavior). When `true`, if the MCP response has structured content (for example, a tool with an output schema), the payload is the structured object itself so downstream components can reference fields directly (for example, `payload.temperature`). If structured content is not present and the response has a single text content that is valid JSON, the text is parsed and used as the payload. | true |
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | Yes
 | Additional Properties a| Object |  |  #[null] | 
 | Target Variable a| String | Name of the variable that stores the operation's output. |  | 
@@ -267,7 +267,7 @@ Validation is managed by the MCP SDK. The connector doesn't perform its own vali
 == MCP Client - Get Prompt
 `<mcp:get-prompt>`
 
-Resolves a prompt by name and returns the rendered prompt messages.
+Resolves a prompt by name in the remote MCP server and returns the rendered prompt messages. Use this operation when your Mule application (acting as an MCP client) needs to fetch a prompt that a remote MCP server exposes, optionally passing arguments that the server uses to render the prompt content.
 
 === Parameters
 
@@ -275,23 +275,23 @@ Resolves a prompt by name and returns the rendered prompt messages.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | Yes
-| Prompt Name a| String | Name of the prompt. |  | Yes
-| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | Yes
-| Arguments a| Object | The prompt's input arguments.  |  #[null] |
+| Prompt Name a| String | Name of the prompt to retrieve from the remote MCP server. |  | Yes
+| Config Ref a| ConfigurationProvider | Name of the configuration to use to execute this component. |  | Yes
+| Arguments a| Object | Arguments to pass to the prompt. The accepted keys and their types are defined by the remote prompt's argument schema. |  #[null] |
 | Additional Properties a| Object | Additional properties to include with the request. Use this field to specify custom key-value pairs that are sent with the MCP connector request. This field is optional and null-safe. |  #[null] |
-| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
-| Target Value a| String | Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
-| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Target Variable a| String | Name of the variable that stores the operation's output. |  |
+| Target Value a| String | Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. | #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> | Set of error mappings |  |
 | Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
 |===
 
 === Output
 
 [%autowidth.spread]
 |===
-| *Type* a| <<GetPromptResponse>>
-| *Attributes Type* a| Any
+|Type | <<GetPromptResponse>>
+| Attributes Type | Any
 |===
 
 === For Configurations
@@ -317,7 +317,7 @@ Resolves a prompt by name and returns the rendered prompt messages.
 == MCP Client - List Prompts
 `<mcp:list-prompts>`
 
-Lists all prompts available in the remote MCP server.
+Lists all prompts available in the remote MCP server. Each entry in the returned array includes metadata such as the prompt name, optional title, description, and the argument definitions the prompt accepts.
 
 === Parameters
 
@@ -325,22 +325,22 @@ Lists all prompts available in the remote MCP server.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | Yes
-| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | Yes
+| Config Ref a| ConfigurationProvider | Name of the configuration to use to execute this component. |  | Yes
 | Streaming Strategy a| * <<RepeatableInMemoryIterable>>
 * <<RepeatableFileStoreIterable>>
 * non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
-| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
-| Target Value a| String | Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
-| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Target Variable a| String | Name of the variable that stores the operation's output. |  |
+| Target Value a| String | Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. | #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> | Set of error mappings |  |
 | Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
 |===
 
 === Output
 
 [%autowidth.spread]
 |===
-| *Type* a| Array of <<PromptMetadata>>
+|Type | Array of <<PromptMetadata>>
 |===
 
 === For Configurations
@@ -360,6 +360,8 @@ Lists all prompts available in the remote MCP server.
 * MCP:RETRY_EXHAUSTED
 * MCP:SCHEMA_VALIDATION_FAILED
 * MCP:SERVER_ERROR
+
+
 
 
 [[ListResources]]
@@ -589,7 +591,7 @@ Reads a resource referenced by its URI.
 == MCP Server - Prompt Listener
 `<mcp:prompt-listener>`
 
-Exposes a prompt whose messages are generated by the owning flow.
+Exposes a prompt whose messages are generated by the execution of the owning flow. The flow is executed for every received `prompts/get` request. When triggered, the flow runs with a message whose payload contains the prompt name and the arguments supplied by the client. The messages returned to the client are produced by the `<mcp:prompt-messages>` nested component.
 
 === Parameters
 
@@ -597,29 +599,29 @@ Exposes a prompt whose messages are generated by the owning flow.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | Yes
-| Name a| String |  The prompt name. |  | Yes
-| Title a| String |  A short, human-friendly prompt title. |  |
-| Description a| String |  A detailed enough description for an LLM to determine when this prompt should be used. |  |
-| Prompt Arguments a| Array of <<PromptArgument>> |  Prompt argument definitions exposed in prompts or a list. |  |
-| Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  |
-| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | Yes
-| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Name a| String | The prompt name. This value is what clients use to request the prompt. |  | Yes
+| Title a| String | A short, human-friendly prompt title. |  |
+| Description a| String | A detailed enough description for an LLM to determine when this prompt should be used. |  |
+| Prompt Arguments a| Array of <<PromptArgument>> | Prompt argument definitions exposed in `prompts/list`. Each argument can be declared as required or optional and can include a description and a JSON schema that the client uses to validate input. |  |
+| Primary Node Only a| Boolean | Determines whether to execute this source only on the primary node when running Mule instances in a cluster. |  |
+| Config Ref a| ConfigurationProvider | Name of the configuration to use to execute this component. |  | Yes
+| Redelivery Policy a| <<RedeliveryPolicy>> | Defines a policy for processing the redelivery of the same message. |  |
 | Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
-| Messages a| Array of one of:
+* <<ReconnectForever>> | Retry strategy in case of connectivity errors. |  |
+| Prompt Messages a| Array of one of:
 
 * <<TextPromptMessageContent>>
 * <<ImagePromptMessageContent>>
 * <<EmbeddedResourcePromptMessageContent>>
-* <<ResourceLinkPromptMessageContent>> | Message content items that can be included in the prompt. |  |  | Yes
+* <<ResourceLinkPromptMessageContent>> | Defines the prompt messages returned to the client. These parameters are evaluated when the flow finishes successfully (when the payload and variables are available). |  | Yes
 |===
 
 === Output
 
 [%autowidth.spread]
 |===
-| *Type* a| <<PromptRequest>>
-| *Attributes Type* a| <<RequestAttributes>>
+|Type |<<PromptRequest>>
+| Attributes Type a| <<RequestAttributes>>
 |===
 
 === For Configurations
@@ -887,7 +889,7 @@ Configures an expiration policy strategy.
 ** SECONDS
 ** MINUTES
 ** HOURS
-** DAYS | Time unit for the *Max Idle Time* field. |  |
+** DAYS | Time unit for the *Max Idle Time* field. |  | 
 |===
 
 [[CallToolResultAttributes]]
@@ -900,6 +902,7 @@ Attributes returned by the Call Tool operation. Always includes the raw MCP resp
 | Field | Type | Description | Default Value | Required
 | Raw Mcp Response a| <<CallToolResponse>> | The raw MCP call-tool response (contents, error flag). Always present so callers can access original content when payload is set to structured content. |  | Yes
 |===
+
 
 [[CallToolResponse]]
 === Call Tool Response
@@ -970,62 +973,6 @@ A flattened representation of a resource content. The resource can be either tex
 ** RETRY_EXHAUSTED
 ** TIMEOUT |  |  | 
 | Target a| String |  |  | Yes
-|===
-
-[[GetPromptResponse]]
-=== Get Prompt Response
-
-Response returned by prompts/get.
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Description a| String |  |  | Yes
-| Messages a| Array of <<PromptMessageResponse>> |  |  | Yes
-|===
-
-[[PromptMessageResponse]]
-=== Prompt Message Response
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Role a| Enumeration, one of:
-
-** USER
-** ASSISTANT |  |  | Yes
-| Content a| One of:
-
-* <<TextPromptResponseContent>>
-* <<ImagePromptResponseContent>>
-* <<EmbeddedResourcePromptResponseContent>>
-* <<ResourceLinkPromptResponseContent>> |  |  | Yes
-|===
-
-[[PromptMetadata]]
-=== Prompt Metadata
-
-Prompt metadata returned by prompts/list.
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Name a| String |  |  | Yes
-| Title a| String |  |  | Yes
-| Description a| String |  |  | Yes
-| Arguments a| Array of <<PromptArgumentMetadata>> |  |  | Yes
-|===
-
-[[PromptArgumentMetadata]]
-=== Prompt Argument Metadata
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Name a| String |  |  | Yes
-| Title a| String |  |  | Yes
-| Description a| String |  |  | Yes
-| Required a| Boolean |  | false |
 |===
 
 [[ResourceMetadata]]
@@ -1209,32 +1156,7 @@ Configures how to identify a redelivered message and how to find out when the me
 |===
 | Field | Type | Description | Default Value | Required
 | Use Secure Hash a| Boolean | If `true`, Mule uses a secure hash algorithm to identify a redelivered message. |  | 
-| Id Expression a| String | One or more expressions that determine when a message was redelivered. You can set this property only if the *Use Secure Hash* field is `false`. |  |
-|===
-
-[[PromptRequest]]
-=== Prompt Request
-
-Input payload for <mcp:prompt-listener> flows.
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Prompt Name a| String |  |  | Yes
-| Arguments a| Object |  |  | Yes
-|===
-
-[[PromptArgument]]
-=== Prompt Argument
-
-Prompt argument definition exposed in prompts/list.
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Name a| String |  |  | Yes
-| Description a| String |  |  |
-| Required a| Boolean |  | false |
+| Id Expression a| String | One or more expressions that determine when a message was redelivered. You can set this property only if the *Use Secure Hash* field is `false`. |  | 
 |===
 
 [[ResourceRequest]]
@@ -1257,7 +1179,7 @@ An inbound request for a resource, used when the connector is acting as an MCP s
 | Session Id a| String |  |  | Yes
 | Request Id a| String |  |  | Yes
 | Additional Properties a| Object | Additional values attached to the request as HTTP Headers. |  | Yes
-| Client Certificate a| <<CertificateData>> |  |  |
+| Client Certificate a| <<CertificateData>> | Client certificate used to authenticate the request. |  | 
 |===
 
 [[TextToolResponseContent]]
@@ -1351,6 +1273,112 @@ Defines the contents of a Blob resource.
 | Blob a| Binary | The raw blob content, without Base64 encoding.  |  | Yes
 |===
 
+[[CustomHeader]]
+=== Custom Header
+
+Configures a custom header to be included in requests or responses.
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Key a| String | The header name. |  | Yes
+| Value a| String | The header value. Supports property placeholders and DataWeave expressions. |  | Yes
+|===
+
+[[CallToolResultAttributes]]
+=== Call Tool Result Attributes
+
+Attributes returned with the `CallTool` response. Use these attributes to inspect whether the remote tool returned structured content and to access the raw response.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Structured Content a| Boolean | `true` when the remote tool returned structured content and the payload was set to the structured object (or to JSON parsed from a single text content). | |
+| Raw Response a| <<CallToolResponse>> | The full tool response returned by the server, including all content items. Useful when *Extract Structured Content* is `true` and you still need the original response. | |
+|===
+
+[[GetPromptResponse]]
+=== Get Prompt Response
+
+Response returned by `prompts/get`.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Description a| String | Optional description of the prompt returned by the server. |  |
+| Messages a| Array of <<PromptMessageResponse>> | The rendered prompt messages. |  | Yes
+|===
+
+[[PromptMessageResponse]]
+=== Prompt Message Response
+
+A single rendered prompt message.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Role a| String | Role associated with the message (typically `user` or `assistant`). |  | Yes
+| Content a| One of:
+
+* <<TextPromptResponseContent>>
+* <<ImagePromptResponseContent>>
+* <<EmbeddedResourcePromptResponseContent>>
+* <<ResourceLinkPromptResponseContent>> | The content of the prompt message. |  | Yes
+|===
+
+[[PromptMetadata]]
+=== Prompt Metadata
+
+Prompt metadata returned by `prompts/list`.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Name a| String | Prompt name. |  | Yes
+| Title a| String | Short, human-friendly title. |  |
+| Description a| String | Description of the prompt. |  |
+| Arguments a| Array of <<PromptArgumentMetadata>> | Argument definitions for the prompt. |  |
+|===
+
+[[PromptArgumentMetadata]]
+=== Prompt Argument Metadata
+
+Description of a single argument supported by a prompt on a remote MCP server.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Name a| String | Argument name. |  | Yes
+| Title a| String | Short, human-friendly title. |  |
+| Description a| String | Description of the argument. |  |
+| Required a| Boolean | Whether the argument is required. |  false |
+|===
+
+[[PromptRequest]]
+=== Prompt Request
+
+Input payload for `<mcp:prompt-listener>` flows.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Prompt Name a| String | The prompt name that was requested. |  | Yes
+| Arguments a| Object | Map of arguments provided by the client. |  |
+|===
+
+[[PromptArgument]]
+=== Prompt Argument
+
+Prompt argument definition exposed in `prompts/list`.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Name a| String | Argument name. |  | Yes
+| Description a| String | Description of the argument. |  |
+| Required a| Boolean | Whether the argument is required. |  false |
+|===
+
 [[InlineOutputSchema]]
 === Inline Output Schema
 
@@ -1359,7 +1387,7 @@ Defines an inline JSON schema for the tool's output structure. The schema conten
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Output Schema a| String |  |  | Yes
+| Output Schema a| String | The JSON schema content. |  | Yes
 |===
 
 [[FileOutputSchema]]
@@ -1370,7 +1398,7 @@ Defines a file-based JSON schema for the tool's output structure. The schema is 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Output Schema File a| String |  |  | Yes
+| Output Schema File a| String | The path to the JSON schema file. |  | Yes
 |===
 
 [[TextPromptMessageContent]]
@@ -1381,16 +1409,16 @@ A text-based prompt message content.
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Text a| String |  |  | Yes
+| Text a| String | The message text. Supports DataWeave expressions. |  | Yes
 | Role a| Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
+** ASSISTANT | Role associated with the message. |  |
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
-| Priority a| Number |  |  |
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences. |  |
+| Priority a| Number | Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  |
 |===
 
 [[ImagePromptMessageContent]]
@@ -1404,17 +1432,17 @@ An image-based prompt message content. Image data can be provided inline (via a 
 | Image Data a| One of:
 
 * <<InlineImageData>>
-* <<FileImageData>> |  |  | Yes
-| Mime Type a| String |  |  |
+* <<FileImageData>> | The image data provided either inline (base64-encoded) or as a file reference. |  | Yes
+| Mime Type a| String | The image MIME type. |  | Yes
 | Role a| Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
+** ASSISTANT | Role associated with the message. |  |
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
-| Priority a| Number |  |  |
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences. |  |
+| Priority a| Number | Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  |
 |===
 
 [[EmbeddedResourcePromptMessageContent]]
@@ -1425,21 +1453,21 @@ An embedded resource prompt message content. The resource content (text or blob)
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Uri a| String |  |  | Yes
-| Mime Type a| String |  |  |
+| Uri a| String | Resource URI. |  | Yes
+| Mime Type a| String | The resource MIME type. |  | Yes
 | Resource Content a| One of:
 
 * <<TextEmbeddedResource>>
-* <<BlobEmbeddedResource>> |  |  | Yes
+* <<BlobEmbeddedResource>> | The resource content (text or blob). |  | Yes
 | Role a| Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
+** ASSISTANT | Role associated with the message. |  |
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
-| Priority a| Number |  |  |
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences. |  |
+| Priority a| Number | Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  |
 |===
 
 [[ResourceLinkPromptMessageContent]]
@@ -1450,42 +1478,43 @@ A resource link prompt message content that references an external resource by U
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Uri a| String |  |  | Yes
-| Name a| String |  |  |
-| Description a| String |  |  |
-| Mime Type a| String |  |  |
-| Size a| Number |  |  |
+| Uri a| String | Resource URI. |  | Yes
+| Name a| String | Name of the linked resource. |  |
+| Title a| String | Human-friendly title. |  |
+| Description a| String | Description. |  |
+| Mime Type a| String | MIME type of the linked resource. |  |
+| Size a| Number | Size of the linked resource. |  |
 | Role a| Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
+** ASSISTANT | Role associated with the message. |  |
 | Audience a| Array of Enumeration, one of:
 
 ** USER
-** ASSISTANT |  |  |
-| Priority a| Number |  |  |
+** ASSISTANT | Describes who the intended consumer of this data is. It can include multiple entries to indicate content useful for multiple audiences. |  |
+| Priority a| Number | Describes how important this data is for operating the server. A value of `1` means "most important", which indicates that the data is required. A value of `0` means "least important", which indicates that the data is entirely optional. |  |
 |===
 
 [[TextEmbeddedResource]]
 === Text Embedded Resource
 
-Defines text content for an embedded resource in a prompt message.
+Text-based embedded resource.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Text a| String |  |  | Yes
+| Text a| String | The text content. |  | Yes
 |===
 
 [[BlobEmbeddedResource]]
 === Blob Embedded Resource
 
-Defines blob (binary) content for an embedded resource in a prompt message. The connector Base64-encodes the data internally before sending it over MCP.
+Binary embedded resource.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Blob a| Binary |  |  | Yes
+| Blob a| Binary | The raw blob content, without Base64 encoding. |  | Yes
 |===
 
 [[InlineImageData]]
@@ -1496,7 +1525,7 @@ Provides image data inline via a DataWeave expression that resolves to binary co
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Image Data a| Binary |  |  | Yes
+| Image Data a| Binary | The image data. |  | Yes
 |===
 
 [[FileImageData]]
@@ -1507,7 +1536,7 @@ Provides image data by referencing a file in the project's classpath resources. 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Image File a| String |  |  | Yes
+| Image File a| String | The path to the image file. |  | Yes
 |===
 
 [[TextPromptResponseContent]]
@@ -1518,7 +1547,7 @@ Text content in a prompt response.
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Text a| String |  |  | Yes
+| Text a| String | The text content. |  | Yes
 |===
 
 [[ImagePromptResponseContent]]
@@ -1529,8 +1558,8 @@ Image content in a prompt response. The data is the raw image bytes (already dec
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Mime Type a| String |  |  | Yes
-| Data a| Binary |  |  | Yes
+| Mime Type a| String | The image MIME type. |  | Yes
+| Data a| Binary | The image data. |  | Yes
 |===
 
 [[EmbeddedResourcePromptResponseContent]]
@@ -1541,7 +1570,7 @@ Embedded resource content in a prompt response. The resource content (text or bl
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Resource a| <<ResourceContent>> |  |  | Yes
+| Resource a| <<ResourceContent>> | The embedded resource payload. |  | Yes
 |===
 
 [[ResourceLinkPromptResponseContent]]
@@ -1552,23 +1581,12 @@ Resource link content in a prompt response. References an external resource by U
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Uri a| String |  |  | Yes
-| Name a| String |  |  |
-| Description a| String |  |  |
-| Mime Type a| String |  |  |
-| Size a| Number |  |  |
-|===
-
-[[CustomHeader]]
-=== Custom Header
-
-Configures a custom header to be included in requests or responses.
-
-[%header%autowidth.spread]
-|===
-| Name | Type | Description | Default Value | Required
-| Key a| String | The header name. |  | Yes
-| Value a| String | The header value. Supports property placeholders and DataWeave expressions. |  | Yes
+| Uri a| String | Resource URI. |  | Yes
+| Name a| String | Name of the linked resource. |  |
+| Title a| String | Human-friendly title. |  |
+| Description a| String | Description. |  |
+| Mime Type a| String | MIME type of the linked resource. |  |
+| Size a| Number | Size of the linked resource. |  |
 |===
 
 == See Also
