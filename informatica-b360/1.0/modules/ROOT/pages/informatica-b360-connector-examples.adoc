@@ -1,0 +1,255 @@
+= Informatica Business 360 Connector 1.0 Examples
+:connector-name: Informatica Business 360
+:lc-connector-name: informatica b360
+
+This page provides examples for {connector-name} Connector operations. Each example shows the XML configuration you can use in Anypoint Studio or a text editor.
+
+== Before You Begin
+
+* Access to an Informatica Business 360 (MDM) environment with valid credentials
+* A Mule project with {connector-name} Connector added as a dependency
+* A configured global element for the connector (see xref:informatica-b360-connector-studio.adoc[])
+
+== Create and Read a Business Entity
+
+This example creates a new person record and then reads it back using the returned business ID.
+
+=== XML Configuration
+
+[source,xml,linenums]
+----
+<flow name="create-and-read-entity-flow">
+    <scheduler>
+        <scheduling-strategy>
+            <fixed-frequency frequency="60" timeUnit="SECONDS" />
+        </scheduling-strategy>
+    </scheduler>
+
+    <!-- Create a new person record -->
+    <informatica-b360:create-entity
+        config-ref="InfaB360_Config"
+        objectType="c360.person"
+        sourceSystem="b360.default.system">
+        <informatica-b360:payload><![CDATA[#[output application/json ---
+        {
+            firstName: "Jane",
+            lastName: "Smith"
+        }]]]></informatica-b360:payload>
+    </informatica-b360:create-entity>
+
+    <set-variable variableName="businessId" value="#[payload.businessId]" />
+    <logger level="INFO" message="Created entity with businessId: #[vars.businessId]" />
+
+    <!-- Read the created record -->
+    <informatica-b360:read-entity
+        config-ref="InfaB360_Config"
+        objectType="c360.person"
+        businessId="#[vars.businessId]" />
+
+    <logger level="INFO" message="Read entity: #[payload]" />
+</flow>
+----
+
+== Update and Partial Update a Record
+
+This example shows both a full update (PUT) and a field-level partial update (PATCH) using JSON Patch format.
+
+=== XML Configuration
+
+[source,xml,linenums]
+----
+<flow name="update-entity-flow">
+    <http:listener config-ref="HTTP_Listener_Config" path="/update" />
+
+    <!-- Full update: all mandatory fields must be included -->
+    <informatica-b360:update-entity
+        config-ref="InfaB360_Config"
+        objectType="c360.person"
+        businessId="#[attributes.queryParams.businessId]"
+        sourceSystem="b360.default.system">
+        <informatica-b360:payload><![CDATA[#[output application/json ---
+        {
+            firstName: "Jane",
+            lastName: "Doe"
+        }]]]></informatica-b360:payload>
+    </informatica-b360:update-entity>
+
+    <logger level="INFO" message="Full update result: #[payload]" />
+
+    <!-- Partial update: only change the lastName field -->
+    <informatica-b360:partial-update-entity
+        config-ref="InfaB360_Config"
+        objectType="c360.person"
+        businessId="#[attributes.queryParams.businessId]"
+        sourceSystem="b360.default.system">
+        <informatica-b360:update-operations><![CDATA[#[output application/json ---
+        [
+            {
+                op: "replace",
+                path: "lastName",
+                value: "UpdatedName"
+            }
+        ]]]]></informatica-b360:update-operations>
+    </informatica-b360:partial-update-entity>
+
+    <logger level="INFO" message="Partial update result: #[payload]" />
+</flow>
+----
+
+== Delete and Restore a Record
+
+This example soft-deletes a record and then restores it.
+
+=== XML Configuration
+
+[source,xml,linenums]
+----
+<flow name="delete-and-restore-flow">
+    <http:listener config-ref="HTTP_Listener_Config" path="/delete-restore" />
+
+    <!-- Soft-delete the record -->
+    <informatica-b360:delete-entity
+        config-ref="InfaB360_Config"
+        objectType="c360.person"
+        businessId="#[attributes.queryParams.businessId]"
+        sourceSystem="b360.default.system" />
+
+    <logger level="INFO" message="Delete result: #[payload]" />
+
+    <!-- Restore the soft-deleted record -->
+    <informatica-b360:restore-entity
+        config-ref="InfaB360_Config"
+        objectType="c360.person"
+        businessId="#[attributes.queryParams.businessId]"
+        sourceSystem="b360.default.system" />
+
+    <logger level="INFO" message="Restore result: #[payload]" />
+</flow>
+----
+
+== Search with Pagination
+
+This example performs a full-text search and iterates over paginated results.
+
+=== XML Configuration
+
+[source,xml,linenums]
+----
+<flow name="search-flow">
+    <http:listener config-ref="HTTP_Listener_Config" path="/search" />
+
+    <informatica-b360:search
+        config-ref="InfaB360_Config"
+        objectType="c360.person"
+        pageSize="50"
+        recordOffset="0"
+        recordsToReturn="100">
+        <informatica-b360:query><![CDATA[#[output application/json ---
+        {
+            search: "*",
+            sort: [
+                { fieldName: "lastName", order: "ASCENDING" }
+            ]
+        }]]]></informatica-b360:query>
+    </informatica-b360:search>
+
+    <!-- Results are automatically paginated — iterate over them -->
+    <foreach>
+        <logger level="INFO" message="Search result: #[payload]" />
+    </foreach>
+</flow>
+----
+
+== Fuzzy Matching with Search Match V1
+
+This example performs ML-based fuzzy matching against source records to find similar person records.
+
+=== XML Configuration
+
+[source,xml,linenums]
+----
+<flow name="search-match-v1-flow">
+    <http:listener config-ref="HTTP_Listener_Config" path="/match-v1" />
+
+    <informatica-b360:search-match-v1
+        config-ref="InfaB360_Config"
+        objectType="c360.person">
+        <informatica-b360:payload><![CDATA[#[output application/json ---
+        {
+            searchControls: {
+                maxRecordsToReturn: 20,
+                searchLevel: "Typical",
+                fileRecordLimit: 1000,
+                matchPreference: "BEST_SCORE"
+            },
+            data: {
+                searchRecord: {
+                    fullName: "JANE SMITH"
+                }
+            }
+        }]]]></informatica-b360:payload>
+    </informatica-b360:search-match-v1>
+
+    <logger level="INFO" message="Match V1 results: #[payload]" />
+</flow>
+----
+
+== Error Handling
+
+This example shows how to handle specific connector error types in your flows.
+
+=== XML Configuration
+
+[source,xml,linenums]
+----
+<flow name="error-handling-flow">
+    <http:listener config-ref="HTTP_Listener_Config" path="/read" />
+
+    <try>
+        <informatica-b360:read-entity
+            config-ref="InfaB360_Config"
+            objectType="c360.person"
+            businessId="#[attributes.queryParams.businessId]" />
+        <error-handler>
+            <on-error-continue type="INFORMATICA-B360:NOT_FOUND">
+                <set-payload value='#[output application/json --- { error: "Record not found" }]' />
+            </on-error-continue>
+            <on-error-continue type="INFORMATICA-B360:RATE_LIMITED">
+                <logger level="WARN" message="Rate limited. Consider adding retry logic" />
+                <set-payload value='#[output application/json --- { error: "Rate limited, try again later" }]' />
+            </on-error-continue>
+            <on-error-propagate type="INFORMATICA-B360:SERVER_ERROR">
+                <logger level="ERROR" message="Server error: #[error.description]" />
+            </on-error-propagate>
+        </error-handler>
+    </try>
+</flow>
+----
+
+== Retry with Until Successful
+
+This example wraps a connector operation with `until-successful` for automatic retry on transient failures.
+
+=== XML Configuration
+
+[source,xml,linenums]
+----
+<flow name="retry-flow">
+    <http:listener config-ref="HTTP_Listener_Config" path="/read-with-retry" />
+
+    <until-successful maxRetries="3" millisBetweenRetries="2000">
+        <informatica-b360:read-entity
+            config-ref="InfaB360_Config"
+            objectType="c360.person"
+            businessId="#[attributes.queryParams.businessId]" />
+    </until-successful>
+
+    <logger level="INFO" message="Entity: #[payload]" />
+</flow>
+----
+
+== See Also
+
+* xref:informatica-b360-connector-reference.adoc[{connector-name} Connector Reference]
+* xref:informatica-b360-connector-studio.adoc[Using Anypoint Studio to Configure {connector-name} Connector]
+* https://help.salesforce.com/s/[Salesforce Help]
