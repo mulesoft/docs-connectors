@@ -1,0 +1,85 @@
+= MCP Connector 1.5 - Applying Security to the MCP Server 
+
+MCP Connector enables server-side authentication for MCP clients. In these examples, it uses the stateful Server-Sent Events (SSE) connection and the *On New Session Listener* source to implement custom security logic, including OAuth access token validation.
+
+== Server-Side Authentication With On New Session Listener
+
+The MCP specification emphasizes session management and SSE connections maintain state. The *On New Session Listener* source offers a key point for implementing server-side authentication. This example illustrates a basic flow triggered by this listener, showing how to access the auto-generated `sessionId` and the HTTP headers sent by the connecting client, which can then be used for custom authentication logic.
+
+This is an example flow that uses the *On New Session Listener* source:
+
+[source,xml]
+----
+<flow name="onNewSession">
+   <mcp:on-new-session-listener config-ref="MCP_Server"/>
+   
+   <logger level="INFO" message="#['new session id: $(payload.sessionId)']"/>
+   <logger level="INFO" message="#['http headers:  $(payload.additionalProperties)']"/>
+</flow>
+----
+
+The flow executes each time a new client connects to the MCP server application. The payload contains the auto-generated `sessionId` and the `additionalProperties`, which when using the SSE connection type, maps to the request HTTP headers.
+
+At this point, you can implement your own authentication logic. For instance, the `#[payload.additionalProperties.authorization]` expression gets the HTTP authorization header, which you can validate later.
+
+=== Validate OAuth Access Tokens
+
+Optionally, you can use the xref:api-manager::mule-oauth-provider-landing-page.adoc[Mule OAuth 2.0 Provider] to implement and validate OAuth access tokens. 
+
+In this example flow, the access token is validated using the OAuth provider, and the session is rejected if the token is invalid:
+
+[source,xml]
+----
+<flow name="onNewSession">
+  <mcp:on-new-session-listener config-ref="MCP_Server">
+<mcp:rejection rejectWithStatusCode="#[vars.rejectStatusCode]" rejectWithMessage="#[vars.rejectMessage]" />
+  </mcp:on-new-session-listener>
+  <oauth2-provider:validate-token scopes="#[['PUBLIC_READ']]" config-ref="external-oauth2-provider" accessToken="#[payload.additionalProperties.authorization]"/>
+        <error-handler>
+                <on-error-continue type="OAUTH2-PROVIDER:TOKEN_UNAUTHORIZED">
+                    <set-variable variableName="rejectWithStatusCode" value="401" />
+                    <set-variable variableName="rejectWithMessage" value="#[error.description]" />
+                </on-error-continue>
+            </error-handler>
+</flow>
+----
+
+The new session is rejected if either of these things happen:
+
+* The `rejectWithStatusCode` parameter is assigned a non null value (or an expression that resolves to a non null value), or
+* The flow fails, in which case a status code 500 is reported.
+
+In this example, the OAuth validation error is handled so that the status code is mapped to a `401 - UNAUTHORIZED` code.
+
+== Client-Side Authentication
+
+In the client, the authentication parameter accepts all the authentication strategies defined in HTTP Connector, and xref:oauth-module::index.adoc[OAuth Module] if it's also added to the project.
+
+Operations like *Call Tool* also accept additional properties, which will map to request headers. This makes it possible to add custom authentication headers like API keys, for example:
+
+[source,xml]
+----
+<mcp:call-tool config-ref="MCP_GMaps_Client" toolName="maps_geocode">
+    <mcp:arguments ><![CDATA[#[output application/java
+---
+{
+	address: payload.address
+}]]]></mcp:arguments>
+<mcp:additional-properties ><![CDATA[
+#[output application/java
+---
+{
+	"API_KEY" : p('api.key')
+}]]]>
+</mcp:additional-properties>
+</mcp:call-tool>
+----
+
+== Next Step
+
+After you configure the connector, you can try the xref:mcp-connector-examples.adoc[Examples].
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
