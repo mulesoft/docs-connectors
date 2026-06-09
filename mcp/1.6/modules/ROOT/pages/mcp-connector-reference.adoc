@@ -22,6 +22,7 @@ Configuration element that acts as a client and connects to an MCP server.
  | The connection types to provide to this configuration. | | Yes
 | Client Name a| String |  Name the client uses to identify itself during the protocol initialization phase. This isn't the same as the name given to this config element (which is later referenced through config-ref parameters). This name doesn't need to be unique. |  | Yes
 | Client Version a| String | Version the client uses to identify itself during the protocol initialization phase. This doesn't need to match the connector or Mule application version. |  | Yes
+| Enable Elicitations a| Boolean |  Enable support for elicitation requests from the MCP server. When enabled without an elicitation-listener source, a default handler automatically declines all elicitation requests. When an elicitation-listener is configured, it overrides this default behavior. |  Yes | 
 | Name a| String |  ID used to reference this configuration. |  | Yes
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration.   |  | 
 |===
@@ -104,7 +105,10 @@ The SSE (Server-Sent Events) Client connection type enables MCP Connector to est
 * <<ListTools>>
 * <<Ping>>
 * <<ReadResource>>
-* <<CreateElicitation>>
+
+== Associated Sources
+
+* <<ElicitationListener>> 
 
 [[Server]]
 === Server
@@ -150,14 +154,14 @@ Exposes the MCP server using the SSE transport.
 ** MINUTES
 ** HOURS
 ** DAYS |  Request Timeout unit |  SECONDS | 
+| Elicitation Timeout Seconds a| Number |  Timeout in seconds for elicitation requests. Elicitation requests sent to the client wait this long for a response before timing out. |  60 |
 | Listener Config a| String |  Reference to the HTTP Listener config used to expose the SSE and messaging endpoints. |  | *Yes*
-| Elicitation Timeout Seconds a| Number |  Timeout in seconds for elicitation requests. |  60 |
 | Sse Endpoint Path a| String |  The endpoint path clients use to initiate the SSE connection. |  /sse | 
 | Messages Path a| String |  The path to send the messaging endpoint request to. |  /message | 
 | Default Sse Response Headers a| Object |  |  | 
 | Default Message Response Headers a| Object |  |  | 
-| Elicitations Object Store a| ObjectStore |  Object store used to correlate elicitation requests and responses across replicas. In multi-replica deployments, use a distributed object store. |  |
-| Elicitation Polling Seconds a| Number |  Polling interval in seconds used to check for elicitation responses written by another replica. |  5 |
+| Elicitations Object Store a| ObjectStore | ObjectStore that correlates elicitation requests and responses. For deployments with multiple replicas, configure a distributed object store (using Hazelcast or OSv2) to ensure responses are properly routed to the correct worker. If not specified, a default transient instance is used, which is recommended only for single-instance deployments. |  |
+| Elicitation Polling Seconds a| Number |  Polling interval in seconds used to check for elicitation responses written by another replica. This setting controls how frequently the connector checks for responses that arrived on a different worker.|  5 |
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
 |===
 
@@ -183,8 +187,8 @@ Exposes the MCP server using the Streamable HTTP transport, as defined in https:
 ** MINUTES
 ** HOURS
 ** DAYS |  Request Timeout unit |  SECONDS | 
+| Elicitation Timeout Seconds a| Number |  Timeout in seconds for elicitation requests. Elicitation requests sent to the client wait this long for a response before timing out. |  60 |
 | Listener Config a| String |  Reference to the http:listener-config used to expose the SSE and messaging endpoints. |  | *Yes*
-| Elicitation Timeout Seconds a| Number |  Timeout in seconds for elicitation requests. |  60 |
 | Mcp Endpoint Path a| String |  The endpoint path clients use to initiate the SSE connection. |  `/mcp` |
 | Response Content Type a| Enumeration, one of:
 
@@ -202,15 +206,18 @@ Exposes the MCP server using the Streamable HTTP transport, as defined in https:
 ** HOURS
 ** DAYS |  Time unit qualifying the sessionIdleTimeout |  MINUTES | 
 | Sessions Object Store a| ObjectStore |  An ObjectStore used to store session information. When deploying to multiple replicas, define a specific object store distributed across all replicas, either through Hazelcast or OSv2. If not specified, a default transient instance is created. Persistence must be enabled if running MCP Server listeners in a multi-worker deployment. For CloudHub 2.0, the Clustered option also must be enabled. |  |
-| Elicitations Object Store a| ObjectStore |  Object store used to correlate elicitation requests and responses across replicas. In multi-replica deployments, configure a distributed object store. |  |
-| Elicitation Polling Seconds a| Number |  Polling interval in seconds used to check for elicitation responses written by another replica. |  5 |
+| Elicitations Object Store a| ObjectStore | ObjectStore that correlates elicitation requests and responses. For deployments with multiple replicas, configure a distributed object store (using Hazelcast or OSv2) to ensure responses are properly routed to the correct worker. If not specified, a default transient instance is used, which is recommended only for single-instance deployments. |  |
+| Elicitation Polling Seconds a| Number |  Polling interval in seconds used to check for elicitation responses written by another replica. This setting controls how frequently the connector checks for responses that arrived on a different worker.|  5 |
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
 |===
+
+== Supported Operations
+
+* <<CreateElicitation>> 
 
 
 == Associated Sources
 
-* <<ElicitationListener>>
 * <<OnNewSessionListener>>
 * <<PromptListener>>
 * <<ResourceListener>>
@@ -339,6 +346,7 @@ Lists all prompts available in the remote MCP server. Each entry in the returned
 | Streaming Strategy a| * <<RepeatableInMemoryIterable>>
 * <<RepeatableFileStoreIterable>>
 * non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Additional Properties a| Object | Additional properties to include with the request. Use this field to specify custom key-value pairs that are sent with the MCP connector request. This field is optional and null-safe. |  #[null] | 
 | Target Variable a| String | Name of the variable that stores the operation's output. |  |
 | Target Value a| String | Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. | #[payload] |
 | Error Mappings a| Array of <<ErrorMapping>> | Set of error mappings. |  |
@@ -390,6 +398,7 @@ Lists all the available resources in the remote MCP server.
 | Streaming Strategy a| * <<RepeatableInMemoryIterable>>
 * <<RepeatableFileStoreIterable>>
 * non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  | 
+| Additional Properties a| Object | Additional properties to include with the request. Use this field to specify custom key-value pairs that are sent with the MCP connector request. This field is optional and null-safe. |  #[null] | 
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  | 
 | Target Value a| String | Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field.|  #[payload] | 
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
@@ -441,6 +450,7 @@ Lists all the available tools in the remote MCP server.
 | Streaming Strategy a| * <<RepeatableInMemoryIterable>>
 * <<RepeatableFileStoreIterable>>
 * non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  | 
+| Additional Properties a| Object | Additional properties to include with the request. Use this field to specify custom key-value pairs that are sent with the MCP connector request. This field is optional and null-safe. |  #[null] | 
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  | 
 | Target Value a| String | Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] | 
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  | 
@@ -565,7 +575,7 @@ Reads a resource referenced by its URI.
 == MCP Server - Create Elicitation
 `<mcp:create-elicitation>`
 
-Requests additional input from the connected MCP client and blocks until the client responds or the request times out.
+Requests an elicitation from the MCP Client. This operation sends an elicitation request via SSE and blocks until the response is received. In clustered environments, the elicitation response might arrive on a different worker, in which case it is stored in Object Store and polled.
 
 === Parameters
 
@@ -619,7 +629,37 @@ Requests additional input from the connected MCP client and blocks until the cli
 == MCP Client - Elicitation Listener
 `<mcp:elicitation-listener>`
 
-Listens for elicitation requests from MCP servers and returns an `ElicitationResponse`.
+Listens for elicitation requests from MCP servers. When a server requires additional information during tool or resource execution, this source triggers a flow to collect that data and return it to the server. The triggered flow receives `ElicitationAttributes` containing the prompt and input schema, and must return an `ElicitationResponse` object specifying the action to take.
+
+To accept with content:
+```
+<ee:transform>
+  <ee:message>
+    <ee:set-payload><![CDATA[
+      %dw 2.0
+      output application/java
+      ---
+      {
+        action: "ACCEPT",
+        content: {
+          firstName: "John",
+          lastName: "Doe"
+        } as Object {class: "com.mulesoft.connectors.mcp.api.elicitation.ElicitationResponse"}
+      }
+    ]]></ee:set-payload>
+  </ee:message>
+</ee:transform>
+```
+
+To decline:
+```
+<set-variable name="response" value="#[output application/java --- { action: 'DECLINE' as Object {class: 'com.mulesoft.connectors.mcp.api.elicitation.ElicitationResponse'} }]" />
+```
+
+To cancel:
+```
+<set-variable name="response" value="#[output application/java --- { action: 'CANCEL' as Object {class: 'com.mulesoft.connectors.mcp.api.elicitation.ElicitationResponse'} }]" />
+```
 
 === Parameters
 
@@ -650,6 +690,8 @@ Listens for elicitation requests from MCP servers and returns an `ElicitationRes
 [[OnNewSessionListener]]
 == MCP Server - On New Session Listener
 `<mcp:on-new-session-listener>`
+
+Triggers a flow when a new MCP client session is initiated. For each session connection request, the flow runs to let you review session details, validate client certificates, or apply custom authentication logic before choosing to accept or reject the session. When triggered, the flow receives a message with the session ID, relevant properties (including any custom headers), and client certificate information if present. To accept the session, let the flow complete successfully. To reject it, set the rejection parameters with your chosen error message, HTTP status code, and headers.
 
 
 === Parameters
@@ -989,21 +1031,21 @@ Configures an expiration policy strategy.
 [[ElicitationAttributes]]
 === Elicitation Attributes
 
-Attributes available in flows triggered by `Elicitation Listener`.
+Attributes available in flows triggered by `Elicitation Listener`. Extends <<RequestAttributes>> to include elicitation-specific fields.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Session Id a| String |  |  | Yes
-| Request Id a| String |  |  | Yes
+| Session Id a| String | Session identifier for the connected MCP client. |  | Yes
+| Request Id a| String | Unique identifier for the elicitation request. |  | Yes
 | Additional Properties a| Object | Additional values attached to the request as HTTP headers. |  | Yes
-| Client Certificate a| <<CertificateData>> | Client certificate used to authenticate the request. |  |
+| Client Certificate a| <<CertificateData>> | Client certificate used to authenticate the request. |  | No
 |===
 
 [[ElicitationResponse]]
 === Elicitation Response
 
-Response structure returned by an `Elicitation Listener` flow.
+Response structure for elicitation requests. This is returned by client flows handling elicitation requests from servers.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
@@ -1012,20 +1054,48 @@ Response structure returned by an `Elicitation Listener` flow.
 
 ** ACCEPT
 ** DECLINE
-** CANCEL | Client response action. |  | Yes
+** CANCEL | Client response action. Valid values are:
+
+* ACCEPT 
++
+Client provides the requested data in the *Content* field
+
+* DECLINE
++
+Client refuses to provide data and the *Content* field should be null
+
+* CANCEL
++
+Client cancels the entire operation and the *Content* field should be null |  | Yes
 | Content a| Object | Response content when action is `ACCEPT`. |  |
 |===
 
 [[ElicitationResult]]
 === Elicitation Result
 
-Result returned by `Create Elicitation`.
+Result returned by the *Create Elicitation* operation to server flows. Contains the client's response to an elicitation request.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
 | Field | Type | Description | Default Value | Required
-| Action a| String | Action returned by the client. |  |
-| Content a| Object | Response content returned by the client. |  |
+| Action a| Enumeration, one of:
+
+** ACCEPT
+** DECLINE
+** CANCEL | Client response action. Valid values are:
+
+* ACCEPT 
++
+Client provides the requested data in the *Content* field
+
+* DECLINE
++
+Client refuses to provide data and the *Content* field should be null
+
+* CANCEL
++
+Client cancels the entire operation and the operation throws an `MCP:OPERATION_CANCELLED` error. |  | Yes
+| Content a| Object | Response content when action is `ACCEPT`. |  |
 |===
 
 [[BooleanSchemaProperty]]
@@ -1325,6 +1395,7 @@ Contains the data associated to a client requiring the creation of a new server 
 | Field | Type | Description | Default Value | Required
 | Serial Number a| Number |  |  | 
 |===
+
 [[RedeliveryPolicy]]
 === Redelivery Policy
 
@@ -1338,6 +1409,7 @@ Configures the redelivery policy for executing requests that generate errors. Yo
 | Message Identifier a| <<RedeliveryPolicyMessageIdentifier>> | One or more expressions that determine if a message was redelivered. This property can be set only if the *Use Secure Hash* field is `false`. |  | 
 | Object Store a| ObjectStore | Configures the object store that stores the redelivery counter for each message. |  | 
 |===
+
 [[RedeliveryPolicyMessageIdentifier]]
 === Redelivery Policy Message Identifier
 
