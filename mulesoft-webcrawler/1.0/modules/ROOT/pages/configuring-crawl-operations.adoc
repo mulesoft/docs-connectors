@@ -1,0 +1,213 @@
+= Configuring Crawl Operations
+
+Configure the *[Crawl] Get Sitemap* operation and the *On Site Crawl* source.
+
+== Configure the [Crawl] Get Sitemap Operation
+
+The *[Crawl] Get Sitemap* operation crawls a website to a specified depth and returns a sitemap in standard XML format following the https://www.sitemaps.org/protocol.html[sitemap protocol]. The sitemap results can be used to customize subsequent crawling of specific pages.
+
+Priority is calculated based on depth: depth 0 = priority 1.0, depth 1 = priority 0.9, and so on. Depth greater than 10 always yields priority 0.0.
+
+To configure the *[Crawl] Get Sitemap* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Website URL*
++
+The starting URL for the sitemap crawl.
+
+* *Maximum depth*
++
+The maximum level of depth that should be reached while crawling a website.
+
+* *Restrict crawl under URL*
++
+If true, only internal pages under the website URL are crawled. Defaults to false.
+
+* *Regex URLs filter logic*
++
+Type of filter logic to apply to regex URLs while crawling. Select INCLUDE to crawl only matching pages, or EXCLUDE to skip matching pages.
+
+* *Regex URLs List*
++
+List of regex patterns for URLs to include or exclude while crawling, based on the filter logic selected above.
+
+=== Page Load Options (Remote WebDriver only)
+
+When using the Remote WebDriver connection type, the following additional options apply:
+
+* *Wait on page load*
++
+The time to wait on page load, in the time unit selected below.
+
+* *Wait on page load unit*
++
+Time unit for the page-load wait.
+
+* *Wait for XPath*
++
+The XPath to wait for before proceeding with content extraction. Not available for the HTTP connection.
+
+* *Extract Shadow DOM*
++
+If true, extracts the Shadow DOM content. Not available for the HTTP connection.
+
+* *Shadow Host(s) XPath*
++
+Shadow host(s) to extract by XPath. If not set, the whole Shadow DOM is extracted. Not available for the HTTP connection.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-webcrawler:get-sitemap
+    config-ref="MuleSoft_WebCrawler_Config"
+    doc:name="[Crawl] Get sitemap"
+    doc:id="6410aae9-21d4-4005-8d86-ac9a136657b4"
+    url="#[payload.url]"
+    maxDepth="#[payload.maxDepth]"
+    restrictToPath="true"/>
+----
+
+=== Output Configuration
+
+This operation responds with an XML payload following the sitemap protocol specification. This is an example response:
+
+[source,xml]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://example.com/</loc>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://example.com/docs</loc>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://example.com/docs/getting-started</loc>
+    <priority>0.8</priority>
+  </url>
+</urlset>
+----
+
+The response attributes include:
+
+* `count` – The total number of URLs in the sitemap.
+* `depth` – The maximum depth reached during the crawl.
+* `url` – The root URL of the crawled site.
+
+== Configure the On Site Crawl Source
+
+The *On Site Crawl* source is a polling source that crawls a website starting from configured seed URLs, emitting each discovered page as a Mule event. The source uses a VM queue for URL scheduling and an object store for URL deduplication, enabling distributed and resumable crawling.
+
+To configure the *On Site Crawl* source:
+
+* *Seed URLs*
++
+URLs where the crawl starts. When empty, the queue starts empty and waits for URLs to be pushed in by another flow targeting the same queue name.
+
+* *Queue Name*
++
+VM queue used to schedule URLs for crawling. When omitted, defaults to `webcrawler-{configName}-source-queue`.
+
+* *Object Store*
++
+Object store used to track already-visited URLs for deduplication. Required.
+
+* *Output format*
++
+Format applied to each emitted page body. Select TEXT, HTML, or MARKDOWN. Default is TEXT.
+
+* *Maximum depth*
++
+The maximum level of depth that should be reached while crawling a website.
+
+* *Restrict crawl under URL*
++
+If true, only internal pages under the seed URLs are crawled. Defaults to false.
+
+* *Regex URLs filter logic*
++
+Type of filter logic to apply to regex URLs while crawling.
+
+* *Regex URLs List*
++
+List of regex patterns for URLs to include or exclude while crawling.
+
+=== Target Content Options
+
+* *Tag list*
++
+List of HTML tags for which content must be retrieved.
+
+* *Retrieve meta tags*
++
+If true, meta tags are retrieved from each crawled page. Defaults to false.
+
+* *Download images*
++
+If true, images referenced on each crawled page are downloaded. Defaults to false.
+
+* *Max image number for each page*
++
+Maximum number of images to download for each page. Default 0 means no limit.
+
+* *Download documents*
++
+If true, documents referenced on each crawled page are downloaded. Defaults to false.
+
+* *Max document number for each page*
++
+Maximum number of documents to download for each page. Default 0 means no limit.
+
+* *Download location*
++
+Filesystem path where images and documents are written when their corresponding download flags are set. Required only if Download images or Download documents is true.
+
+=== XML Configuration
+
+This is the XML for this source:
+
+[source,xml,linenums]
+----
+<flow name="crawl-website-flow">
+    <ms-webcrawler:crawl-website-source
+        config-ref="MuleSoft_WebCrawler_Config"
+        doc:name="On Site Crawl"
+        doc:id="7a2b3c4d-5e6f-7890-abcd-ef1234567890"
+        maxDepth="3"
+        outputFormat="MARKDOWN"
+        restrictToPath="true">
+        <ms-webcrawler:seed-urls>
+            <ms-webcrawler:seed-url value="https://example.com"/>
+        </ms-webcrawler:seed-urls>
+        <scheduling-strategy>
+            <fixed-frequency frequency="10" timeUnit="SECONDS"/>
+        </scheduling-strategy>
+        <ms-webcrawler:object-store>
+            <os:private-object-store
+                config-ref="ObjectStore_Config"
+                persistent="true"/>
+        </ms-webcrawler:object-store>
+    </ms-webcrawler:crawl-website-source>
+
+    <logger level="INFO" message="#[attributes.url]"/>
+</flow>
+----
+
+=== Output Configuration
+
+Each emitted event contains the crawled page content in the configured output format. The response attributes include:
+
+* `title` – The page title.
+* `url` – The page URL.
+* `otherAttributes` – Additional metadata about the page.
+
+== See Also
+
+* xref:index.adoc[MuleSoft WebCrawler Connector Overview]
+* xref:mulesoft-webcrawler-connector-reference.adoc[MuleSoft WebCrawler Connector Reference]
+* https://help.salesforce.com[Salesforce Help]

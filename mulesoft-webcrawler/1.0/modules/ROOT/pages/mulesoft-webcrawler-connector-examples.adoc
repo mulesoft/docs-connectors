@@ -1,0 +1,187 @@
+= MuleSoft WebCrawler Connector 1.0 Examples
+:lc-connector-name: mulesoft-webcrawler
+:connector-name: MuleSoft WebCrawler
+
+This example is a minimal Mule 4 application that exposes the WebCrawler Connector through two HTTP endpoints. Use it as a smoke test for the connector or as a starting point for your own crawl flow.
+
+The demo wires up both connection providers shipped by the connector and exercises the two most-used operations through them:
+
+[%header%autowidth.spread]
+|===
+| Endpoint | Operation | Notes
+| `GET /api/page` | `ms-webcrawler:page-content` | Single-page fetch. Returns the rendered content in the requested `outputFormat` (`HTML`, `TEXT`, or `MARKDOWN`).
+| `GET /api/sitemap` | `ms-webcrawler:get-sitemap` | BFS crawl bounded by `depth`; `restrictToPath=true` so the walk stays under the seed URL's path.
+|===
+
+Both endpoints accept a `connection` query parameter that selects between the two configurations:
+
+* `connection=http` (default) — Uses `ms-webcrawler:http-connection`. Plain HTTP fetch; fastest, no JS execution.
+* `connection=webdriver` — Uses `ms-webcrawler:web-driver-connection`. Selenium-driven Chromium fetch; use for JS-heavy or SPA pages.
+
+Error handling on `GET /api/page` maps two connector errors to JSON responses:
+
+* `MS-WEBCRAWLER:CRAWL_ON_PAGE_DISALLOWED_ERROR` -> HTTP 403
+* `MS-WEBCRAWLER:WEBCRAWLER_OPERATIONS_FAILURE` -> HTTP 500
+
+== Prerequisites
+
+* JDK 17 (set `JAVA_HOME` accordingly)
+* Maven 3.8+
+* Mule Runtime 4.6.9 (declared in the `pom.xml` `app.runtime`). The connector requires `minMuleVersion=4.9.8` once packaged, so deploy to a 4.9+ runtime.
+* For `connection=webdriver`: a Chromium-family browser reachable on the same host as the runtime (the WebDriver provider spins up a local browser).
+
+== Run It
+
+[source,bash]
+----
+cd demo/mule-webcrawler-connector-operations-demo
+mvn -DskipTests clean package
+mvn mule:run
+----
+
+The HTTP listener binds to `${http.port}` (default `8081` from `src/main/resources/config.properties`).
+
+== Configuration Properties
+
+The following properties in `src/main/resources/config.properties` control runtime behavior:
+
+[%header%autowidth.spread]
+|===
+| Property | Default | Effect
+| `http.port` | `8081` | Port the demo listens on.
+| `webcrawler.userAgent` | Chrome 139 desktop UA | Sent as `User-Agent` for both configs.
+| `webcrawler.referrer` | `https://www.google.com` | Sent as `Referer` for both configs.
+| `webcrawler.delayBetweenPages` | `0` | Per-page delay (ms) inside multi-page operations.
+| `webcrawler.delayOnPageLoad` | `0` | WebDriver-only: max wait for `document.readyState === 'complete'` (ms).
+| `webcrawler.enforceRobotsTxt` | `false` | When `true`, WebDriver config respects `robots.txt`; when `false`, all URLs are crawled. HTTP config has it pinned to `true`.
+|===
+
+== Example Calls
+
+[source,bash]
+----
+# Plain HTTP fetch, return as Markdown
+curl 'http://localhost:8081/api/page?url=https://example.com&outputFormat=MARKDOWN&connection=http'
+
+# WebDriver fetch (JS rendered), HTML output
+curl 'http://localhost:8081/api/page?url=https://example.com&outputFormat=HTML&connection=webdriver'
+
+# Two-level sitemap, HTTP path
+curl 'http://localhost:8081/api/sitemap?url=https://example.com&depth=2&connection=http'
+----
+
+== XML Source
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ms-webcrawler="http://www.mulesoft.org/schema/mule/ms-webcrawler"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ms-webcrawler http://www.mulesoft.org/schema/mule/ms-webcrawler/current/mule-webcrawler.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <!-- HTTP listener that backs both demo endpoints. -->
+  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+  </http:listener-config>
+
+  <!-- HTTP fetch (no JS); use for static pages. -->
+  <ms-webcrawler:config name="HTTP_Configuration" doc:name="WebCrawler HTTP" enforceRobotsTxt="true" delayMillis="${webcrawler.delayBetweenPages}">
+    <ms-webcrawler:http-connection userAgent="${webcrawler.userAgent}" referrer="${webcrawler.referrer}"/>
+  </ms-webcrawler:config>
+
+  <!-- WebDriver fetch (Selenium); use for JS-heavy pages. -->
+  <ms-webcrawler:config name="WebDriver_Configuration" doc:name="WebCrawler WebDriver" enforceRobotsTxt="#[p('webcrawler.enforceRobotsTxt')]" delayMillis="${webcrawler.delayBetweenPages}" waitOnPageLoad="${webcrawler.delayOnPageLoad}">
+    <ms-webcrawler:web-driver-connection userAgent="${webcrawler.userAgent}" referrer="${webcrawler.referrer}"/>
+  </ms-webcrawler:config>
+
+  <configuration-properties file="config.properties"/>
+
+  <!-- GET /api/page?url=&outputFormat=&connection=http|webdriver  ->  webcrawler:page-content -->
+  <flow name="get-page-content">
+    <http:listener config-ref="HTTP_Listener_config" path="/api/page"/>
+    <choice>
+      <when expression='#[attributes.queryParams.connection == "webdriver"]'>
+        <ms-webcrawler:page-content config-ref="WebDriver_Configuration"
+            url="#[attributes.queryParams.url]"
+            outputFormat="#[attributes.queryParams.outputFormat]"/>
+      </when>
+      <otherwise>
+        <ms-webcrawler:page-content config-ref="HTTP_Configuration"
+            url="#[attributes.queryParams.url]"
+            outputFormat="#[attributes.queryParams.outputFormat]"/>
+      </otherwise>
+    </choice>
+    <error-handler>
+      <on-error-propagate type="MS-WEBCRAWLER:CRAWL_ON_PAGE_DISALLOWED_ERROR">
+        <ee:transform>
+          <ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ message: error.description }]]></ee:set-payload></ee:message>
+          <ee:variables><ee:set-variable variableName="httpStatus">403</ee:set-variable></ee:variables>
+        </ee:transform>
+      </on-error-propagate>
+      <on-error-propagate type="MS-WEBCRAWLER:WEBCRAWLER_OPERATIONS_FAILURE">
+        <ee:transform>
+          <ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ message: error.description }]]></ee:set-payload></ee:message>
+          <ee:variables><ee:set-variable variableName="httpStatus">500</ee:set-variable></ee:variables>
+        </ee:transform>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+
+  <!-- GET /api/sitemap?url=&depth=&connection=http|webdriver  ->  webcrawler:get-sitemap -->
+  <flow name="get-sitemap">
+    <http:listener config-ref="HTTP_Listener_config" path="/api/sitemap"/>
+    <choice>
+      <when expression='#[attributes.queryParams.connection == "webdriver"]'>
+        <ms-webcrawler:get-sitemap config-ref="WebDriver_Configuration"
+            url="#[attributes.queryParams.url]"
+            maxDepth="#[attributes.queryParams.depth]"
+            restrictToPath="true"/>
+      </when>
+      <otherwise>
+        <ms-webcrawler:get-sitemap config-ref="HTTP_Configuration"
+            url="#[attributes.queryParams.url]"
+            maxDepth="#[attributes.queryParams.depth]"
+            restrictToPath="true"/>
+      </otherwise>
+    </choice>
+  </flow>
+
+</mule>
+----
+
+== Project Layout
+
+[source]
+----
+src/main/mule/mule-webcrawler-connector-operations-demo.xml   # Flows + connector configs
+src/main/resources/config.properties                          # Runtime knobs
+src/main/resources/log4j2.xml                                 # Logging
+pom.xml                                                       # mule-application packaging
+----
+
+== Key Points
+
+* *Dual configuration* — The example defines two global configurations: one using the HTTP connection for static pages, and one using the Remote WebDriver connection for JavaScript-heavy pages. A `choice` router selects the configuration at runtime.
+* *Property placeholders* — Connection settings such as `userAgent`, `referrer`, and `delayBetweenPages` are externalized to `config.properties` for easy environment-specific tuning.
+* *robots.txt enforcement* — The HTTP configuration sets `enforceRobotsTxt="true"` to respect crawling rules. A `MS-WEBCRAWLER:CRAWL_ON_PAGE_DISALLOWED_ERROR` error handler returns a 403 when a page is disallowed.
+* *Error handling* — The `get-page-content` flow demonstrates error handling for common WebCrawler errors, mapping them to appropriate HTTP status codes.
+
+== See Also
+
+* xref:index.adoc[MuleSoft WebCrawler Connector Overview]
+* xref:mulesoft-webcrawler-connector-reference.adoc[MuleSoft WebCrawler Connector Reference]
+* https://help.salesforce.com[Salesforce Help]
