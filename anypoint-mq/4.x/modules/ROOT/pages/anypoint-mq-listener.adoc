@@ -175,42 +175,52 @@ The feature is controlled by the system property `anypoint.mq.subscriber.backpre
 
 ==== Enable Backpressure
 
-To enable backpressure, set the property for your runtime and set *Max Concurrency* on your flow to the number of messages you want processed in parallel:
+To enable backpressure, set the `anypoint.mq.subscriber.backpressure.enabled` system property to `true`.
+This property is set to `false` by default.
 
-[%header,cols="1,2"]
-|===
-| Runtime | How to set the property
-| CloudHub | Add to your app properties: `anypoint.mq.subscriber.backpressure.enabled=true`
-| CloudHub 2.0 | In Runtime Manager, go to *Properties* and add key `anypoint.mq.subscriber.backpressure.enabled` with value `true`
-| Standalone Mule / on-premises | Add to the launch command or `wrapper.conf`: `-M-Danypoint.mq.subscriber.backpressure.enabled=true`
-| Anypoint Studio | In the run configuration, go to *Arguments > VM arguments* and add `-Danypoint.mq.subscriber.backpressure.enabled=true`
-|===
+To set this application property in Runtime Manager:
 
-To disable or roll back, remove the property or set it to `false` and restart the application. No redeployment of a different artifact is required.
+. Sign in to Anypoint Platform and click *Runtime Manager* in the navigation menu.
+. Deploy a new app or change the settings for a deployed app.
+. On the *Properties* tab, specify the value for the property, for example:
++
+image::amq-4x-subscriber-backpressure-enabled.png["Properties table with anypoint.mq.subscriber.backpressure.enabled set to true"]
+
+Alternatively, set the property in *Run Configurations* in Anypoint Studio.
+For more information, see xref:mule-runtime::mule-app-properties-system.adoc[System Properties in Mule Apps].
 
 When backpressure is enabled, the number of messages fetched per poll is capped to your flow's remaining capacity.
 
 
-==== Behavior by Configuration
+==== Fetching Behavior by Configuration
 
-The behavior depends on whether backpressure is enabled and whether `maxConcurrency` is set on the flow:
+The following table shows how backpressure affects message fetching depending on whether it is enabled and whether `maxConcurrency` is set on the flow:
 
 [%header,cols="2,2,2"]
 |===
 | Configuration | Behavior | Change from previous behavior
-| Feature disabled (default) | Subscriber behaves exactly as before this release. | None.
-| Feature enabled, `maxConcurrency` not set | Subscriber behaves exactly as before this release. | None.
-| Feature enabled, `maxConcurrency` set | The polling strategy honors `maxConcurrency` as a true in-flight limit. Under heavy load, fetching paces itself to the flow instead of running ahead. | Under sustained load, message intake is throttled to the flow's capacity. Acknowledgment and redelivery behavior is identical.
+| Backpressure disabled (default) | Subscriber behaves exactly as before this release. | None.
+| Backpressure enabled, `maxConcurrency` not set | Subscriber behaves exactly as before this release. | None.
+| Backpressure enabled, `maxConcurrency` set | The polling strategy honors `maxConcurrency` as a true in-flight limit. Under heavy load, fetching paces itself to the flow instead of running ahead. | Under sustained load, message intake is throttled to the flow's capacity. Acknowledgment and redelivery behavior is identical.
 |===
 
+==== Adopt Backpressure
 
-To adopt backpressure:
+No action is required to upgrade. Backpressure is off by default and existing applications are unaffected.
 
-. Enable the feature by setting `-Danypoint.mq.subscriber.backpressure.enabled=true`. Validate in a non-production environment first and confirm the `enabled` startup log line.
-. Set *Max Concurrency* on your flow to the number of messages you want processed in parallel.
-. If you need strict ordering, use the polling strategy with `maxConcurrency = 1`, and expect a higher API request volume.
+To enable and configure backpressure:
+
+. Enable backpressure by setting `-Danypoint.mq.subscriber.backpressure.enabled=true`. Validate in a non-production environment first and confirm the `enabled` startup log line.
+. Set *Max Concurrency* on your flow to the number of messages you want processed in parallel. This becomes the in-flight fetch cap.
+. If batching efficiency or lower request cost is a priority, set *Max Concurrency* to `10` or higher to preserve full batches, or use the prefetch strategy, which is unaffected by backpressure.
+. If you need strict ordering, use the polling strategy with `maxConcurrency = 1` and expect a higher API request volume.
+
+To roll back at any time, remove the property or set it to `false` and restart. No redeployment of a different artifact is required.
+
+
 
 == Message Acknowledgment
+
 
 You can acknowledge received messages automatically only if the flow execution finishes successfully or as your app consumes them, before processing them.
 
@@ -246,6 +256,9 @@ To perform the manual acknowledgment, you need the value of `ackToken` provided 
 For more information, see xref:anypoint-mq-ack.adoc#manual-acknowledgment[Manual Acknowledgment].
 
 For information about acknowledgment timeouts, see xref:anypoint-mq-ack.adoc#acknowledgment-timeout[Acknowledgment Timeout].
+
+
+NOTE: Backpressure does not affect acknowledgment behavior. The AUTO, MANUAL, and IMMEDIATE modes work the same way regardless of whether backpressure is enabled. Redelivery, acknowledgment timeouts, and error handling are also unchanged.
 
 == Circuit Breaker Capability
 
