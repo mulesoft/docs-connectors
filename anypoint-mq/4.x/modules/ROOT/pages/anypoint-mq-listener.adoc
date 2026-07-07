@@ -17,21 +17,21 @@ The Subscriber source supports two retrieval strategies with different goals:
 Choose prefetch to buffer messages and maximize throughput. Choose polling to pace message intake to your flow's processing capacity, or when strict ordering is required.
 
 * Prefetch is the default and requires no additional configuration for most use cases. Choose prefetch when throughput is the priority and you don't need messages processed in a specific order.
-* Polling gives you control: when flow control is enabled, it fetches messages only when the flow has capacity, which keeps memory usage predictable and prevents the subscriber from building up an unbounded backlog. Choose polling when you need strict ordering, want to limit how many messages are in-flight at once, or want to tie message intake to a specific schedule using a fixed frequency or cron expression.
+* Polling gives you control: when backpressure is enabled, it fetches messages only when the flow has capacity, which keeps memory usage predictable and prevents the subscriber from building up an unbounded backlog. Choose polling when you need strict ordering, want to limit how many messages are in-flight at once, or want to tie message intake to a specific schedule using a fixed frequency or cron expression.
 
 Use this table to choose the strategy that matches your priority:
 
 [%header,cols="2,1,2"]
 |===
 | Priority | Recommended strategy | Billing and throughput note
-| Buffer messages or bulk-retrieve many at once | Prefetch | Best batching, lowest request count, highest throughput. Unaffected by flow control.
-| High throughput, ordering not required | Prefetch | Best batching, lowest request count, highest throughput. Unaffected by flow control.
+| Buffer messages or bulk-retrieve many at once | Prefetch | Best batching, lowest request count, highest throughput. Unaffected by backpressure.
+| High throughput, ordering not required | Prefetch | Best batching, lowest request count, highest throughput. Unaffected by backpressure.
 | Bounded in-flight messages or predictable memory | Polling | Batching efficiency depends on Max Concurrency setting.
 | Strict ordering (`maxConcurrency = 1`) | Polling | Highest request count: batching is effectively disabled by design.
 |===
 
 [NOTE]
-If you previously relied on the polling strategy's over-fetching behavior to achieve buffering-like throughput, use the prefetch strategy instead. Prefetch is purpose-built for buffering and provides better batching efficiency with no billing impact from flow control.
+If you previously relied on the polling strategy's over-fetching behavior to achieve buffering-like throughput, use the prefetch strategy instead. Prefetch is purpose-built for buffering and provides better batching efficiency with no billing impact from backpressure.
 
 == Prefetch Strategy
 
@@ -79,7 +79,7 @@ include::connectors::partial$mq-disclaimer.adoc[tag=mqPrefetchMode]
 
 == Polling Strategy
 
-If your app requires predictable and controlled message consumption rather than maximum throughput, you can configure the Subscriber as a polling strategy. The Subscriber source checks for new messages in the queue at a fixed scheduling rate. Every time the poll is triggered, the Subscriber source retrieves up to 10 messages and dispatches them to the flow individually in order. When flow control is enabled and `maxConcurrency` is set on the flow, the fetch size is further capped to the flow's remaining capacity. See <<flow-control-and-max-concurrency,Flow Control and Max Concurrency>> for details.
+If your app requires predictable and controlled message consumption rather than maximum throughput, you can configure the Subscriber as a polling strategy. The Subscriber source checks for new messages in the queue at a fixed scheduling rate. Every time the poll is triggered, the Subscriber source retrieves up to 10 messages and dispatches them to the flow individually in order. When backpressure is enabled and `maxConcurrency` is set on the flow, the fetch size is further capped to the flow's remaining capacity. See <<backpressure-and-max-concurrency,Backpressure and Max Concurrency>> for details.
 
 Messages aren't consumed immediately. Instead, they remain in the queue until the next poll is triggered. Each poll retrieves up to 10 messages at a time. For example, if your queue has 15 messages, one poll retrieves the first 10 and the remaining 5 wait for the next poll.
 
@@ -162,18 +162,20 @@ image::amq-4x-subscriber-polling-cron.png["Subscriber configuration window showi
 ----
 
 
-[[flow-control-and-max-concurrency]]
-=== Flow Control and Max Concurrency
+[[backpressure-and-max-concurrency]]
+=== Backpressure and Max Concurrency
 
-Flow control for the polling strategy is opt-in and disabled by default. Existing applications are unaffected unless you explicitly enable it.
+Backpressure for the polling strategy is opt-in and disabled by default. Existing applications are unaffected unless you explicitly enable it.
 
-When enabled, the polling strategy paces message retrieval to match your flow's actual processing capacity. It tracks how many messages the flow is currently processing and holds off fetching more until capacity is available. Capacity is released only when a message finishes processing (success or error), not when it is dispatched to the flow. When used with FIFO queues and message groups, flow control also improves fairness — preventing a backlog in one message group from stalling processing of others.
+When enabled, the polling strategy paces message retrieval to match your flow's actual processing capacity. It tracks how many messages the flow is currently processing and holds off fetching more until capacity is available. Capacity is released only when a message finishes processing (success or error), not when it is dispatched to the flow. When used with FIFO queues and message groups, backpressure also improves fairness — preventing a backlog in one message group from stalling processing of others.
 
-NOTE: Flow control affects only when messages are fetched. Acknowledgment behavior (AUTO, MANUAL, and IMMEDIATE modes), redelivery, and error handling are unchanged.
+NOTE: Backpressure affects only when messages are fetched. Acknowledgment behavior (AUTO, MANUAL, and IMMEDIATE modes), redelivery, and error handling are unchanged.
 
 The feature is controlled by the system property `anypoint.mq.subscriber.backpressure.enabled` (default `false`). The property is global to the application: it applies to every polling strategy subscriber in that app and has no effect on prefetch strategy subscribers.
 
-To enable flow control, set the property for your runtime and set *Max Concurrency* on your flow to the number of messages you want processed in parallel:
+==== Enable Backpressure
+
+To enable backpressure, set the property for your runtime and set *Max Concurrency* on your flow to the number of messages you want processed in parallel:
 
 [%header,cols="1,2"]
 |===
@@ -186,13 +188,13 @@ To enable flow control, set the property for your runtime and set *Max Concurren
 
 To disable or roll back, remove the property or set it to `false` and restart the application. No redeployment of a different artifact is required.
 
-When flow control is enabled, the number of messages fetched per poll is capped to your flow's remaining capacity:
+When backpressure is enabled, the number of messages fetched per poll is capped to your flow's remaining capacity:
 
 ----
 effectiveFetchSize = min(configuredFetchSize, maxConcurrency - inFlight)
 ----
 
-==== Confirm Flow Control is Active
+==== Confirm Backpressure is Active
 
 On startup, each polling strategy subscriber logs its state. Enable DEBUG logging for `com.mulesoft.extension.mq` to see the disabled line:
 
@@ -236,7 +238,7 @@ NOTE: The ~10x figure is a ceiling assuming the flow is continuously at capacity
 
 If batching efficiency and lower request cost are a priority, set `maxConcurrency` to `10` or higher to preserve full batches, or use the prefetch strategy, which is purpose-built for buffering and preserves the most efficient batching regardless of flow concurrency.
 
-To adopt flow control:
+To adopt backpressure:
 
 . Enable the feature by setting `-Danypoint.mq.subscriber.backpressure.enabled=true`. Validate in a non-production environment first and confirm the `enabled` startup log line.
 . Set *Max Concurrency* on your flow to the number of messages you want processed in parallel.
@@ -507,7 +509,7 @@ With message groups, multiple consumers can access messages in a FIFO queue at t
 FIFO queues do not support retrieving messages by message group ID.
 
 [IMPORTANT]
-To preserve message processing order, set the value of `maxConcurrency` to `1` for flows that consume messages from a FIFO queue. When using the polling strategy with flow control enabled and `maxConcurrency = 1`, each fetch retrieves one message at a time, which can result in a significantly higher API request volume. See <<flow-control-and-max-concurrency>> for details.
+To preserve message processing order, set the value of `maxConcurrency` to `1` for flows that consume messages from a FIFO queue. When using the polling strategy with backpressure enabled and `maxConcurrency = 1`, each fetch retrieves one message at a time, which can result in a significantly higher API request volume. See <<backpressure-and-max-concurrency>> for details.
 
 
 [NOTE]
