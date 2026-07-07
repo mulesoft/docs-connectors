@@ -188,61 +188,27 @@ To enable backpressure, set the property for your runtime and set *Max Concurren
 
 To disable or roll back, remove the property or set it to `false` and restart the application. No redeployment of a different artifact is required.
 
-When backpressure is enabled, the number of messages fetched per poll is capped to your flow's remaining capacity:
+When backpressure is enabled, the number of messages fetched per poll is capped to your flow's remaining capacity.
 
-----
-effectiveFetchSize = min(configuredFetchSize, maxConcurrency - inFlight)
-----
-
-==== Confirm Backpressure is Active
-
-On startup, each polling strategy subscriber logs its state. Enable DEBUG logging for `com.mulesoft.extension.mq` to see the disabled line:
-
-----
-INFO  AnypointMQServer - Flow backpressure tracking enabled for destination '<queue>' (maxInflightMessages=<n>, ackMode=<mode>)
-DEBUG AnypointMQServer - Flow backpressure tracking disabled for destination '<queue>' (set -Danypoint.mq.subscriber.backpressure.enabled=true to enable)
-----
-
-* `maxInflightMessages=<n>` reflects the flow's resolved *Max Concurrency* value. If Max Concurrency is not set, it is reported as unbounded. If the value cannot be resolved, it falls back to `1`.
-* Prefetch strategy subscribers log neither line — the property does not affect them.
 
 ==== Behavior by Configuration
 
-The behavior depends on whether the feature is enabled and whether `maxConcurrency` is set on the flow:
+The behavior depends on whether backpressure is enabled and whether `maxConcurrency` is set on the flow:
 
 [%header,cols="2,2,2"]
 |===
 | Configuration | Behavior | Change from previous behavior
 | Feature disabled (default) | Subscriber behaves exactly as before this release. | None.
-| Feature enabled, `maxConcurrency` not set | Fetching is effectively unbounded. Throughput is unchanged. | None.
+| Feature enabled, `maxConcurrency` not set | Subscriber behaves exactly as before this release. | None.
 | Feature enabled, `maxConcurrency` set | The polling strategy honors `maxConcurrency` as a true in-flight limit. Under heavy load, fetching paces itself to the flow instead of running ahead. | Under sustained load, message intake is throttled to the flow's capacity. Acknowledgment and redelivery behavior is identical.
 |===
 
-[[billing-api-request-volume]]
-==== Billing: API Request Volume
-
-NOTE: The billing effects described here apply only when the feature is enabled (`anypoint.mq.subscriber.backpressure.enabled=true`) and your flow sets `maxConcurrency` lower than the fetch size. With the feature disabled (the default), batching and request volume are unchanged.
-
-Anypoint MQ is billed by API request volume. A single receive request can return up to 10 messages. When `maxConcurrency` limits the effective fetch size, batches shrink and it takes more requests to consume the same number of messages.
-
-[%header,cols="2,1,2"]
-|===
-| Max Concurrency setting | Batching | Likely billing impact
-| Not set (unbounded default) | Full batches of 10 | No change
-| 10 or higher | Full batches preserved | No change, or modestly lower
-| 2–9 | Partial batches | Some increase
-| 1 (strict ordering) | One message per fetch | Largest increase: up to ~10x more receive requests
-|===
-
-NOTE: The ~10x figure is a ceiling assuming the flow is continuously at capacity. Actual impact depends on your load and message completion timing.
-
-If batching efficiency and lower request cost are a priority, set `maxConcurrency` to `10` or higher to preserve full batches, or use the prefetch strategy, which is purpose-built for buffering and preserves the most efficient batching regardless of flow concurrency.
 
 To adopt backpressure:
 
 . Enable the feature by setting `-Danypoint.mq.subscriber.backpressure.enabled=true`. Validate in a non-production environment first and confirm the `enabled` startup log line.
 . Set *Max Concurrency* on your flow to the number of messages you want processed in parallel.
-. If you need strict ordering, use the polling strategy with `maxConcurrency = 1`, and expect a higher API request volume. See <<billing-api-request-volume,Billing: API Request Volume>>.
+. If you need strict ordering, use the polling strategy with `maxConcurrency = 1`, and expect a higher API request volume.
 
 == Message Acknowledgment
 
