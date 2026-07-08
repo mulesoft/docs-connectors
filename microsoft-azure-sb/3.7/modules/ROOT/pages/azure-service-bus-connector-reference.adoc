@@ -150,6 +150,7 @@ The Azure Active Directory (Azure AD) connection type provides role-based access
 == List of Operations
 * <<abandonMessage>>
 * <<completeMessage>>
+* <<deadLetterMessage>>
 * <<receive>>
 * <<receiveBatch>>
 * <<send>>
@@ -220,6 +221,40 @@ This operation completes a message received from within a flow with a Message Li
 * AZURE-SERVICE-BUS-MESSAGING:CONNECTIVITY
 * AZURE-SERVICE-BUS-MESSAGING:RETRY_EXHAUSTED
 * AZURE-SERVICE-BUS-MESSAGING:TOKEN_NOT_FOUND
+
+
+[[deadLetterMessage]]
+=== Dead Letter
+`<azure-service-bus-messaging:dead-letter-message>`
+
+Sends the message associated with the Lock Token to the entity's native dead-letter sub-queue, recording an optional reason and description on the dead-lettered message. This operation can be used only from inside a flow that also includes a *Message Listener Source* operation.
+
+
+==== Parameters
+[%header,cols="20s,20a,35a,20a,5a"]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use | | x
+| Lock Token a| String |  Lock Token from the message to dead-letter. This represents a UUID for a message. |  | x
+| Dead Letter Reason a| String |  Reason recorded on the dead-lettered message describing why it was dead-lettered |  |
+| Dead Letter Description a| String |  Human-readable description recorded on the dead-lettered message providing further detail about the dead-lettering |  |
+| Properties To Modify a| Object |  Map of properties to stamp onto the dead-lettered message as application properties |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  Retry strategy in case of connectivity errors |  |
+|===
+
+
+=== For Configurations
+* <<config>>
+
+==== Throws
+
+* AZURE-SERVICE-BUS-MESSAGING:CONNECTIVITY
+* AZURE-SERVICE-BUS-MESSAGING:OPERATION_TIMEOUT
+* AZURE-SERVICE-BUS-MESSAGING:RETRY_EXHAUSTED
+* AZURE-SERVICE-BUS-MESSAGING:TOKEN_EXPIRED
+* AZURE-SERVICE-BUS-MESSAGING:TOKEN_NOT_FOUND
+* AZURE-SERVICE-BUS-MESSAGING:ANY
 
 
 [[receive]]
@@ -425,12 +460,15 @@ This operation receives messages from a specific queue or subscription.
 | Number Of Consumers a| Number | Number of concurrent consumers to use to receive messages |  |
 |Buffered Mode | Boolean | Buffered is the default mode. Consumers send the message to the flow and immediately receive the next message. If Buffered Mode is disabled, the consumers do not receive the next message until the current message exits the flow. | true |
 | Enable Auto Lock Renewal a| Boolean |  Specifies whether the source should automatically renew message locks for session-aware queues, which prevents lock expiration during long-running message processing. The message lock renewal duration defaults to 5 minutes (hardcoded per Azure SDK). Flows exceeding 5 minutes of processing time experience lock expiration. |  true |
+| Max Auto Lock Renew Duration a| String |  Maximum duration for which the SDK keeps renewing the message lock automatically, expressed as an ISO-8601 duration (for example, `PT5M`, `PT30M`, `PT2H`). Only applies when Enable Auto Lock Renewal is enabled. Raise it for flows whose processing legitimately exceeds the broker-side lock duration. Longer values delay broker redelivery if the consumer hangs. |  PT5M |
 | Output Mime Type a| String | MIME type of the payload that this operation outputs |  |
 | Output Encoding a| String |  Encoding of the payload that this operation outputs |  |
 | Primary Node Only a| Boolean |  Whether this source should be executed only on the primary node when running in a cluster |  true |
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message |  |
 | Destination Name a| String | Name of the destination from which messages are received |  | x
 | Subscription Name a| String | Name of the subscription from which messages are received |  NONE |
+| Consume From Dead Letter Queue a| Boolean |  When enabled, the listener consumes messages from the entity's native dead-letter sub-queue (`$deadletterqueue`) instead of the main entity. Cannot be combined with a Message Session Id, since dead-letter queue messages are session-less. |  false |
+| Inactivity Timeout Minutes a| Number |  Inactivity timeout, in minutes. If no message is received within this period, the listener triggers a reconnection. Set to `0` to disable inactivity monitoring. |  0 |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> | Retry strategy in case of connectivity errors |  |
 | Body a| Binary |  Body of the message |  #[payload] |
@@ -528,6 +566,8 @@ This operation receives messages from a specific queue or subscription.
 |===
 | Field | Type | Description | Default Value | Required
 | Correlation Id a| String | Specifies a context for the message for correlation purposes  |  |
+| Dead Letter Error Description a| String | Read-only, human-readable error description recorded on the dead-lettered message. Only populated when consuming from a dead-letter sub-queue. |  |
+| Dead Letter Reason a| String | Read-only reason recorded on the dead-lettered message describing why it was dead-lettered. Only populated when consuming from a dead-letter sub-queue. |  |
 | Dead Letter Source a| String | Read-only property that indicates the entity in which the message was unable to be delivered |  |
 | Delivery Count a| Number | Number of times message delivery was attempted. When a message lock expires, or when the message is abandoned by the receiver, delivery count increases.    |  |
 | Enqueued Time Utc a| DateTime | The instant in UTC time when the message is accepted and stored in the entity  |  |
@@ -568,6 +608,8 @@ This operation receives messages from a specific queue or subscription.
 |===
 | Field | Type | Description | Default Value | Required
 | Correlation Id a| String |Specifies a context for the message for correlation purposes  |  |
+| Dead Letter Error Description a| String | Read-only, human-readable error description recorded on the dead-lettered message. Only populated when consuming from a dead-letter sub-queue. |  |
+| Dead Letter Reason a| String | Read-only reason recorded on the dead-lettered message describing why it was dead-lettered. Only populated when consuming from a dead-letter sub-queue. |  |
 | Dead Letter Source a| String | Read-only property that indicates the entity in which the message was unable to be delivered |  |
 | Delivery Count a| Number | Number of times message delivery was attempted. When a message lock expires, or when the message is abandoned by the receiver, delivery count increases. |  |
 | Enqueued Time Utc a| DateTime | The instant in UTC time when the message is accepted and stored in the entity  |  |
