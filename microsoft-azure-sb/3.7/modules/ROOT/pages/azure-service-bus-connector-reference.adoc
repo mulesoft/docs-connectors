@@ -186,6 +186,7 @@ Abandon message stored in the current receiver (This is equivalent to a NACK ope
 ==== Throws
 
 * AZURE-SERVICE-BUS-MESSAGING:CONNECTIVITY
+* AZURE-SERVICE-BUS-MESSAGING:LOCK_TOKEN_NOT_FOUND
 * AZURE-SERVICE-BUS-MESSAGING:OPERATION_TIMEOUT
 * AZURE-SERVICE-BUS-MESSAGING:RETRY_EXHAUSTED
 * AZURE-SERVICE-BUS-MESSAGING:TOKEN_NOT_FOUND
@@ -219,6 +220,7 @@ This operation completes a message received from within a flow with a Message Li
 * AZURE-SERVICE-BUS-MESSAGING:OPERATION_TIMEOUT
 * AZURE-SERVICE-BUS-MESSAGING:ANY
 * AZURE-SERVICE-BUS-MESSAGING:CONNECTIVITY
+* AZURE-SERVICE-BUS-MESSAGING:LOCK_TOKEN_NOT_FOUND
 * AZURE-SERVICE-BUS-MESSAGING:RETRY_EXHAUSTED
 * AZURE-SERVICE-BUS-MESSAGING:TOKEN_NOT_FOUND
 
@@ -250,6 +252,7 @@ Sends the message associated with the Lock Token to the entity's native dead-let
 ==== Throws
 
 * AZURE-SERVICE-BUS-MESSAGING:CONNECTIVITY
+* AZURE-SERVICE-BUS-MESSAGING:LOCK_TOKEN_NOT_FOUND
 * AZURE-SERVICE-BUS-MESSAGING:OPERATION_TIMEOUT
 * AZURE-SERVICE-BUS-MESSAGING:RETRY_EXHAUSTED
 * AZURE-SERVICE-BUS-MESSAGING:TOKEN_EXPIRED
@@ -415,7 +418,7 @@ This operation sends a list of messages to a queue or topic.
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use | | x
 | Destination Name a| String | Destination name to which to send the message |  | x
-| Messages a| Array of Any |  Messages to send |  #[payload] |
+| Messages a| Array of Object |  Messages to send |  #[payload] |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -442,7 +445,7 @@ This operation sends a list of messages to a queue or topic.
 === Message Listener
 `<azure-service-bus-messaging:message-listener>`
 
-This operation receives messages from a specific queue or subscription.
+Listens for messages from an Azure Service Bus queue or topic subscription. The source consumes messages and dispatches them to the flow for processing. Supports PeekLock and ReceiveAndDelete receive modes, session-aware receivers, configurable auto-lock renewal, and dead-letter queue consumption.
 
 
 ==== Parameters
@@ -451,15 +454,14 @@ This operation receives messages from a specific queue or subscription.
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
 | Message Session Id a| String |  Message session ID. |   | 
-| Acknowledgment mode a| Enumeration, one of:
+| Ack Mode a| Enumeration, one of:
 
-** AUTO
-** MANUAL
-** IMMEDIATE | Specifies the way to acknowledge received messages. AUTO and MANUAL uses the PeekLock mode. IMMEDIATE uses the ReceiveAndDelete mode. |  | x
+** IMMEDIATE
+** MANUAL | Acknowledgment mode to use when consuming messages. IMMEDIATE acknowledges messages automatically upon receipt (uses ReceiveAndDelete mode). MANUAL requires explicit acknowledgment via the Complete or Abandon operations (uses PeekLock mode). |  | x
 | Prefetch Count a| Number |  When Prefetch is enabled, the receiver quietly acquires more messages, up to the PrefetchCount limit, beyond what the application initially requested. Setting this value to zero (`0`) disables prefetching. |  0 |
 | Number Of Consumers a| Number | Number of concurrent consumers to use to receive messages |  |
 |Buffered Mode | Boolean | Buffered is the default mode. Consumers send the message to the flow and immediately receive the next message. If Buffered Mode is disabled, the consumers do not receive the next message until the current message exits the flow. | true |
-| Enable Auto Lock Renewal a| Boolean |  Specifies whether the source should automatically renew message locks for session-aware queues, which prevents lock expiration during long-running message processing. The message lock renewal duration defaults to 5 minutes (hardcoded per Azure SDK). Flows exceeding 5 minutes of processing time experience lock expiration. |  true |
+| Enable Auto Lock Renewal a| Boolean |  Specifies whether the source should automatically renew message locks for session-aware queues, which prevents lock expiration during long-running message processing. The message lock renewal duration defaults to 5 minutes (hardcoded per Azure SDK). Flows exceeding 5 minutes of processing time experience lock expiration. |  false |
 | Max Auto Lock Renew Duration a| String |  Maximum duration for which the SDK keeps renewing the message lock automatically, expressed as an ISO-8601 duration (for example, `PT5M`, `PT30M`, `PT2H`). Only applies when Enable Auto Lock Renewal is enabled. Raise it for flows whose processing legitimately exceeds the broker-side lock duration. Longer values delay broker redelivery if the consumer hangs. |  PT5M |
 | Output Mime Type a| String | MIME type of the payload that this operation outputs |  |
 | Output Encoding a| String |  Encoding of the payload that this operation outputs |  |
@@ -570,20 +572,20 @@ This operation receives messages from a specific queue or subscription.
 | Dead Letter Reason a| String | Read-only reason recorded on the dead-lettered message describing why it was dead-lettered. Only populated when consuming from a dead-letter sub-queue. |  |
 | Dead Letter Source a| String | Read-only property that indicates the entity in which the message was unable to be delivered |  |
 | Delivery Count a| Number | Number of times message delivery was attempted. When a message lock expires, or when the message is abandoned by the receiver, delivery count increases.    |  |
-| Enqueued Time Utc a| DateTime | The instant in UTC time when the message is accepted and stored in the entity  |  |
-| Expires At a| DateTime | The instant in UTC time when the message is marked for removal and no longer able to be retrieved from the entity because of its expiration, which is controlled by *Time to Live*. |  |
+| Enqueued Time Utc a| LocalDateTime | The instant in UTC time when the message is accepted and stored in the entity  |  |
+| Expires At a| LocalDateTime | The instant in UTC time when the message is marked for removal and no longer able to be retrieved from the entity because of its expiration, which is controlled by *Time to Live*. |  |
 | Label a| String | States the purpose of the message to the receiver |  |
-| Lock Token a| String | Read-only property that references the lock that is in peek-lock receive mode  |  |
-| Locked Until Utc a| DateTime | UTC instant until which the message is kept locked in the queue or subscription |  |
+| Lock Token a| String | Lock token for the message. Used for MANUAL acknowledgment operations (Complete, Abandon, Dead Letter).  |  |
+| Locked Until Utc a| LocalDateTime | UTC instant until which the message is kept locked in the queue or subscription |  |
 | Message Id a| String | Uniquely identifies the message and its payload |  |
 | Partition Key a| String | Used for partitioned entities to enable related messages to be assigned to the same internal partition so that submission sequence order of the messages is recorded correctly   |  |
 | Properties a| Object |  |  |
 | Reply To a| String | Path for where the receiver of the message can reply  |  |
 | Reply To Session Id a| String | Specify the specific session ID for where the application can receive messages  |  |
-| Scheduled Enqueue Time Utc a| DateTime | Schedule the UTC time for when the message will appear in the queue  |  |
+| Scheduled Enqueue Time Utc a| LocalDateTime | Schedule the UTC time for when the message will appear in the queue  |  |
 | Sequence Number a| Number | Unique 64-bit integer that is assigned to a message when the message is accepted and stored by the broker, and which functions as the message's true ID  |  |
 | Session Id a| String | Specifies the session association of the message for session-aware entities  |  |
-| Time To Live a| Any | Relative duration after which time the message expires, starting at the moment the message is accepted and stored by the broker, as defined in Enqueued Time UTC  |  |
+| Time To Live a| Duration | Relative duration after which time the message expires, starting at the moment the message is accepted and stored by the broker, as defined in Enqueued Time UTC  |  |
 | To a| String | Reserved for future use in routing scenarios and currently ignored by the broker. Can be used by applications in rule-driven, auto-forward chaining interactions to specify the intended logical destination of the message |  |
 | Via Partition Key a| String | Selects the transfer queue partition when a message is sent through a transfer queue in the scope of a transaction  |  |
 |===
@@ -596,7 +598,7 @@ This operation receives messages from a specific queue or subscription.
 | Field | Type | Description | Default Value | Required
 | Max Redelivery Count a| Number | Maximum number of times a message can be redelivered and processed unsuccessfully before triggering a process-failed-message |  |
 | Use Secure Hash a| Boolean | Whether to use a secure hash algorithm to identify a redelivered message. |  |
-| Message Digest Algorithm a| String | Secure hashing algorithm to use. If not set, the default is SHA-256. | SHA-256 |
+| Message Digest Algorithm a| String | Secure hashing algorithm to use if the *Use Secure Hash* field is `true`. If the payload of the message is a Java object, Mule ignores this value and returns the value that the payload's `hashCode()` returns. If not set, the default is SHA-256. | SHA-256 |
 | Id Expression a| String | Defines one or more expressions to use to determine when a message is redelivered. This property can be set only if useSecureHash is false. |  |
 | Object Store a| Object Store | Object store where the redelivery counter for each message is stored |  |
 |===
@@ -612,19 +614,19 @@ This operation receives messages from a specific queue or subscription.
 | Dead Letter Reason a| String | Read-only reason recorded on the dead-lettered message describing why it was dead-lettered. Only populated when consuming from a dead-letter sub-queue. |  |
 | Dead Letter Source a| String | Read-only property that indicates the entity in which the message was unable to be delivered |  |
 | Delivery Count a| Number | Number of times message delivery was attempted. When a message lock expires, or when the message is abandoned by the receiver, delivery count increases. |  |
-| Enqueued Time Utc a| DateTime | The instant in UTC time when the message is accepted and stored in the entity  |  |
-| Expires At a| DateTime | The instant in UTC time when the message is marked for removal and no longer able to be retrieved from the entity because of its expiration, which is controlled by *Time to Live*.  |  |
+| Enqueued Time Utc a| LocalDateTime | The instant in UTC time when the message is accepted and stored in the entity  |  |
+| Expires At a| LocalDateTime | The instant in UTC time when the message is marked for removal and no longer able to be retrieved from the entity because of its expiration, which is controlled by *Time to Live*.  |  |
 | Label a| String | States the purpose of the message to the receiver |  |
-| Locked Until Utc a| DateTime | UTC instant until which the message is kept locked in the queue or subscription |  |
+| Locked Until Utc a| LocalDateTime | UTC instant until which the message is kept locked in the queue or subscription |  |
 | Message Id a| String | Uniquely identifies the message and its payload |  |
 | Partition Key a| String | Used for partitioned entities to enable related messages to be assigned to the same internal partition so that submission sequence order of the messages is recorded correctly |  |
 | Properties a| Object |  |  |
 | Reply To a| String | Path for where the receiver of the message can reply  |  |
 | Reply To Session Id a| String | Specify the specific session ID for where the application can receive messages  |  |
-| Scheduled Enqueue Time Utc a| DateTime | Schedule the UTC time for when the message will appear in the queue  |  |
+| Scheduled Enqueue Time Utc a| LocalDateTime | Schedule the UTC time for when the message will appear in the queue  |  |
 | Sequence Number a| Number | Unique 64-bit integer that is assigned to a message when the message is accepted and stored by the broker, and which functions as the message's true ID  |  |
 | Session Id a| String | Specifies the session association of the message for session-aware entities |  |
-| Time To Live a| Any | Relative duration after which time the message expires, starting at the moment the message is accepted and stored by the broker, as defined in Enqueued Time UTC  |  |
+| Time To Live a| Duration | Relative duration after which time the message expires, starting at the moment the message is accepted and stored by the broker, as defined in Enqueued Time UTC  |  |
 | To a| String | Reserved for future use in routing scenarios and currently ignored by the broker. Can be used by applications in rule-driven, auto-forward chaining interactions to specify the intended logical destination of the message |  |
 | Via Partition Key a| String | Selects the transfer queue partition when a message is sent through a transfer queue in the scope of a transaction |  |
 |===
