@@ -1,31 +1,31 @@
 = Configuring Crawl Operations
 
-Configure the *[Crawl] Get Sitemap* operation and the *On Site Crawl* source.
+Configure the *Get SiteMap* operation and the *On Content Crawl* source.
 
-== Configure the [Crawl] Get Sitemap Operation
+== Configure the Get SiteMap Operation
 
-The *[Crawl] Get Sitemap* operation crawls a website to a specified depth and returns a sitemap in standard XML format following the https://www.sitemaps.org/protocol.html[sitemap protocol]. The sitemap results can be used to customize subsequent crawling of specific pages.
+The *Get SiteMap* operation crawls a website to a specified depth and returns a sitemap in standard XML format following the https://www.sitemaps.org/protocol.html[sitemap protocol]. The sitemap results can be used to customize subsequent crawling of specific pages.
 
 Priority is calculated based on depth: depth 0 = priority 1.0, depth 1 = priority 0.9, and so on. Depth greater than 10 always yields priority 0.0.
 
-To configure the *[Crawl] Get Sitemap* operation:
+To configure the *Get SiteMap* operation:
 
 include::connectors::partial$t-configure-operations.adoc[]
-* *Website URL*
+* *Path*
 +
-The starting URL for the sitemap crawl.
+Relative path, resolved against the connection's base URL, where the sitemap crawl starts.
+
+* *Maximum depth*
++
+The maximum depth to reach while crawling a website. Defaults to 0.
 
 * *Encoding*
 +
 Encoding for emitted page bodies. Overrides the configuration's encoding when set.
 
-* *Maximum depth*
-+
-The maximum depth to reach while crawling a website.
-
 * *Restrict crawl under URL*
 +
-If true, only internal pages under the website URL are crawled. Defaults to false.
+If true, only internal pages under the base URL are crawled. Defaults to false.
 
 * *Regex URLs filter logic*
 +
@@ -93,9 +93,9 @@ This is the XML for this operation:
 ----
 <ms-webcrawler:get-sitemap
     config-ref="MuleSoft_WebCrawler_Config"
-    doc:name="[Crawl] Get sitemap"
+    doc:name="Get SiteMap"
     doc:id="6410aae9-21d4-4005-8d86-ac9a136657b4"
-    url="#[payload.url]"
+    path="#[payload.path]"
     maxDepth="#[payload.maxDepth]"
     restrictToPath="true"/>
 ----
@@ -135,15 +135,23 @@ The maximum depth reached during the crawl.
 +
 The root URL of the crawled site.
 
-== Configure the On Site Crawl Source
+== Configure the On Content Crawl Source
 
-The *On Site Crawl* source is a polling source that crawls a website starting from configured seed URLs, emitting each discovered page as a Mule event. The source uses a VM queue for URL scheduling and an object store for URL deduplication, enabling distributed and resumable crawling.
+The *On Content Crawl* source is a polling source that crawls a website starting from a configured path, emitting each discovered page, image, or document as a Mule event. The source uses a VM queue for URL scheduling and an object store for URL deduplication, enabling distributed and resumable crawling.
 
-To configure the *On Site Crawl* source:
+To configure the *On Content Crawl* source:
 
-* *Seed URLs*
+* *Path*
 +
-Comma-separated list of URLs where the crawl starts. Whitespace around entries is ignored. When empty, the queue starts empty and waits for URLs to be pushed in by another flow targeting the same queue name.
+Relative path, resolved against the connection's base URL, where the crawl starts. When empty or `/`, the crawl starts at the base URL itself. Fully-qualified URLs are rejected with INVALID_PARAMETERS.
+
+* *Additional seed URLs*
++
+Comma-separated list of additional fully-qualified seed URLs to enqueue alongside the path. Each entry must be a fully-qualified URL, and relative paths are dropped. Off-host and off-path entries are dropped and a warning is logged.
+
+* *Maximum depth*
++
+The maximum depth to reach while crawling a website. Defaults to 0.
 
 * *Queue Name*
 +
@@ -157,6 +165,10 @@ Object store used to track already-visited URLs for deduplication. Required.
 +
 Format applied to each emitted page body. Select TEXT, HTML, or MARKDOWN. Default is TEXT.
 
+* *Number Of Consumers*
++
+Number of concurrent queue consumers used by this source. Defaults to 1.
+
 * *Hash route mode*
 +
 How to treat URLs containing #fragments. IGNORE strips fragments before crawling (default, fits classic server-rendered sites). PATH rewrites SPA-style hash routes (for example, #/page) into real paths (/page). PRESERVE keeps the URL verbatim, fragment included.
@@ -165,13 +177,9 @@ How to treat URLs containing #fragments. IGNORE strips fragments before crawling
 +
 Encoding for emitted page bodies. Overrides the configuration's encoding when set.
 
-* *Maximum depth*
-+
-The maximum depth to reach while crawling a website.
-
 * *Restrict crawl under URL*
 +
-If true, only internal pages under the seed URLs are crawled. Defaults to false.
+If true, only internal pages under the base URL are crawled. Defaults to false.
 
 * *Regex URLs filter logic*
 +
@@ -183,33 +191,37 @@ List of regex patterns for URLs to include or exclude while crawling.
 
 === Target Content Options
 
-* *Tag list*
+* *Pages*
 +
-List of HTML tags for which content must be retrieved.
+If true, page content of the crawled URL is emitted. Defaults to true.
+
+* *Images*
++
+If true, images referenced on the crawled URL are emitted. Defaults to false.
+
+* *Max image number for each page*
++
+Maximum number of images to fetch for each page. 0 means no limit.
+
+* *Documents*
++
+If true, documents referenced on the crawled URL are emitted. Defaults to false.
+
+* *Max document number for each page*
++
+Maximum number of documents to fetch for each page. 0 means no limit.
+
+* *Additional Allowed Base URLs*
++
+Optional comma-separated allowlist for image and document URLs. When set, assets must be under the base URL or one of these base URLs.
 
 * *Retrieve meta tags*
 +
 If true, meta tags are retrieved from each crawled page. Defaults to false.
 
-* *Download images*
+* *Tag list*
 +
-If true, images referenced on each crawled page are downloaded. Defaults to false.
-
-* *Max image number for each page*
-+
-Maximum number of images to download for each page. 0 means no limit.
-
-* *Download documents*
-+
-If true, documents referenced on each crawled page are downloaded. Defaults to false.
-
-* *Max document number for each page*
-+
-Maximum number of documents to download for each page. 0 means no limit.
-
-* *Download location*
-+
-Filesystem path where images and documents are written when their corresponding download flags are set. Required only if Download images or Download documents is true.
+List of HTML tags for which content must be retrieved.
 
 === Crawl Options
 
@@ -267,15 +279,15 @@ This is the XML for this source:
 
 [source,xml,linenums]
 ----
-<flow name="crawl-website-flow">
-    <ms-webcrawler:crawl-website-listener
+<flow name="crawl-content-flow">
+    <ms-webcrawler:crawl-content-listener
         config-ref="MuleSoft_WebCrawler_Config"
-        doc:name="On Site Crawl"
+        doc:name="On Content Crawl"
         doc:id="7a2b3c4d-5e6f-7890-abcd-ef1234567890"
         maxDepth="3"
         outputFormat="MARKDOWN"
         restrictToPath="true"
-        seedUrls="https://example.com, https://example.com/docs">
+        path="/docs">
         <scheduling-strategy>
             <fixed-frequency frequency="10" timeUnit="SECONDS"/>
         </scheduling-strategy>
@@ -284,7 +296,7 @@ This is the XML for this source:
                 config-ref="ObjectStore_Config"
                 persistent="true"/>
         </ms-webcrawler:object-store>
-    </ms-webcrawler:crawl-website-listener>
+    </ms-webcrawler:crawl-content-listener>
 
     <logger level="INFO" message="#[attributes.url]"/>
 </flow>
@@ -306,9 +318,21 @@ The crawl depth at which this page was discovered.
 * `etag`
 +
 The ETag header value from the page response.
+* `eventType`
++
+The type of emitted event: PAGE, IMAGE, or DOCUMENT.
+* `fileName`
++
+The file name of the emitted image or document.
 * `lastModified`
 +
 The last-modified timestamp from the page response.
+* `metaTags`
++
+The meta tags retrieved from the page.
+* `size`
++
+The size of the emitted content in bytes.
 * `statusCode`
 +
 The HTTP status code of the page response.

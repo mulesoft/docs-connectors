@@ -9,11 +9,11 @@ The application uses both connection types and exercises the two most common ope
 [%header%autowidth.spread]
 |===
 | Endpoint | Operation | Notes
-| `GET /api/page` | *[Page] Get Content* | Single-page fetch. Returns the rendered content in the requested `outputFormat` (`HTML`, `TEXT`, or `MARKDOWN`).
-| `GET /api/sitemap` | *[Crawl] Get Sitemap* | Crawls to the specified `depth`. `restrictToPath=true` keeps the crawl under the seed URL's path.
+| `GET /api/page` | *Get Page Content* | Single-page fetch. Returns the rendered content in the requested `outputFormat` (`HTML`, `TEXT`, or `MARKDOWN`).
+| `GET /api/sitemap` | *Get SiteMap* | Crawls to the specified `depth`. `restrictToPath=true` keeps the crawl under the base URL's path.
 |===
 
-Both endpoints accept a `connection` query parameter that selects between the two configurations.
+Each endpoint accepts a `path` query parameter, which is resolved against the connection's base URL, and a `connection` query parameter that selects between the two configurations.
 
 * `connection=http` (default)
 +
@@ -32,13 +32,13 @@ Error handling on `GET /api/page` maps two connector errors to JSON responses.
 [source,bash]
 ----
 # Plain HTTP fetch, return as Markdown
-curl 'http://localhost:8081/api/page?url=https://example.com&outputFormat=MARKDOWN&connection=http'
+curl 'http://localhost:8081/api/page?path=/docs&outputFormat=MARKDOWN&connection=http'
 
 # WebDriver fetch (JS rendered), HTML output
-curl 'http://localhost:8081/api/page?url=https://example.com&outputFormat=HTML&connection=webdriver'
+curl 'http://localhost:8081/api/page?path=/docs&outputFormat=HTML&connection=webdriver'
 
 # Two-level sitemap, HTTP path
-curl 'http://localhost:8081/api/sitemap?url=https://example.com&depth=2&connection=http'
+curl 'http://localhost:8081/api/sitemap?path=/docs&depth=2&connection=http'
 ----
 
 == XML Source
@@ -65,29 +65,29 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 
   <!-- HTTP fetch (no JS); use for static pages. -->
   <ms-webcrawler:config name="HTTP_Configuration" doc:name="WebCrawler HTTP">
-    <ms-webcrawler:http-connection userAgent="${webcrawler.userAgent}"/>
+    <ms-webcrawler:http-connection baseUrl="${webcrawler.baseUrl}" browserUserAgent="${webcrawler.userAgent}"/>
   </ms-webcrawler:config>
 
   <!-- WebDriver fetch (Selenium); use for JS-heavy pages. -->
   <ms-webcrawler:config name="WebDriver_Configuration" doc:name="WebCrawler WebDriver">
-    <ms-webcrawler:web-driver-connection userAgent="${webcrawler.userAgent}" remoteWebDriverUrl="${webcrawler.webDriverUrl}"/>
+    <ms-webcrawler:web-driver-connection baseUrl="${webcrawler.baseUrl}" browserUserAgent="${webcrawler.userAgent}" remoteBrowserUrl="${webcrawler.webDriverUrl}"/>
   </ms-webcrawler:config>
 
   <configuration-properties file="config.properties"/>
 
-  <!-- GET /api/page?url=&outputFormat=&connection=http|webdriver  ->  webcrawler:page-content -->
+  <!-- GET /api/page?path=&outputFormat=&connection=http|webdriver  ->  webcrawler:page-content -->
   <flow name="get-page-content">
     <http:listener config-ref="HTTP_Listener_config" path="/api/page"/>
     <choice>
       <when expression='#[attributes.queryParams.connection == "webdriver"]'>
         <ms-webcrawler:page-content config-ref="WebDriver_Configuration"
-            url="#[attributes.queryParams.url]"
+            path="#[attributes.queryParams.path]"
             outputFormat="#[attributes.queryParams.outputFormat]"
             enforceRobotsTxt="true"/>
       </when>
       <otherwise>
         <ms-webcrawler:page-content config-ref="HTTP_Configuration"
-            url="#[attributes.queryParams.url]"
+            path="#[attributes.queryParams.path]"
             outputFormat="#[attributes.queryParams.outputFormat]"
             enforceRobotsTxt="true"/>
       </otherwise>
@@ -114,19 +114,19 @@ output application/json
     </error-handler>
   </flow>
 
-  <!-- GET /api/sitemap?url=&depth=&connection=http|webdriver  ->  webcrawler:get-sitemap -->
+  <!-- GET /api/sitemap?path=&depth=&connection=http|webdriver  ->  webcrawler:get-sitemap -->
   <flow name="get-sitemap">
     <http:listener config-ref="HTTP_Listener_config" path="/api/sitemap"/>
     <choice>
       <when expression='#[attributes.queryParams.connection == "webdriver"]'>
         <ms-webcrawler:get-sitemap config-ref="WebDriver_Configuration"
-            url="#[attributes.queryParams.url]"
+            path="#[attributes.queryParams.path]"
             maxDepth="#[attributes.queryParams.depth]"
             restrictToPath="true"/>
       </when>
       <otherwise>
         <ms-webcrawler:get-sitemap config-ref="HTTP_Configuration"
-            url="#[attributes.queryParams.url]"
+            path="#[attributes.queryParams.path]"
             maxDepth="#[attributes.queryParams.depth]"
             restrictToPath="true"/>
       </otherwise>

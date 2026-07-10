@@ -45,7 +45,8 @@ Default configuration
 [%header%autowidth.spread]
 |===
 | Name | Type | Description | Default Value | Required
-| User agent a| String |  Browser user-agent advertised on outbound requests. |  |
+| Base URL a| String |  Base URL against which relative paths are resolved. |  | x
+| Browser User Agent a| String |  Browser user-agent advertised on outbound requests. |  |
 | Proxy Configuration a| <<DefaultHttpProxyConfig>> |  Proxy configuration for outbound HTTP requests. |  |
 | Response timeout a| Number |  Connect and read timeout for the connection's HTTP client, in the time unit selected below. |  30 |
 | Response timeout unit a| Enumeration, one of:
@@ -69,7 +70,8 @@ Default configuration
 [%header%autowidth.spread]
 |===
 | Name | Type | Description | Default Value | Required
-| User agent a| String |  Browser user-agent advertised on outbound requests. |  |
+| Base URL a| String |  Base URL against which relative paths are resolved. |  | x
+| Browser User Agent a| String |  Browser user-agent advertised on outbound requests. |  |
 | Proxy Configuration a| <<DefaultHttpProxyConfig>> |  Proxy configuration for outbound HTTP requests. |  |
 | Response timeout a| Number |  Connect and read timeout for the connection's HTTP client, in the time unit selected below. |  30 |
 | Response timeout unit a| Enumeration, one of:
@@ -82,7 +84,10 @@ Default configuration
 ** HOURS
 ** DAYS |  Time unit for the *Response timeout* field. |  SECONDS |
 | TLS Configuration a| <<Tls>> |  TLS configuration for secure HTTPS connections. |  |
-| Remote WebDriver URL a| String |  URL of the remote Selenium WebDriver endpoint (for example, Selenium Grid, standalone ChromeDriver, BrowserStack, or a CloudHub-hosted remote-browser app). Chromium-only (Chrome, Chromium, Edge). |  | x
+| Remote Browser URL a| String |  URL of the remote Selenium WebDriver endpoint (for example, Selenium Grid, standalone ChromeDriver, BrowserStack, or a CloudHub-hosted remote-browser app). Chromium-only (Chrome, Chromium, Edge). |  | x
+| Browser Authentication a| * <<None>>
+* <<Basic>>
+* <<ApiAccessToken>> |  Authentication used to reach the remote browser endpoint. |  |
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
 | Pooling Profile a| <<PoolingProfile>> |  Characteristics of the connection pool. |  |
 |===
@@ -90,19 +95,17 @@ Default configuration
 == Supported Operations
 * <<GetSitemap>>
 * <<PageContent>>
-* <<PageDownloadDocument>>
-* <<PageDownloadImage>>
-* <<PageInsights>>
+* <<PageElements>>
 
 == Associated Sources
-* <<CrawlWebsiteListener>>
+* <<CrawlContentListener>>
 
 
 
 == Operations
 
 [[GetSitemap]]
-=== [Crawl] Get Sitemap
+=== Get SiteMap
 `<ms-webcrawler:get-sitemap>`
 
 
@@ -115,15 +118,15 @@ Crawls a website to a specified depth and returns a sitemap in standard XML form
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
-| Website URL a| String |  The starting URL for the sitemap crawl. |  | x
+| Path a| String |  Relative path, resolved against the connection's base URL, where the sitemap crawl starts. |  |
+| Maximum depth a| Number |  The maximum depth to reach while crawling a website. |  0 |
 | Encoding a| String |  Encoding for emitted page bodies. Overrides the configuration's encoding when set. |  |
 | Output Mime Type a| String |  The mime type of the payload that this operation outputs. |  |
 | Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
-| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  | x
 | Streaming Strategy a| * <<RepeatableInMemoryStream>>
 * <<RepeatableFileStoreStream>>
 * non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
-| Maximum depth a| Number |  The maximum depth to reach while crawling a website. |  | x
 | Restrict crawl under URL a| Boolean |  If true, only internal pages are crawled. |  false |
 | Regex URLs filter logic a| Enumeration, one of:
 
@@ -195,7 +198,7 @@ Crawls a website to a specified depth and returns a sitemap in standard XML form
 
 
 [[PageContent]]
-=== [Page] Get Content
+=== Get Page Content
 `<ms-webcrawler:page-content>`
 
 
@@ -208,8 +211,8 @@ Retrieves the content of a specified web page in TEXT, HTML, or MARKDOWN format.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
+| Path a| String |  Relative path, resolved against the connection's base URL, of the page to retrieve content from. |  |
 | Javascript a| String |  Browser-context JavaScript executed after page load. Trusted input only — never bind to user-controlled data; runs with full DOM access. |  |
-| Page URL a| String |  The URL of the page to retrieve content from. |  | x
 | Output format a| Enumeration, one of:
 
 ** TEXT
@@ -218,7 +221,7 @@ Retrieves the content of a specified web page in TEXT, HTML, or MARKDOWN format.
 | Encoding a| String |  Encoding for emitted page bodies. Overrides the configuration's encoding when set. |  |
 | Output Mime Type a| String |  The mime type of the payload that this operation outputs. |  |
 | Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
-| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  | x
 | Streaming Strategy a| * <<RepeatableInMemoryStream>>
 * <<RepeatableFileStoreStream>>
 * non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
@@ -279,7 +282,6 @@ Retrieves the content of a specified web page in TEXT, HTML, or MARKDOWN format.
 ==== Throws
 
 * MS-WEBCRAWLER:CONNECTIVITY
-* MS-WEBCRAWLER:DOWNLOAD_FAILED
 * MS-WEBCRAWLER:INVALID_PARAMETERS
 * MS-WEBCRAWLER:PAGE_FETCH_FAILED
 * MS-WEBCRAWLER:PAGE_LOAD_TIMEOUT
@@ -288,189 +290,9 @@ Retrieves the content of a specified web page in TEXT, HTML, or MARKDOWN format.
 * MS-WEBCRAWLER:TIMEOUT
 
 
-[[PageDownloadDocument]]
-=== [Page] Download Document
-`<ms-webcrawler:page-download-document>`
-
-
-Downloads documents from a web page or from a direct document URL and saves them to the specified location.
-
-
-==== Parameters
-
-[%header%autowidth.spread]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | The name of the configuration to use. | | x
-| Javascript a| String |  Browser-context JavaScript executed after page load. Trusted input only — never bind to user-controlled data; runs with full DOM access. |  |
-| Page or document URL a| String |  The web page URL containing documents to download, or a direct document link. |  | x
-| Max number of documents a| Number |  Maximum number of documents to download. 0 means no limit. |  0 |
-| Download location a| String |  Filesystem path where downloaded documents are saved. |  | x
-| Encoding a| String |  Encoding for emitted page bodies. Overrides the configuration's encoding when set. |  |
-| Output Mime Type a| String |  The mime type of the payload that this operation outputs. |  |
-| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
-| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  |
-| Streaming Strategy a| * <<RepeatableInMemoryStream>>
-* <<RepeatableFileStoreStream>>
-* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
-| Delay between pages a| Number |  The delay introduced between each request. |  0 |
-| Delay time unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS |  Time unit for the *Delay between pages* field. |  SECONDS |
-| Enforce robots.txt a| Boolean |  If true, enforce checks against the robots.txt file. |  false |
-| Wait on page load a| Number |  The time to wait on page load. |  0 |
-| Wait on page load unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS |  Time unit for the *Wait on page load* field. |  SECONDS |
-| Wait for XPath a| String |  The XPath to wait for (not available for HTTP connection). |  |
-| Extract Shadow DOM a| Boolean |  Extract the Shadow DOM content (not available for HTTP connection). |  false |
-| Shadow Host(s) XPath a| String |  Shadow host(s) to extract by XPath (not available for HTTP connection). |  |
-| Response Timeout a| Number |  Response timeout value. Overrides the configuration's timeout when set. |  |
-| Response Timeout Unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS |  Time unit for the *Response Timeout* field. |  |
-| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
-| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  A retry strategy in case of connectivity errors. |  |
-|===
-
-==== Output
-
-[%autowidth.spread]
-|===
-|Type |Array of Any
-| Attributes Type a| <<PageResponseAttributes>>
-|===
-
-==== For Configurations
-
-* <<Config>>
-
-==== Throws
-
-* MS-WEBCRAWLER:CONNECTIVITY
-* MS-WEBCRAWLER:DOWNLOAD_FAILED
-* MS-WEBCRAWLER:INVALID_PARAMETERS
-* MS-WEBCRAWLER:PAGE_FETCH_FAILED
-* MS-WEBCRAWLER:PAGE_LOAD_TIMEOUT
-* MS-WEBCRAWLER:RETRY_EXHAUSTED
-* MS-WEBCRAWLER:ROBOTS_DISALLOWED
-* MS-WEBCRAWLER:TIMEOUT
-
-
-[[PageDownloadImage]]
-=== [Page] Download Image
-`<ms-webcrawler:page-download-image>`
-
-
-Downloads images from a web page or from a direct image URL and saves them to the specified location.
-
-
-==== Parameters
-
-[%header%autowidth.spread]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | The name of the configuration to use. | | x
-| Javascript a| String |  Browser-context JavaScript executed after page load. Trusted input only — never bind to user-controlled data; runs with full DOM access. |  |
-| Page or image URL a| String |  The web page URL containing images to download, or a direct image link. |  | x
-| Max number of images a| Number |  Maximum number of images to download. 0 means no limit. |  0 |
-| Download location a| String |  Filesystem path where downloaded images are saved. |  | x
-| Encoding a| String |  Encoding for emitted page bodies. Overrides the configuration's encoding when set. |  |
-| Output Mime Type a| String |  The mime type of the payload that this operation outputs. |  |
-| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
-| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  |
-| Streaming Strategy a| * <<RepeatableInMemoryStream>>
-* <<RepeatableFileStoreStream>>
-* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
-| Delay between pages a| Number |  The delay introduced between each request. |  0 |
-| Delay time unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS |  Time unit for the *Delay between pages* field. |  SECONDS |
-| Enforce robots.txt a| Boolean |  If true, enforce checks against the robots.txt file. |  false |
-| Wait on page load a| Number |  The time to wait on page load. |  0 |
-| Wait on page load unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS |  Time unit for the *Wait on page load* field. |  SECONDS |
-| Wait for XPath a| String |  The XPath to wait for (not available for HTTP connection). |  |
-| Extract Shadow DOM a| Boolean |  Extract the Shadow DOM content (not available for HTTP connection). |  false |
-| Shadow Host(s) XPath a| String |  Shadow host(s) to extract by XPath (not available for HTTP connection). |  |
-| Response Timeout a| Number |  Response timeout value. Overrides the configuration's timeout when set. |  |
-| Response Timeout Unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS |  Time unit for the *Response Timeout* field. |  |
-| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
-| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  A retry strategy in case of connectivity errors. |  |
-|===
-
-==== Output
-
-[%autowidth.spread]
-|===
-|Type |Array of Any
-| Attributes Type a| <<PageResponseAttributes>>
-|===
-
-==== For Configurations
-
-* <<Config>>
-
-==== Throws
-
-* MS-WEBCRAWLER:CONNECTIVITY
-* MS-WEBCRAWLER:DOWNLOAD_FAILED
-* MS-WEBCRAWLER:INVALID_PARAMETERS
-* MS-WEBCRAWLER:PAGE_FETCH_FAILED
-* MS-WEBCRAWLER:PAGE_LOAD_TIMEOUT
-* MS-WEBCRAWLER:RETRY_EXHAUSTED
-* MS-WEBCRAWLER:ROBOTS_DISALLOWED
-* MS-WEBCRAWLER:TIMEOUT
-
-
-[[PageInsights]]
-=== [Page] Get Insights
-`<ms-webcrawler:page-insights>`
+[[PageElements]]
+=== Get Page Elements
+`<ms-webcrawler:page-elements>`
 
 
 Fetches analytical data about a web page including word count, element or tag counts, link structures, and image links.
@@ -482,12 +304,12 @@ Fetches analytical data about a web page including word count, element or tag co
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
+| Path a| String |  Relative path, resolved against the connection's base URL, of the page to analyze. |  |
 | Javascript a| String |  Browser-context JavaScript executed after page load. Trusted input only — never bind to user-controlled data; runs with full DOM access. |  |
-| Page URL a| String |  The URL of the page to analyze. |  | x
 | Encoding a| String |  Encoding for emitted page bodies. Overrides the configuration's encoding when set. |  |
 | Output Mime Type a| String |  The mime type of the payload that this operation outputs. |  |
 | Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
-| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  | x
 | Streaming Strategy a| * <<RepeatableInMemoryStream>>
 * <<RepeatableFileStoreStream>>
 * non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
@@ -548,7 +370,6 @@ Fetches analytical data about a web page including word count, element or tag co
 ==== Throws
 
 * MS-WEBCRAWLER:CONNECTIVITY
-* MS-WEBCRAWLER:DOWNLOAD_FAILED
 * MS-WEBCRAWLER:INVALID_PARAMETERS
 * MS-WEBCRAWLER:PAGE_FETCH_FAILED
 * MS-WEBCRAWLER:PAGE_LOAD_TIMEOUT
@@ -560,12 +381,12 @@ Fetches analytical data about a web page including word count, element or tag co
 
 == Sources
 
-[[CrawlWebsiteListener]]
-=== On Site Crawl
-`<ms-webcrawler:crawl-website-listener>`
+[[CrawlContentListener]]
+=== On Content Crawl
+`<ms-webcrawler:crawl-content-listener>`
 
 
-A polling source that crawls a website starting from configured seed URLs, emitting each discovered page as a Mule event.
+A polling source that crawls a website starting from a configured path, emitting each discovered page as a Mule event.
 
 
 ==== Parameters
@@ -574,7 +395,9 @@ A polling source that crawls a website starting from configured seed URLs, emitt
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
-| Seed URLs a| String |  Comma-separated list of URLs where the crawl starts. Whitespace around entries is ignored. When empty, the queue starts empty and waits for URLs to be pushed in by another flow targeting the same queue name. |  |
+| Path a| String |  Relative path, resolved against the connection's base URL, where the crawl starts. When empty or `/`, the crawl starts at the base URL itself. Fully-qualified URLs are rejected with INVALID_PARAMETERS. |  |
+| Additional seed URLs a| String |  Comma-separated list of additional fully-qualified seed URLs to enqueue alongside the path. Each entry must be a fully-qualified URL, and relative paths are dropped. Off-host and off-path entries are dropped and a warning is logged. |  |
+| Maximum depth a| Number |  The maximum depth to reach while crawling a website. |  0 |
 | Queue Name a| String |  VM queue used to schedule URLs for crawling. When omitted, defaults to `webcrawler-{configName}-source-queue`. |  |
 | Object Store a| ObjectStore |  Object store used to track already-visited URLs for deduplication. |  | x
 | Output format a| Enumeration, one of:
@@ -582,7 +405,7 @@ A polling source that crawls a website starting from configured seed URLs, emitt
 ** TEXT
 ** HTML
 ** MARKDOWN |  Format applied to each emitted page body. |  TEXT |
-| Download location a| String |  Filesystem path where images or documents are written when their corresponding download flags are set. Required only if Download images or Download documents is true. |  |
+| Number Of Consumers a| Number |  Number of concurrent queue consumers used by this source. |  1 |
 | Hash route mode a| Enumeration, one of:
 
 ** IGNORE
@@ -590,25 +413,25 @@ A polling source that crawls a website starting from configured seed URLs, emitt
 ** PRESERVE |  How to treat URLs containing #fragments. IGNORE strips fragments before crawling (default, fits classic server-rendered sites). PATH rewrites SPA-style hash routes (for example, #/page) into real paths (/page). PRESERVE keeps the URL verbatim, fragment included. |  IGNORE |
 | Encoding a| String |  Encoding for emitted page bodies. Overrides the configuration's encoding when set. |  |
 | Primary Node Only a| Boolean |  Whether this source should only be executed on the primary node when running in a cluster. |  |
-| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  |
-| Scheduling Strategy a| SchedulingStrategy |  Configures the scheduler that triggers the polling. |  | x
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component. |  | x
 | Streaming Strategy a| * <<RepeatableInMemoryStream>>
 * <<RepeatableFileStoreStream>>
 * non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
 | Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
-| Maximum depth a| Number |  The maximum depth to reach while crawling a website. |  | x
 | Restrict crawl under URL a| Boolean |  If true, only internal pages are crawled. |  false |
 | Regex URLs filter logic a| Enumeration, one of:
 
 ** INCLUDE
 ** EXCLUDE |  Type of filter logic to apply to regex URLs while crawling. |  |
 | Regex URLs List a| Array of String |  List of regex patterns for URLs to include or exclude while crawling. |  |
-| Tag list a| Array of String |  List of HTML tags for which content must be retrieved. |  |
+| Pages a| Boolean |  If true, page content of the crawled URL is emitted. |  true |
+| Images a| Boolean |  If true, images referenced on the crawled URL are emitted. |  false |
+| Max image number for each page a| Number |  Maximum number of images to fetch for each page. 0 means no limit. |  0 |
+| Documents a| Boolean |  If true, documents referenced on the crawled URL are emitted. |  false |
+| Max document number for each page a| Number |  Maximum number of documents to fetch for each page. 0 means no limit. |  0 |
+| Additional Allowed Base URLs a| String |  Optional comma-separated allowlist for image and document URLs. When set, assets must be under the base URL or one of these base URLs. |  |
 | Retrieve meta tags a| Boolean |  If true, meta tags are retrieved from each crawled page. |  false |
-| Download images a| Boolean |  If true, images referenced on each crawled page are downloaded. |  false |
-| Max image number for each page a| Number |  Maximum number of images to download for each page. 0 means no limit. |  0 |
-| Download documents a| Boolean |  If true, documents referenced on each crawled page are downloaded. |  false |
-| Max document number for each page a| Number |  Maximum number of documents to download for each page. 0 means no limit. |  0 |
+| Tag list a| Array of String |  List of HTML tags for which content must be retrieved. |  |
 | Delay between pages a| Number |  The delay introduced between each request. |  0 |
 | Delay time unit a| Enumeration, one of:
 
@@ -822,6 +645,26 @@ A polling source that crawls a website starting from configured seed URLs, emitt
 ** DAYS | Time unit for the *Max Idle Time* field. |  |
 |===
 
+[[Basic]]
+=== Basic
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Username a| String | Username for basic authentication. |  | x
+| Password a| String | Password for basic authentication. |  | x
+| Preemptive a| Boolean | Whether to send credentials preemptively. |  false |
+|===
+
+[[ApiAccessToken]]
+=== API Access Token
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Token a| String | The API access token used to authenticate to the remote browser endpoint. |  | x
+|===
+
 [[PageResponseAttributes]]
 === Page Response Attributes
 
@@ -832,8 +675,16 @@ A polling source that crawls a website starting from configured seed URLs, emitt
 | Content Type a| String | The content type of the page response. |  |
 | Depth a| Number | The crawl depth at which this page was discovered. |  |
 | Etag a| String | The ETag header value from the page response. |  |
+| Event Type a| Enumeration, one of:
+
+** PAGE
+** IMAGE
+** DOCUMENT | The type of emitted event. |  |
+| File Name a| String | The file name of the emitted image or document. |  |
 | Last Modified a| DateTime | The last-modified timestamp from the page response. |  |
+| Meta Tags a| String | The meta tags retrieved from the page. |  |
 | Other Attributes a| Object | Additional attributes returned by the operation. |  |
+| Size a| Number | The size of the emitted content in bytes. |  |
 | Status Code a| Number | The HTTP status code of the page response. |  |
 | Title a| String | The page title. |  |
 | Url a| String | The page URL. |  |
