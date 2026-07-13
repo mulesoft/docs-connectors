@@ -173,7 +173,7 @@ This connector does not validate all possible authentication types.
 [[config_oauth-client-credentials-connection]]
 === OAuth 2.0 - Client Credentials Connection Type
 
-OAuth 2.0 (OIDC) Client Credentials connection provider for MongoDB. The provider performs the OAuth client_credentials token POST via HttpService so that the optional audience parameter can be placed in the form-encoded request body (Auth0, Atlassian, and similar identity providers require this). The acquired token is fed into the MongoDB driver via the OIDC callback.
+Uses the OAuth 2.0 (OIDC) client credentials grant to connect to MongoDB. The connector performs the OAuth client_credentials token POST itself so that you can place the optional audience parameter in the form-encoded request body, which Auth0, Atlassian, and similar identity providers require. The connector then feeds the acquired token into the MongoDB driver through the OIDC callback.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
@@ -181,19 +181,19 @@ OAuth 2.0 (OIDC) Client Credentials connection provider for MongoDB. The provide
 | Servers (host:port) a| Array of <<ServerAddress>> |  Server in which your MongoDB instance is located. You can specify multiple servers. |  | x
 | Username a| String |  Username to use for authentication. |  |
 | Database a| String |  Database name to which you want to connect. |  `admin` |
-| Audience a| String |  Optional OAuth 2.0 audience parameter required by some identity providers (for example, Auth0). Sent in the form-encoded request body to the token endpoint. |  |
-| Custom Token Request Parameters a| Object |  Additional form-encoded parameters appended to the OAuth token POST body. Use for identity-provider-specific fields beyond the RFC standards (for example, Microsoft Entra v1 `resource`, Auth0 `organization`, Okta `claims`). |  |
-| Include Accept Header a| Boolean |  When `true`, sends `Accept: application/json` on the OAuth token request. Disable for identity providers that reject the header. |  `true` |
+| Audience a| String |  Optional OAuth 2.0 audience parameter that some identity providers, such as Auth0, require. The connector sends this value in the form-encoded request body to the token endpoint. |  |
+| Custom Token Request Parameters a| Object |  Additional form-encoded parameters that the connector appends to the OAuth token POST body. Use this field for identity-provider-specific fields beyond the RFC standards (for example, Microsoft Entra v1 `resource`, Auth0 `organization`, Okta `claims`). |  |
+| Include Accept Header a| Boolean |  When `true`, the connector sends `Accept: application/json` on the OAuth token request. Set this field to `false` for identity providers that reject the header. |  `true` |
 | Client Authentication a| Enumeration, one of:
 
 ** BASIC_AUTHENTICATION_HEADER
-** BODY |  How client credentials are presented to the token endpoint, per RFC 6749 §2.3.1. `BASIC_AUTHENTICATION_HEADER` (client_secret_basic, the RFC-recommended default) sends them in an HTTP Basic Authorization header; `BODY` (client_secret_post) sends them as form fields in the request body. Other parameters (audience, scope, custom parameters) are always sent in the body. |  `BASIC_AUTHENTICATION_HEADER` |
-| Allow Invalid Hostnames a| Boolean |  Disables TLS hostname verification on the MongoDB connection only. Required when MongoDB Atlas traffic is fronted by an NLB or proxy whose certificate CN/SAN does not match the connection hostname. The OAuth token endpoint always verifies hostnames; this setting does not affect identity provider TLS. Not for production or FIPS environments: disabling hostname verification removes a control mandated by FIPS 140-3, so the provider fails fast when this is `true` and Mule is in FIPS mode. |  `false` |
-| Direct Connection a| Boolean |  Connect directly to the configured server address without performing replica-set or topology discovery. Required when MongoDB Atlas is fronted by a single NLB, proxy, or HAProxy endpoint, where discovery would otherwise return real cluster member hostnames that are not reachable. Only honored when a single server address is configured. |  `false` |
-| Token Endpoint Proxy a| <<ProxyConfig>> |  Optional HTTP proxy through which the OAuth token requests to the identity provider are routed. Does not affect the MongoDB connection itself. |  |
+** BODY |  Determines how the connector presents client credentials to the token endpoint, per RFC 6749 §2.3.1. `BASIC_AUTHENTICATION_HEADER` (client_secret_basic, the RFC-recommended default) sends the credentials in an HTTP Basic Authorization header. `BODY` (client_secret_post) sends the credentials as form fields in the request body. The connector always sends other parameters, such as audience, scope, and custom parameters, in the body. |  `BASIC_AUTHENTICATION_HEADER` |
+| Allow Invalid Hostnames a| Boolean |  Disables TLS hostname verification on the MongoDB connection only. Set this field to `true` when an NLB or proxy fronts your MongoDB Atlas traffic and its certificate CN/SAN does not match the connection hostname. The OAuth token endpoint always verifies hostnames, so this field does not affect identity provider TLS. Do not use this field in production or FIPS environments: disabling hostname verification removes a control that FIPS 140-3 requires, so the connector fails fast when you set this field to `true` and Mule is in FIPS mode. |  `false` |
+| Direct Connection a| Boolean |  Connects directly to the configured server address without performing replica-set or topology discovery. Set this field to `true` when a single NLB, proxy, or HAProxy endpoint fronts your MongoDB Atlas deployment, where discovery would otherwise return real cluster member hostnames that you cannot reach. The connector honors this field only when you configure a single server address. |  `false` |
+| Token Endpoint Proxy a| <<ProxyConfig>> |  Optional HTTP proxy through which the connector routes the OAuth token requests to the identity provider. This proxy does not affect the MongoDB connection itself. |  |
 | Tls Context a| <<Tls>> | Configures TLS. If using the HTTPS protocol, you must configure TLS. |  |
-| Client ID a| String |  OAuth 2.0 client identifier issued by the identity provider. |  | x
-| Client Secret a| String |  OAuth 2.0 client secret issued by the identity provider. |  | x
+| Client ID a| String |  OAuth 2.0 client identifier that the identity provider issues. |  | x
+| Client Secret a| String |  OAuth 2.0 client secret that the identity provider issues. |  | x
 | Token URL a| String |  Token endpoint URL of the identity provider. |  | x
 | Scopes a| String |  Space-separated OAuth 2.0 scopes to request from the identity provider. |  |
 | Connection Timeout a| Number |  How long the connector waits before timing out when establishing the socket connection. `0` is infinite. |  `30` |
@@ -206,7 +206,7 @@ OAuth 2.0 (OIDC) Client Credentials connection provider for MongoDB. The provide
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Connection Timeout* field. |  `SECONDS` |
-| Socket Timeout a| Number |  Socket timeout. Used for I/O socket read and write operations. Set this field to `0` if you do not want socket read and write operations to time out. |  |
+| Socket Timeout a| Number |  Socket timeout that the connector uses for I/O socket read and write operations. Set this field to `0` if you do not want socket read and write operations to time out. |  |
 | Socket Timeout Unit a| Enumeration, one of:
 
 ** NANOSECONDS
@@ -259,7 +259,7 @@ OAuth 2.0 (OIDC) Client Credentials connection provider for MongoDB. The provide
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Max Connection Idle Time* field. |  `SECONDS` |
-| Token Refresh Skew a| Number |  Time subtracted from the OAuth `expires_in` value when determining how long to keep the cached bearer token. Larger values trigger earlier re-fetches and absorb clock skew between the Mule worker and the identity provider. |  `60` |
+| Token Refresh Skew a| Number |  Time that the connector subtracts from the OAuth `expires_in` value when determining how long to keep the cached bearer token. Larger values trigger earlier refetches and absorb clock skew between the Mule worker and the identity provider. |  `60` |
 | Token Refresh Skew Unit a| Enumeration, one of:
 
 ** NANOSECONDS
@@ -269,7 +269,7 @@ OAuth 2.0 (OIDC) Client Credentials connection provider for MongoDB. The provide
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for the *Token Refresh Skew* field. |  `SECONDS` |
-| Token Request Timeout a| Number |  Maximum time the OAuth token POST is allowed to take. Sent as the connection-level timeout to the underlying HTTP client. If the identity provider does not respond within this window, the request is aborted and connection establishment fails. |  `30` |
+| Token Request Timeout a| Number |  Maximum time that the connector allows the OAuth token POST to take. The connector sends this value as the connection-level timeout to the underlying HTTP client. If the identity provider does not respond within this window, the connector aborts the request and connection establishment fails. |  `30` |
 | Token Request Timeout Unit a| Enumeration, one of:
 
 ** NANOSECONDS
@@ -1658,7 +1658,7 @@ Configures an HTTP proxy for the OAuth token requests to the identity provider.
 | Port a| Number | Port of the proxy server. |  | x
 | Username a| String | Username to authenticate against the proxy server. |  |
 | Password a| String | Password to authenticate against the proxy server. |  |
-| Non Proxy Hosts a| String | Comma-separated list of hosts that the proxy must not be used against. |  |
+| Non Proxy Hosts a| String | Comma-separated list of hosts that the connector must not route through the proxy. |  |
 |===
 
 [[standard-revocation-check]]
