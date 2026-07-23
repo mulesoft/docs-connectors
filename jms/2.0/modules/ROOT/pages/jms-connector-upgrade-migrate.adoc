@@ -15,9 +15,16 @@ Upgrade Anypoint Connector for JMS (JMS Connector) to version 2.x.
 
 JMS Connector 2.x contains the following changes:
 
-* The connector is upgraded to Spring 6 and requires Mule Runtime 4.10.0 or later.
-* The connector now uses separate, dedicated connection providers for XA and non-XA scenarios, instead of a single connection provider that supports both. This change aligns the connector with the `XATransactionalConnectionProvider` interface introduced in Mule Runtime 4.10.
-* The *Enable Xa* field is removed from the ActiveMQ connection factory configuration.
+* This connector is now compatible with Java 17 only.
+* JMS Connector now provides separate connection types for XA and non-XA transactions. In Anypoint Studio and the connectors UI, you now select *ActiveMQ XA Connection* or *Generic XA Connection* to use XA transactions, instead of enabling XA on a single connection through the *Enable xa* option.
+* The *Enable xa* field is removed from the ActiveMQ connection factory configuration.
+* The deprecated *ActiveMQ Connection - No Connectivity Test* connection type is removed. There is no replacement connection type. Use *ActiveMQ Connection* instead.
+* These libraries are upgraded:
+
+** The `jakarta.jms-api` library is upgraded to version 3.1.0, replacing `javax.jms-api`.
+** The Spring framework is upgraded to version 6.2.15.
+** The Apache ActiveMQ library is upgraded to version 6.1.0.
+** The Apache ActiveMQ Artemis library is upgraded to version 2.50.0.
 
 === Changes in Connection Types and Configuration
 
@@ -25,20 +32,20 @@ JMS Connector 2.x contains the following changes to the connection types:
 
 * Added the following XA connection types, each of which is dedicated to XA transactions:
 ** *ActiveMQ XA Connection* (`<jms:active-mq-xa-connection>`)
-** *ActiveMQ XA Connection - No Connectivity Test* (`<jms:active-mq-xa-nct-connection>`)
 ** *Generic XA Connection* (`<jms:generic-xa-connection>`)
-* The existing *ActiveMQ Connection*, *ActiveMQ Connection - No Connectivity Test*, and *Generic Connection* types are now used only for non-XA scenarios.
+* The existing *ActiveMQ Connection* and *Generic Connection* types are now used only for non-XA scenarios.
+* Removed the deprecated *ActiveMQ Connection - No Connectivity Test* connection type (`<jms:active-mq-nct-connection>`). This connection type has no replacement in 2.x.
 * Removed the *Enable Xa* field from the *ActiveMQ Connection* factory configuration. You no longer enable XA support with a flag on the connection; instead, you select the corresponding XA connection type.
-* The *XA connection pool* configuration (*Min pool size*, *Max pool size*, and *Max idle seconds*) now applies only to the XA connection types.
+* The *XA connection pool* configuration (*Max pool size* and *Max idle seconds*) now applies only to the XA connection types. The *Min pool size* field no longer exists.
 
 In version 1.x, you configured XA transactions on the standard ActiveMQ connection:
 
 [source,xml,linenums]
 ----
 <jms:config name="JMS_Config">
-    <jms:active-mq-connection brokerURL="tcp://localhost:61616"
-                               userName="admin"
+    <jms:active-mq-connection username="admin"
                                password="admin">
+        <jms:factory-configuration brokerUrl="tcp://localhost:61616"/>
         <jms:xa-connection-pool minPoolSize="1"
                                 maxPoolSize="10"
                                 maxIdleSeconds="45"/>
@@ -51,17 +58,16 @@ In version 2.x, configure XA transactions using the new *ActiveMQ XA Connection*
 [source,xml,linenums]
 ----
 <jms:config name="JMS_Config">
-    <jms:active-mq-xa-connection brokerURL="tcp://localhost:61616"
-                                  userName="admin"
+    <jms:active-mq-xa-connection username="admin"
                                   password="admin">
-        <jms:xa-connection-pool minPoolSize="1"
-                                maxPoolSize="10"
-                                maxIdleSeconds="45"/>
+        <jms:factory-configuration brokerUrl="tcp://localhost:61616"/>
+        <jms:xa-connection-pool maxPoolSize="32"
+                                maxIdleSeconds="60"/>
     </jms:active-mq-xa-connection>
 </jms:config>
 ----
 
-Non-XA connections that use the *ActiveMQ Connection* type require no changes.
+Non-XA connections that use the *ActiveMQ Connection* type require no changes. If your application uses the removed *ActiveMQ Connection - No Connectivity Test* type, switch to *ActiveMQ Connection* (or *ActiveMQ XA Connection*, if the application also requires XA transactions).
 
 == Requirements
 
@@ -97,10 +103,10 @@ After you install the latest version of the connector, complete the following st
 
 . In each *JMS Config* global element that uses XA transactions, change the *Connection* field to the corresponding XA connection type:
 ** *ActiveMQ Connection* → *ActiveMQ XA Connection*
-** *ActiveMQ Connection - No Connectivity Test* → *ActiveMQ XA Connection - No Connectivity Test*
 ** *Generic Connection* → *Generic XA Connection*
-. Move any *XA connection pool* configuration (*Min pool size*, *Max pool size*, and *Max idle seconds*) to the new XA connection element.
+. Move any *XA connection pool* configuration (*Max pool size* and *Max idle seconds*) to the new XA connection element. Remove any *Min pool size* value, because this field no longer exists.
 . Remove any reference to the *Enable Xa* field, if present, because it no longer exists on the ActiveMQ connection factory configuration.
+. If any *JMS Config* global element uses the removed *ActiveMQ Connection - No Connectivity Test* connection type, change the *Connection* field to *ActiveMQ Connection* (or *ActiveMQ XA Connection* if the application also requires XA transactions).
 
 For more information, see xref:jms-xa-transactions.adoc[Configuring XA Transactions in JMS Connector].
 
@@ -115,7 +121,7 @@ After you install the latest version of the connector, follow these steps to ver
 
 == Revert the Upgrade
 
-If it is necessary to revert to the previous version of JMS Connector, change the `mule-jms-connector` dependency version in the project's `pom.xml` file to the previous version, and revert any XA connection elements back to their equivalent non-XA connection type with the *Enable Xa* field set.
+If it is necessary to revert to the previous version of JMS Connector, change the `mule-jms-connector` dependency version in the project's `pom.xml` file to the previous version, and revert any XA connection elements back to their equivalent non-XA connection type with the *Enable Xa* field set. If you switched away from the removed *ActiveMQ Connection - No Connectivity Test* connection type as part of the upgrade, you can restore it after reverting.
 
 You must update the project's `pom.xml` file in Anypoint Studio.
 
