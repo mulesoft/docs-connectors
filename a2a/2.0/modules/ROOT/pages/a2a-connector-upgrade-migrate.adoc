@@ -1,29 +1,68 @@
-= Upgrading and Migrating A2A Connector to Version 2.x 
+= Upgrading and Migrating A2A Connector to Version 2.x
 
-Upgrade Anypoint Connector for Agent2Agent (A2A) (A2A Connector) to version 1.x.
+Upgrade Anypoint Connector for Agent2Agent (A2A) (A2A Connector) to version 2.x.
 
 == Supported Upgrade Paths
 
-[%header,"cols=50a,50a"]
+[%header,cols="50a,50a"]
 |===
 |From Version | To Version
-|0.x |1.x
+|1.x |2.x
 |===
 
-== Changes in 1.0
+== Changes in 2.0
 
-* There is now a clear distinction in the naming between client and server operations/sources.
-* A2A Connector now supports the new *A2A Client - Send Stream Message*, *A2A Client - Task Resubscribe*, *A2A Server - Send Push Notification*, *A2A Server - Update Task Artifact*, and *A2A Server - Update Task Status* operations.
-* A2A Connector now supports the new *A2A Server - On Task Stream Listener* source. 
-* In the *A2A Server - On Push Notification Set Listener* source, *Response Timeout* is now *Push notification request timeout*, and *Response Timeout Unit* is now *Request Timeout Unit*.
-* Push notifications on the A2A server side are no longer supported unless the *A2A Server - On Push Notification Set Listener* source is defined. 
-* The server now performs out-of-the-box context ID and task ID validations for tasks associated with the application.
-* The server now supports task cancellation via the `tasks/cancel` method. 
-* A2A Connector now includes the `A2A:TASK_NOT_CANCELABLE` and `A2A:UNSUPPORTED_OPERATION` errors for all operations. 
-* A2A Connector no longer includes the `A2A:TASK_ALREADY_COMPLETED` error for all operations.
-* A2A Connector now uses the A2A Java SDK for request and response validations, which enhances reliability.
-* In the Server connection type, *Card* is replaced with either *Card Json* or *Card Path* to define the agent card.
-* The *Agent Card*, *Agent Skill*, *Agent Capabilities*, *Agent Extension*, *Agent Provider*, *Security Requirement*, *Http Security Scheme*, *Api Key Security Scheme*, *Oauth2 Security Scheme*, *Oauth2 Flows*, *Implicit Oauth2 Flows*, *Oauth2 Scope*, *Password Oauth2 Flows*, *Client Credentials Oauth2 Flows*, *Authorization Code Oauth2 Flows*, and *Open Id Connect Security Scheme* types are no longer supported.  
+A2A Connector 2.0 uplifts the connector from A2A protocol 0.3.0 to A2A protocol 1.0.0. This is a breaking change: wire method names, transport configuration, client and listener elements, and the error palette all change. Review the changes below and update your apps before upgrading.
+
+=== Protocol and Transports
+
+* A2A Connector now uses A2A protocol 1.0.0 instead of 0.3.0. Wire JSON-RPC method names change from slash-form to PascalCase. For example, `message/send` becomes `SendMessage`, `message/stream` becomes `SendStreamingMessage`, `tasks/get` becomes `GetTask`, `tasks/cancel` becomes `CancelTask`, and `tasks/resubscribe` becomes `SubscribeToTask`. Clients written against 0.3.0 must update their method strings.
+* An A2A Server can expose the same agent over both the JSON-RPC and the new HTTP+JSON transport bindings on a single connection (gRPC is out of scope for this release).
+* You can now send a non-blocking `SendMessage` request by setting `returnImmediately` to `true` in the request configuration. The A2A Server acknowledges the request with the initial `Task` and continues processing asynchronously, and the *A2A Server - On Async Request Listener* source authors that initial response.
+* At most one active `SendMessage` request (blocking, non-blocking, or streaming) can run against a given `taskId` at a time. A duplicate concurrent submission is rejected with `A2A:INVALID_REQUEST` ("Another SendMessage is already in flight for taskId {id}; retry once it completes."), which preserves the ordering of a task's message history under concurrency.
+* Tasks in a terminal state (`TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, or `TASK_STATE_REJECTED`) are immutable. A `SendMessage` or `SendStreamingMessage` request against a terminal task is rejected with `A2A:UNSUPPORTED_OPERATION` ("Task has reached terminal state.").
+* Task states now use the `TASK_STATE_*` constants (for example, `TASK_STATE_WORKING`, `TASK_STATE_COMPLETED`) instead of the lowercase 0.3.0 states.
+* Streaming events use the A2A `StreamResponse` envelope shape with a single root key (`task`, `statusUpdate`, or `artifactUpdate`). There is no explicit `final` boolean. Finality is derived from `TaskStatus.state`.
+
+=== Server Configuration
+
+* New required `<a2a:interfaces>` block on `<a2a:connection>`. One or more `<a2a:interface>` entries select the *Protocol* (`JSONRPC` or `HTTP_JSON`) and the *Path* segment appended to *Agent Path*. This is what enables multi-transport agents on a single connection.
+* *Agent Path* on `<a2a:connection>` is now the base HTTP path for both the agent card (served at `+{agentPath}/.well-known/agent-card.json+`) and every configured interface (`+{agentPath}{interface.path}+`), rather than a single fixed agent endpoint.
+* Startup validates a bijection between the configured `<a2a:interface>` entries and `agentCard.supportedInterfaces`. Mismatched `(protocol, path)` pairs fail initialization instead of surfacing as runtime 404s.
+* Multi-tenant support: A single connection can serve multiple tenants at the same `+{agentPath}{interface.path}+` surface. Each request's tenant (the `params.tenant` field on the request body, or `?tenant=` on GET/DELETE) is validated against `agentCard.supportedInterfaces[].tenant` and surfaced to flows as `attributes.tenant`.
+
+=== Client Configuration
+
+* The *Client Connection* provider is replaced by two transport-specific connection providers, *Jsonrpc Client Connection* and *Http Json Client Connection*, chosen via the *Connection* dropdown in Studio. The transport must match one of the entries in the target `agentCard.supportedInterfaces`.
+* The *Server Url* connection parameter is renamed to *Agent Url*, the base URL of the target A2A agent that the connector discovers via `+{agentUrl}/.well-known/agent-card.json+`.
+* Every outbound request now sends `A2A-Version: 1.0` as a default header unless you override it via `<a2a:default-headers>`. If overridden, the value is validated to be a `1.x` version. Agent-card discovery (both connect-time and the *A2A Client - Get Card* operation) is exempt from this header.
+
+=== Sources
+
+* The *A2A Server - Task Listener* source is now a unified listener. The same flow serves blocking `SendMessage`, non-blocking `SendMessage` (`returnImmediately=true`), and `SendStreamingMessage` over both JSON-RPC and HTTP+JSON, with no DSL change to distinguish the modes. The standalone *A2A Server - On Task Stream Listener* source is removed.
+* The new *A2A Server - On Async Request Listener* source lets the flow customize the initial `Task` response emitted for streaming and non-blocking `SendMessage` requests. The flow receives the incoming `MessageSendParams` as payload and must return a `Task` (or raise an error to reject the request, or return a terminal or interrupted-state `Task` to short-circuit and skip the *A2A Server - Task Listener* flow entirely).
+* The *A2A Server - Authorization Listener* source is replaced by the *A2A Server - Task Authorizer Listener* source, which uses a per-operation authorization contract and exposes the current operation name on `attributes.operationName`.
+* The *A2A Server - On Push Notification Set Listener* source output payload is now the resolved `TaskPushNotificationConfig` JSON rather than the raw request params.
+* SSE streams now close on terminal states (`TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, `TASK_STATE_REJECTED`) and on the interrupted state `TASK_STATE_INPUT_REQUIRED`. `TASK_STATE_AUTH_REQUIRED` does not close the stream.
+
+=== Operations
+
+* The new *A2A Client - List Tasks* operation is a client operation that returns the tasks from the target A2A server as a list (`Array of Any`) with a configurable streaming strategy, consumable from `<foreach>`.
+* The new *A2A Server - Get Tasks* operation is a server-side batch read of stored tasks by ID. The flow supplies a *Task IDs* list and an optional *History Length* per task.
+* The new *A2A Server - Get Tasks By Context* operation is a server-side read of every stored task that belongs to a *Context Id*, returned oldest first. The flow supplies a *Context Id* and an optional *History Length* per task.
+* The new *A2A Server - Set Task Metadata* operation is a full-replace (no merge) of the persisted `Task`'s `metadata` field. Pass `{}` to clear. It's rejected for tasks in a terminal state.
+* The *Task Resubscribe* operation is renamed to *A2A Client - Subscribe To Task*.
+* The *A2A Client - Set Push Notification Config* operation is renamed to *A2A Client - Create Push Notification Config* (`<a2a:create-push-notification-config>`).
+* The extended agent card is now fetched via a new *Use Extended Card* boolean parameter on the existing *A2A Client - Get Card* operation (defaults to `false`). No separate operation was added.
+* The *A2A Client - List Push Notification Configs* operation now returns its results as a list (`Array of Any`) with a configurable streaming strategy, also consumable from `<foreach>`.
+* The *A2A Server - Send Push Notification* operation now accepts a full `StreamingMessageResponse` payload (Task, Message, `TaskStatusUpdateEvent`, or `TaskArtifactUpdateEvent`).
+* The *A2A Server - Update Task Status* and *A2A Server - Update Task Artifact* operations are uplifted to the A2A 1.0.0 event schemas, and each now declares only the concrete error types it raises.
+
+=== Errors
+
+* Added: `A2A:CONTENT_TYPE_UNSUPPORTED`, `A2A:INVALID_AGENT_RESPONSE`, `A2A:EXTENDED_CARD_UNCONFIGURED`, `A2A:EXTENSION_SUPPORT_REQUIRED`, and `A2A:VERSION_UNSUPPORTED`.
+* Updated: The `A2A:UNAUTHORIZED` JSON-RPC code moved from `-32005` to `-32099` (`-32005` is now the code for `CONTENT_TYPE_UNSUPPORTED`). Every error type now also carries a `google.rpc.ErrorInfo` reason string.
+* Dropped: `A2A:JSON_RPC_ERROR` (the umbrella parent type), `A2A:METHOD_NOT_FOUND`, and `A2A:REQUEST_TIMEOUT`. Each operation now declares only the concrete error types it actually raises, so verify your error handling after upgrading.
 
 == Requirements
 
@@ -34,29 +73,40 @@ Ensure your system meets the following compatibility requirements before you per
 |Software |Version
 |Mule |4.9.8 and later
 |OpenJDK |17
-|A2A protocol |0.3.0
+|A2A protocol |1.0.0
 |===
+
+A2A Connector requires Mule Maven Plugin 4.6.0 or later to support Server-Sent Events (SSE) for streaming operations. See xref:a2a-connector-xml-maven.adoc[A2A Connector XML and Maven Support].
 
 == Upgrade Prerequisites
 
 Before you perform the upgrade, create a backup of your files, data, and configuration in case you need to restore to the previous version.
 
+Because 2.0 is a breaking change, plan to update your Mule apps for the following before or immediately after upgrading:
+
+* Add the required `<a2a:interfaces>`/`<a2a:interface>` block and ensure *Agent Path* is set on every `<a2a:connection>`, and that your agent card's `supportedInterfaces` matches it exactly.
+* Replace the *Client Connection* provider with *Jsonrpc Client Connection* or *Http Json Client Connection*, and rename *Server Url* to *Agent Url*.
+* Replace any *A2A Server - On Task Stream Listener* source with the unified *A2A Server - Task Listener* source.
+* Replace the *A2A Server - Authorization Listener* source with the *A2A Server - Task Authorizer Listener* source.
+* Update client method strings and event payloads to A2A 1.0.0 (PascalCase methods, `TASK_STATE_*` states, `StreamResponse` envelopes).
+* Update error handling for the added, renamed, and dropped `A2A:` error types.
+
 == Upgrade Steps
 
-Follow these steps to perform the upgrade to version 1.x:
+Follow these steps to perform the upgrade to version 2.x:
 
 . In Anypoint Studio, create a Mule project.
 . In the *Mule Palette* view, click *Search in Exchange*.
 . In *Add Dependencies to Project*, enter `a2a` in the search field.
 . In *Available modules*, select *A2A Connector* and click *Add*.
 . Click *Finish*.
-. Verify that the A2A Connector dependency version is 1.x in the `pom.xml` file in the Mule project.
+. Verify that the A2A Connector dependency version is 2.x in the `pom.xml` file in the Mule project.
 
 Studio upgrades the connector automatically.
 
 == Post-Upgrade Steps
 
-After you install the latest version of the connector, verify that your error handling is updated to work with the minor changes in error codes in this version of the connector.
+After you install the latest version of the connector, verify that your app reflects the breaking changes listed in <<Upgrade Prerequisites>>: transport configuration, client connection elements, unified task listener, authorizer listener, protocol 1.0.0 method names and payloads, and the updated error palette.
 
 == Verify the Upgrade
 
@@ -64,6 +114,7 @@ After you install the latest version of the connector, follow these steps to ver
 
 . In Studio, verify that there are no errors in the *Problems* or *Console* views.
 . Verify that there are no problems in the project `pom.xml` file.
+. Confirm the app starts without an interface/agent-card bijection error.
 . Test the connection to verify that the operations work.
 
 == Revert the Upgrade
@@ -74,5 +125,7 @@ You must update the project's `pom.xml` file in Anypoint Studio.
 
 == See Also
 
+* xref:a2a-connector-reference.adoc[A2A Connector Reference]
+* xref:a2a-connector-examples.adoc[A2A Connector Examples]
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
 * https://help.salesforce.com[Salesforce Help]
