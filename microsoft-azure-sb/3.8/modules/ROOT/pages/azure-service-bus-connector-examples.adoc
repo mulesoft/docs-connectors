@@ -6,6 +6,7 @@ The examples in this section show application flows that:
 * <<send-listen-ack, Sends and listens>> for messages and receives an acknowledgment using the `MANUAL` acknowledgment type
 * <<batch-send-receive,Sends and receives batch messages>>
 * <<send-receive-session-ids,Sends and receives messages using session IDs for session-aware queues>>
+* <<dynamic-sessions,Receives messages from dynamically generated sessions using a dynamic-session listener>>
 * <<using-aad-connector, Using Azure Active Directory connector provider>>
 
 These examples use variables for some field values. You can either:
@@ -503,6 +504,63 @@ http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mu
 				</raise-error>
 			</on-error-continue>
 		</error-handler>
+	</flow>
+</mule>
+----
++
+. When you are prompted to regenerate `doc:id` values, click *Yes*.
+. Save the project.
+. Right-click in the Studio canvas and select *Run project <project-name>* to run the project.
+
+[[dynamic-sessions]]
+== Receive Messages from Dynamically Generated Sessions Example
+
+The <<send-receive-session-ids,previous example>> locks each *Message Listener* to a fixed session ID that you know in advance. When the session IDs are generated dynamically and are not known ahead of time (for example, one session per order, device, or user), enable *Enable Dynamic Sessions* on the *Message Listener* instead. Each consumer then continuously accepts the next available session, drains it, and rolls to the next one, so a bounded pool of consumers services an unbounded set of session IDs.
+
+This flow uses the *Send* operation to send messages across several distinct session IDs to a session-aware queue and a single dynamic-session *Message Listener* to receive them. Because *Enable Dynamic Sessions* is enabled, the listener does not set a fixed *Message Session Id*. *Number Of Consumers* controls how many sessions the listener processes concurrently, and *Session Idle Timeout* controls how long a consumer waits for the next message in the currently locked session before releasing it and rolling to the next available session.
+
+For details about these fields, see the *Message Listener* section of the xref:azure-service-bus-connector-reference.adoc#message-listener[Azure Service Bus Connector Reference].
+
+To create this flow:
+
+. In the Studio canvas, click *Configuration XML*.
+. Delete all the contents after the line `<?xml version="1.0" encoding="UTF-8"?>`.
+. Copy and paste the following XML after the line `<?xml version="1.0" encoding="UTF-8"?>`:
++
+[source,xml,linenums]
+----
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	  xmlns:azure-service-bus-messaging="http://www.mulesoft.org/schema/mule/azure-service-bus-messaging"
+	  xmlns="http://www.mulesoft.org/schema/mule/core"
+	  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-service-bus-messaging http://www.mulesoft.org/schema/mule/azure-service-bus-messaging/current/mule-azure-service-bus-messaging.xsd">
+	<configuration-properties file="mule-app.properties" doc:name="Configuration properties"/>
+	<azure-service-bus-messaging:config name="Azure_Service_Bus_Messaging_Connector_Config" doc:name="Azure Service Bus Messaging Connector Config" doc:id="71d0e711-6d29-4eff-b640-00986a41dfbc" >
+		<azure-service-bus-messaging:sas-connection namespace="${azure.namespace}" sharedAccessKeyName="${azure.keyname}" sharedAccessKey="${azure.key}" />
+	</azure-service-bus-messaging:config>
+
+	<!-- Send messages across several distinct, dynamically generated session IDs -->
+	<flow name="send-across-sessions-flow">
+		<scheduler doc:name="Scheduler">
+			<scheduling-strategy>
+				<fixed-frequency frequency="30" timeUnit="SECONDS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<foreach doc:name="For each session" collection="#[['session-1', 'session-2', 'session-3']]">
+			<azure-service-bus-messaging:send doc:name="Send" config-ref="Azure_Service_Bus_Messaging_Connector_Config" destinationName="${queue.name}" sessionId="#[payload]">
+				<azure-service-bus-messaging:body><![CDATA[#['Message for ' ++ payload]]]></azure-service-bus-messaging:body>
+			</azure-service-bus-messaging:send>
+		</foreach>
+	</flow>
+
+	<!-- Dynamic-session listener: no fixed session ID; rolls through available sessions -->
+	<flow name="dynamic-session-listener-flow">
+		<azure-service-bus-messaging:message-listener doc:name="Message listener" config-ref="Azure_Service_Bus_Messaging_Connector_Config" ackMode="MANUAL" destinationName="${queue.name}" numberOfConsumers="2" dynamicSessionEnabled="true" sessionIdleTimeout="PT30S"/>
+		<logger level="INFO" doc:name="Log the message" message="#[payload]"/>
+		<azure-service-bus-messaging:complete-message doc:name="Complete" config-ref="Azure_Service_Bus_Messaging_Connector_Config" lockToken="#[attributes.lockToken]"/>
 	</flow>
 </mule>
 ----
