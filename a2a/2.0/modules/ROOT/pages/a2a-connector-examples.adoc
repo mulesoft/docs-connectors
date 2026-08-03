@@ -1,0 +1,1082 @@
+= A2A Connector 2.0 - Examples
+
+A2A Connector 2.0 speaks A2A protocol 1.0.0. An A2A server exposes an agent to the world through an agent card and one or more transport bindings. Client A2A agents use the card to determine:
+
+* When to use the agent (based on description, skills, and capabilities)
+* Where to contact the agent (based on `supportedInterfaces[].url` and `protocolBinding`)
+* Whether the endpoint is multi-tenant (based on `supportedInterfaces[].tenant`)
+
+== Configure an A2A Server
+
+An A2A server serves each agent over one or more transport bindings. The two supported bindings are `JSONRPC` and `HTTP_JSON` (gRPC is out of scope for this release). Every binding you register in the DSL must be advertised by the agent card, and every card entry must be registered in the DSL. Startup validates this bijection.
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-connection host="0.0.0.0" port="8081" />
+</http:listener-config>
+
+<a2a:server-config name="A2A_Server_config" doc:name="A2A Server config">
+    <a2a:connection listenerConfig="HTTP_Listener_config" agentPath="/stock-summarizer">
+        <a2a:interfaces>
+            <a2a:interface protocol="JSONRPC"   path="/jsonrpc"/>
+            <a2a:interface protocol="HTTP_JSON" path="/rest"/>
+        </a2a:interfaces>
+    </a2a:connection>
+    <a2a:agent-card file="${app.home}/agent-card.json" />
+</a2a:server-config>
+----
+
+[calloutlist]
+.. `a2a:server-config` defines the A2A server configuration.
+.. `a2a:connection` binds the server to an HTTP listener and specifies the base `agentPath`. The agent card is served at `+{agentPath}/.well-known/agent-card.json+`, and each transport binding is registered under `+{agentPath}{interface.path}+`.
+.. `a2a:interfaces` declares one or more transport bindings, each with a `protocol` (`JSONRPC` or `HTTP_JSON`) and a `path` segment. There is no `tenant` attribute on `<a2a:interface>`. Tenant identities live only in the agent card.
+.. `a2a:agent-card` points to the JSON file that describes the agent. On CloudHub, use `${app.home}/agent-card.json`.
+
+If you register an `<a2a:interface>` whose `(protocol, path)` is not advertised in the card (or vice versa), startup fails with an error naming the offending entry, so misconfiguration surfaces at deployment time instead of as runtime 404s.
+
+== Choose a Transport: JSON-RPC vs HTTP+JSON
+
+The two bindings deliver the same agent over different wire shapes. A client that talks A2A can use either.
+
+* JSON-RPC 2.0 (protocol `JSONRPC`): Every operation is a `POST` to a single URL with a JSON-RPC envelope. The `method` field identifies the operation (`SendMessage`, `SendStreamingMessage`, `GetTask`, `CancelTask`, `SubscribeToTask`, `ListTasks`, `CreateTaskPushNotificationConfig`, `GetTaskPushNotificationConfig`, `ListTaskPushNotificationConfigs`, `DeleteTaskPushNotificationConfig`).
+* HTTP+JSON (protocol `HTTP_JSON`): Each operation has its own URL and HTTP method: `POST /message:send`, `POST /message:stream` (SSE), `GET /tasks/{id}`, `GET /tasks`, `POST /tasks/{id}:cancel`, `POST /tasks/{id}:subscribe` (SSE), `POST /tasks/{id}/pushNotificationConfigs`, `GET /tasks/{id}/pushNotificationConfigs/{configId}`, `GET /tasks/{id}/pushNotificationConfigs`, `DELETE /tasks/{id}/pushNotificationConfigs/{configId}`.
+
+The connector's server-side flow logic is transport-agnostic. The same *A2A Server - Task Listener* flow serves both. You only need to advertise the bindings you actually register.
+
+== A2A Request Format
+
+The minimum required JSON-RPC 2.0 request for `SendMessage`:
+
+[source,json,linenums]
+----
+{
+    "jsonrpc": "2.0",
+    "method": "SendMessage",
+    "id": "test-001",
+    "params": {
+        "message": {
+            "messageId": "550e8400-e29b-41d4-a716-446655440000",
+            "role": "ROLE_USER",
+            "parts": [
+                { "text": "Hello, this is my message" }
+            ]
+        }
+    }
+}
+----
+
+The equivalent HTTP+JSON request is `POST {agentPath}{interface.path}/message:send` with only the `params` body:
+
+[source,json,linenums]
+----
+{
+    "message": {
+        "messageId": "550e8400-e29b-41d4-a716-446655440000",
+        "role": "ROLE_USER",
+        "parts": [
+            { "text": "Hello, this is my message" }
+        ]
+    }
+}
+----
+
+You can use metadata types in Anypoint Studio to ensure your payloads conform to the A2A schema. The connector ships JSON schema definitions for `MessageSendParams`, `Task`, `TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`, `ListTasksParams`, and other A2A objects.
+
+[NOTE]
+====
+The wire-level JSON-RPC method names in A2A 1.0.0 are PascalCase (`SendMessage`, `GetTask`, and so on), not the slash-form (`message/send`, `tasks/get`) used in the older 0.3.0 spec. Clients written against 0.3.0 must update their method strings.
+====
+
+== Write a Task Listener
+
+The *A2A Server - Task Listener* source is now unified. The same flow serves blocking `SendMessage`, non-blocking `SendMessage` (with `returnImmediately=true`), and `SendStreamingMessage` over both JSON-RPC and HTTP+JSON. There is no separate *A2A Server - On Task Stream Listener* element anymore.
+
+[source,xml,linenums]
+----
+<flow name="a2aTaskFlow">
+    <a2a:task-listener doc:name="Task Listener" config-ref="A2A_Server_config" />
+
+    <set-variable variableName="user_prompt" value="#[payload.message.parts[0].text]" />
+    <set-variable variableName="taskId"      value="#[attributes.taskId]" />
+    <set-variable variableName="contextId"   value="#[attributes.contextId]" />
+    <set-variable variableName="tenant"      value="#[attributes.tenant]" />
+</flow>
+----
+
+Task and context identifiers are surfaced on `attributes` (`attributes.taskId`, `attributes.contextId`), along with the resolved tenant (`attributes.tenant`, which is an empty string when the client did not send one). Use these for direct addressing rather than deriving them from the request body.
+
+=== Example Response
+
+The *A2A Server - Task Listener* flow does not return a `Task` payload directly. It emits one or more update events via the *A2A Server - Update Task Status* and *A2A Server - Update Task Artifact* operations, and the connector materializes the client response automatically from the persisted task state after a terminal or interrupted status update is dispatched.
+
+Each update event follows the A2A `StreamResponse` shape: a single root key (`statusUpdate` for status events, `artifactUpdate` for artifact events) whose value carries `taskId`, `contextId`, and the update body. A typical successful sequence is an intermediate `statusUpdate` (working), an `artifactUpdate` for the result, and a final `statusUpdate` in a terminal state:
+
+[source,xml,linenums]
+----
+<!-- 1. Progress update — non-terminal state; does not complete the response. -->
+<a2a:update-task-status doc:name="Working" config-ref="A2A_Server_config">
+    <a2a:status-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  statusUpdate: {
+    taskId: vars.taskId,
+    contextId: vars.contextId,
+    status: {
+      state: "TASK_STATE_WORKING",
+      message: {
+        messageId: uuid(),
+        role: "ROLE_AGENT",
+        parts: [{ text: "Working on it..." }]
+      }
+    }
+  }
+}]]]></a2a:status-content>
+</a2a:update-task-status>
+
+<!-- 2. Artifact carrying the answer. -->
+<a2a:update-task-artifact doc:name="Answer" config-ref="A2A_Server_config">
+    <a2a:artifact-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  artifactUpdate: {
+    taskId: vars.taskId,
+    contextId: vars.contextId,
+    artifact: {
+      artifactId: "artifact-" ++ vars.taskId,
+      name: "answer",
+      parts: [{ text: "Task completed successfully." }]
+    }
+  }
+}]]]></a2a:artifact-content>
+</a2a:update-task-artifact>
+
+<!-- 3. Terminal status — this event triggers response emission. -->
+<a2a:update-task-status doc:name="Completed" config-ref="A2A_Server_config">
+    <a2a:status-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  statusUpdate: {
+    taskId: vars.taskId,
+    contextId: vars.contextId,
+    status: { state: "TASK_STATE_COMPLETED" }
+  }
+}]]]></a2a:status-content>
+</a2a:update-task-status>
+----
+
+When the terminal (or interrupted) `statusUpdate` is dispatched, the connector materializes the current `Task` from the task store, carrying every `artifactUpdate` and message history persisted along the way, and delivers it to the caller:
+
+* Blocking `SendMessage`: Returned synchronously as a `StreamResponse` with a `task` root key.
+* `SendStreamingMessage` and `SubscribeToTask`: The same terminal event also closes the SSE stream. The exception is `TASK_STATE_AUTH_REQUIRED`, which does not close the stream so the agent can resolve auth out of band.
+
+Terminal states are `TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, and `TASK_STATE_REJECTED`. Interrupted states are `TASK_STATE_INPUT_REQUIRED` and `TASK_STATE_AUTH_REQUIRED`.
+
+== Mule App Example
+
+This example shows a financial A2A agent that answers queries about US companies by combining an MCP-tool lookup with an LLM prompt.
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="financeAgentFlow">
+    <a2a:task-listener doc:name="Task Listener" config-ref="A2A_Server_config" /> #(1)
+    <logger level="INFO" message="Triggering MCP Tools"/>                          #(2)
+    <set-variable value="#[attributes.taskId]"     variableName="task_id"/>        #(3)
+    <set-variable value="#[attributes.contextId]"  variableName="context_id"/>     #(4)
+    <set-variable value="#[payload.message.parts[0].text]" variableName="user_prompt"/> #(5)
+
+    <ms-inference:mcp-tools-native-template config-ref="MuleSoft_Inference_config"> #(6)
+        <ms-inference:template><![CDATA[You are a specialized assistant that performs financial analysis based on stock market data using stock market symbols]]></ms-inference:template>
+        <ms-inference:instructions><![CDATA[Your sole purpose is to use the tools "get_company_symbol" and "get_company_financials" to answer financial questions about US based companies. Response Format: JSON with { message, status, sentiment, reasoning }.]]></ms-inference:instructions>
+        <ms-inference:data><![CDATA[#[vars.user_prompt]]]></ms-inference:data>
+    </ms-inference:mcp-tools-native-template>
+
+    <set-variable value="#[payload.response]" variableName="mcp_tooling_results"/>  #(7)
+
+    <ms-inference:agent-define-prompt-template config-ref="MuleSoft_Inference_config"> #(8)
+        <ms-inference:template><![CDATA[#["You are a specialized assistant for financial analysis. Use the following context to answer.
+Context: $(vars.mcp_tooling_results)"]]]></ms-inference:template>
+        <ms-inference:instructions><![CDATA[Response Format: JSON with { message, status, sentiment, reasoning }.]]></ms-inference:instructions>
+        <ms-inference:data><![CDATA[#[vars.user_prompt]]]></ms-inference:data>
+    </ms-inference:agent-define-prompt-template>
+
+    <a2a:update-task-artifact doc:name="Answer Artifact" config-ref="A2A_Server_config">   #(9)
+        <a2a:artifact-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  artifactUpdate: {
+    taskId: vars.task_id,
+    contextId: vars.context_id,
+    artifact: {
+      artifactId: "artifact-" ++ vars.task_id,
+      name: "Answer",
+      parts: [{ text: payload.response }]
+    }
+  }
+}]]]></a2a:artifact-content>
+    </a2a:update-task-artifact>
+
+    <a2a:update-task-status doc:name="Completed (Final)" config-ref="A2A_Server_config">   #(10)
+        <a2a:status-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  statusUpdate: {
+    taskId: vars.task_id,
+    contextId: vars.context_id,
+    status: { state: "TASK_STATE_COMPLETED" }
+  }
+}]]]></a2a:status-content>
+    </a2a:update-task-status>
+</flow>
+----
+
+[calloutlist]
+.. The *A2A Server - Task Listener* waits for an incoming `SendMessage` (blocking, non-blocking, or streaming) from any registered transport binding.
+.. The `logger` component records a diagnostic entry.
+.. `attributes.taskId` is captured to `task_id`. Prefer `attributes` over deriving IDs from `payload`. The attribute is authoritative for both JSON-RPC and HTTP+JSON.
+.. `attributes.contextId` is captured to `context_id`. Reuse it in subsequent event payloads so the client can correlate.
+.. The user prompt is extracted from `payload.message.parts[0].text`.
+.. The `ms-inference:mcp-tools-native-template` calls the LLM with the tools configured for financial analysis.
+.. The tool-augmented response is captured to `mcp_tooling_results`.
+.. A second inference pass converts the tool output into the user-facing JSON structure.
+.. The *A2A Server - Update Task Artifact* operation emits the LLM answer as an artifact event. The DataWeave payload uses the `artifactUpdate` root key required by the A2A `StreamResponse` shape. Artifact events do not close the response by themselves. They are streamed to SSE subscribers and merged into the persisted `Task`.
+.. The *A2A Server - Update Task Status* operation with `state: "TASK_STATE_COMPLETED"` is the terminal event that triggers the connector to materialize the current `Task` from the store and deliver it to the caller (or close the SSE stream). Emit exactly one terminal or interrupted status per invocation.
+
+== Configure the A2A Client to Call Other A2A Agents
+
+The client connection provider is transport-specific. Choose the one that matches the target agent card's `supportedInterfaces[].protocolBinding`.
+
+[source,xml,linenums]
+----
+<!-- JSON-RPC target -->
+<a2a:client-config name="A2A_Client_JsonRpc">
+    <a2a:jsonrpc-client-connection agentUrl="https://fqdn.com/stock-summarizer" />
+</a2a:client-config>
+
+<!-- HTTP+JSON target -->
+<a2a:client-config name="A2A_Client_HttpJson">
+    <a2a:http-json-client-connection agentUrl="https://fqdn.com/stock-summarizer" />
+</a2a:client-config>
+----
+
+[calloutlist]
+.. The config parameter is now `agentUrl` (previously `serverUrl`). The connector discovers the target agent via `+{agentUrl}/.well-known/agent-card.json+`.
+.. Every outbound request automatically sends `A2A-Version: 1.0` as a default header, unless overridden via `<a2a:default-headers>`. Agent-card discovery (connect-time and the *A2A Client - Get Card* operation) is exempt from the header.
+
+A minimal flow that listens for an A2A task and forwards it to a remote agent:
+
+[source,xml,linenums]
+----
+<flow name="forwardToRemoteAgentFlow">
+    <a2a:task-listener config-ref="A2A_Server_config"/>
+    <a2a:send-message config-ref="A2A_Client_JsonRpc">
+        <a2a:message><![CDATA[#[payload]]]></a2a:message>
+    </a2a:send-message>
+</flow>
+----
+
+== Non-Blocking Send Message (`returnImmediately=true`)
+
+Clients that don't want to hold a connection open for the entire compute can send `configuration.returnImmediately=true`. The server acknowledges immediately with an initial `Task` (typically in `TASK_STATE_SUBMITTED` or `TASK_STATE_WORKING`) and continues processing asynchronously. The client can later call the *A2A Client - Subscribe To Task* operation to stream events for the ongoing task.
+
+To customize the initial `Task` response, add an *A2A Server - On Async Request Listener* flow to the same server config:
+
+[source,xml,linenums]
+----
+<flow name="asyncInitialTaskFlow">
+    <a2a:on-async-request-listener doc:name="On Async Request Listener" config-ref="A2A_Server_config"/>
+
+    <ee:transform doc:name="Author Initial Task">
+        <ee:message>
+            <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  task: {
+    id: attributes.taskId,
+    contextId: attributes.contextId,
+    status: { state: "TASK_STATE_SUBMITTED" }
+  }
+}]]></ee:set-payload>
+        </ee:message>
+    </ee:transform>
+</flow>
+
+<flow name="asyncComputeFlow">
+    <a2a:task-listener config-ref="A2A_Server_config"/>
+    <!-- Long-running compute; emit progress via <a2a:update-task-status> / <a2a:update-task-artifact>. -->
+</flow>
+----
+
+[calloutlist]
+.. The *A2A Server - On Async Request Listener* runs for `SendStreamingMessage` requests and for `SendMessage` with `returnImmediately=true`. It receives the incoming `MessageSendParams` as payload and `attributes.taskId` / `attributes.contextId` / `attributes.tenant` / request headers on attributes.
+.. The flow must return the initial task as a `StreamResponse` with a `task` root key (matching the same envelope shape used for `statusUpdate` and `artifactUpdate` events). Missing or unparseable output is rejected with `A2A:INTERNAL_ERROR`.
+.. The `Task` under `task` can already be in a terminal state (`TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, or `TASK_STATE_REJECTED`) or an interrupted state (`TASK_STATE_INPUT_REQUIRED` or `TASK_STATE_AUTH_REQUIRED`) to short-circuit the request. In that case, the *A2A Server - Task Listener* compute flow is not invoked.
+.. The flow can raise a Mule error to reject the request outright. The raised error type propagates on the wire.
+
+[NOTE]
+====
+Concurrency and terminal-state safety on `SendMessage`:
+
+* In-flight rejection: Cluster-wide, only one active `SendMessage` (blocking, non-blocking, or streaming) may run against a given `taskId` at any time. A duplicate concurrent submission is rejected with `A2A:INVALID_REQUEST` ("Another SendMessage is already in flight for taskId {id}; retry once it completes."), so a task's message-history ordering holds under concurrency. Orphan claims from a crashed worker auto-clear via the multi-replica claim store's 5-minute TTL.
+
+* Terminal-sticky rejection: Once a task reaches a terminal state (`TASK_STATE_COMPLETED` / `TASK_STATE_FAILED` / `TASK_STATE_CANCELED` / `TASK_STATE_REJECTED`), further `SendMessage` / `SendStreamingMessage` requests against that `taskId` are rejected with `A2A:UNSUPPORTED_OPERATION` ("Task has reached terminal state."). The same rejection also fires when a legitimate terminal transition (typically an out-of-replica `CancelTask` or the *A2A Server - Task Listener* flow's own terminal *A2A Server - Update Task Status* operation) commits while a concurrent write is mid-flight, so racing and non-racing multi-turn attempts look identical to the client.
+====
+
+[[configure-streaming-with-unified-task-listener]]
+== Streaming with the Unified Task Listener
+
+Streaming (`SendStreamingMessage`, wire `POST /message:stream` on HTTP+JSON) uses the same *A2A Server - Task Listener* flow as non-streaming. No separate *A2A Server - On Task Stream Listener* is needed. Emit intermediate status and artifact events via the *A2A Server - Update Task Status* and *A2A Server - Update Task Artifact* operations. The connector delivers them over SSE to the connected client. Each event's DataWeave payload uses the `StreamResponse` root key (`statusUpdate` or `artifactUpdate`) with `taskId`, `contextId`, and body under it. There is no explicit `final` boolean. The connector derives finality from `TaskStatus.state.isFinal()`.
+
+[source,xml,linenums]
+----
+<flow name="a2aStreamFlow">
+    <a2a:task-listener doc:name="Task Listener" config-ref="A2A_Server_config"/>
+
+    <set-variable variableName="taskId"    value="#[attributes.taskId]"/>
+    <set-variable variableName="contextId" value="#[attributes.contextId]"/>
+
+    <a2a:update-task-status doc:name="Working" config-ref="A2A_Server_config">
+        <a2a:status-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  statusUpdate: {
+    taskId: vars.taskId,
+    contextId: vars.contextId,
+    status: {
+      state: "TASK_STATE_WORKING",
+      message: {
+        messageId: uuid(),
+        role: "ROLE_AGENT",
+        parts: [{ text: "Task accepted and processing started" }]
+      }
+    }
+  }
+}]]]></a2a:status-content>
+    </a2a:update-task-status>
+
+    <a2a:update-task-artifact doc:name="Partial Answer" config-ref="A2A_Server_config">
+        <a2a:artifact-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  artifactUpdate: {
+    taskId: vars.taskId,
+    contextId: vars.contextId,
+    artifact: {
+      artifactId: "artifact-" ++ vars.taskId,
+      name: "partial-answer",
+      parts: [{ text: "Here is an incremental result chunk." }]
+    }
+  }
+}]]]></a2a:artifact-content>
+    </a2a:update-task-artifact>
+
+    <a2a:update-task-status doc:name="Completed" config-ref="A2A_Server_config">
+        <a2a:status-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  statusUpdate: {
+    taskId: vars.taskId,
+    contextId: vars.contextId,
+    status: { state: "TASK_STATE_COMPLETED" }
+  }
+}]]]></a2a:status-content>
+    </a2a:update-task-status>
+</flow>
+----
+
+=== Expected SSE Event Format
+
+The stream is delivered as standard server-sent events. Every event carries a JSON payload in `data:`, but the wire envelope depends on the protocol binding that received the streaming request:
+
+* HTTP+JSON: Each `data:` payload is the bare A2A `StreamResponse` envelope. The oneof discriminator is the root key: `task` for the initial task snapshot, `statusUpdate` for status events, and `artifactUpdate` for artifact events.
+* JSON-RPC: Each `data:` payload wraps the same `StreamResponse` inside a JSON-RPC 2.0 success response: `{"jsonrpc":"2.0","id":<originalRequestId>,"result":<StreamResponse>}`. The `id` echoes the client's `SendStreamingMessage` or `SubscribeToTask` request id.
+
+HTTP+JSON (`POST /message:stream` or `POST /tasks/{id}:subscribe`):
+
+[source,text]
+----
+event: task
+data: {"task":{"id":"task-123","contextId":"context-task-123","status":{"state":"TASK_STATE_WORKING"}}}
+
+event: artifact-update
+data: {"artifactUpdate":{"taskId":"task-123","contextId":"context-task-123","artifact":{"artifactId":"artifact-task-123","name":"partial-answer","parts":[{"text":"Here is an incremental result chunk."}]}}}
+
+event: status-update
+data: {"statusUpdate":{"taskId":"task-123","contextId":"context-task-123","status":{"state":"TASK_STATE_COMPLETED"}}}
+----
+
+JSON-RPC (`method: "SendStreamingMessage"` or `method: "SubscribeToTask"`, request id `"req-1"`):
+
+[source,text]
+----
+event: task
+data: {"jsonrpc":"2.0","id":"req-1","result":{"task":{"id":"task-123","contextId":"context-task-123","status":{"state":"TASK_STATE_WORKING"}}}}
+
+event: artifact-update
+data: {"jsonrpc":"2.0","id":"req-1","result":{"artifactUpdate":{"taskId":"task-123","contextId":"context-task-123","artifact":{"artifactId":"artifact-task-123","name":"partial-answer","parts":[{"text":"Here is an incremental result chunk."}]}}}}
+
+event: status-update
+data: {"jsonrpc":"2.0","id":"req-1","result":{"statusUpdate":{"taskId":"task-123","contextId":"context-task-123","status":{"state":"TASK_STATE_COMPLETED"}}}}
+----
+
+Finality is derived from `TaskStatus.state`, not a separate `final` field. The stream closes automatically on:
+
+* Any terminal state (`TASK_STATE_COMPLETED` / `TASK_STATE_FAILED` / `TASK_STATE_CANCELED` / `TASK_STATE_REJECTED`).
+* `TASK_STATE_INPUT_REQUIRED`: The client must submit more input before the task can proceed.
+
+`TASK_STATE_AUTH_REQUIRED` does not close the stream. The agent can resolve auth out of band and continue on the same stream.
+
+=== Error Handling for Streaming Flows
+
+Wrap stream-processing logic in error handling and always send a terminal status update on failures:
+
+[source,xml,linenums]
+----
+<flow name="a2aStreamFlowWithErrors">
+    <a2a:task-listener config-ref="A2A_Server_config"/>
+
+    <try>
+        <!-- Business logic -->
+        <raise-error type="A2A:INTERNAL_ERROR" description="Simulated downstream failure"/>
+        <error-handler>
+            <on-error-continue enableNotifications="true" logException="true">
+                <a2a:update-task-status config-ref="A2A_Server_config">
+                    <a2a:status-content><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  statusUpdate: {
+    taskId: attributes.taskId,
+    contextId: attributes.contextId,
+    status: {
+      state: "TASK_STATE_FAILED",
+      message: {
+        messageId: uuid(),
+        role: "ROLE_AGENT",
+        parts: [{ text: error.description default "Unexpected server error" }]
+      }
+    }
+  }
+}]]]></a2a:status-content>
+                </a2a:update-task-status>
+            </on-error-continue>
+        </error-handler>
+    </try>
+</flow>
+----
+
+== Subscribe to an Ongoing Task
+
+The *A2A Client - Subscribe To Task* operation (previously known as _Task Resubscribe_) reconnects to a task that is already running on the server and streams its remaining events. It reuses the same `On Task Status Update` and `On Task Artifact Update` route callbacks as the *A2A Client - Send Stream Message* operation. The task can be created by any of the three _SendMessage_ variants: blocking *A2A Client - Send Message*, non-blocking *A2A Client - Send Message* (`returnImmediately=true`), or *A2A Client - Send Stream Message*. All three attach a subscribable event stream at task creation, so a client can subscribe to any non-terminal task regardless of how it was originally submitted.
+
+[source,xml,linenums]
+----
+<a2a:subscribe-to-task doc:name="Subscribe to Task" config-ref="A2A_Client_JsonRpc">
+    <a2a:task-id-params><![CDATA[#[{ "id": vars.taskId }]]]></a2a:task-id-params>
+    <a2a:on-task-status-update>
+        <logger level="INFO" message="Status update: #[payload]"/>
+    </a2a:on-task-status-update>
+    <a2a:on-task-artifact-update>
+        <logger level="INFO" message="Artifact update: #[payload]"/>
+    </a2a:on-task-artifact-update>
+</a2a:subscribe-to-task>
+----
+
+If the target task is already in a terminal state at subscribe time, the server rejects with `A2A:UNSUPPORTED_OPERATION` ("Cannot subscribe to task in terminal state ..."). Otherwise, the connector replays all previously buffered events for the task to the late subscriber before live event delivery resumes. It replays the current `task` snapshot first, then every `statusUpdate` and `artifactUpdate` published before the subscribe point. Buffering keeps growing as long as the task is still open. After the task reaches a terminal state (`TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, or `TASK_STATE_REJECTED`) or `TASK_STATE_INPUT_REQUIRED`, the stream closes and no further events flow through it. `TASK_STATE_AUTH_REQUIRED` does not close the stream.
+
+== Multi-Tenant Configuration
+
+A single `(protocol, path)` endpoint can serve multiple logically distinct tenants. Tenant identities are advertised in the agent card, not in the DSL. Each request carries its tenant in one canonical location:
+
+* JSON-RPC: Always in `params.tenant` on the request body.
+* HTTP+JSON POST-with-body operations (`SendMessage`, `SendStreamingMessage`, and `CreateTaskPushNotificationConfig`): In `params.tenant` on the body.
+* HTTP+JSON GET, DELETE, and POST-custom-method operations: In the `?tenant=` query parameter.
+
+Every request is validated against the tenants advertised for the endpoint's `(protocol, path)`. Unknown tenants are rejected with `A2A:INVALID_PARAMS`. Missing or blank tenants are normalized to the empty string sentinel (`""`) on both transports.
+
+Every source (*A2A Server - Task Listener*, *A2A Server - On Async Request Listener*, *A2A Server - On Push Notification Set Listener*, *A2A Server - Task Authorizer Listener*) surfaces `attributes.tenant` for per-tenant branching:
+
+[source,xml,linenums]
+----
+<flow name="multiTenantFlow">
+    <a2a:task-listener config-ref="A2A_Server_config"/>
+
+    <choice doc:name="Route by tenant">
+        <when expression="#[attributes.tenant == 'us-east']">
+            <flow-ref name="usEastRoutingFlow"/>
+        </when>
+        <when expression="#[attributes.tenant == 'eu-west']">
+            <flow-ref name="euWestRoutingFlow"/>
+        </when>
+        <otherwise>
+            <flow-ref name="defaultRoutingFlow"/>
+        </otherwise>
+    </choice>
+</flow>
+----
+
+The corresponding agent card advertises the tenants:
+
+[source,json,linenums]
+----
+{
+  "supportedInterfaces": [
+    { "protocolBinding": "JSONRPC",    "url": "https://fqdn.com/stock-summarizer/rpc", "protocolVersion": "1.0", "tenant": "us-east" },
+    { "protocolBinding": "JSONRPC",    "url": "https://fqdn.com/stock-summarizer/rpc", "protocolVersion": "1.0", "tenant": "eu-west" },
+    { "protocolBinding": "HTTP_JSON",  "url": "https://fqdn.com/stock-summarizer/",    "protocolVersion": "1.0", "tenant": "us-east" }
+  ]
+}
+----
+
+== Task Authorization
+
+The *A2A Server - Task Authorizer Listener* source (which supersedes the older *A2A Server - Authorization Listener* source) gates every auth-required operation before it executes. It runs on both JSON-RPC and HTTP+JSON. The payload is the A2A operation's params object (transport-agnostic), and its concrete shape depends on the operation being authorized:
+
+* `ListTasks`: The flow receives a JSON array of `{taskId, contextId}` candidates for the current page. It must return the authorized subset (return the same shape with the entries to keep, or an empty array to deny the whole page). This is the only operation that expects a return payload from the flow.
+* `SendMessage` and `SendStreamingMessage`: Payload is `MessageSendParams` (`{ message: { messageId, role, parts, ... }, configuration?, metadata? }`).
+* `GetTask`, `CancelTask`, and `SubscribeToTask`: Payload is `TaskIdParams` (`{ id, metadata? }`).
+* `CreateTaskPushNotificationConfig`: Payload is `TaskPushNotificationConfig` (`{ taskId, pushNotificationConfig: { url, id?, token?, authentication? }, metadata? }`).
+* `GetTaskPushNotificationConfig` and `DeleteTaskPushNotificationConfig`: Payload is `GetTaskPushNotificationConfigParams` or `DeleteTaskPushNotificationConfigParams` (`{ id, pushNotificationConfigId, metadata? }`).
+* `ListTaskPushNotificationConfigs`: Payload is `ListTaskPushNotificationConfigParams` (`{ id, pageSize?, pageToken?, metadata? }`).
+
+For every operation except `ListTasks`, successful completion of the flow authorizes the request. Raising an error denies it (mapped to `A2A:UNAUTHORIZED`).
+
+The current operation name is exposed on `attributes.operationName` so a single listener flow can multiplex all the payload shapes.
+
+[source,xml,linenums]
+----
+<flow name="taskAuthorizerFlow">
+    <a2a:task-authorizer-listener doc:name="Task Authorizer" config-ref="A2A_Server_config"/>
+
+    <choice>
+        <when expression="#[attributes.operationName == 'ListTasks']">
+            <ee:transform>
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload filter (
+  (attributes.tenant == 'us-east' and $.taskId startsWith 'us-')
+  or (attributes.tenant == 'eu-west' and $.taskId startsWith 'eu-')
+)]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </when>
+        <otherwise>
+            <flow-ref name="validateTaskOwnershipFlow"/>
+        </otherwise>
+    </choice>
+</flow>
+----
+
+== Server-Side Batch Read and Metadata
+
+=== A2A Server - Get Tasks: Resolve Tasks Referenced by an Incoming Message
+
+A server-side operation that fetches a batch of tasks from the task store by ID. The primary use case is resolving `referenceTaskIds` on incoming A2A messages: when a client's `SendMessage` / `SendStreamingMessage` request carries `params.message.referenceTaskIds: ["taskA", "taskB", ...]`, the agent flow needs the full task objects (status, artifacts, history) to have proper conversational context. Drop the *A2A Server - Get Tasks* operation into the *A2A Server - Task Listener* flow with those IDs to load them in a single call.
+
+[source,xml,linenums]
+----
+<a2a:task-listener config-ref="A2A_Server_config"/>
+
+<a2a:get-tasks doc:name="Load Referenced Tasks" config-ref="A2A_Server_config" historyLength="10">
+    <a2a:task-ids><![CDATA[#[payload.message.referenceTaskIds default []]]]></a2a:task-ids>
+</a2a:get-tasks>
+
+<set-variable variableName="referencedTasks" value="#[payload.tasks]"/>
+----
+
+`taskIds` is a JSON array of task IDs. `historyLength` caps the number of history entries returned per task (`0` omits history, default `0`). Tasks that cannot be found are not treated as errors. They are reported separately in `nonExistentTaskIds`.
+
+The response is a `GetTasksResponse` object with two arrays:
+
+[source,json,linenums]
+----
+{
+  "tasks": [
+    {
+      "id": "task-a",
+      "contextId": "ctx-a",
+      "status": { "state": "TASK_STATE_COMPLETED" },
+      "artifacts": [ ... ],
+      "history": [ ... ],
+      "metadata": { ... }
+    }
+  ],
+  "nonExistentTaskIds": [ "task-b" ]
+}
+----
+
+`tasks[]` carries the full `Task` object for every ID that resolved. `nonExistentTaskIds[]` lists the input IDs that could not be resolved because they were not found in the store or failed to load. The server logs the underlying reason.
+
+=== A2A Server - Get Tasks By Context: Recover a Conversational Session
+
+A server-side operation that fetches every task belonging to a `contextId`, oldest first. A2A 1.0.0 treats a `contextId` as a conversational session that groups multiple task and message objects, so this operation lets an agent flow recover that session in a single call. Unlike the *A2A Client - List Tasks* operation, the full ordered task list is returned rather than paged, and tasks are never truncated. Use *History Length* to bound the message history embedded within each task (default is all history). A blank or unknown `contextId` returns an empty list rather than an error.
+
+[source,xml,linenums]
+----
+<a2a:task-listener config-ref="A2A_Server_config"/>
+
+<a2a:get-tasks-by-context doc:name="Load Context Tasks" config-ref="A2A_Server_config" historyLength="10">
+    <a2a:context-id><![CDATA[#[attributes.contextId]]]></a2a:context-id>
+</a2a:get-tasks-by-context>
+
+<set-variable variableName="contextTasks" value="#[payload]"/>
+----
+
+The response is an array of the full `Task` objects recorded for the context, oldest first.
+
+=== A2A Server - Set Task Metadata: Replace Metadata
+
+Full-replace (no merge) of the persisted `Task`'s `metadata` field. Pass an empty JSON object (`{}`) to clear. Typical use is inside an *A2A Server - Task Listener* flow to stamp workflow-tracking or annotation data on the task as it progresses, so downstream `GetTask` / `ListTasks` reads (and the eventual terminal response materialized for a blocking `SendMessage`) reflect it. Because the operation persists straight to the task store and does not dispatch a `statusUpdate` / `artifactUpdate` event, streaming subscribers do not receive it out-of-band.
+
+[source,xml,linenums]
+----
+<flow name="taskFlowWithMetadata">
+    <a2a:task-listener config-ref="A2A_Server_config"/>
+
+    <set-variable variableName="taskId"        value="#[attributes.taskId]"/>
+    <set-variable variableName="workflowRunId" value="#[uuid()]"/>
+
+    <!-- Stamp workflow-tracking metadata onto the task before doing the actual work. -->
+    <a2a:set-task-metadata doc:name="Stamp Workflow Metadata" config-ref="A2A_Server_config" taskId="#[vars.taskId]">
+        <a2a:metadata><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  "workflowRunId": vars.workflowRunId,
+  "receivedAt": now() as String,
+  "annotations": { "source": "task-listener-flow" }
+}]]]></a2a:metadata>
+    </a2a:set-task-metadata>
+
+    <!-- ... business logic and <a2a:update-task-status> / <a2a:update-task-artifact> calls ... -->
+</flow>
+----
+
+Rejected for tasks already in a terminal state (`A2A:INTERNAL_ERROR`). Other errors: `A2A:PARSE_ERROR` (payload not valid JSON), `A2A:TASK_NOT_FOUND` (unknown `taskId`).
+
+== Client-Side List Operations
+
+=== A2A Client - List Tasks: List Tasks from the Server
+
+The *A2A Client - List Tasks* operation returns the tasks from the target A2A server as a list (`Array of Any`) with a configurable streaming strategy, so it can be iterated from a `<foreach>` in the flow.
+
+[source,xml,linenums]
+----
+<a2a:list-tasks config-ref="A2A_Client_HttpJson">
+    <a2a:list-tasks-params><![CDATA[{ "pageSize": 50 }]]></a2a:list-tasks-params>
+</a2a:list-tasks>
+
+<foreach doc:name="Iterate Tasks" collection="#[payload]">
+    <logger level="INFO" message="Task: #[payload]"/>
+</foreach>
+----
+
+=== A2A Client - List Push Notification Configs: List Configs from the Server
+
+Now returns its results as a list (`Array of Any`) with a configurable streaming strategy too:
+
+[source,xml,linenums]
+----
+<a2a:list-push-notification-configs config-ref="A2A_Client_HttpJson">
+    <a2a:list-push-config-params><![CDATA[{ "id": vars.taskId, "pageSize": 20 }]]></a2a:list-push-config-params>
+</a2a:list-push-notification-configs>
+----
+
+=== A2A Client - Get Card: Fetch Public or Extended Agent Card
+
+The extended agent card is fetched via the *Use Extended Card* boolean parameter on the existing *A2A Client - Get Card* operation:
+
+[source,xml,linenums]
+----
+<a2a:get-card config-ref="A2A_Client_JsonRpc"/>                              <!-- public card -->
+<a2a:get-card config-ref="A2A_Client_JsonRpc" useExtendedCard="true"/>       <!-- authenticated extended card -->
+----
+
+Agent-card discovery (both connect-time and the *A2A Client - Get Card* operation) is exempt from the default `A2A-Version: 1.0` request header.
+
+== JSON-RPC 2.0 Request and Response Patterns
+
+=== Non-Streaming Send (`SendMessage`)
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-1001",
+  "method": "SendMessage",
+  "params": {
+    "message": {
+      "messageId": "550e8400-e29b-41d4-a716-446655440000",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "Summarize the latest task status." }]
+    }
+  }
+}
+----
+
+Response, where the `result` object is an A2A `Task`:
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-1001",
+  "result": {
+    "id": "task-1001",
+    "contextId": "context-task-1001",
+    "status": { "state": "TASK_STATE_COMPLETED" },
+    "artifacts": [
+      {
+        "artifactId": "artifact-task-1001",
+        "name": "answer",
+        "parts": [{ "text": "Task completed successfully." }]
+      }
+    ],
+    "history": []
+  }
+}
+----
+
+=== Non-Blocking Send (`SendMessage` + `returnImmediately`)
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-2001",
+  "method": "SendMessage",
+  "params": {
+    "message": {
+      "messageId": "...",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "Run a long-running analysis." }]
+    },
+    "configuration": {
+      "returnImmediately": true
+    }
+  }
+}
+----
+
+The response comes back synchronously with an initial `Task` (typically in `TASK_STATE_SUBMITTED` or `TASK_STATE_WORKING`). The server continues compute asynchronously. Follow up with `SubscribeToTask` to stream the remaining events.
+
+=== Streaming Send (`SendStreamingMessage`)
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-stream-3001",
+  "method": "SendStreamingMessage",
+  "params": {
+    "message": {
+      "messageId": "...",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "Generate a step-by-step answer." }]
+    }
+  }
+}
+----
+
+The response is an SSE stream shaped as in <<configure-streaming-with-unified-task-listener>>.
+
+=== Multi-Tenant Request
+
+To target a specific tenant, add `params.tenant`:
+
+[source,json,linenums]
+----
+{
+  "jsonrpc": "2.0",
+  "id": "req-4001",
+  "method": "SendMessage",
+  "params": {
+    "tenant": "us-east",
+    "message": { "messageId": "...", "role": "ROLE_USER",
+                 "parts": [{ "text": "..." }] }
+  }
+}
+----
+
+== HTTP+JSON Request and Response Patterns
+
+The HTTP+JSON binding uses one URL per operation. The body carries only the `params` (no JSON-RPC envelope). Base path is `+{agentPath}{interface.path}+`.
+
+[cols="1,3,3", options="header"]
+|===
+| Operation | HTTP method + URL | Body / query
+| `SendMessage`                        | `POST /message:send`                                     | Body = `MessageSendParams` JSON
+| `SendStreamingMessage`               | `POST /message:stream` (SSE)                             | Body = `MessageSendParams` JSON
+| `GetTask`                            | `GET /tasks/{id}`                                        | `?historyLength=&tenant=`
+| `CancelTask`                         | `POST /tasks/{id}:cancel`                                | Body = `TaskIdParams` JSON
+| `SubscribeToTask`                    | `POST /tasks/{id}:subscribe` (SSE)                       | No body. `?tenant=`
+| `CreateTaskPushNotificationConfig`   | `POST /tasks/{id}/pushNotificationConfigs`               | Body = `TaskPushNotificationConfig` JSON
+| `GetTaskPushNotificationConfig`      | `GET /tasks/{id}/pushNotificationConfigs/{configId}`     | `?tenant=`
+| `ListTaskPushNotificationConfigs`    | `GET /tasks/{id}/pushNotificationConfigs`                | `?pageSize=&pageToken=&tenant=`
+| `DeleteTaskPushNotificationConfig`   | `DELETE /tasks/{id}/pushNotificationConfigs/{configId}`  | `?tenant=`
+| `ListTasks`                          | `GET /tasks`                                             | `?pageSize=&pageToken=&tenant=`
+| `GetPublicAgentCard`                 | `GET /.well-known/agent-card.json`                       | No headers required. Discovery is exempt from the `A2A-Version` header.
+| `GetExtendedAgentCard`               | `GET /extendedAgentCard`                                 | `?tenant=`
+|===
+
+Example `POST /message:send`:
+
+[source,json,linenums]
+----
+{
+  "message": {
+    "messageId": "550e8400-e29b-41d4-a716-446655440000",
+    "role": "ROLE_USER",
+    "parts": [{ "text": "Hello, this is my message" }]
+  }
+}
+----
+
+The response body is a plain A2A `Task` (no JSON-RPC envelope).
+
+== Sample `agent-card.json` for A2A 1.0.0
+
+Use this as a starting point for cards that advertise both JSON-RPC and HTTP+JSON transports, plus streaming, push notifications, and tenants:
+
+[source,json,linenums]
+----
+{
+  "name": "Finance Streaming Agent",
+  "description": "Handles financial analysis tasks with streaming progress updates and push notifications.",
+  "version": "2.0.0",
+  "protocolVersion": "1.0",
+  "provider": {
+    "organization": "Example Org",
+    "url": "https://example.org"
+  },
+  "supportedInterfaces": [
+    { "protocolBinding": "JSONRPC",   "url": "https://example.org/stock-summarizer/rpc", "protocolVersion": "1.0", "tenant": "" },
+    { "protocolBinding": "HTTP_JSON", "url": "https://example.org/stock-summarizer/",    "protocolVersion": "1.0", "tenant": "" }
+  ],
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "extendedAgentCard": false
+  },
+  "skills": [
+    {
+      "id": "financial-analysis",
+      "name": "Financial Analysis",
+      "description": "Analyzes public company financial performance."
+    }
+  ],
+  "defaultInputModes":  ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json", "text/plain"]
+}
+----
+
+The card is the single source of truth for tenants. To add a tenant, add another entry with the same `(protocolBinding, url)` and a distinct `tenant` value. No DSL rewrite or redeploy is needed for the transport wiring.
+
+== Complete Mule App Example
+
+A full example combining a multi-transport server, an initial-task customizer, a unified task listener, push-notification config handling, and a client *A2A Client - List Tasks* call:
+
+[source,xml,linenums, subs=attributes+]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule
+    xmlns:a2a="http://www.mulesoft.org/schema/mule/a2a"
+    xmlns:http="http://www.mulesoft.org/schema/mule/http"
+    xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/a2a http://www.mulesoft.org/schema/mule/a2a/current/mule-a2a.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+    <http:listener-config name="HTTP_Listener_config" basePath="/v1">
+        <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+    </http:listener-config>
+
+    <a2a:server-config name="A2A_Server">
+        <a2a:connection listenerConfig="HTTP_Listener_config" agentPath="/stock-summarizer">
+            <a2a:interfaces>
+                <a2a:interface protocol="JSONRPC"   path="/rpc"/>
+                <a2a:interface protocol="HTTP_JSON" path="/"/>
+            </a2a:interfaces>
+        </a2a:connection>
+        <a2a:agent-card>
+            <a2a:json><![CDATA[{
+  "name": "Stock Summarizer Agent",
+  "version": "2.0.0",
+  "protocolVersion": "1.0",
+  "description": "Summarizes stock-related questions; supports streaming and push notifications.",
+  "supportedInterfaces": [
+    { "protocolBinding": "JSONRPC",   "url": "http://localhost:8082/v1/stock-summarizer/rpc", "protocolVersion": "1.0", "tenant": "" },
+    { "protocolBinding": "HTTP_JSON", "url": "http://localhost:8082/v1/stock-summarizer/",    "protocolVersion": "1.0", "tenant": "" }
+  ],
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "extendedAgentCard": false
+  },
+  "skills": [
+    {
+      "id": "stock-summary",
+      "name": "Stock Earnings Summary",
+      "description": "Summarizes stock earnings and financial highlights.",
+      "inputModes":  ["application/json", "text/plain"],
+      "outputModes": ["application/json", "text/plain"]
+    }
+  ],
+  "provider": { "organization": "MuleSoft", "url": "https://www.mulesoft.com" },
+  "defaultInputModes":  ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json", "text/plain"]
+}]]></a2a:json>
+        </a2a:agent-card>
+    </a2a:server-config>
+
+    <a2a:client-config name="A2A_Client">
+        <a2a:jsonrpc-client-connection agentUrl="http://localhost:8082/v1/stock-summarizer"/>
+    </a2a:client-config>
+
+    <http:request-config name="OpenAI_config" basePath="/v1">
+        <http:request-connection host="api.openai.com" port="443" protocol="HTTPS"/>
+    </http:request-config>
+
+    <!-- Optional: customize the initial Task response for streaming and non-blocking sends. -->
+    <flow name="initialTaskFlow">
+        <a2a:on-async-request-listener config-ref="A2A_Server"/>
+        <ee:transform>
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  task: {
+    id: attributes.taskId,
+    contextId: attributes.contextId,
+    status: { state: "TASK_STATE_SUBMITTED" }
+  }
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+
+    <!-- Unified task-listener: serves blocking, non-blocking, and streaming SendMessage. -->
+    <flow name="a2aServerFlow">
+        <a2a:task-listener config-ref="A2A_Server"/>
+
+        <ee:transform doc:name="OpenAI Request">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  model: "gpt-4.1",
+  messages: [ { role: "user", content: payload.message.parts[0].text } ]
+}]]></ee:set-payload>
+            </ee:message>
+            <ee:variables>
+                <ee:set-variable variableName="taskId">#[attributes.taskId]</ee:set-variable>
+                <ee:set-variable variableName="contextId">#[attributes.contextId]</ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+
+        <http:request method="POST" config-ref="OpenAI_config" path="/chat/completions" responseTimeout="20000">
+            <http:headers><![CDATA[#[%dw 2.0
+output application/java
+---
+{ Authorization: "Bearer " ++ p("secure::openai.token") }]]]></http:headers>
+        </http:request>
+
+        <ee:transform doc:name="A2A Task Response">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  id: vars.taskId,
+  contextId: vars.contextId,
+  status: {
+    state: "TASK_STATE_COMPLETED",
+    message: {
+      role: "ROLE_AGENT",
+      messageId: uuid(),
+      parts: [{ text: payload.choices[0].message.content }]
+    }
+  },
+  artifacts: [
+    {
+      artifactId: uuid(),
+      name: "answer",
+      parts: [{ text: payload.choices[0].message.content }]
+    }
+  ]
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+    </flow>
+
+    <!-- Push-notification config authoring (unchanged listener; 1.0.0 TaskPushNotificationConfig shape on payload). -->
+    <flow name="pushNotificationConfigFlow">
+        <a2a:push-notification-config-listener config-ref="A2A_Server"/>
+        <logger level="INFO" message="Push notification config: #[payload]"/>
+    </flow>
+
+    <flow name="pushNotificationCallbackFlow">
+        <http:listener config-ref="HTTP_Listener_config" path="/update/notification"/>
+        <logger level="INFO" message="Push notification callback received: #[payload]"/>
+    </flow>
+
+    <!-- Example client caller: submit a task then iterate the server's task list. -->
+    <flow name="a2aClientFlow">
+        <http:listener config-ref="HTTP_Listener_config" path="/stock/summarize"/>
+        <a2a:send-message config-ref="A2A_Client">
+            <a2a:message><![CDATA[#[%dw 2.0
+output application/json
+---
+{
+  message: {
+    role: "ROLE_USER",
+    messageId: uuid(),
+    parts: [{ text: "Summarize the stock earnings for " ++ attributes.queryParams.stock ++ " in Q4 2024" }]
+  },
+  configuration: {
+    pushNotificationConfig: {
+      url: "http://localhost:8082/v1/update/notification"
+    }
+  }
+}]]></a2a:message>
+        </a2a:send-message>
+    </flow>
+
+    <flow name="listAllTasksFlow">
+        <http:listener config-ref="HTTP_Listener_config" path="/admin/tasks"/>
+        <foreach batchSize="1">
+            <a2a:list-tasks config-ref="A2A_Client">
+                <a2a:list-tasks-params><![CDATA[{ "pageSize": 50 }]]></a2a:list-tasks-params>
+            </a2a:list-tasks>
+            <logger level="INFO" message="Task page: #[payload]"/>
+        </foreach>
+    </flow>
+
+</mule>
+----
+
+== See Also
+
+* xref:a2a-connector-troubleshooting.adoc[A2A Connector Troubleshooting]
+* xref:a2a-connector-reference.adoc[A2A Connector Reference]
+* xref:mulesoft-inference-connector::index.adoc[MuleSoft Inference Connector Documentation]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.salesforce.com[Salesforce Help]
