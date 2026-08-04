@@ -1,4 +1,5 @@
-= IBM MQ Connector 1.9
+= IBM MQ Connector 2.0
+:page-aliases: connectors::ibm/ibm-mq-connector.adoc
 
 Anypoint Connector for IBM MQ (IBM MQ Connector) enables an app to do messaging to a IBM MQ Broker
 using the IBM MQ JMS implementation.  The main features include:
@@ -11,8 +12,20 @@ using the IBM MQ JMS implementation.  The main features include:
 Release Notes: xref:release-notes::connector/connector-ibm-mq.adoc[IBM MQ Connector Release Notes] +
 Exchange: https://www.mulesoft.com/exchange/com.mulesoft.connectors/mule-ibm-mq-connector/[IBM MQ Connector]
 
+== Before You Begin
 
+IBM MQ Connector 2.0 uses the Jakarta Messaging (`jakarta.jms`) namespace instead of `javax.jms`, and it replaces the `enableXa` attribute with a separate XA connection element. If you are upgrading from version 1.x, see xref:ibm-mq-connector-upgrade-migrate.adoc[Upgrading and Migrating IBM MQ Connector].
 
+== Connection Types
+
+IBM MQ Connector provides two connection types. In Studio, select the connection type in the *Connection* field of the global element configuration:
+
+* *IBM MQ Connection* (`<ibm-mq:ibm-mq-connection>`) +
+Use this connection type for local transactions and non-transactional messaging.
+* *IBM MQ XA Connection* (`<ibm-mq:ibm-mq-xa-connection>`) +
+Use this connection type to create or join XA transactions that span multiple resources. See xref:ibm-mq-transactions.adoc[Handling Transactions in IBM MQ].
+
+Both connection types accept the same connection parameters. The *IBM MQ XA Connection* type adds the *Min Pool Size*, *Max Pool Size*, and *Max Idle Seconds* XA connection pool parameters. For a full list of parameters for each connection type, see xref:ibm-mq-xml-ref.adoc#config_connection[IBM MQ Connection] and xref:ibm-mq-xml-ref.adoc#config_xa_connection[IBM MQ XA Connection].
 
 == Connection Mode
 
@@ -40,7 +53,11 @@ For this connection mode are available the following configurations:
 |Connection Name List |FALSE | |Hosts to which the client attempts to reconnect after its connection is broken. +
 The connection name list is a comma separated list of host and IP port pairs. +
 *Example:* `0.0.0.0(1414),somehost.domain.com(1415)`
+|Client Reconnect Options |FALSE |RECONNECT |Controls the reconnection behavior for the IBM MQ client. Applies when *Connection Name List* or a CCDT is configured.
+|Client Reconnect Timeout |FALSE |20 |The maximum time, in seconds, that the client spends attempting to reconnect. Applies when *Connection Name List* is configured with multiple hosts.
 |===
+
+For descriptions of all client connection mode parameters, see xref:ibm-mq-xml-ref.adoc#client[Client].
 
 .Client Connection Configuration on Studio
 image::ibm-mq-client-connection-mode.png[Client Connection]
@@ -49,11 +66,11 @@ image::ibm-mq-client-connection-mode.png[Client Connection]
 [source,xml,linenums]
 ----
 <ibm-mq:config name="IBM_MQ_Config">
- <ibm-mq:connection >
+ <ibm-mq:ibm-mq-connection >
    <ibm-mq:connection-mode >
 	 	<ibm-mq:client host="0.0.0.0" port="1414" queueManager="QM1" channel="DEV.ADMIN.SVRCONN" />
 		</ibm-mq:connection-mode>
-	</ibm-mq:connection>
+	</ibm-mq:ibm-mq-connection>
 </ibm-mq:config>
 ----
 
@@ -67,17 +84,17 @@ connect to. If the IBM MQ broker has a default Queue Manager, this configuration
 is not required.
 
 .Binding Connection Configuration on Studio
-image::ibm-mq-binding-connection-mode.png[Client Connection]
+image::ibm-mq-binding-connection-mode.png[Binding Connection]
 
 .Binding Connection Configuration on XML
 [source,xml,linenums]
 ----
 <ibm-mq:config name="IBM_MQ_Config">
-  <ibm-mq:connection >
+  <ibm-mq:ibm-mq-connection >
     <ibm-mq:connection-mode >
       <ibm-mq:binding queueManager="QM1" />
     </ibm-mq:connection-mode>
-  </ibm-mq:connection>
+  </ibm-mq:ibm-mq-connection>
 </ibm-mq:config>
 ----
 
@@ -94,7 +111,7 @@ in any of the operations that are associated to this config, and also a default.
 [source,xml,linenums]
 ----
 <ibm-mq:config name="IBM_MQ_Config">
-  <ibm-mq:connection/>
+  <ibm-mq:ibm-mq-connection/>
   <ibm-mq:consumer-config selector="JMSType = `INVOICE`"/>
   <ibm-mq:producer-config timeToLive="60000"/>
 </ibm-mq:config>
@@ -129,7 +146,7 @@ To establish an authenticated connection, you need to configure the username and
 [source,xml,linenums]
 ----
 <ibm-mq:config name="IBM_MQ_Config">
-	<ibm-mq:connection username="<username>" password="<password>" >
+	<ibm-mq:ibm-mq-connection username="<username>" password="<password>" >
 		<ibm-mq:connection-mode >
 			<ibm-mq:client
 			host="0.0.0.0"
@@ -137,7 +154,7 @@ To establish an authenticated connection, you need to configure the username and
 			queueManager="QM1"
 			channel="DEV.ADMIN.SVRCONN" />
 		</ibm-mq:connection-mode>
-	</ibm-mq:connection>
+	</ibm-mq:ibm-mq-connection>
 </ibm-mq:config>
 ----
 
@@ -155,13 +172,15 @@ Customizing the cache configuration can be done directly in the connection decla
 [source,xml,linenums]
 ----
 <ibm-mq:config name="IBM_MQ_Config">
-  <ibm-mq:connection>
+  <ibm-mq:ibm-mq-connection>
     <ibm-mq:caching-strategy>
       <ibm-mq:default-caching sessionCacheSize="100" consumersCache="false" producersCache="true"/>
     </ibm-mq:caching-strategy>
-  </ibm-mq:connection>
+  </ibm-mq:ibm-mq-connection>
 </ibm-mq:config>
 ----
+
+In Studio, configure these values in the *Caching strategy* field of the connection. For parameter descriptions, see xref:ibm-mq-xml-ref.adoc#default-caching[Default Caching].
 
 == Identify the Connection Client
 
@@ -172,7 +191,7 @@ for identifying an unshared durable subscription.
 [source,xml,linenums]
 ----
 <ibm-mq:config name="IBM_MQ_Config">
-  <ibm-mq:connection clientId="${env.clientId}"/>
+  <ibm-mq:ibm-mq-connection clientId="${env.clientId}"/>
 </ibm-mq:config>
 ----
 
@@ -184,24 +203,35 @@ WARNING: By definition, the client state identified by a `clientId` can be "in u
 
 === IBM MQ External Libraries
 
-To use the IBM MQ Connector, configure the external IBM MQ library,
-The IBM MQ Client library must provide the `com.ibm.mq.jms.MQConnectionFactory` implementation.
+To use IBM MQ Connector, configure the external IBM MQ library. The library must provide the `com.ibm.mq.MQException` class, which both the Jakarta Messaging and the legacy `javax.jms` IBM MQ client libraries ship.
 
-TIP: Use the IBM MQ Allclient library.
+TIP: Use the IBM MQ Jakarta client library.
 
-For example, you can use:
+Version 2.0 uses the Jakarta Messaging (`jakarta.jms`) namespace, so the recommended library is `com.ibm.mq.jakarta.client`:
 
 [source,xml,linenums]
 ----
 <dependency>
     <groupId>com.ibm.mq</groupId>
-    <artifactId>com.ibm.mq.allclient</artifactId>
-    <version>9.0.5.0</version>
+    <artifactId>com.ibm.mq.jakarta.client</artifactId>
+    <version>9.4.5.1</version>
 </dependency>
 ----
 
+[[javax-client-library]]
+=== Support for the Legacy javax.jms Client Library
+
+If your application ships the legacy `com.ibm.mq.allclient` library instead, the connector detects it at startup and wraps it so that it exposes a `jakarta.jms` connection factory. This support is provided only for backward compatibility, and it has these limitations:
+
+* The connector logs a warning at startup and a message on the first successful connection test that recommends switching to the Jakarta client library.
+* Connection failure messages are suffixed with `[shim:javax-fallback]`.
+* Code that casts directly to IBM MQ-specific subclasses doesn't work through the wrapper.
+
+To get full support, use the `com.ibm.mq.jakarta.client` library.
 
 == See Also
+
+* xref:ibm-mq-connector-upgrade-migrate.adoc[Upgrading and Migrating IBM MQ Connector]
 
 * xref:ibm-mq-consume.adoc[Consume Messages]
 * xref:ibm-mq-publish.adoc[Publish Messages]
