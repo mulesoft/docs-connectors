@@ -29,6 +29,18 @@ Shows how to query the Salesforce Data 360 data lake across data model, lake, un
 Shows how to use the Query v2 API to make a query against the Data 360 data lake.
 ** <<Query v2 - Get Next Batch>> +
 Shows how to use the Query v2 Get Next Batch API to get the next batch of results.
+** <<Query v3>> +
+Shows how to submit a SQL query in asynchronous or adaptive mode and obtain a query ID for polling.
+** <<Query v3 - Get Status>> +
+Shows how to poll the execution status of a submitted query.
+** <<Query v3 - Get Rows>> +
+Shows how to page through query results with an offset and limit.
+** <<Query v3 - Get Chunk>> +
+Shows how to retrieve a result chunk, which is the preferred way to read large result sets.
+** <<Query v3 - Get Metadata>> +
+Shows how to retrieve the result schema without fetching rows.
+** <<Query v3 - Cancel>> +
+Shows how to cancel a running query.
 * Calculated Insights API Flows include: +
 ** <<Insights - List Metadata API>> +
 Shows how to retrieve the metadata, including the dimensions and measures for all calculated insights.
@@ -1032,7 +1044,7 @@ http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mu
 
 === Steps for Running This Example
 
-. Verify that your connector is configured.
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
 . Save the project.
 . Test the flow by sending a `GET` to
 `localhost:8081/insight/metadata`.
@@ -1088,7 +1100,7 @@ http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mu
 
 === Steps for Running This Example
 
-. Verify that your connector is configured.
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
 . Save the project.
 . Test the flow by sending a `GET` to
 `localhost:8081/insight/metadata/{CALCULATED_INSIGHT_NAME}`.
@@ -1484,6 +1496,426 @@ http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mu
 . Test the flow by sending a `GET` to
 `localhost:8081/profile/{DATA_MODEL_NAME}/{Id}/calculated-insights/{CALCULATED_INSIGHT_NAME}`.
 
+
+== Query v3
+
+This Mule flow submits a SQL query against the Data 360 data lake. Submit the query in `ASYNC` mode to receive a query ID that the other Query v3 flows use, or in `ADAPTIVE` mode to receive rows in the same response when the query finishes quickly. For more information, refer to the https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/data-cloud-query-api-reference/[Data 360 Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP POST requests with the query in the payload.
+* *Logger* +
+Shows the SQL received from the *Listener*, then shows the query status returned by the *Query v3* operation.
+* *Query v3* +
+** Authenticates based on your choice of OAuth Client Credentials, OAuth JWT, or OAuth Username and Password.
+** Receives the request body as the query, which sets `sql` and can optionally set `transferMode`.
+** Calls the Salesforce API and returns the result schema, rows when the query completes within the adaptive timeout, and the query status in the response header.
+
+image::query-v3-flow.png["Salesforce Data Cloud Connector Query v3 flow with Listener, Logger, Query v3, and Response Logger"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config"><http:listener-connection host="0.0.0.0" port="8081"/></http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties"/>
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config"><sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/></sdc:sdc-config>
+    <flow name="Query_V3">
+        <http:listener doc:name="POST /queryv3" config-ref="HTTP_Listener_config" path="/queryv3" allowedMethods="POST" outputMimeType="application/json"/>
+        <logger level="INFO" doc:name="Request Logger" message='#["Received query: " ++ (payload.sql default "") as String]'/>
+        <sdc:query-v3 doc:name="Query v3" config-ref="Salesforce_Data_Cloud_config"/>
+        <logger level="INFO" doc:name="Response Logger" message='#["Query status header: " ++ (attributes.headers["x-hyperdb-status"] default "{}")]'/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
+. Save the project.
+. Send a `POST` request to `localhost:8081/queryv3`:
++
+[source,bash]
+----
+curl --location 'http://localhost:8081/queryv3' --header 'Content-Type: application/json' --data '{"sql":"SELECT ssot__id__c, ssot__name__c FROM ssot__account__dlm ORDER BY ssot__id__c LIMIT 3"}'
+----
+. This request returns the result schema and rows, for example:
++
+[source,json]
+----
+{
+  "metadata": {
+    "columns": [
+      { "type": "varchar", "nullable": false, "name": "ssot__id__c" },
+      { "type": "varchar", "nullable": true, "name": "ssot__name__c" }
+    ]
+  },
+  "data": [
+    ["0015b000029TJB8AAO", "Updated Account 1"],
+    ["0015b00002DySwvAAF", "Create Composite Test Account adadad662000000"],
+    ["0015b00002LLLTFAA5", "AccountTest"]
+  ],
+  "returnedRows": 3
+}
+----
+. To retrieve a query ID for polling, use asynchronous mode:
++
+[source,bash]
+----
+curl --location 'http://localhost:8081/queryv3' --header 'Content-Type: application/json' --data '{"sql":"SELECT ssot__id__c, ssot__name__c, ssot__createddate__c FROM ssot__account__dlm ORDER BY ssot__id__c LIMIT 2500","transferMode":"ASYNC"}'
+----
+
+In `ASYNC` mode, the response body carries only the schema and `returnedRows` is `0`, because no rows are streamed back:
+
+[source,json]
+----
+{
+  "metadata": {
+    "columns": [
+      { "type": "varchar", "nullable": false, "name": "ssot__id__c" },
+      { "type": "varchar", "nullable": true, "name": "ssot__name__c" },
+      { "type": "timestamptz", "nullable": true, "name": "ssot__createddate__c" }
+    ]
+  },
+  "returnedRows": 0
+}
+----
+
+The response logger writes the status header, including the `queryId` used by the other Query v3 examples, for example:
+
+[source,json]
+----
+{
+  "queryId": "MTAuNzguNjEuMTM1Ojc0ODQ_0731d532-152c-beba-bd44-6d0dd407b4da",
+  "completionStatus": "RUNNING",
+  "chunkCount": 0,
+  "rowCount": 0,
+  "progress": 0.0
+}
+----
+
+== Query v3 - Get Status
+
+This Mule flow polls the execution status of a query submitted by <<Query v3>>. Poll until `completionStatus` is `RESULTS_PRODUCED` or `FINISHED`, then retrieve the results with <<Query v3 - Get Rows>> or <<Query v3 - Get Chunk>>. For more information, refer to the https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/data-cloud-query-api-reference/[Data 360 Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the query ID as a URI parameter.
+* *Logger* +
+Shows the query ID received from the *Listener*, then shows the returned status.
+* *Query v3 - Get Status* +
+** Authenticates based on your choice of OAuth Client Credentials, OAuth JWT, or OAuth Username and Password.
+** Receives the query ID and a wait time of 10000 milliseconds.
+** Calls the Salesforce API and returns the completion status, row count, chunk count, progress, and execution statistics.
+
+image::query-v3-get-status.png["Salesforce Data Cloud Connector Query v3 Get Status flow with Listener, Logger, Query v3 Get Status, and Response Logger"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config"><http:listener-connection host="0.0.0.0" port="8081"/></http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties"/>
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config"><sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/></sdc:sdc-config>
+    <flow name="Query_V3_Get_Status">
+        <http:listener doc:name="GET /queryv3/{queryId}" config-ref="HTTP_Listener_config" path="/queryv3/{queryId}" allowedMethods="GET" outputMimeType="application/json"/>
+        <logger level="INFO" doc:name="Request Logger" message='#["Query ID received: " ++ attributes.uriParams.queryId]'/>
+        <sdc:get-query-status-v3 doc:name="Query v3 - Get Status" config-ref="Salesforce_Data_Cloud_config" queryIdUriParam="#[attributes.uriParams.queryId]" waitTimeMs="10000"/>
+        <logger level="INFO" doc:name="Response Logger" message="#[payload]"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
+. Save the project.
+. Submit a query with <<Query v3>> and copy its query ID.
+. Send a `GET` request to `localhost:8081/queryv3/{QUERY_ID}`. The operation long-polls for up to 10 seconds and returns the completion status, row count, chunk count, progress, and execution statistics:
++
+[source,bash]
+----
+curl --location 'http://localhost:8081/queryv3/MTAuNzguNjEuMTM1Ojc0ODQ_0731d532-152c-beba-bd44-6d0dd407b4da'
+----
++
+[source,json]
+----
+{
+  "queryId": "MTAuNzguNjEuMTM1Ojc0ODQ_0731d532-152c-beba-bd44-6d0dd407b4da",
+  "completionStatus": "FINISHED",
+  "chunkCount": 1,
+  "rowCount": 2500,
+  "progress": 1.0,
+  "expirationTime": "2026-08-18T06:15:05Z",
+  "executionStats": { "wallClockTime": 0.125647841, "rowsProcessed": 41577 }
+}
+----
+
+== Query v3 - Get Rows
+
+This Mule flow pages through the results of a completed query with an offset and limit. Use this flow after <<Query v3>>. For large result sets, use <<Query v3 - Get Chunk>> instead. For more information, refer to the https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/data-cloud-query-api-reference/[Data 360 Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the query ID as a URI parameter and offset and limit as query parameters.
+* *Logger* +
+Shows the query ID received from the *Listener*, then shows the returned rows.
+* *Query v3 - Get Rows* +
+** Authenticates based on your choice of OAuth Client Credentials, OAuth JWT, or OAuth Username and Password.
+** Receives the query ID, offset, and limit. The example defaults offset to `0` and limit to `10`.
+** Calls the Salesforce API and returns the page of rows and schema.
+
+image::query-v3-get-rows.png["Salesforce Data Cloud Connector Query v3 Get Rows flow with Listener, Logger, Query v3 Get Rows, and Response Logger"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config"><http:listener-connection host="0.0.0.0" port="8081"/></http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties"/>
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config"><sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/></sdc:sdc-config>
+    <flow name="Query_V3_Get_Rows">
+        <http:listener doc:name="GET /queryv3/{queryId}/rows" config-ref="HTTP_Listener_config" path="/queryv3/{queryId}/rows" allowedMethods="GET" outputMimeType="application/json"/>
+        <logger level="INFO" doc:name="Request Logger" message='#["Fetching rows for query: " ++ attributes.uriParams.queryId]'/>
+        <sdc:get-query-rows-v3 doc:name="Query v3 - Get Rows" config-ref="Salesforce_Data_Cloud_config" queryIdUriParam="#[attributes.uriParams.queryId]" offset="#[(attributes.queryParams.offset default '0') as Number]" limit="#[(attributes.queryParams.limit default '10') as Number]"/>
+        <logger level="INFO" doc:name="Response Logger" message="#[payload]"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
+. Save the project.
+. Submit a query with <<Query v3>> and copy its query ID.
+. Send a `GET` request to `localhost:8081/queryv3/{QUERY_ID}/rows?offset=0&limit=3`:
++
+[source,bash]
+----
+curl --location \
+'http://localhost:8081/queryv3/MTAuNzguNjEuMTM1Ojc0ODQ_0731d532-152c-beba-bd44-6d0dd407b4da/rows?offset=0&limit=3'
+----
+. To retrieve the next page, increase `offset` by the number of rows already read, up to the `rowCount` returned by <<Query v3 - Get Status>>.
++
+The response includes the schema, rows, and `returnedRows`, for example:
+
+[source,json]
+----
+{
+  "metadata": {
+    "columns": [
+      { "name": "ssot__id__c", "type": "varchar", "nullable": false },
+      { "name": "ssot__name__c", "type": "varchar", "nullable": true },
+      { "name": "ssot__createddate__c", "type": "timestamptz", "nullable": true }
+    ]
+  },
+  "data": [["0015b000029TJB8AAO", "Updated Account 1", "2022-12-12T18:13:31+00:00"],
+    ["0015b00002DySwvAAF", "Create Composite Test Account adadad662000000", "2023-05-12T01:11:55+00:00"],
+    ["0015b00002LLLTFAA5", "AccountTest", "2023-11-15T11:34:47+00:00"]
+  ],
+
+  "returnedRows": 3
+}
+----
+
+== Query v3 - Get Chunk
+
+This Mule flow retrieves a chunk of a completed query result. Reading by chunk is the preferred way to consume a large result set because the service determines the chunk boundaries and streams each chunk. Chunk IDs are zero-indexed. For more information, refer to the https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/data-cloud-query-api-reference/[Data 360 Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the query ID and chunk ID as URI parameters.
+* *Logger* +
+Shows the query ID and chunk ID received from the *Listener*, then shows the returned chunk.
+* *Query v3 - Get Chunk* +
+** Authenticates based on your choice of OAuth Client Credentials, OAuth JWT, or OAuth Username and Password.
+** Receives the query ID and zero-indexed chunk ID.
+** Calls the Salesforce API and returns the chunk rows and schema.
+
+image::query-v3-get-chunk.png["Salesforce Data Cloud Connector Query v3 Get Chunk flow with Listener, Logger, Query v3 Get Chunk, and Response Logger"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config"><http:listener-connection host="0.0.0.0" port="8081"/></http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties"/>
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config"><sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/></sdc:sdc-config>
+    <flow name="Query_V3_Get_Chunk">
+        <http:listener doc:name="GET /queryv3/{queryId}/chunks/{chunkId}" config-ref="HTTP_Listener_config" path="/queryv3/{queryId}/chunks/{chunkId}" allowedMethods="GET" outputMimeType="application/json"/>
+        <logger level="INFO" doc:name="Request Logger" message='#["Fetching chunk " ++ attributes.uriParams.chunkId ++ " of query " ++ attributes.uriParams.queryId]'/>
+        <sdc:get-query-chunk-v3 doc:name="Query v3 - Get Chunk" config-ref="Salesforce_Data_Cloud_config" queryIdUriParam="#[attributes.uriParams.queryId]" chunkIdUriParam="#[attributes.uriParams.chunkId as Number]"/>
+        <logger level="INFO" doc:name="Response Logger" message="#[payload]"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
+. Save the project.
+. Submit a query with <<Query v3>> and obtain its `chunkCount` from <<Query v3 - Get Status>>.
+. Send a `GET` request to `localhost:8081/queryv3/{QUERY_ID}/chunks/0`:
++
+[source,bash]
+----
+curl --location 'http://localhost:8081/queryv3/MTAuNzguNjEuMTM1Ojc0ODQ_0731d532-152c-beba-bd44-6d0dd407b4da/chunks/0'
+----
++
+The response includes the schema and all rows in the requested chunk. The `returnedRows` value can be larger than the page size used by <<Query v3 - Get Rows>>, for example:
+
+[source,json]
+----
+{
+  "metadata": {
+    "columns": [
+      { "name": "ssot__id__c", "type": "varchar", "nullable": false },
+      { "name": "ssot__name__c", "type": "varchar", "nullable": true },
+      { "name": "ssot__createddate__c", "type": "timestamptz", "nullable": true }
+    ]
+  },
+  "data": [["0015b000029TJB8AAO", "Updated Account 1", "2022-12-12T18:13:31+00:00"],
+    ["0015b00002DySwvAAF", "Create Composite Test Account adadad662000000", "2023-05-12T01:11:55+00:00"],
+    ["0015b00002LLLTFAA5", "AccountTest", "2023-11-15T11:34:47+00:00"]
+
+  "returnedRows": 2500
+}
+----
+
+== Query v3 - Get Metadata
+
+This Mule flow retrieves a query result schema without fetching rows. Use it to inspect the column names, types, and nullability before reading a large result set. For more information, refer to the https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/data-cloud-query-api-reference/[Data 360 Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP GET requests with the query ID as a URI parameter.
+* *Logger* +
+Shows the query ID received from the *Listener*, then shows the returned schema.
+* *Query v3 - Get Metadata* +
+** Authenticates based on your choice of OAuth Client Credentials, OAuth JWT, or OAuth Username and Password.
+** Receives the query ID.
+** Calls the Salesforce API and returns the column definitions without data rows.
+
+image::query-v3-get-metadata.png["Salesforce Data Cloud Connector Query v3 Get Metadata flow with Listener, Logger, Query v3 Get Metadata, and Response Logger"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config"><http:listener-connection host="0.0.0.0" port="8081"/></http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties"/>
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config"><sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/></sdc:sdc-config>
+    <flow name="Query_V3_Get_Metadata">
+        <http:listener doc:name="GET /queryv3/{queryId}/metadata" config-ref="HTTP_Listener_config" path="/queryv3/{queryId}/metadata" allowedMethods="GET" outputMimeType="application/json"/>
+        <logger level="INFO" doc:name="Request Logger" message='#["Fetching metadata for query: " ++ attributes.uriParams.queryId]'/>
+        <sdc:get-query-metadata-v3 doc:name="Query v3 - Get Metadata" config-ref="Salesforce_Data_Cloud_config" queryIdUriParam="#[attributes.uriParams.queryId]"/>
+        <logger level="INFO" doc:name="Response Logger" message="#[payload]"/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
+. Save the project.
+. Submit a query with <<Query v3>> and copy its query ID.
+. Send a `GET` request to `localhost:8081/queryv3/{QUERY_ID}/metadata`:
++
+[source,bash]
+----
+curl --location 'http://localhost:8081/queryv3/MTAuNzguNjEuMTM1Ojc0ODQ_0731d532-152c-beba-bd44-6d0dd407b4da/metadata'
+----
++
+The response contains the result schema, for example:
+
+[source,json]
+----
+{
+  "metadata": {
+    "columns": [
+      { "name": "ssot__id__c", "type": "varchar", "nullable": false },
+      { "name": "ssot__name__c", "type": "varchar", "nullable": true },
+      { "name": "ssot__createddate__c", "type": "timestamptz", "nullable": true }
+    ]
+  }
+}
+----
+
+== Query v3 - Cancel
+
+This Mule flow cancels a query and frees the server resources it holds. Cancel a query when its results are no longer needed, for example, if the requesting client has timed out. For more information, refer to the https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/data-cloud-query-api-reference/[Data 360 Reference Guide].
+
+This example uses the following operations:
+
+* *HTTP Listener* +
+Accepts HTTP DELETE requests with the query ID as a URI parameter.
+* *Logger* +
+Shows the query ID received from the *Listener*, then shows the HTTP status returned by the cancel operation.
+* *Query v3 - Cancel* +
+** Authenticates based on your choice of OAuth Client Credentials, OAuth JWT, or OAuth Username and Password.
+** Receives the query ID.
+** Calls the Salesforce API to cancel the query. A successful call returns `204 No Content` with an empty body.
+
+image::query-v3-cancel.png["Salesforce Data Cloud Connector Query v3 Cancel flow with Listener, Logger, Query v3 Cancel, and Response Logger"]
+
+=== XML for This Example
+
+Paste this code into the Studio XML editor to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:sdc="http://www.mulesoft.org/schema/mule/sdc" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/sdc http://www.mulesoft.org/schema/mule/sdc/current/mule-sdc.xsd">
+    <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config"><http:listener-connection host="0.0.0.0" port="8081"/></http:listener-config>
+    <configuration-properties doc:name="Configuration properties" file="mule-app.properties"/>
+    <sdc:sdc-config name="Salesforce_Data_Cloud_config" doc:name="Salesforce Data Cloud config"><sdc:oauth-jwt-connection consumerKey="${server.consumerKey}" keyStorePath="${server.keyStorePath}" storePassword="${server.keyStorePassword}" subject="${server.userName}" keyAlias="${server.certificateAlias}" audienceUrl="${server.audienceUrl}"/></sdc:sdc-config>
+    <flow name="Query_V3_Cancel">
+        <http:listener doc:name="DELETE /queryv3/{queryId}" config-ref="HTTP_Listener_config" path="/queryv3/{queryId}" allowedMethods="DELETE"/>
+        <logger level="INFO" doc:name="Request Logger" message='#["Cancelling query: " ++ attributes.uriParams.queryId]'/>
+        <sdc:cancel-query-v3 doc:name="Query v3 - Cancel" config-ref="Salesforce_Data_Cloud_config" queryIdUriParam="#[attributes.uriParams.queryId]"/>
+        <logger level="INFO" doc:name="Response Logger" message='#["Cancel returned HTTP " ++ attributes.statusCode]'/>
+    </flow>
+</mule>
+----
+
+=== Steps for Running This Example
+
+. https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-connect-an-ingestion-source.html[Verify that your connector is configured.]
+. Save the project.
+. Submit a query with <<Query v3>> and copy its query ID.
+. Send a `DELETE` request to `localhost:8081/queryv3/{QUERY_ID}`:
++
+[source,bash]
+----
+curl --location --request DELETE 'http://localhost:8081/queryv3/MTAuNzguNjEuMTM1Ojc0ODQ_7a6ce284-300e-3694-394a-55867c82422a'
+----
++
+A successful cancel returns `204 No Content` with an empty response body. The response logger writes `Cancel returned HTTP 204`.
 
 == Data Action Webhook
 
