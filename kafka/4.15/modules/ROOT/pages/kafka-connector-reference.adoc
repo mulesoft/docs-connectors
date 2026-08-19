@@ -86,7 +86,7 @@ Use AWS Identity and Access Management (IAM) authentication to connect to an Ama
 | Endpoint identification algorithm | String | Endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means the endpoint identification algorithm is disabled. | |
 | Group ID a| String | Default group ID for all Kafka consumers that use this configuration. | |
 | Consumer Amount a| Number | Number of consumers that the connection initially creates. | `1` |
-| Maximum polling interval a| Number | Maximum delay between invocations of `poll()` when using consumer group management. | `60` |
+| Maximum polling interval a| Number | Maximum delay between invocations of `poll()` when using consumer group management. This places an upper bound on the time that a consumer can be idle before fetching more records. If `poll()` isn't called before this timeout expires, the consumer is considered failed and the group rebalances to reassign the partitions to another member. For consumers using a non-null `group.instance.id` that reach this timeout, partitions aren't immediately reassigned. Instead, the consumer stops sending heartbeats and partitions are reassigned after `session.timeout.ms` expires. | `60` |
 | Maximum Polling Interval Time Unit a| Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` | Time unit for the *Maximum polling interval* field. You can override this parameter at the source level. | `SECONDS` |
 | Isolation Level a| Enumeration, one of:
 
@@ -104,36 +104,52 @@ Use AWS Identity and Access Management (IAM) authentication to connect to an Ama
 Non-transactional messages are returned unconditionally in either mode. Messages are returned in offset order. In `READ_COMMITTED` mode, `consumer.poll()` returns messages only up to the last stable offset (LSO), which is one less than the offset of the first open transaction.
 
 Messages after those belonging to ongoing transactions are withheld until the relevant transaction completes. As a result, `READ_COMMITTED` consumers can't read to the high watermark when transactions are in flight. In `READ_COMMITTED` mode, the `seekToEnd` method returns the LSO. | `READ_UNCOMMITTED` |
-| Exclude internal topics a| Boolean | Determines whether internal topics matching a subscribed pattern are excluded from the subscription. | `true` |
-| Auto offset reset a| Enumeration, one of: `EARLIEST`, `LATEST`, `ERROR` | Determines what to do when there is no initial offset in Kafka or if the current offset no longer exists on the server. | `LATEST` |
-| Retry Backoff Timeout a| Number | Amount of time to wait before attempting to retry a failed request to a given topic partition. | `100` |
+| Exclude internal topics a| Boolean | Determines whether internal topics matching a subscribed pattern are excluded from the subscription. It is always possible to explicitly subscribe to an internal topic. | `true` |
+| Auto offset reset a| Enumeration, one of:
+
+** EARLIEST
+** LATEST
+** ERROR a| Determines what to do when there is no initial offset in Kafka or if the current offset no longer exists on the server, for example, because the data was deleted.
+
+* EARLIEST
++
+Automatically reset the offset to the earliest offset.
+
+* LATEST
++
+Automatically reset the offset to the latest offset.
+
+* ERROR
++
+Throw an error if no previous offset is found for the consumer's group. | `LATEST` |
+| Retry Backoff Timeout a| Number | Amount of time to wait before attempting to retry a failed request to a given topic partition. This avoids repeatedly sending requests in a tight loop under some failure scenarios. | `100` |
 | Retry Backoff Timeout Time Unit a| Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` | Time unit for the *Retry Backoff Timeout* field. | `MILLISECONDS` |
-| Check CRC a| Boolean | Automatically check the CRC32 of the records consumed. | `true` |
-| Default receive buffer size a| Number | Size of the TCP receive buffer (SO_RCVBUF) to use when reading data. | `64` |
+| Check CRC a| Boolean | Automatically check the CRC32 of the records consumed. This ensures that no on-the-wire or on-disk corruption to the messages occurred. This check adds some overhead, so in situations that require extremely high performance, this can be disabled. | `true` |
+| Default receive buffer size a| Number | Size of the TCP receive buffer (SO_RCVBUF) to use when reading data. If the value is `-1`, the OS default is used. You can override this parameter at the source level. | `64` |
 | Default receive buffer size unit a| Enumeration, one of: `BYTE`, `KB`, `MB`, `GB` | Unit of measure for the *Default receive buffer size* field. | `KB` |
-| Default send buffer size a| Number | Size of the TCP send buffer (SO_SNDBUF) to use when sending data. | `128` |
+| Default send buffer size a| Number | Size of the TCP send buffer (SO_SNDBUF) to use when sending data. If the value is `-1`, the OS default is used. You can override this parameter at the source level. | `128` |
 | Default send buffer size unit a| Enumeration, one of: `BYTE`, `KB`, `MB`, `GB` | Unit of measure for the *Default send buffer size* field. | `KB` |
-| Request Timeout a| Number | Maximum amount of time the client waits for the response of a request. | `30` |
+| Request Timeout a| Number | Maximum amount of time the client waits for the response of a request. If the response isn't received before the timeout elapses, the client resends the request if necessary, or fails the request if the retries are exhausted. You can override this parameter at the source level. | `30` |
 | Request Timeout Time Unit a| Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` | Time unit for the *Request Timeout* field. | `SECONDS` |
-| Default record limit a| Number | Maximum number of records returned on a poll call to the Kafka cluster. | `500` |
-| DNS Lookups a| Enumeration, one of: `DEFAULT`, `USE_ALL_DNS_IPS`, `RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY` | Controls how the client uses DNS lookups. | `USE_ALL_DNS_IPS` |
-| Heartbeat interval a| Number | Expected time between heartbeats to the consumer coordinator. | `3` |
+| Default record limit a| Number | Maximum number of records returned on a poll call to the Kafka cluster. You can override this parameter at the source level. | `500` |
+| DNS Lookups a| Enumeration, one of: `DEFAULT`, `USE_ALL_DNS_IPS`, `RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY` | Controls how the client uses DNS lookups. If set to `USE_ALL_DNS_IPS`, when the lookup returns multiple IP addresses for a hostname, a connection is attempted to all of the IP addresses before the connection fails. This applies to both bootstrap and advertised servers. If the value is `RESOLVE_CANONICAL_BOOTSTRAP_SERVERS_ONLY`, each entry is resolved and expanded into a list of canonical names. | `USE_ALL_DNS_IPS` |
+| Heartbeat interval a| Number | Expected time between heartbeats to the consumer coordinator when using Kafka's group management facilities. Heartbeats ensure that the consumer's session stays active and facilitate rebalancing when consumers join or leave the group. The value must be lower than `session.timeout.ms`, but typically should be no higher than 1/3 of that value. You can adjust it lower to control the expected time for normal rebalances. | `3` |
 | Heartbeat Interval Time Unit a| Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` | Time unit for the *Heartbeat interval* field. | `SECONDS` |
-| Session timeout a| Number | Timeout used to detect consumer failures when using Kafka group management. | `10` |
+| Session timeout a| Number | Timeout used to detect consumer failures when using Kafka's group management facility. The consumer sends periodic heartbeats to indicate that it is active to the broker. If no heartbeats are received before the session timeout expires, the broker removes the consumer from the group and initiates a rebalance. The value must be in the allowable range configured by `group.min.session.timeout.ms` and `group.max.session.timeout.ms`. | `10` |
 | Session timeout time unit a| Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` | Time unit for the *Session timeout* field. | `SECONDS` |
-| Connection maximum idle time a| Number | Close idle connections after the specified time. | `540` |
+| Connection maximum idle time a| Number | Close idle connections after the specified number of milliseconds. | `540` |
 | Connection maximum idle time time unit a| Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` | Time unit for the *Connection maximum idle time* field. | `SECONDS` |
 | Additional Properties a| Object | Additional properties used to customize the Kafka connection. | |
 | TLS Configuration a| <<Tls>> | Defines a TLS configuration used to secure communication for the Mule app. | |
-| Topic Subscription Patterns a| Array of String | List of subscription regular expressions to which to subscribe. | |
-| Assignments a| Array of <<TopicPartition>> | List of topic-partition pairs to assign. Consumers are not automatically rebalanced. | |
-| Default fetch minimum size a| Number | Minimum amount of data the server returns for a fetch request. | `1` |
+| Topic Subscription Patterns a| Array of String | List of subscription regular expressions to which to subscribe. Topics are automatically rebalanced between the topic consumers. | |
+| Assignments a| Array of <<TopicPartition>> | List of topic-partition pairs to assign. Consumers aren't automatically rebalanced. | |
+| Default fetch minimum size a| Number | Minimum amount of data the server returns for a fetch request. If insufficient data is available, the request waits for the specified minimum amount of data to accumulate before answering the request. The default setting of `1` byte means that fetch requests are answered as soon as a single byte of data is available or the fetch request times out waiting for data to arrive. If you set this to a value greater than `1`, the server waits for larger amounts of data to accumulate, which can improve server throughput slightly at the cost of some additional latency. You can override this parameter at the source level. | `1` |
 | Fetch Minimum Size Unit a| Enumeration, one of: `BYTE`, `KB`, `MB`, `GB` | Unit of measure for the *Default fetch minimum size* field. | `BYTE` |
-| Default fetch maximum size a| Number | Maximum amount of data the server returns for a fetch request. | `1` |
+| Default fetch maximum size a| Number | Maximum amount of data the server returns for a fetch request. Records are fetched in batches by the consumer. If the first record batch in the first non-empty partition of the fetch is larger than this value, the record batch is still returned to ensure that the consumer can make progress. As such, this isn't an absolute maximum. The maximum record batch size accepted by the broker is defined using `message.max.bytes` (broker configuration) or `max.message.bytes` (topic configuration). The consumer performs multiple fetches in parallel. You can override this parameter at the source level. | `1` |
 | Default maximum fetch size unit a| Enumeration, one of: `BYTE`, `KB`, `MB`, `GB` | Unit of measure for the *Default fetch maximum size* field. | `MB` |
-| Default maximum partition fetch size a| Number | Maximum amount of data per partition that the server returns. | `1` |
+| Default maximum partition fetch size a| Number | Maximum amount of data per partition that the server returns. The consumer fetches records in batches. If the first record batch in the first non-empty partition of the fetch is larger than this limit, the batch is still returned to ensure that the consumer can make progress. The maximum record batch size accepted by the broker is defined using `message.max.bytes` (broker configuration) or `max.message.bytes` (topic configuration). See `fetch.max.bytes` for limiting the consumer request size. You can override this parameter at the source level. | `1` |
 | Default maximum partition fetch unit a| Enumeration, one of: `BYTE`, `KB`, `MB`, `GB` | Unit of measure for the *Default maximum partition fetch size* field. | `MB` |
-| Fetch Maximum Wait Timeout a| Number | Maximum amount of time the server blocks before answering a fetch request. | `500` |
+| Fetch Maximum Wait Timeout a| Number | Maximum amount of time the server blocks before answering the fetch request if there isn't sufficient data to immediately satisfy the requirement specified by `fetch.min.bytes`. | `500` |
 | Fetch Maximum Wait Timeout Unit a| Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` | Time unit for the *Fetch Maximum Wait Timeout* field. | `MILLISECONDS` |
 | Access Key ID a| String | AWS access key ID of the principal that can assume the IAM role. Leave this field empty to use the default credentials provider chain. | |
 | Secret Access Key a| String | AWS secret access key of the principal that can assume the IAM role. Leave this field empty to use the default credentials provider chain. | |
