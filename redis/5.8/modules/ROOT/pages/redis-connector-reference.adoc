@@ -28,6 +28,9 @@ Starting with Redis Connector 5.4.5, Mule apps that use an Object Store *Entry T
 [NOTE]
 Starting with Redis Connector 5.7, in addition to password-based authentication, the connector supports ACL-based authentication for Redis 6 and later. Set the *Username* field in the connection configuration to authenticate using the `AUTH <username> <password>` form. When the *Username* field is empty, the connector falls back to the legacy `AUTH <password>` path, which remains fully backward compatible.
 
+[NOTE]
+Starting with Redis Connector 5.8, the *Clustered*, *NonClustered*, and *Sentinel* connection types include optional *Socket Timeout* and *Socket Time Unit* fields. Leave *Socket Timeout* unset to preserve the legacy behavior where *Connection Timeout* also served as the read timeout.
+
 [[redis_clustered]]
 === Clustered
 
@@ -37,6 +40,9 @@ Redis Connector does not support clustered connections on Redis Enterprise Activ
 
 Redis Connector does not support clustered sharded connections.
 ====
+
+[NOTE]
+Starting with Redis Connector 5.8, pooling settings such as *Max Total* and *Max Wait Millis* on the *Clustered* connection are applied to the cluster client. In Redis Connector 5.4.6 through 5.7.0, those values were ignored and the client used Jedis defaults.
 
 ==== Parameters
 [%header%autowidth.spread]
@@ -77,6 +83,16 @@ Redis Connector does not support clustered sharded connections.
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for Redis instance connection timeout. |  MILLISECONDS |
+| Socket Timeout a| Number | Socket (read) timeout applied to Redis command responses. This bounds how long a single blocking command waits for the server to reply, independently of the TCP connect timeout. Leave unset to preserve the legacy behavior where the connection timeout also served as the read timeout. Existing configurations that leave this field empty keep the previous behavior. |  |
+| Socket Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the socket (read) timeout. This field applies only when *Socket Timeout* is set. |  MILLISECONDS |
 | Username a| String |  Redis ACL username. Set this to authenticate against an ACL-enabled Redis (Redis 6+) using the `AUTH <username> <password>` form. When left empty, the connector falls back to the legacy `AUTH <password>` path (the default user), which remains fully backward compatible. |  |
 | Password a| String |  Redis password. Set if the Redis server requires authentication. |  |
 | Entry TTL a| Number |  The default time to live to set on keys stored for the connector. |  |
@@ -126,10 +142,20 @@ Redis Connector does not support clustered sharded connections.
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for Redis instance connection timeout. |  MILLISECONDS |
+| Socket Timeout a| Number | Socket (read) timeout applied to Redis command responses. This bounds how long a single blocking command waits for the server to reply, independently of the TCP connect timeout. Leave unset to preserve the legacy behavior where the connection timeout also served as the read timeout. Existing configurations that leave this field empty keep the previous behavior. |  |
+| Socket Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the socket (read) timeout. This field applies only when *Socket Timeout* is set. |  MILLISECONDS |
 | Username a| String |  Redis ACL username. Set this to authenticate against an ACL-enabled Redis (Redis 6+) using the `AUTH <username> <password>` form. When left empty, the connector falls back to the legacy `AUTH <password>` path (the default user), which remains fully backward compatible. |  |
 | Password a| String |  Redis password. Set this if the server requires authentication. |  |
 | Entry TTL a| Number |  The default time to live to be set on keys stored for the connector. |  |
-| Host a| String |  Redis host. Use this field when you want to access you Redis server that is not part of a cluster through connector. |  localhost |
+| Host a| String |  Redis host. Use this field when you want to access you Redis server that is not part of a cluster through connector. |  \localhost |
 | Port a| Number |  Redis port. The port on which your non cluster server is running. |  6379 |
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn’t pass after exhausting the associated reconnection strategy. |  |
 |===
@@ -178,6 +204,16 @@ Sentinel provides a high-availability solution in case of failure on your Redis 
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for Redis instance connection timeout. |  MILLISECONDS |
+| Socket Timeout a| Number | Socket (read) timeout applied to Redis command responses. This bounds how long a single blocking command waits for the server to reply, independently of the TCP connect timeout. Leave unset to preserve the legacy behavior where the connection timeout also served as the read timeout. Existing configurations that leave this field empty keep the previous behavior. |  |
+| Socket Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the socket (read) timeout. This field applies only when *Socket Timeout* is set. |  MILLISECONDS |
 | Username a| String |  Redis ACL username. Set this to authenticate against an ACL-enabled Redis (Redis 6+) using the `AUTH <username> <password>` form. When left empty, the connector falls back to the legacy `AUTH <password>` path (the default user), which remains fully backward compatible. |  |
 | Password a| String |  Redis password. Set this if the server requires authentication. |  |
 | Entry TTL a| Number |  The default time to live to be set on keys stored for the connector. |  |
@@ -1181,7 +1217,7 @@ Returns the specified range of elements from an existing list.
 === Set
 `<redis:set>`
 
-Set the key to hold the payload. If the key already holds a value, it is overwritten, regardless of its type as long as ifNotExists is `false`.
+Set the key to hold the payload. If *If Not Exists* is `false` and the key already holds a value, the value is overwritten regardless of its type. If *If Not Exists* is `true` and the key already exists, the operation returns null, leaves the existing value unchanged, and does not update the key's TTL. TTL is applied only when the write succeeds.
 
 ==== Parameters
 [%header%autowidth.spread]
@@ -1191,7 +1227,7 @@ Set the key to hold the payload. If the key already holds a value, it is overwri
 | Key a| String |  Key used to store payload |  | x
 | Value a| String |  The value to set. |  `#[payload]` |
 | Expire a| Number |  Set a timeout on the specified key in seconds. After the timeout the key is automatically deleted by the server. A key with an associated timeout is said to be volatile in Redis terminology. |  |
-| If Not Exists a| Boolean |  If `true`, then execute SETNX on the Redis server, otherwise execute SET. |  false |
+| If Not Exists a| Boolean |  If `true`, execute SETNX on the Redis server. If the key already exists, the operation returns null and does not change the existing value or TTL. If `false`, execute SET. |  false |
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
 | Target Variable a| String |  Name of a variable that stores the operation's output |  |
 | Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
