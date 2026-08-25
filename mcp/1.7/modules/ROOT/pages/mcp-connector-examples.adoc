@@ -1,0 +1,493 @@
+= MCP Connector 1.7 - Examples 
+
+These are some examples of how to use existing APIs to build agents using MCP Connector. 
+
+== Create an MCP Server and Tools
+
+These examples show you the process of creating an MCP server within your Mule app and defining two distinct tools that the MCP server exposes: one for retrieving a dynamic list of approved vendors with their product categories, and another for initiating the creation of purchase orders with specified details. 
+
+These examples illustrate the concept of MCP tools as invocable Remote Procedure Calls (RPCs).
+
+=== Create the MCP Server Configuration
+
+This example demonstrates how to configure an MCP server within your Mule application using the Streamable HTTP transport. When acting as an MCP client, MuleSoft facilitates the creation of integrations and orchestrations where AI Agents are integrated as just another system in the workflow.
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:listener-config name="http-listener-config" doc:name="HTTP Listener config" doc:id="b15f1eb5-468e-4170-8f59-62c9965e2a57"> <<1>>
+	<http:listener-connection host="localhost" port="${https.port}" />
+</http:listener-config>
+
+<mcp:server-config name="mcp-server-config" doc:name="MCP Server Config" doc:id="mcp-server-config" serverName="Mule MCP Server" serverVersion="1.0.0"> <<2>>
+	<mcp:streamable-http-server-connection listenerConfig="http-listener-config" />
+</mcp:server-config>
+
+<configuration-properties file="mule-artifact.properties"/>
+
+<flow name="mcp-connectorFlow" doc:id="a8cbbf9b-dfe7-4519-97e3-c832f8815267">
+	<http:listener doc:name="Listener" doc:id="53fb94b1-cbd6-4e5a-9bf7-d33e02284bb7" config-ref="http-listener-config" path="/path"/>
+</flow> <<3>>
+----
+
+[calloutlist]
+.. The HTTP listener configuration defines the endpoint where the MCP server is exposed.
+.. The MCP server configuration uses the Streamable HTTP transport.
+.. Property placeholders are used for configuration values to support different environments.
+
+=== Create a Tool That Provides a List of Vendors
+
+This example illustrates how to create an MCP tool that retrieves a dynamic list of approved vendors from an external system (in this case, SAP Concur). The example demonstrates how to use the `<mcp:tool-listener>` to define a callable tool and how to process the data to provide the agent with relevant vendor information, including their assigned product category from the `Custom19` field.
+
+First, set up the SAP Concur configuration with retry and timeout settings:
+
+[source,xml,linenums, subs=attributes+]
+----
+<sap-concur:config name="SAP_Concur_Config"> <<1>>
+	<sap-concur:oauth-connection clientId="${concur.client.id}" clientSecret="${concur.client.secret}">
+		<oauth:token-manager-config tokenUrl="${concur.token.url}"/>
+	</sap-concur:oauth-connection>
+	<reconnection> <<2>>
+		<reconnect-forever frequency="5000"/>
+	</reconnection>
+	<request-timeout>30</request-timeout> <<3>>
+	<request-timeout-unit>SECONDS</request-timeout-unit>
+</sap-concur:config>
+
+<!-- Cache configuration for vendor data -->
+<ee:cache-config name="Vendor_Cache_Config"> <<4>>
+	<ee:cache-ttl>3600000</ee:cache-ttl>
+	<ee:cache-ttl-unit>MILLISECONDS</ee:cache-ttl-unit>
+</ee:cache-config>
+----
+
+[calloutlist]
+.. The SAP Concur configuration includes OAuth authentication settings.
+.. A reconnection strategy is configured to handle temporary connection issues.
+.. Request timeout is set to 30 seconds to prevent hanging requests.
+.. A cache configuration is added to improve performance with a one hour TTL.
+
+Now, create the main flow that handles vendor retrieval with pagination and caching:
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="getVendorsFlow">
+	<mcp:tool-listener config-ref="MCP_Server" name="get-vendors"> <<1>>
+		<mcp:description>Get all approved vendors with optional pagination</mcp:description>
+		<mcp:parameters-schema><![CDATA[{ <<2>>
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {
+				"pageSize": {
+					"type": "integer",
+					"description": "Number of vendors to return per page",
+					"minimum": 1,
+					"maximum": 100,
+					"default": 50
+				},
+				"pageNumber": {
+					"type": "integer",
+					"description": "Page number to retrieve",
+					"minimum": 1,
+					"default": 1
+				}
+			},
+			"required": []
+		}]]></mcp:parameters-schema>
+		<mcp:responses>
+			<mcp:text-tool-response-content text="#[payload.^raw]" />
+		</mcp:responses>
+		<mcp:on-error-responses>
+			<mcp:text-tool-response-content text="#['Error retrieving vendors: $(error.description)']" />
+		</mcp:on-error-responses>
+	</mcp:tool-listener>
+
+	<ee:cache config-ref="Vendor_Cache_Config" key="#[payload.pageNumber ++ '-' ++ payload.pageSize]"> <<3>>
+		<sap-concur:get-vendors config-ref="SAP_Concur_Config">
+			<sap-concur:query-params><![CDATA[#[output application/java
+			---
+			{
+				limit: payload.pageSize default 50,
+				offset: ((payload.pageNumber default 1) - 1) * (payload.pageSize default 50)
+			}]]></sap-concur:query-params>
+		</sap-concur:get-vendors>
+	</ee:cache>
+	
+	<ee:transform> <<4>>
+		<ee:message>
+			<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	vendors: payload.Vendor filter ($.Approved == "true") map {
+		id: $.ID,
+		name: $.VendorName,
+		country: $.Country,
+		city: $.City,
+		productCategories: $.Custom19
+	},
+	pagination: {
+		totalVendors: sizeOf(payload.Vendor),
+		currentPage: payload.pageNumber default 1,
+		pageSize: payload.pageSize default 50,
+		totalPages: ceil(sizeOf(payload.Vendor) / (payload.pageSize default 50))
+	}
+}]]></ee:set-payload>
+		</ee:message>
+	</ee:transform>
+
+	<error-handler> <<5>>
+		<on-error-continue type="SAP-CONCUR:CONNECTIVITY">
+			<set-payload value="#['Error connecting to SAP Concur: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="SAP-CONCUR:AUTHENTICATION">
+			<set-payload value="#['Authentication error with SAP Concur: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="ANY">
+			<set-payload value="#['Unexpected error: $(error.description)']"/>
+		</on-error-continue>
+	</error-handler>
+</flow>
+----
+
+[calloutlist]
+.. The `<mcp:tool-listener>` defines the interface for the vendor retrieval tool with pagination support.
+.. The `<mcp:parameters-schema>` schema includes validation for page size and page number.
+.. The cache component improves performance by storing results for 1 hour.
+.. The DataWeave transformation filters approved vendors and adds pagination metadata.
+.. Error handling covers connectivity, authentication, and unexpected errors.
+
+=== Create a Tool That Creates Purchase Orders
+
+This example demonstrates the creation of an MCP tool that allows an agent to initiate the creation of a purchase order in SAP Concur. The example highlights how to define input parameters for a tool using a JSON schema, including natural language descriptions for each parameter to help the LLM in understanding and populating the required information.
+
+[source,xml,linenums, subs=attributes+]
+----
+<flow name="createPurchaseOrderFlow">
+	<mcp:tool-listener config-ref="MCP_Server" name="create-concur-purchase-order"> <<1>>
+		<mcp:description>Create a new purchase order in SAP Concur with validation</mcp:description>
+		<mcp:parameters-schema><![CDATA[{ <<2>>
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string",
+					"description": "Name for the purchase order.",
+					"minLength": 1,
+					"maxLength": 100
+				},
+				"description": {
+					"type": "string",
+					"description": "Purchase order description.",
+					"minLength": 1,
+					"maxLength": 500
+				},
+				"vendorCode": {
+					"type": "string",
+					"description": "Code that identifies the vendor.",
+					"pattern": "^[A-Z0-9]{3,10}$"
+				},
+				"itemDescription": {
+					"type": "string",
+					"description": "Description of the item purchased in this order.",
+					"minLength": 1,
+					"maxLength": 200
+				},
+				"price": {
+					"type": "number",
+					"description": "Monetary amount of the purchase order.",
+					"minimum": 0.01,
+					"maximum": 999999.99
+				},
+				"currency": {
+					"type": "string",
+					"description": "Currency code for the purchase order monetary amount.",
+					"pattern": "^[A-Z]{3}$"
+				}
+			},
+			"required": ["name", "description", "vendorCode", "itemDescription", "price", "currency"]
+		}]]></mcp:parameters-schema>
+		<mcp:responses>
+			<mcp:text-tool-response-content text="#['Created Purchase Order: $(payload.PurchaseOrderNumber)']" />
+		</mcp:responses>
+		<mcp:on-error-responses>
+			<mcp:text-tool-response-content text="#['Error creating purchase order: $(error.description)']" />
+		</mcp:on-error-responses>
+	</mcp:tool-listener>
+
+	<!-- Validate vendor exists -->
+	<sap-concur:get-vendors config-ref="SAP_Concur_Config"> <<3>>
+		<sap-concur:query-params><![CDATA[#[output application/java
+		---
+		{
+			vendorCode: payload.vendorCode
+		}]]></sap-concur:query-params>
+	</sap-concur:get-vendors>
+
+	<ee:transform> <<4>>
+		<ee:message>
+			<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+if (isEmpty(payload.Vendor))
+	throw "Vendor not found: " ++ payload.vendorCode
+else
+	payload]]></ee:set-payload>
+		</ee:message>
+	</ee:transform>
+		
+	<sap-concur:create-purchase-order config-ref="SAP_Concur_Config">
+		<sap-concur:create-purchase-order-request-data><![CDATA[#[output application/json
+		---
+		{
+			Name: payload.name,
+			CurrencyCode: payload.currency,
+			Description: payload.description,
+			VendorCode: payload.vendorCode,
+			LineItem: {
+				Description: payload.itemDescription,
+				ApprovedLineItemAmount: payload.price as String,
+				TotalPrice: payload.price as String
+			}
+		}]]></sap-concur:create-purchase-order-request-data>
+	</sap-concur:create-purchase-order>
+
+	<error-handler> <<5>>
+		<on-error-continue type="SAP-CONCUR:CONNECTIVITY">
+			<set-payload value="#['Error connecting to SAP Concur: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="SAP-CONCUR:AUTHENTICATION">
+			<set-payload value="#['Authentication error with SAP Concur: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="SAP-CONCUR:VALIDATION">
+			<set-payload value="#['Validation error: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="ANY">
+			<set-payload value="#['Unexpected error: $(error.description)']"/>
+		</on-error-continue>
+	</error-handler>
+</flow>
+----
+
+[calloutlist]
+.. The tool listener defines the purchase order creation interface with comprehensive input validation.
+.. The parameters schema includes validation rules for all fields, including length limits and patterns.
+.. A vendor existence check is performed before creating the purchase order.
+.. The DataWeave transformation validates the vendor check response.
+.. Error handling covers connectivity, authentication, validation, and unexpected errors.
+
+== Configure the MCP Client to Use Third-Party MCP Servers
+
+The previous examples showed you how to write tools that draw from existing Anypoint Connectors. Now, take a look at how to use third-party MCP servers.
+
+=== Create a Weather Service Using Multiple MCP Servers
+
+This example shows how to integrate your Mule applications with existing third-party MCP servers using Streamable HTTP transport by configuring the MCP Client and using the *Call Tool* operation.
+
+[NOTE]
+====
+When connecting to third-party MCP servers, ensure they support Streamable HTTP transport. If a third-party server only supports SSE transport, you may need to use the SSE client connection or contact the service provider for Streamable HTTP support.
+====
+
+First, set up the client configurations with timeout and retry settings:
+
+[source,xml,linenums, subs=attributes+]
+----
+<http:request-config name="Weather_API_Config" basePath="/v1"> <<1>>
+	<http:request-connection host="api.open-meteo.com" protocol="HTTPS"/>
+	<http:request-timeout>30</http:request-timeout>
+	<http:request-timeout-unit>SECONDS</http:request-timeout-unit>
+	<reconnection>
+		<reconnect-forever frequency="5000"/>
+	</reconnection>
+</http:request-config>
+
+<mcp:client-config name="Google_Maps_Client" clientName="Mule MCP Maps Client" clientVersion="1.0.0"> <<2>>
+	<mcp:streamable-http-client-connection 
+		serverUrl="http://google-maps-mcp-streamable-f5ebe64f8456.herokuapp.com"
+		mcpEndpointPath="/mcp">
+		<mcp:default-request-headers >
+			<mcp:default-request-header key="X-Client-Version" value="1.0.0" />
+		</mcp:default-request-headers>
+	</mcp:streamable-http-client-connection>
+	<reconnection>
+		<reconnect-forever frequency="5000"/>
+	</reconnection>
+</mcp:client-config>
+
+<mcp:server-config name="Weather_MCP_Server" serverName="Weather MCP Server" serverVersion="1.0.0"> <<3>>
+	<mcp:streamable-http-server-connection 
+		listenerConfig="HTTP_Listener_config" 
+		mcpEndpointPath="/weather/mcp">
+		<mcp:default-response-headers>
+			<mcp:default-response-header key="X-API-Version" value="1.0.0"/>
+			<mcp:default-response-header key="X-Service-Type" value="weather"/>
+		</mcp:default-response-headers>
+	</mcp:streamable-http-server-connection>
+</mcp:server-config>
+----
+
+[calloutlist]
+.. The HTTP request configuration includes timeout and retry settings for the weather API.
+.. The Google Maps MCP client configuration uses Streamable HTTP transport with custom headers and reconnection settings.
+.. The Weather MCP server configuration uses Streamable HTTP transport and exposes the weather service endpoints with custom headers.
+
+Now, create the weather service flows with error handling and caching:
+
+[source,xml,linenums, subs=attributes+]
+----
+<!-- Cache configuration for weather data -->
+<ee:cache-config name="Weather_Cache_Config"> <<1>>
+	<ee:cache-ttl>900000</ee:cache-ttl>
+	<ee:cache-ttl-unit>MILLISECONDS</ee:cache-ttl-unit>
+</ee:cache-config>
+
+<flow name="getWeatherByCoordinatesFlow">
+	<mcp:tool-listener config-ref="Weather_MCP_Server" name="get-weather-by-coordinates"> <<2>>
+		<mcp:description>Provides the weather at given coordinates expressed as latitude and longitude</mcp:description>
+		<mcp:parameters-schema><![CDATA[{
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {
+				"latitude": {
+					"type": "number",
+					"description": "The latitude component of a location's coordinates",
+					"minimum": -90,
+					"maximum": 90
+				},
+				"longitude": {
+					"type": "number",
+					"description": "The longitude component of a location's coordinates",
+					"minimum": -180,
+					"maximum": 180
+				}
+			},
+			"required": ["latitude", "longitude"]
+		}]]></mcp:parameters-schema>
+		<mcp:responses>
+			<mcp:text-tool-response-content text="#['Current temperature at location is $(payload.current.temperature_2m)°C']"/>
+		</mcp:responses>
+		<mcp:on-error-responses>
+			<mcp:text-tool-response-content text="#['Error getting weather: $(error.description)']"/>
+		</mcp:on-error-responses>
+	</mcp:tool-listener>
+	
+	<ee:cache config-ref="Weather_Cache_Config" key="#[payload.latitude ++ '-' ++ payload.longitude]">
+		<http:request config-ref="Weather_API_Config" method="GET" path="/forecast">
+			<http:query-params><![CDATA[#[output application/java
+			---
+			{
+				latitude: payload.latitude,
+				longitude: payload.longitude,
+				current: 'temperature_2m'
+			}]]></http:query-params>
+		</http:request>
+	</ee:cache>
+	
+	<error-handler> <<3>>
+		<on-error-continue type="HTTP:CONNECTIVITY">
+			<set-payload value="#['Error connecting to weather service: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="HTTP:TIMEOUT">
+			<set-payload value="#['Weather service request timed out: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="ANY">
+			<set-payload value="#['Unexpected error: $(error.description)']"/>
+		</on-error-continue>
+	</error-handler>
+</flow>
+
+<flow name="getWeatherByAddressFlow">
+	<mcp:tool-listener config-ref="Weather_MCP_Server" name="get-weather-by-address"> <<4>>
+		<mcp:description>Provides the weather at a specific address</mcp:description>
+		<mcp:parameters-schema><![CDATA[{
+			"$schema": "http://json-schema.org/draft-07/schema#",
+			"type": "object",
+			"properties": {
+				"address": {
+					"type": "string",
+					"description": "The address we want to learn the weather for",
+					"minLength": 1,
+					"maxLength": 200
+				}
+			},
+			"required": ["address"]
+		}]]></mcp:parameters-schema>
+		<mcp:responses>
+			<mcp:text-tool-response-content text="#[payload]"/>
+		</mcp:responses>
+		<mcp:on-error-responses>
+			<mcp:text-tool-response-content text="#['Error getting weather for address: $(error.description)']"/>
+		</mcp:on-error-responses>
+	</mcp:tool-listener>
+	
+	<!-- First get coordinates from Google Maps MCP -->
+	<mcp:call-tool config-ref="Google_Maps_Client" toolName="maps_geocode" extractStructuredContent="false">
+		<mcp:arguments><![CDATA[#[output application/java
+		---
+		{
+			address: payload.address
+		}]]></mcp:arguments>
+	</mcp:call-tool>
+	
+	<ee:transform>
+		<ee:message>
+			<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+if (isEmpty(payload.contents))
+	throw "Address not found: " ++ payload.address
+else
+	{
+		latitude: read(payload.contents[0].text!, 'json').location.lat as Number,
+		longitude: read(payload.contents[0].text!, 'json').location.lng as Number
+	}]]></ee:set-payload>
+		</ee:message>
+	</ee:transform>
+	
+	<!-- Then get weather using our coordinates tool -->
+	<mcp:call-tool config-ref="Weather_MCP_Server" toolName="get-weather-by-coordinates">
+		<mcp:arguments><![CDATA[#[output application/java
+		---
+		{
+			latitude: payload.latitude,
+			longitude: payload.longitude
+		}]]></mcp:arguments>
+	</mcp:call-tool>
+	
+	<error-handler> <<5>>
+		<on-error-continue type="MCP:CONNECTIVITY">
+			<set-payload value="#['Error connecting to Google Maps service: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="MCP:REQUEST_TIMEOUT">
+			<set-payload value="#['Google Maps service request timed out: $(error.description)']"/>
+		</on-error-continue>
+		<on-error-continue type="ANY">
+			<set-payload value="#['Unexpected error: $(error.description)']"/>
+		</on-error-continue>
+	</error-handler>
+</flow>
+----
+
+[calloutlist]
+.. The cache configuration stores weather data for 15 minutes to reduce API calls.
+.. The coordinates-based weather flow includes input validation and caching.
+.. The address-based weather flow demonstrates tool composition by:
+   ** First converting the address to coordinates using Google Maps
+   ** Then using those coordinates to get the weather
+.. Both flows include comprehensive error handling for different scenarios.
+.. The DataWeave transformation validates the Google Maps response before proceeding.
+
+While LLMs can orchestrate these tools directly, there are cases where manual 
+composition in Mule is preferable:
+
+* When you need guaranteed access to all MCP servers
+* When authentication needs to be handled securely
+* When you need strong governance and tracing capabilities
+
+== See Also
+
+* xref:mcp-connector-config-topics.adoc[Applying Security to the MCP Server]
+* xref:mcp-connector-reference.adoc[MCP Connector Reference]
+* https://blogs.mulesoft.com/news/model-context-protocol/[MuleSoft MCP Support: Get Started With Model Context Protocol]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.mulesoft.com[MuleSoft Help Center]
