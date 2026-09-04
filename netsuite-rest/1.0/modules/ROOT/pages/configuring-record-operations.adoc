@@ -1,0 +1,388 @@
+= Configuring Record Operations
+
+Configure the operations that act on a single NetSuite record: *Create Record*, *Get Record*, *Update Record*, *Delete Record*, *Upsert Record*, *Create Form*, *Edit Form*, *Initialize Record (Transform)*, *Attach Record*, and *Detach Record*.
+
+Each of these operations targets a NetSuite record type (for example, `customer`, `salesOrder`, or `invoice`) and can raise the standard `MS-NETSUITE-REST:*` errors. For the full parameter, output, and error details, see xref:netsuite-rest-connector-reference.adoc[NetSuite REST Connector Reference].
+
+== Configure the Create Record Operation
+
+The *Create Record* operation creates a new record of the specified type in NetSuite by sending `POST /record/v1/{recordType}`. To help avoid duplicate records, consider *Upsert Record* with an external ID instead.
+
+To configure the *Create Record* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type to create (for example, `customer`, `salesOrder`, or `invoice`).
+
+* *Record Body*
++
+JSON body containing the field values for the new record. Defaults to `#[payload]`.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:create-record
+    config-ref="Config"
+    doc:name="Create Record"
+    recordType="customer">
+    <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+</ms-netsuite-rest:create-record>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. On success, NetSuite returns `204 No Content` with the new record's URL in the `Location` response header, available on `attributes.headers.Location`.
+
+== Configure the Get Record Operation
+
+The *Get Record* operation retrieves a record by internal ID or external ID by sending `GET /record/v1/{recordType}/{id}` or `GET /record/v1/{recordType}/eid:{externalId}`. Provide exactly one of *Internal ID* or *External ID*.
+
+To configure the *Get Record* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type to retrieve.
+
+* *Internal ID*
++
+The internal ID of the record to retrieve.
+
+* *External ID*
++
+The external ID of the record to retrieve, as an alternative to *Internal ID*.
+
+* *Expand Sub-Resources*
++
+If true, inline sublists and sub-records (for example, `addressBook` and `contacts`) via `?expandSubResources=true`. If false (default), they are returned as links.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:get-record
+    config-ref="Config"
+    doc:name="Get Record"
+    recordType="customer"
+    id="1234"
+    expandSubResources="true"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload containing the record as JSON, with `NetSuiteRestAttributes`.
+
+== Configure the Update Record Operation
+
+The *Update Record* operation applies a partial update to an existing record by sending `PATCH /record/v1/{recordType}/{id}`. Merge-patch semantics apply: only the fields in the request body are updated, and omitted fields are left unchanged.
+
+To configure the *Update Record* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type to update.
+
+* *Internal ID*
++
+The internal ID of the record to update.
+
+* *Record Body*
++
+JSON body of the record fields to update. Set a field to `null` to clear it. Defaults to `#[payload]`.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:update-record
+    config-ref="Config"
+    doc:name="Update Record"
+    recordType="customer"
+    id="1234">
+    <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+</ms-netsuite-rest:update-record>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. Check `attributes.statusCode` to confirm the update.
+
+== Configure the Delete Record Operation
+
+The *Delete Record* operation deletes a record by its internal ID by sending `DELETE /record/v1/{recordType}/{id}`.
+
+To configure the *Delete Record* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type to delete.
+
+* *Internal ID*
++
+The internal ID of the record to delete.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:delete-record
+    config-ref="Config"
+    doc:name="Delete Record"
+    recordType="customer"
+    id="#[attributes.queryParams.id]"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. On success, NetSuite returns `204 No Content`. If the record doesn't exist, the connector raises `MS-NETSUITE-REST:NOT_FOUND`.
+
+== Configure the Upsert Record Operation
+
+The *Upsert Record* operation creates or updates a record by its external ID by sending `PUT /record/v1/{recordType}/eid:{externalId}`. If a record with that external ID exists, it is updated. Otherwise a new record is created. Because an external ID is required, upsert is supported only for record types that have an external ID field.
+
+To configure the *Upsert Record* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type to upsert.
+
+* *External ID*
++
+The external ID of the record. Creates the record if it isn't found, and updates it if it exists.
+
+* *Record Body*
++
+JSON body containing field values. Must include all mandatory fields for creation. Defaults to `#[payload]`.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:upsert-record
+    config-ref="Config"
+    doc:name="Upsert Record"
+    recordType="customer"
+    externalId="CUST-EXT-001">
+    <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+</ms-netsuite-rest:upsert-record>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`.
+
+== Configure the Create Form Operation
+
+The *Create Form* operation retrieves a prefilled create form for a new record of the specified type, with NetSuite defaults applied, by sending `POST /record/v1/{recordType}` with `Accept: application/vnd.oracle.resource+json; type=create-form`. The form isn't submitted. Use the returned data as a template for a subsequent *Create Record* call.
+
+To configure the *Create Form* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type (for example, `customer`, `salesOrder`, or `invoice`).
+
+* *Record Body*
++
+Optional JSON body with seed field values (for example, `{"entity":{"id":107}}`) to trigger server-side defaulting. When omitted or null, an empty JSON object is sent, representing a blank new-record context.
+
+* *Expand Sub-Resources*, *Expand*, and *Fields*
++
+Optionally inline sublists and sub-records, expand specific sublists or subrecords, or limit the response to a comma-separated list of field names.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:create-form
+    config-ref="Config"
+    doc:name="Create Form"
+    recordType="salesOrder">
+    <ms-netsuite-rest:body>#[{"entity": {"id": 107}}]</ms-netsuite-rest:body>
+</ms-netsuite-rest:create-form>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload containing the prefilled form as JSON, with `NetSuiteRestAttributes`.
+
+== Configure the Edit Form Operation
+
+The *Edit Form* operation retrieves a recalculated edit form for an existing record with proposed changes applied, by sending `PATCH /record/v1/{recordType}/{id}` with `Accept: application/vnd.oracle.resource+json; type=edit-form`. The record isn't modified. Use this operation to preview server-side calculations such as tax, totals, and dependent fields before you commit an update.
+
+To configure the *Edit Form* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type.
+
+* *Internal ID*
++
+The internal ID of the record to preview changes on.
+
+* *Record Body*
++
+JSON body of the record changes used to preview the update without committing it. Defaults to `#[payload]`.
+
+* *Expand Sub-Resources*, *Expand*, and *Fields*
++
+Optionally inline sublists and sub-records, expand specific sublists or subrecords, or limit the response to a comma-separated list of field names.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:edit-form
+    config-ref="Config"
+    doc:name="Edit Form"
+    recordType="salesOrder"
+    id="1234">
+    <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+</ms-netsuite-rest:edit-form>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload containing the recalculated form as JSON, with `NetSuiteRestAttributes`.
+
+== Configure the Initialize Record (Transform) Operation
+
+The *Initialize Record (Transform)* operation transforms a source record into a target record type and pre-populates fields (for example, `salesOrder` to `invoice`) by sending `POST /record/v1/{sourceType}/{id}/!transform/{targetType}` with `Accept: application/vnd.oracle.resource+json; type=create-form`. It returns a prefilled form that isn't submitted. You can modify the form before you submit it with *Create Record*.
+
+To configure the *Initialize Record (Transform)* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Source Record Type*
++
+The source record type (for example, `salesOrder`).
+
+* *Source Internal ID*
++
+The internal ID of the source record.
+
+* *Target Record Type*
++
+The record type to transform into (for example, `invoice`).
+
+* *Override Fields*
++
+Optional JSON body with field overrides to apply on top of the prefilled defaults.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:initialize-record
+    config-ref="Config"
+    doc:name="Initialize Record"
+    sourceType="salesOrder"
+    sourceId="1234"
+    targetType="invoice"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload containing the prefilled target-record form as JSON, with `NetSuiteRestAttributes`.
+
+== Configure the Attach Record Operation
+
+The *Attach Record* operation attaches a contact or file to another record by sending `POST /record/v1/{recordType}/{recordId}/!attach/{attachRecordType}/{attachRecordId}`. When attaching a contact, you can specify the role in the body. For files, omit the body or send an empty JSON object. Both record IDs support the external ID format `eid:EXTERNAL_ID`.
+
+To configure the *Attach Record* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type* and *Record ID*
++
+The type and internal ID (or `eid:EXTERNAL_ID`) of the record to attach to (for example, `customer` or `opportunity`).
+
+* *Attach Record Type* and *Attach Record ID*
++
+The type and internal ID (or `eid:EXTERNAL_ID`) of the record being attached. Supported values for *Attach Record Type* are `contact` and `file`.
+
+* *Attach Body*
++
+Optional JSON body for a contact role (for example, `{"role":{"id":"-10"}}`). Omit for file attachments.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:attach-record
+    config-ref="Config"
+    doc:name="Attach Record"
+    recordType="customer"
+    recordId="1234"
+    attachRecordType="contact"
+    attachRecordId="5678">
+    <ms-netsuite-rest:body>#[{"role": {"id": "-10"}}]</ms-netsuite-rest:body>
+</ms-netsuite-rest:attach-record>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. On success, NetSuite returns `204 No Content`.
+
+== Configure the Detach Record Operation
+
+The *Detach Record* operation detaches a record (for example, a contact, employee, file, or invoice) from another record by sending `POST /record/v1/{recordType}/{recordId}/!detach/{detachRecordType}/{detachRecordId}`. Both record IDs support the external ID format `eid:EXTERNAL_ID`.
+
+To configure the *Detach Record* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type* and *Record ID*
++
+The type and internal ID (or `eid:EXTERNAL_ID`) of the record to detach from.
+
+* *Detach Record Type* and *Detach Record ID*
++
+The type and internal ID (or `eid:EXTERNAL_ID`) of the record being detached.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:detach-record
+    config-ref="Config"
+    doc:name="Detach Record"
+    recordType="customer"
+    recordId="1234"
+    detachRecordType="contact"
+    detachRecordId="5678"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. On success, NetSuite returns `204 No Content`.
+
+== See Also
+
+* xref:index.adoc[NetSuite REST Connector Overview]
+* xref:configuring-batch-operations.adoc[Configuring Batch and Asynchronous Operations]
+* xref:netsuite-rest-connector-reference.adoc[NetSuite REST Connector Reference]
+* https://help.salesforce.com[Salesforce Help]

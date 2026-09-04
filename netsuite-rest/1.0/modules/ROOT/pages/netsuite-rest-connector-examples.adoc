@@ -1,0 +1,118 @@
+= NetSuite REST Connector 1.0 Examples
+:lc-connector-name: netsuite-rest
+:connector-name: NetSuite REST
+
+These examples are Mule apps that expose NetSuite REST Connector through HTTP endpoints. Use them as a starting point for your own record flows. The two examples work together: the first creates a NetSuite `customer` record and returns its URL, and the second deletes a `customer` record by internal ID.
+
+Both examples share the same connector configuration.
+
+== Shared Configuration
+
+Both examples use OAuth 2.0 client credentials (JWT bearer) to authenticate with NetSuite. Supply all credentials through properties, and provide the private key through a secure property so that it is never committed in plain text.
+
+[source,xml,linenums]
+----
+<configuration-properties file="mule-app.properties"/>
+
+<http:listener-config name="Listener-config">
+    <http:listener-connection host="0.0.0.0" port="8081" protocol="HTTP"/>
+</http:listener-config>
+
+<ms-netsuite-rest:config name="Config">
+    <ms-netsuite-rest:connection
+        accountId="${netsuite.accountId}"
+        clientId="${netsuite.clientId}"
+        certificateId="${netsuite.certificateId}"
+        privateKey="${secure::netsuite.privateKey}"
+        signatureAlgorithm="ES512"/>
+</ms-netsuite-rest:config>
+----
+
+The connection parameters are:
+
+* `accountId`
++
+The NetSuite account ID (for example, the sandbox account `TSTDRV1234567`).
+* `clientId` and `certificateId`
++
+Values from the NetSuite integration record and the mapped certificate.
+* `privateKey`
++
+The PKCS#8 PEM private key that matches the uploaded certificate. Supply it through a secure property, and never commit it.
+* `signatureAlgorithm`
++
+The JWT signing algorithm: `ES512` (default), `ES256`, `ES384`, `PS256`, `PS384`, or `PS512`. It must match the certificate's algorithm.
+
+== Example: Create a Record
+
+This example exposes an HTTP endpoint that creates a NetSuite `customer` record from the JSON request body. On success, NetSuite returns `204 No Content` with the new record's URL in the `Location` response header, and the flow logs the status code and the `Location` value.
+
+This example uses the *Create Record* operation, which sends `POST /record/v1/customer`.
+
+[source,xml,linenums]
+----
+<flow name="create-record-flow">
+    <http:listener config-ref="Listener-config" doc:name="Listener" path="/create"/>
+    <ms-netsuite-rest:create-record config-ref="Config" doc:name="Create Record" recordType="customer">
+        <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+    </ms-netsuite-rest:create-record>
+    <logger level="INFO" doc:name="Logger"
+        message="#['Created customer | statusCode=' ++ (attributes.statusCode as String) ++ ' | Location=' ++ (attributes.headers.Location default 'N/A')]"/>
+</flow>
+----
+
+To test the flow, send a request to the `/create` endpoint:
+
+[source,bash]
+----
+curl -X POST "http://localhost:8081/create" \
+  -H "Content-Type: application/json" \
+  -d '{ "companyName": "Acme Corp", "email": "billing@acme.example", "subsidiary": { "id": "1" } }'
+----
+
+NetSuite returns `204 No Content`, and the new record's URL is on the `Location` header. The logged line looks like this:
+
+[source,text]
+----
+Created customer | statusCode=204 | Location=https://<account>.suitetalk.api.netsuite.com/services/rest/record/v1/customer/1234
+----
+
+== Example: Delete a Record
+
+This example exposes an HTTP endpoint that deletes a NetSuite `customer` record by internal ID, which is supplied as the `id` query parameter. The flow logs the status code. This example is a natural follow-on to the create example: use the ID from the create response's `Location` header.
+
+This example uses the *Delete Record* operation, which sends `DELETE /record/v1/customer/{id}`.
+
+[source,xml,linenums]
+----
+<flow name="delete-record-flow">
+    <http:listener config-ref="Listener-config" doc:name="Listener" path="/delete"/>
+    <ms-netsuite-rest:delete-record config-ref="Config" doc:name="Delete Record"
+        recordType="customer"
+        id="#[attributes.queryParams.id]"/>
+    <logger level="INFO" doc:name="Logger"
+        message="#['Deleted customer | statusCode=' ++ (attributes.statusCode as String)]"/>
+</flow>
+----
+
+To test the flow, send a request to the `/delete` endpoint:
+
+[source,bash]
+----
+curl -X DELETE "http://localhost:8081/delete?id=1234"
+----
+
+NetSuite returns `204 No Content` on success, and the flow logs this line:
+
+[source,text]
+----
+Deleted customer | statusCode=204
+----
+
+If the record doesn't exist, the connector raises `MS-NETSUITE-REST:NOT_FOUND`.
+
+== See Also
+
+* xref:index.adoc[NetSuite REST Connector Overview]
+* xref:netsuite-rest-connector-reference.adoc[NetSuite REST Connector Reference]
+* https://help.salesforce.com[Salesforce Help]
