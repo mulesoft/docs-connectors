@@ -1,13 +1,13 @@
 = PeopleSoft REST Connector 1.0 Reference
 
-PeopleSoft REST Connector provides real-time connectivity to PeopleSoft modules through the Component Interface REST (CIRT) API.
+PeopleSoft REST Connector calls PeopleSoft Component Interface REST Transport (CIRT) endpoints over HTTPS through the Integration Broker REST listener.
 
 == Configurations
 ---
 [[Config]]
 === Config
 
-Configuration for the CIRT REST-over-HTTPS surface of PeopleSoft REST Connector. This configuration supports Basic authentication and OAuth 2.0 client credentials connections.
+Configuration for the CIRT REST-over-HTTPS surface of PeopleSoft REST Connector. Set the Integration Broker REST listener base URI, TLS and HTTP settings, and either Basic authentication or OAuth 2.0 client credentials.
 
 ==== Parameters
 
@@ -36,7 +36,7 @@ Configuration for the CIRT REST-over-HTTPS surface of PeopleSoft REST Connector.
 [[Config_BasicAuthConnection]]
 ===== Basic Auth Connection
 
-Basic authentication connection provider for the PeopleSoft CIRT surface. USER_PROFILE endpoints are served over HTTPS on port 8443, so a TLS context is typically required. Wrong credentials cause the connectivity test to fail.
+Basic authentication connection provider for the PeopleSoft CIRT surface. HTTPS is strongly recommended because CIRT carries credentials and PII. The scheme comes from *Base URI*. Wrong credentials cause the connectivity test to fail.
 
 ====== Parameters
 
@@ -44,8 +44,8 @@ Basic authentication connection provider for the PeopleSoft CIRT surface. USER_P
 |===
 | Name | Type | Description | Default Value | Required
 | Base URI a| String |  Base URI of the CIRT REST endpoint, for example `\https://<host>:8443/PSIGW/RESTListeningConnector/PSFT_HR`. |  | x
-| Connectivity Test Path a| String |  Optional CIRT route that makes Test Connection stricter. If this field is blank, the connector performs a lenient check that requires HTTP 200 only. Set a path to require HTTP 200 with an XML or JSON body, which rejects the PSIGW HTML routing-error page for an unregistered route. |  |
-| Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* operation parameter dropdown. If the list is empty, the connector falls back to the single-path probe. |  |
+| Connectivity Test Path a| String |  Optional CIRT route that makes Test Connection stricter. If this field is blank, the connector performs a lenient check that requires HTTP 200 only. Set a path such as `/CIRT_USER_PROFILE_F_GET.V1` to require HTTP 200 with an XML or JSON body. |  |
+| Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* parameter on xref:#InvokeCirtOperation[Invoke CIRT Operation]. If the list is empty, the connector falls back to the single-path probe. |  |
 | Username a| String |  PeopleSoft user ID used to authenticate CIRT requests. |  | x
 | Password a| String |  Password associated with *Username*. |  | x
 | Max Connections a| Number |  Maximum number of outbound connections the client keeps open. `-1` means unbounded. |  -1 |
@@ -76,7 +76,7 @@ Basic authentication connection provider for the PeopleSoft CIRT surface. USER_P
 [[Config_ClientCredentialsConnection]]
 ===== OAuth 2.0 Client Credentials Connection
 
-OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface. Each PeopleSoft installation is self-hosted, so you must override the token URL, client ID, client secret, and scopes in the configuration. For example, on Microsoft Entra ID, the client credentials grant requires the resource default scope `api://<client-id>/.default`. A delegated scope such as `readwrite` is rejected with an invalid_scope error. Other identity providers use their own scope syntax.
+OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface. Use this connection when the Integration Broker REST listener is fronted by an OAuth-secured gateway. Each PeopleSoft installation is self-hosted, so you must override the token URL, client ID, client secret, and scopes in the configuration. For example, on Microsoft Entra ID, the client credentials grant requires the resource default scope `api://<client-id>/.default`. A delegated scope such as `readwrite` is rejected with an invalid_scope error. Other identity providers use their own scope syntax.
 
 ====== Parameters
 
@@ -84,8 +84,8 @@ OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface
 |===
 | Name | Type | Description | Default Value | Required
 | Base URI a| String |  Base URI of the CIRT REST endpoint, for example `\https://<host>:8443/PSIGW/RESTListeningConnector/PSFT_HR`. |  | x
-| Connectivity Test Path a| String |  Optional CIRT route that makes Test Connection stricter. If this field is blank, the connector performs a lenient check that requires HTTP 200 only. Set a path to require HTTP 200 with an XML or JSON body, which rejects the PSIGW HTML routing-error page for an unregistered route. |  |
-| Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* operation parameter dropdown. If the list is empty, the connector falls back to the single-path probe. |  |
+| Connectivity Test Path a| String |  Optional CIRT route that makes Test Connection stricter. If this field is blank, the connector performs a lenient check that requires HTTP 200 only. Set a path such as `/CIRT_USER_PROFILE_F_GET.V1` to require HTTP 200 with an XML or JSON body. |  |
+| Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* parameter on xref:#InvokeCirtOperation[Invoke CIRT Operation]. If the list is empty, the connector falls back to the single-path probe. |  |
 | Max Connections a| Number |  Maximum number of outbound connections the client keeps open. `-1` means unbounded. |  -1 |
 | Connection Timeout a| Number |  Maximum time to establish the TCP connection to PSIGW. |  30 |
 | Connection Timeout Unit a| Enumeration, one of:
@@ -128,7 +128,7 @@ OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface
 == Invoke CIRT Operation
 `<peoplesoft-rest:invoke-cirt-operation>`
 
-Invokes a Component Interface method pair through the CIRT contract and returns the classified response.
+Invokes a Component Interface method through the CIRT contract and returns the classified JSON response. CREATE and SAVE_NESTED automatically run a follow-up GET after the write so the operation can return the persisted graph. GET, FIND, and SAVE_SCALAR return the response from a single request. The connector buffers the full response. This release is tested with `CI_PERSONAL_DATA`, `CI_POSITION_DATA`, `LOCATION`, and `USER_PROFILE`. The Component Interface must be registered and REST-enabled on the target PeopleSoft instance.
 
 === Parameters
 
@@ -143,10 +143,10 @@ Invokes a Component Interface method pair through the CIRT contract and returns 
 ** GET
 ** FIND
 ** SAVE_SCALAR
-** SAVE_NESTED |  CIRT verb. |  | x
+** SAVE_NESTED |  CIRT verb. SAVE_SCALAR is the scalar update (child rowsets unchanged). SAVE_NESTED is the nested updatedata write (full graph). |  | x
 | Path Keys a| Array of String |  Ordered path-key values. Leave this field empty for CREATE. This field is required for GET, FIND, SAVE_SCALAR, and SAVE_NESTED. |  |
 | Body a| Binary |  JSON body from the caller. This field is ignored for GET and FIND. |  #[payload] |
-| Follow-up GET Key Fields a| Array of String |  Primary-key field names. For SAVE_SCALAR and SAVE_NESTED, these values are also injected into the body and paired with *Path Keys*. If unset, the connector defaults to *Path Keys*. |  |
+| Follow-up GET Key Fields a| Array of String |  Primary-key field names used for the follow-up GET after CREATE or SAVE_NESTED. For SAVE_SCALAR and SAVE_NESTED, these values are also injected into the body and paired with *Path Keys*. If unset, the connector defaults to *Path Keys*. |  |
 | Output Mime Type a| String |  MIME type of the payload that this operation outputs. |  |
 | Output Encoding a| String |  Encoding of the payload that this operation outputs. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
@@ -199,7 +199,7 @@ Invokes a Component Interface method pair through the CIRT contract and returns 
 == Replace User Profile ID Types
 `<peoplesoft-rest:replace-user-profile-id-types>`
 
-Replaces the IDTypes collection on an existing USER_PROFILE. The operation gets the current graph, overwrites its IDTypes array with the sorted caller list, and posts the mutated graph back. The operation returns the classified UD acknowledgment and does not perform a follow-up GET.
+Replaces the IDTypes collection on an existing USER_PROFILE. The operation gets the current graph, overwrites its IDTypes array with the sorted caller list, and posts the mutated graph with Updatedata. The operation returns the classified Updatedata acknowledgment and does not run a follow-up GET after the write.
 
 === Parameters
 
