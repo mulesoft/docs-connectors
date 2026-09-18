@@ -1,8 +1,9 @@
-= Apache Cassandra Connector 4.1 Reference 
+= Apache Cassandra Connector 5.0 Reference 
+:page-aliases: connectors::cassandra/cassandra-connector-reference.adoc
 
 
 
-Anypoint Connector for Cassandra (Cassandra Connector) implements the DataStax Java Driver for Apache Cassandra 3.1.
+Anypoint Connector for Cassandra (Cassandra Connector) implements the DataStax Java Driver for Apache Cassandra 4.17.0.
 
 == Configurations
 ---
@@ -17,6 +18,7 @@ Anypoint Connector for Cassandra (Cassandra Connector) implements the DataStax J
 |Name | String | The name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| <<config_connection, Connection>>
  | Connection authentication types to provide to this configuration. | | x
+| Name a| String |  ID used to reference this configuration. |  | x
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. This does not mean that the platform expires the instance at the exact moment that it becomes eligible. Mule purges the instances as appropriate. |  |
 |===
 
@@ -34,10 +36,10 @@ Anypoint Connector for Cassandra (Cassandra Connector) implements the DataStax J
 | Endpoint identification algorithm a| Enumeration, one of:
 
 ** HTTPS
-** LDAPS |  The endpoint identification algorithm used by clients to validate the server host name. The default value is an empty string, which means that the algorithm is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker host name matches the host name in the broker's certificate. |  HTTPS |
+** LDAPS
+** DISABLED | Algorithm that clients use to validate the server host name against the server certificate. The default is `DISABLED`, which turns hostname validation off and matches version 4.1 behavior, where the setting wasn't enforced. Set `HTTPS` or `LDAPS` to require the certificate Subject Alternative Name or CN to match the host. Enabling validation can reject servers whose certificates don't include a matching host name. |  DISABLED |
 | Port a| String |  Port |  9042 |
 | Cassandra Keyspace a| String |  Cassandra keyspace |   |
-| Cassandra Cluster Name a| String |  Cassandra cluster name |  |
 | Cassandra Cluster Nodes a| String |  Cassandra cluster nodes (IP or host address and port separated by commas, for example, `host1:port1`, `host2:port2`). If the port is not specified, the connector uses the default port, `9042`. When you specify this parameter, the host and port from the general settings are ignored. |  |
 | Username a| String | Username for authentication. |   |
 | Password a| String | Password for authentication. If the password is null or all white spaces, the connector won't use authentication. In this case, the username must also be empty.|  |
@@ -46,15 +48,17 @@ Anypoint Connector for Cassandra (Cassandra Connector) implements the DataStax J
 ** V1
 ** V2
 ** V3
-** V4 |  Version of the native protocol supported by the driver. |  |
+** V4 | Native protocol version that the driver uses. Don't select `V1` or `V2`. Those values fail at application initialization. Leave this field unset to let the driver negotiate, including native protocol V5 on Apache Cassandra 5.x. You can also select `V3` or `V4`. |  |
 | Max Schema Agreement Wait Seconds a| Number |  The maximum time to wait for a schema agreement before returning from a DDL query. |  0 |
+| Request Timeout (ms) a| Number | Per-request timeout for CQL operations, in milliseconds. The default of `12000` preserves the 12-second deadline from version 4.1. Raise this value for high-latency clusters or heavy DDL. Lower it to fail faster. This timeout is distinct from *Max Schema Agreement Wait Seconds*, which only bounds the post-DDL schema-agreement poll. |  12000 |
 | Compression a| Enumeration, one of:
 
 ** LZ4
 ** NONE
 ** SNAPPY|  The compression to use for the transport. |  |
-| Prepared Statements Cache Size a| Number |  Cache size for prepared statements. Set a value with at least the number of different statements that you handle in your Mule application. |  10 | 
-| TLS Configuration a| <<Tls>> |  |  |
+| Prepared Statements Cache Size a| Number |  Cache size for prepared statements. Set a value with at least the number of different statements that you handle in your Mule application. |  10 |
+| Local Datacenter a| String | Local datacenter for the driver's default load-balancing policy. Required when contact points don't share one datacenter, such as in a multi-DC cluster. You can omit this field for single-DC clusters. If your cluster doesn't use a single inferred datacenter, set this field or the connection fails. |  |
+| TLS Configuration a| <<Tls>> | Configures TLS for the Cassandra connection. |  |
 | Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
 |===
 
@@ -93,6 +97,8 @@ Adds a new column
 | Table a| String |  The name of the table to use for the operation |  | x
 | Keyspace Name a| String |  The keyspace that contains the table to use |  |
 | Alter Column Input a| <<AlterColumnInput>> |  POJO defining the name of the new column and its data type |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -147,6 +153,8 @@ Adds a new column
 
 Changes the type of a column. To check compatibility, see https://docs.datastax.com/en/archived/cql/3.1/cql/cql_reference/cql_data_types_c.html[CQL type compatibility].
 
+On Apache Cassandra 5.x, *Change Column Type* fails because Cassandra no longer supports altering column types. Add a new column, backfill the data, then drop the old column.
+
 ==== Parameters
 [%header,cols="20s,20a,35a,20a,5a"]
 |===
@@ -155,6 +163,8 @@ Changes the type of a column. To check compatibility, see https://docs.datastax.
 | Table a| String |  The name of the table to use for the operation |  | x
 | Keyspace Name a| String |  (optional) The keyspace that contains the table to use |  |
 | Alter Column Input a| <<AlterColumnInput>> |  POJO defining the name of the column to change and the new data type |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -215,6 +225,8 @@ Creates a new keyspace
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
 | Input a| <<CreateKeyspaceInput>> |  Operation input containing the keyspace name and the replication details |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -275,6 +287,8 @@ Creates a table (column family) in a specific keyspace. If you don't specify a k
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
 | Create Table Input a| <<CreateTableInput>> |  The *Create Table Input* operation, which specifies the table name, keyspace name, and list of columns. |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -338,6 +352,8 @@ Deletes values from an object specified by the Where clause
 | Keyspace Name a| String | The keyspace that contains the table to use |  |
 | Entities a| Array of String |  The columns to delete |  | x
 | Where Clause a| Object |  |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -400,6 +416,8 @@ Deletes an entire record
 | Table a| String |  The name of the table |  | x
 | Keyspace Name a| String |  The keyspace that contains the table to use |  |
 | Where Clause a| Object |  The Where clause for the *Delete* operation |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -462,6 +480,8 @@ Removes a column
 | Table a| String |  The name of the table to use for the operation |  | x
 | Keyspace Name a| String |  The keyspace that contains the table to use |  |
 | Column Name a| String |  The name of the column to remove |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -522,6 +542,8 @@ Drops the entire keyspace
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
 | Keyspace Name a| String |  The name of the keyspace to drop |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -584,6 +606,8 @@ Drops an entire table form the specified keyspace or from the keyspace used for 
 | Configuration | String | The name of the configuration to use. | | x
 | Table Name a| String |  The name of the table to drop |  #[payload] |
 | Keyspace Name a| String |  The keyspace that contains the table to drop |  |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -644,8 +668,10 @@ Executes the specified raw input query
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
 | Cql Input a| <<CQLQueryInput>> |  CQL query input that describes the parametrized query to execute along with the query parameters |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
 | Target Variable a| String |  Name of the variable in which to store the operation's output|  |
 | Target Value a| String |  Expression that evaluates the operation's output. The expression outcome is stored in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -712,8 +738,11 @@ Returns all table names from the specified keyspace
 | Name | Type | Description | Default Value | Required
 | Configuration | String | The name of the configuration to use. | | x
 | Keyspace Name a| String |  The name of the keyspace to use on the operation |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
 | Target Variable a| String |  Name of the variable in which to store the operation's output|  |
 | Target Value a| String |  Expression that evaluates the operation's output. The expression outcome is stored in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -782,6 +811,8 @@ Executes the Insert Entity operation
 | Table a| String |  The name of the table in which to insert the entity |  | x
 | Keyspace Name a| String |  The keyspace that contains the table to use |  |
 | Entity To Insert a| Object |  The entity to insert |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -845,6 +876,8 @@ Renames a column
 | Keyspace Name a| String | The keyspace that contains the table to use |  |
 | Old Column Name a| String |  The name of the column to change |  #[payload] |
 | New Column Name a| String |  The new name of the column  |  | x
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -906,8 +939,10 @@ Executes a select query
 | Configuration | String | The name of the configuration to use. | | x
 | Query a| String |  The query to execute |  #[payload] |
 | Parameters a| Array of Any |  The query parameters |  |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
 | Target Variable a| String |  Name of the variable in which to store the operation's output|  |
 | Target Value a| String |  Expression that evaluates the operation's output. The expression outcome is stored in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -976,6 +1011,8 @@ Executes the update entity operation
 | Table a| String |  The name of the table in which to update the entity |  | x
 | Keyspace Name a| String |  The keyspace that contains the table to drop|  |
 | Entity To Update a| Object |  The entity to update |  #[payload] |
+| Config Ref a| ConfigurationProvider |  The name of the configuration to use to execute this component |  |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors |  |
 |===
@@ -1033,11 +1070,11 @@ Executes the update entity operation
 | Field | Type | Description | Default Value | Required
 | Enabled Protocols a| String | A comma-separated list of protocols enabled for this context. |  |
 | Enabled Cipher Suites a| String | A comma-separated list of cipher suites enabled for this context. |  |
-| Trust Store a| <<TrustStore>> |  |  |
-| Key Store a| <<KeyStore>> |  |  |
+| Trust Store a| <<TrustStore>> | Configures the TLS truststore. |  |
+| Key Store a| <<KeyStore>> | Configures the TLS keystore. |  |
 | Revocation Check a| * <<standard-revocation-check>>
 * <<custom-ocsp-responder>>
-* <<crl-file>> |  |  |
+* <<crl-file>> | Configures a revocation checking mechanism. |  |
 |===
 
 [[TrustStore]]
@@ -1116,6 +1153,7 @@ Executes the update entity operation
 |===
 | Field | Type | Description | Default Value | Required
 | Frequency a| Number | How often in milliseconds to reconnect |  |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. |  |
 | Count a| Number | How many reconnection attempts to make. |  |
 |===
 
@@ -1126,6 +1164,7 @@ Executes the update entity operation
 |===
 | Field | Type | Description | Default Value | Required
 | Frequency a| Number | How often, in milliseconds, to reconnect |  |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. |  |
 |===
 
 [[ExpirationPolicy]]
@@ -1177,6 +1216,30 @@ Executes the update entity operation
 ** VARINT |  |  |
 |===
 
+[[ErrorMapping]]
+=== Error Mapping
+
+Maps source error types to custom error types for an operation.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Source a| Enumeration, one of:
+
+** ANY
+** REDELIVERY_EXHAUSTED
+** TRANSFORMATION
+** EXPRESSION
+** SECURITY
+** CLIENT_SECURITY
+** SERVER_SECURITY
+** ROUTING
+** CONNECTIVITY
+** RETRY_EXHAUSTED
+** TIMEOUT | Source error type to map. |  |
+| Target a| String | Custom error type to map the source error to. |  | x
+|===
+
 [[CreateKeyspaceInput]]
 === Create Keyspace Input
 
@@ -1189,8 +1252,8 @@ Executes the update entity operation
 | Replication Factor a| Number |  |  |
 | Replication Strategy Class a| Enumeration, one of:
 
-** SimpleStrategy
-** NetworkTopologyStrategy |  |  |
+** SIMPLE_STRATEGY
+** NETWORK_TOPOLOGY_STRATEGY |  |  |
 |===
 
 [[DataCenter]]
