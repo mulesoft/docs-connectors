@@ -1,0 +1,143 @@
+= MuleSoft WebCrawler Connector 1.0 Examples
+:lc-connector-name: mulesoft-webcrawler
+:connector-name: MuleSoft WebCrawler
+
+This example is a Mule app that exposes MuleSoft WebCrawler Connector through two HTTP endpoints. Use it as a starting point for your own crawl flow.
+
+The application uses both connection types and exercises the two most common operations.
+
+[%header%autowidth.spread]
+|===
+| Endpoint | Operation | Notes
+| `GET /api/page` | *Get Page Content* | Single-page fetch. Returns the rendered content in the requested `outputFormat` (`HTML`, `TEXT`, or `MARKDOWN`).
+| `GET /api/sitemap` | *Get SiteMap* | Crawls to the specified `depth`. `restrictToPath=true` keeps the crawl under the base URL's path.
+|===
+
+Each endpoint accepts a `path` query parameter, which is resolved against the connection's base URL, and a `connection` query parameter that selects between the two configurations.
+
+* `connection=http` (default)
++
+Uses `ms-webcrawler:http-connection`. Plain HTTP fetch, fastest, no JavaScript execution.
+* `connection=webdriver`
++
+Uses `ms-webcrawler:remote-webdriver-connection`. Selenium-driven Chromium fetch, use for JavaScript-heavy or SPA pages.
+
+Error handling on `GET /api/page` maps two connector errors to JSON responses.
+
+* `MS-WEBCRAWLER:ROBOTS_DISALLOWED` -> HTTP 403
+* `MS-WEBCRAWLER:PAGE_FETCH_FAILED` -> HTTP 500
+
+== Example Calls
+
+[source,bash]
+----
+# Plain HTTP fetch, return as Markdown
+curl 'http://localhost:8081/api/page?path=/docs&outputFormat=MARKDOWN&connection=http'
+
+# WebDriver fetch (JS rendered), HTML output
+curl 'http://localhost:8081/api/page?path=/docs&outputFormat=HTML&connection=webdriver'
+
+# Two-level sitemap, HTTP path
+curl 'http://localhost:8081/api/sitemap?path=/docs&depth=2&connection=http'
+----
+
+== XML Source
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ms-webcrawler="http://www.mulesoft.org/schema/mule/ms-webcrawler"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ms-webcrawler http://www.mulesoft.org/schema/mule/ms-webcrawler/current/mule-ms-webcrawler.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <!-- HTTP listener that backs both demo endpoints. -->
+  <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+  </http:listener-config>
+
+  <!-- HTTP fetch (no JS); use for static pages. -->
+  <ms-webcrawler:config name="HTTP_Configuration" doc:name="WebCrawler HTTP">
+    <ms-webcrawler:http-connection baseUrl="${webcrawler.baseUrl}" userAgent="${webcrawler.userAgent}"/>
+  </ms-webcrawler:config>
+
+  <!-- WebDriver fetch (Selenium); use for JS-heavy pages. -->
+  <ms-webcrawler:config name="WebDriver_Configuration" doc:name="WebCrawler WebDriver">
+    <ms-webcrawler:remote-webdriver-connection baseUrl="${webcrawler.baseUrl}" userAgent="${webcrawler.userAgent}" remoteUrl="${webcrawler.webDriverUrl}"/>
+  </ms-webcrawler:config>
+
+  <configuration-properties file="config.properties"/>
+
+  <!-- GET /api/page?path=&outputFormat=&connection=http|webdriver  ->  webcrawler:page-content -->
+  <flow name="get-page-content">
+    <http:listener config-ref="HTTP_Listener_config" path="/api/page"/>
+    <choice>
+      <when expression='#[attributes.queryParams.connection == "webdriver"]'>
+        <ms-webcrawler:page-content config-ref="WebDriver_Configuration"
+            path="#[attributes.queryParams.path]"
+            outputFormat="#[attributes.queryParams.outputFormat]"
+            enforceRobotsTxt="true"/>
+      </when>
+      <otherwise>
+        <ms-webcrawler:page-content config-ref="HTTP_Configuration"
+            path="#[attributes.queryParams.path]"
+            outputFormat="#[attributes.queryParams.outputFormat]"
+            enforceRobotsTxt="true"/>
+      </otherwise>
+    </choice>
+    <error-handler>
+      <on-error-propagate type="MS-WEBCRAWLER:ROBOTS_DISALLOWED">
+        <ee:transform>
+          <ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ message: error.description }]]></ee:set-payload></ee:message>
+          <ee:variables><ee:set-variable variableName="httpStatus">403</ee:set-variable></ee:variables>
+        </ee:transform>
+      </on-error-propagate>
+      <on-error-propagate type="MS-WEBCRAWLER:PAGE_FETCH_FAILED">
+        <ee:transform>
+          <ee:message><ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{ message: error.description }]]></ee:set-payload></ee:message>
+          <ee:variables><ee:set-variable variableName="httpStatus">500</ee:set-variable></ee:variables>
+        </ee:transform>
+      </on-error-propagate>
+    </error-handler>
+  </flow>
+
+  <!-- GET /api/sitemap?path=&depth=&connection=http|webdriver  ->  webcrawler:get-sitemap -->
+  <flow name="get-sitemap">
+    <http:listener config-ref="HTTP_Listener_config" path="/api/sitemap"/>
+    <choice>
+      <when expression='#[attributes.queryParams.connection == "webdriver"]'>
+        <ms-webcrawler:get-sitemap config-ref="WebDriver_Configuration"
+            path="#[attributes.queryParams.path]"
+            maxDepth="#[attributes.queryParams.depth]"
+            restrictToPath="true"/>
+      </when>
+      <otherwise>
+        <ms-webcrawler:get-sitemap config-ref="HTTP_Configuration"
+            path="#[attributes.queryParams.path]"
+            maxDepth="#[attributes.queryParams.depth]"
+            restrictToPath="true"/>
+      </otherwise>
+    </choice>
+  </flow>
+
+</mule>
+----
+
+== See Also
+
+* xref:index.adoc[MuleSoft WebCrawler Connector Overview]
+* xref:mulesoft-webcrawler-connector-reference.adoc[MuleSoft WebCrawler Connector Reference]
+* https://help.salesforce.com[Salesforce Help]

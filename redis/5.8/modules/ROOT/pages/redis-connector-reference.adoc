@@ -1,0 +1,1618 @@
+= Redis Connector 5.8 Reference 
+:page-aliases: connectors::redis/redis-connector-reference.adoc
+
+include::reuse::partial$non-inclusive-banner.adoc[]
+
+[NOTE]
+You can set configurations in Expression mode, except when Redis Connector is used in conjunction with Object Store Connector, which does not support Expression mode.
+
+Starting with Redis Connector 5.4.5, Mule apps that use an Object Store *Entry TTL* exceeding 24 days now observe that the TTL for new keys is set to the correct values.
+
+[[redis]]
+== Redis Configuration
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+|Name | String | The name for this configuration. Connectors reference the configuration with this name. | | x
+| Connection a| * <<redis_clustered, Clustered>>
+* <<redis_nonclustered, NonClustered>>
+* <<redis_sentinel, Sentinel>>
+ | The connection types to provide to this configuration. | | x
+| Name a| String |  The ID used to reference this configuration. |  | x
+| Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. This does not mean that the instance expires at the exact moment that it becomes eligible. Mule purges the instances as appropriate. |  |
+|===
+
+== Connection Types
+
+[NOTE]
+Starting with Redis Connector 5.7, in addition to password-based authentication, the connector supports ACL-based authentication for Redis 6 and later. Set the *Username* field in the connection configuration to authenticate using the `AUTH <username> <password>` form. When the *Username* field is empty, the connector falls back to the legacy `AUTH <password>` path, which remains fully backward compatible.
+
+[NOTE]
+Starting with Redis Connector 5.8, the *Clustered*, *NonClustered*, and *Sentinel* connection types include optional *Socket Timeout* and *Socket Time Unit* fields. Leave *Socket Timeout* unset to preserve the legacy behavior where *Connection Timeout* also served as the read timeout.
+
+[[redis_clustered]]
+=== Clustered
+
+[NOTE]
+====
+Redis Connector does not support clustered connections on Redis Enterprise Active-Active databases. To connect to one of the Redis Enterprise active-active clusters, non-clustered connection should be used in the connector. However, the connection is only made to the specified node.
+
+Redis Connector does not support clustered sharded connections.
+====
+
+[NOTE]
+Starting with Redis Connector 5.8, pooling settings such as *Max Total* and *Max Wait Millis* on the *Clustered* connection are applied to the cluster client. In Redis Connector 5.4.6 through 5.7.0, those values were ignored and the client used Jedis defaults.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Endpoint identification algorithm a| Enumeration, one of:
+
+** HTTPS
+** LDAPS
+** DISABLED | The endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means that this functionality is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker hostname matches the hostname in the broker's certificate. |  DISABLED |
+| TLS Configuration a| <<Tls>> |  Configures TLS. If you are running the Mule app securely by using the HTTPS protocol, you must configure TLS in the connector.
+ | |
+| Max Total a| Number | Maximum number of connections that can be in the pool at a given time |  8 |
+| Max Idle a| Number | Maximum number of idle connections allowed in a pool before the connections are closed  |  8 |
+| Min Idle a| Number | Minimum number of idle connections in the pool that are ready for immediate use |  0 |
+| Lifo a| Boolean | If set to `true`, the queue is last-in first-out |  true |
+| Fairness a| Boolean | If set to `true`, the thread that waited for the longest amount of time to connect acquires the next available connection |  false |
+| Max Wait Millis a| Number | Maximum number of milliseconds the client can wait before a connection is available |  -1 |
+| Min Evictable Idle Time Millis a| Number | Minimum amount of time a connection can be idle in the pool before it is evicted |  1800000 |
+| Soft Min Evictable Idle Time Millis a| Number | Minimum amount of time a connection can be idle in pool before it is evicted |  1800000 |
+| Num Tests Per Eviction Run a| Number | Number of connections to test per eviction attempt |  3 |
+| Test On Create a| Boolean | Whether to test the validity of the connection |  false |
+| Test On Borrow a| Boolean | Whether to test the validity of the connection before it is borrowed from the pool  |  false |
+| Test On Return a| Boolean | Whether to test the validity of the connection before it is returned from the pool  |  false |
+| Test While Idle a| Boolean | Whether to enable idle resource detection |  false |
+| Time Between Eviction Runs Millis a| Number | Cycle of time for idle resources detection |  -1 |
+| Block When Exhausted a| Boolean | Whether the client waits when the resource pool is exhausted |  true |
+| Jmx Enabled a| Boolean | Enables JMX monitoring when set to `true` |  true |
+| Jmx Name Prefix a| String |JMX name prefix used as part of the name assigned to the JMX-enabled pool  |  pool |
+| Jmx Name Base a| String | JMX name base used as part of the name assigned to the JMX-enabled pool |  |
+| Connection Timeout a| Number |  Redis instance Connection timeout value. |  2000 |
+| Connection Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for Redis instance connection timeout. |  MILLISECONDS |
+| Socket Timeout a| Number | Socket (read) timeout applied to Redis command responses. This bounds how long a single blocking command waits for the server to reply, independently of the TCP connect timeout. Leave unset to preserve the legacy behavior where *Connection Timeout* also served as the read timeout. Existing configurations that leave this field empty keep the previous behavior. |  |
+| Socket Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the socket (read) timeout. This field applies only when *Socket Timeout* is set. |  MILLISECONDS |
+| Username a| String |  Redis ACL username. Set this to authenticate against an ACL-enabled Redis (Redis 6+) using the `AUTH <username> <password>` form. When left empty, the connector falls back to the legacy `AUTH <password>` path (the default user), which remains fully backward compatible. |  |
+| Password a| String |  Redis password. Set if the Redis server requires authentication. |  |
+| Entry TTL a| Number |  The default time to live to set on keys stored for the connector. |  |
+| Cluster Hosts a| String |  Redis cluster hosts separated by commas and having the format `host:port`. Use this field when you want to access your Redis cluster through the connector. |  | *x*
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn’t pass after exhausting the associated reconnection strategy. |  |
+|===
+
+[[redis_nonclustered]]
+=== NonClustered
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Endpoint identification algorithm a| Enumeration, one of:
+
+** HTTPS
+** LDAPS
+** DISABLED |  The endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means that this functionality is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker hostname matches the hostname in the broker's certificate. |  DISABLED |
+| TLS Configuration a| <<Tls>> |  Configures TLS. If you are running the Mule app securely by using the HTTPS protocol, you must configure TLS in the connector.
+ | |
+| Max Total a| Number | Maximum number of connections that can be in the pool at a given time |  8 |
+| Max Idle a| Number | Maximum number of idle connections allowed in a pool before the connections are closed |  8 |
+| Min Idle a| Number | Minimum number of idle connections in the pool that are ready for immediate use |  0 |
+| Lifo a| Boolean | If set to `true`, the queue is last-in first-out |  true |
+| Fairness a| Boolean | If set to `true`, the thread that waited for the longest amount of time to connect acquires the next available connection |  false |
+| Max Wait Millis a| Number | Maximum number of milliseconds the client can wait before a connection is available |  -1 |
+| Min Evictable Idle Time Millis a| Number | Minimum amount of time a connection can be idle in the pool before it is evicted |  1800000 |
+| Soft Min Evictable Idle Time Millis a| Number | Minimum amount of time a connection can be idle in pool before it is evicted |  1800000 |
+| Num Tests Per Eviction Run a| Number | Number of connections to test per eviction attempt |  3 |
+| Test On Create a| Boolean | Whether to test the validity of the connection |  false |
+| Test On Borrow a| Boolean | Whether to test the validity of the connection before it is borrowed from the pool |  false |
+| Test On Return a| Boolean | Whether to test the validity of the connection before it is returned from the pool |  false |
+| Test While Idle a| Boolean | Whether to enable idle resource detection |  false |
+| Time Between Eviction Runs Millis a| Number | Cycle of time for idle resources detection |  -1 |
+| Block When Exhausted a| Boolean | Whether the client waits when the resource pool is exhausted |  true |
+| Jmx Enabled a| Boolean | Enables JMX monitoring when set to `true` |  true |
+| Jmx Name Prefix a| String | JMX name prefix used as part of the name assigned to the JMX-enabled pool |  pool |
+| Jmx Name Base a| String | JMX name base used as part of the name assigned to the JMX-enabled pool |  |
+| Connection Timeout a| Number |  Redis instance Connection timeout value. |  2000 |
+| Connection Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for Redis instance connection timeout. |  MILLISECONDS |
+| Socket Timeout a| Number | Socket (read) timeout applied to Redis command responses. This bounds how long a single blocking command waits for the server to reply, independently of the TCP connect timeout. Leave unset to preserve the legacy behavior where *Connection Timeout* also served as the read timeout. Existing configurations that leave this field empty keep the previous behavior. |  |
+| Socket Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the socket (read) timeout. This field applies only when *Socket Timeout* is set. |  MILLISECONDS |
+| Username a| String |  Redis ACL username. Set this to authenticate against an ACL-enabled Redis (Redis 6+) using the `AUTH <username> <password>` form. When left empty, the connector falls back to the legacy `AUTH <password>` path (the default user), which remains fully backward compatible. |  |
+| Password a| String |  Redis password. Set this if the server requires authentication. |  |
+| Entry TTL a| Number |  The default time to live to be set on keys stored for the connector. |  |
+| Host a| String |  Redis host. Use this field when you want to access you Redis server that is not part of a cluster through connector. |  localhost |
+| Port a| Number |  Redis port. The port on which your non cluster server is running. |  6379 |
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn’t pass after exhausting the associated reconnection strategy. |  |
+|===
+
+[[redis_sentinel]]
+=== Sentinel
+
+Sentinel provides a high-availability solution in case of failure on your Redis cluster.
+
+==== Parameters
+[cols=".^20%,.^20%,.^35%,.^20%,^.^5%", options="header"]
+|======================
+| Name | Type | Description | Default Value | Required
+| Endpoint identification algorithm a| Enumeration, one of:
+
+** HTTPS
+** LDAPS
+** DISABLED | The endpoint identification algorithm used by clients to validate the server hostname. The default value is an empty string, which means that this functionality is disabled. Clients, including client connections created by the broker for inter-broker communication, verify that the broker hostname matches the hostname in the broker's certificate. |  DISABLED |
+| TLS Configuration a| <<Tls>> |  Configures TLS. If you are running the Mule app securely by using the HTTPS protocol, you must configure TLS in the connector.
+| | 
+| Max Total a| Number | Maximum number of connections that can be in the pool at a given time  |  8 |
+| Max Idle a| Number | Maximum number of idle connections allowed in a pool before the connections are closed  |  8 |
+| Min Idle a| Number | Minimum number of idle connections in the pool that are ready for immediate use |  0 |
+| Lifo a| Boolean | If set to `true`, the queue is last-in first-out |  true |
+| Fairness a| Boolean | If set to `true`, the thread that waited for the longest amount of time to connect acquires the next available connection |  false |
+| Max Wait Millis a| Number | Maximum number of milliseconds the client can wait before a connection is available  |  -1 |
+| Min Evictable Idle Time Millis a| Number | Minimum amount of time a connection can be idle in the pool before it is evicted |  1800000 |
+| Soft Min Evictable Idle Time Millis a| Number | Minimum amount of time a connection can be idle in pool before it is evicted |  1800000 |
+| Num Tests Per Eviction Run a| Number | Number of connections to test per eviction attempt  |  3 |
+| Test On Create a| Boolean | Whether to test the validity of the connection  |  false |
+| Test On Borrow a| Boolean | Whether to test the validity of the connection before it is borrowed from the pool |  false |
+| Test On Return a| Boolean | Whether to test the validity of the connection before it is returned from the pool |  false |
+| Test While Idle a| Boolean | Whether to enable idle resource detection |  false |
+| Time Between Eviction Runs Millis a| Number | Cycle of time for idle resources detection |  -1 |
+| Block When Exhausted a| Boolean | Whether the client waits when the resource pool is exhausted |  true |
+| Jmx Enabled a| Boolean | Enables JMX monitoring when set to `true` |  true |
+| Jmx Name Prefix a| String | JMX name prefix used as part of the name assigned to the JMX-enabled pool |  pool |
+| Jmx Name Base a| String | JMX name base used as part of the name assigned to the JMX-enabled pool |  |
+| Connection Timeout a| Number |  Redis instance connection timeout value. |  2000 |
+| Connection Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for Redis instance connection timeout. |  MILLISECONDS |
+| Socket Timeout a| Number | Socket (read) timeout applied to Redis command responses. This bounds how long a single blocking command waits for the server to reply, independently of the TCP connect timeout. Leave unset to preserve the legacy behavior where *Connection Timeout* also served as the read timeout. Existing configurations that leave this field empty keep the previous behavior. |  |
+| Socket Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the socket (read) timeout. This field applies only when *Socket Timeout* is set. |  MILLISECONDS |
+| Username a| String |  Redis ACL username. Set this to authenticate against an ACL-enabled Redis (Redis 6+) using the `AUTH <username> <password>` form. When left empty, the connector falls back to the legacy `AUTH <password>` path (the default user), which remains fully backward compatible. |  |
+| Password a| String |  Redis password. Set this if the server requires authentication. |  |
+| Entry TTL a| Number |  The default time to live to be set on keys stored for the connector. |  |
+| Sentinels Hosts a| String |  Set of sentinel addresses that are monitoring the master host to which the connector will connect. |  | *x*
+| Master Name a| String |  Redis master name. The name of the master for which the sentinels will return the current address. |  |
+| Sentinel Username a| String |  Sentinel ACL username. Set this to authenticate to the sentinel processes with the `AUTH <username> <password>` form (Redis 6.2+ sentinel ACL). Independent of the master username: a deployment may use one identity to reach the master and another for the sentinels. When left empty, the connector falls back to the legacy `AUTH <sentinelPassword>` path on the sentinel channel, which remains fully backward compatible. |  |
+| Sentinel Password a| String |  Sentinel password. Set if the sentinel servers require authentication. |  |
+| Index a| Number |  The index of the database that the pool will use. |  |
+| Sentinel Connection Timeout a| Number |  Sentinel connection timeout value. |  2000 |
+| Sentinel Connection Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for sentinel connection timeout. |  MILLISECONDS |
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn’t pass after exhausting the associated reconnection strategy. |  |
+|======================
+
+== Sources
+
+Supported source:
+
+* <<subscribe>>
+
+[[subscribe]]
+=== Subscribe
+`<redis:subscribe>`
+
+Message source that subscribes to one or more Redis Pub/Sub channels or glob patterns and emits each received message into the flow. The message payload is the channel message, and the SubscribeChannelAttributes carry the originating channel name. The subscription is established on start and released on stop.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Channels a| Array of String |  A list of channel names or globbing patterns. |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this source outputs. |  |
+| Primary Node Only a| Boolean |  Whether this source should be executed on the primary node only when running in  a cluster. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Streaming Strategy a| * <<repeatable-in-memory-stream>>
+* <<repeatable-file-store-stream>>
+* <<non-repeatable-stream>> |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+| Attributes Type a| <<SubscribeChannelAttributes>>
+|===
+
+=== For Configurations
+* <<redis>>
+
+== Operations
+
+Supported operations:
+
+* <<addToSet>>
+* <<addToSortedSet>>
+* <<decrement>>
+* <<del>>
+* <<exists>>
+* <<expire>>
+* <<expireAt>>
+* <<get>>
+* <<getAllFromHash>>
+* <<getFromHash>>
+* <<getRangeByIndex>>
+* <<getRangeByScore>>
+* <<getTtl>>
+* <<increment>>
+* <<incrementHash>>
+* <<incrementSortedSet>>
+* <<persist>>
+* <<popFromList>>
+* <<popFromSet>>
+* <<publish>>
+* <<pushToList>>
+* <<randomMemberFromSet>>
+* <<rangeFromList>>
+* <<set>>
+* <<setInHash>>
+* <<trimFromList>>
+
+[[addToSet]]
+=== Add To Set
+`<redis:add-to-set>`
+
+Add the message payload to the set stored at the specified key. If the key does not exist, a new key holding a set is created.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for SADD |  | x
+| Value a| String |  The value to set. |  `#[payload]` |
+| Must Succeed a| Boolean |  If `true`, ensures that adding to the set is successful (that is, no pre-existing identical value is in the set) |  false |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  An expression that evaluates against the operation's output. The outcome of the expression is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[addToSortedSet]]
+=== Add To Sorted Set
+`<redis:add-to-sorted-set>`
+
+Add the message payload with the desired score to the sorted set stored at the specified key. If the key does not exist, a new key holding a sorted set is created.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for ZADD |  | x
+| Value a| String |  The value to set. |  `#[payload]` |
+| Score a| Number |  Score to use for the value |  | x
+| Must Succeed a| Boolean |  If `true`, ensures that adding to the set is successful (that is, no pre-existing identical value is in the set) |  false |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+
+[[decrement]]
+=== Decrement
+`<redis:decrement>`
+
+Decrements the number stored at key by step. If the key does not exist, it is set to 0 before performing the operation. An error is returned if the key contains a value of the wrong type or contains data that cannot be represented as integer.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for DECR. |  | x
+| Step a| Number |  Step used for the increment. |  1 |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Number
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[del]]
+=== Del
+`<redis:del>`
+
+Remove the specified key. A key is ignored if it does not exist.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for DEL |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  An expression that evaluates against the operation's output. The outcome of the expression is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Number
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[exists]]
+=== Exists
+`<redis:exists>`
+
+Test if the specified key exists.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for EXISTS |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Boolean
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[expire]]
+=== Expire
+`<redis:expire>`
+
+Set a timeout on the specified key.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  The key in the sorted set. |  | x
+| Seconds a| Number |  The time to live in seconds. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Boolean
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[expireAt]]
+=== Expire At
+`<redis:expire-at>`
+
+Set a timeout in the form of a UNIX timestamp (number of seconds elapsed since 1 Jan 1970) on the specified key.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  The key in the sorted set. |  | x
+| Unix Time a| Number |  The UNIX timestamp in seconds. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Boolean
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[get]]
+=== Get
+`<redis:get>`
+
+Get the value of the specified key. If the key does not exist, a null value is returned.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for GET |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[getAllFromHash]]
+=== Get All From Hash
+`<redis:get-all-from-hash>`
+
+Get all fields and values of the hash stored at the specified key. If the field or the hash don't exist, a null value is returned.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for HGETALL |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Object
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[getFromHash]]
+=== Get From Hash
+`<redis:get-from-hash>`
+
+Get the value stored at the specified field in the hash at the specified key. If the field or the hash don't exist, a null value is returned.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for HGET |  | x
+| Field a| String |  Field to use for HGET |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[getRangeByIndex]]
+=== Get Range By Index
+`<redis:get-range-by-index>`
+
+
+Retrieve a range of values from the sorted set stored at the specified key. The range of values is defined by indices in the sorted set and sorted as desired.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for ZRANGE/ZREVRANGE |  | x
+| Start a| Number |  Range start index |  | x
+| End a| Number |  Range end index |  | x
+| Ascending Order a| Boolean |  Index order for sorting the range. If the parameter is set to `true`, the range is sorted in ascending order. If the parameter is set to `false`, the range is sorted in descending order. |  true |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Array of String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[getRangeByScore]]
+=== Get Range By Score
+`<redis:get-range-by-score>`
+
+Retrieve a range of values from the sorted set stored at the specified key. The range of values is defined by scores in the sorted set and sorted as desired.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for ZRANGEBYSCORE and ZREVRANGEBYSCORE |  | x
+| Min a| Number |  Range start score |  | x
+| Max a| Number |  Range end score |  | x
+| Ascending Order a| Boolean |  Score order for sorting the range. If the parameter is set to `true`, the range is sorted in ascending order. If the parameter is set to `false`, the range is sorted in descending order. |  true |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Array of String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[getTtl]]
+=== Get TTL
+`<redis:get-ttl>`
+
+Get the remaining time to live of a volatile key, in seconds.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  The key in the sorted set. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Number
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[increment]]
+=== Increment
+`<redis:increment>`
+
+Increments the number stored at key by step. If the key does not exist, it is set to 0 before performing the operation. An error is returned if the key contains a value of the wrong type or contains data that can not be represented as integer.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for INCR. |  | x
+| Step a| Number |  Step used for the increment. |  1 |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Number
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[incrementHash]]
+=== Increment Hash
+`<redis:increment-hash>`
+
+Increments the number stored at field in the hash stored at key by increment. If the key does not exist, a new key holding a hash is created. If field does not exist, the value is set to `0` before the operation is performed.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for HGET |  | x
+| Field a| String |  Field to use for HGET |  | x
+| Step a| Number |  Step used for the increment. |  1 |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Number
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[incrementSortedSet]]
+=== Increment Sorted Set
+`<redis:increment-sorted-set>`
+
+Increments the score of member in the sorted set stored at key by increment. If member does not exist in the sorted set, it is added with increment as its score (as if its previous score was `0.0`). If the key does not exist, a new sorted set with the specified member as its sole member is created.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  The key in the sorted set. |  | x
+| Value a| String |  The value to set. |  `#[payload]` |
+| Step a| Number |  The step to use to increment the score. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Number
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[persist]]
+=== Persist
+`<redis:persist>`
+
+Undo an expire or expireAt, turning the volatile key into a normal key.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  The key in the sorted set. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Boolean
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[popFromList]]
+=== Pop From List
+`<redis:pop-from-list>`
+
+Pop a value from the desired side of the list stored at the specified key.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for LPOP/RPOP |  | x
+| Pop Left a| boolean |  The side from which to pop the value. If the parameter is `true`, the value is popped from the left side. If the parameter is `false`, the value is popped from the right side. |  false |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[popFromSet]]
+=== Pop From Set
+`<redis:pop-from-set>`
+
+Pops a random value from the set stored at the specified key.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for SPOP |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[publish]]
+=== Publish
+`<redis:publish>`
+
+
+Publish the message payload to the specified channel.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Channel a| String |  Destination of the published message |  | x
+| Message a| String |  The message to publish. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Boolean
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[pushToList]]
+=== Push To List
+`<redis:push-to-list>`
+
+Push the message payload to the desired side (LEFT or RIGHT) of the list stored at the specified key. If the key does not exist, a new key holding a list is created as long as ifExists is `false`.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for LPUSH or RPUSH, or LPUSHX or RPUSHX. |  | x
+| Value a| String |  The value to push. |  `#[payload]` |
+| Push Left a| Boolean |  Side that receives the pushed payload. If the parameter is true, push the payload on the left side. If the parameter is `false`, push the payload on the right side. |  false |
+| If Exists a| Boolean |  If the parameter is `true`, execute LPUSHX or RPUSHX. If the parameter is `false`, execute LPUSH or RPUSH. |  false |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[randomMemberFromSet]]
+=== Random Member From Set
+`<redis:random-member-from-set>`
+
+Reads a random value from the set stored at the specified key.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for SRANDMEMBER |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[rangeFromList]]
+=== Range From List
+`<redis:range-from-list>`
+
+Returns the specified range of elements from an existing list.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key | String |  Key of the list from which to return elements |  | x
+| Start a| Number |  Zero-based index at which the range starts. A negative value indicates that the offset starts at the end of the list. |  | x
+| Stop a| Number |  Zero-based index at which the range ends. A negative value indicates that the offset starts at the end of the list. |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |Array of String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+
+[[set]]
+=== Set
+`<redis:set>`
+
+Set the key to hold the payload. If *If Not Exists* is `false` and the key already holds a value, the value is overwritten regardless of its type. If *If Not Exists* is `true` and the key already exists, the operation returns null, leaves the existing value unchanged, and does not update the key's TTL. TTL is applied only when the write succeeds.
+
+[NOTE]
+Starting with Redis Connector 5.8, a *Set* with *If Not Exists* set to `true` returns null when the key already exists. Redis Connector 5.7 and earlier raised `REDIS:UNKNOWN` for that no-op. Overwrite (`If Not Exists` = `false`) still raises `REDIS:UNKNOWN` when the server returns a genuine null response.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key used to store payload |  | x
+| Value a| String |  The value to set. |  `#[payload]` |
+| Expire a| Number |  Set a timeout on the specified key in seconds. After the timeout the key is automatically deleted by the server. A key with an associated timeout is said to be volatile in Redis terminology. |  |
+| If Not Exists a| Boolean |  If `true`, execute SETNX on the Redis server. If the key already exists, the operation returns null and does not change the existing value or TTL. If `false`, execute SET. |  false |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  Expression that evaluates against the operation’s output. The expression outcome is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+[[setInHash]]
+=== Set In Hash
+`<redis:set-in-hash>`
+
+Set the specified hash field to the message payload. If the key does not exist, a new key holding a hash is created as long as ifNotExists is true.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key a| String |  Key to use for HSET |  | x
+| Value a| String |  The value to set. |  `#[payload]` |
+| Field a| String |  Field to use for HSET |  |
+| If Not Exists a| Boolean |  If `true` execute HSETNX, otherwise HSET. |  false |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output |  |
+| Target Value a| String |  An expression that evaluates against the operation's output. The outcome of the expression is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+
+[[trimFromList]]
+=== Trim From List
+`<redis:trim-from-list>`
+
+Modify an existing list so that it contains only the specified range of elements.
+
+==== Parameters
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Key | String |  Key of the list to modify |  | x
+| Start a| Number |  Zero-based index at which the range starts. A negative value indicates that the offset starts at the end of the list. |  | x
+| Stop a| Number |  Zero-based index at which the range ends. A negative value indicates that the offset starts at the end of the list. |  | x
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  |
+| Target Variable a| String |  Name of a variable that stores the operation's output. |  |
+| Target Value a| String |  Expression that evaluates against the operation's output. The outcome of the expression is stored in the target variable. |  `#[payload]` |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+[%autowidth.spread]
+|===
+|Type |String
+|===
+
+=== For Configurations
+* <<redis>>
+
+==== Throws
+* REDIS:CONNECTIVITY
+* REDIS:INVALID_REQUEST_DATA
+* REDIS:INVALID_CONFIGURATION
+* REDIS:INVALID_STRUCTURE_FOR_INPUT_DATA
+* REDIS:RETRY_EXHAUSTED
+* REDIS:UNKNOWN
+* REDIS:UNABLE_TO_UNSUBSCRIBE
+
+== Types
+[[Tls]]
+=== TLS
+
+Configures TLS to provide secure communications for the Mule app.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Enabled Protocols a| String | A comma-separated list of protocols enabled for this context. |  |
+| Enabled Cipher Suites a| String | A comma-separated list of cipher suites enabled for this context. |  |
+| Trust Store a| <<TrustStore>> | Configures the TLS truststore. |  |
+| Key Store a| <<KeyStore>> | Configures the TLS keystore. |  |
+| Revocation Check a| * <<standard-revocation-check>>
+* <<custom-ocsp-responder>>
+* <<crl-file>> |  |  |
+|===
+[[TrustStore]]
+=== Truststore
+
+Configures the truststore for TLS.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the truststore. Mule resolves the path relative to the current classpath and file system. |  |
+| Password a| String | Password used to protect the truststore. |  |
+| Type a| String | Type of store. |  |
+| Algorithm a| String | Encryption algorithm that the truststore uses. |  |
+| Insecure a| Boolean | If `true`, Mule stops performing certificate validations. Setting this to `true` can make connections vulnerable to attacks. |  |
+|===
+[[KeyStore]]
+=== Keystore
+
+Configures the keystore for the TLS protocol. The keystore you generate contains a private key and a public certificate.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the keystore. Mule resolves the path relative to the current classpath and file system. |  |
+| Type a| String | Type of store. |  |
+| Alias a| String | Alias of the key to use when the keystore contains multiple private keys. By default, Mule uses the first key in the file. |  |
+| Key Password a| String | Password used to protect the private key. |  |
+| Password a| String | Password used to protect the keystore. |  |
+| Algorithm a| String | Encryption algorithm that the keystore uses. |  |
+|===
+[[standard-revocation-check]]
+=== Standard Revocation Check
+
+Configures standard revocation checks for TLS certificates.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Only End Entities a| Boolean | Which elements to verify in the certificate chain:
+
+* `true`
+
+Verify only the last element in the certificate chain.
+
+* `false`
+
+Verify all elements in the certificate chain. |  |
+| Prefer Crls a| Boolean | How to check certificate validity:
+
+* `true`
+
+Check the Certification Revocation List (CRL) for certificate validity.
+
+* `false`
+
+Use the Online Certificate Status Protocol (OCSP) to check certificate validity. |  |
+| No Fallback a| Boolean | Whether to use the secondary method to check certificate validity:
+
+* `true`
+
+Use the method that wasn't specified in the *Prefer Crls* field (the secondary method) to check certificate validity.
+
+* `false`
+
+Do not use the secondary method to check certificate validity. |  |
+| Soft Fail a| Boolean | What to do if the revocation server can't be reached or is busy:
+
+* `true`
+
+Avoid verification failure.
+
+* `false`
+
+Allow the verification to fail. |  |
+|===
+[[custom-ocsp-responder]]
+=== Custom OCSP Responder
+
+Configures a custom OCSP responder for certification revocation checks.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Url a| String | URL of the OCSP responder. |  |
+| Cert Alias a| String | Alias of the signing certificate for the OCSP response. If specified, the alias must be in the truststore. |  |
+|===
+[[crl-file]]
+=== CRL File
+
+Specifies the location of the certification revocation list (CRL) file.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the CRL file. |  |
+|===
+
+[[Reconnection]]
+=== Reconnection
+
+Configures a reconnection strategy for an operation.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Fails Deployment a| Boolean | When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+| Reconnection Strategy a| * <<reconnect>>
+* <<reconnect-forever>> | Reconnection strategy to use. |  |
+|===
+
+[[reconnect]]
+=== Reconnect
+
+Configures a standard reconnection strategy, which specifies how often to reconnect and how many reconnection attempts the connector source or operation can make.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency a| Number | How often to attempt to reconnect, in milliseconds. | |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. | |
+| Count a| Number | How many reconnection attempts the Mule app can make. | |
+|===
+
+[[reconnect-forever]]
+=== Reconnect Forever
+
+Configures a forever reconnection strategy by which the connector source or operation attempts to reconnect at a specified frequency for as long as the Mule app runs.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency a| Number | How often to attempt to reconnect, in milliseconds. | |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. | |
+|===
+
+[[ExpirationPolicy]]
+=== Expiration Policy
+
+Configures an expiration policy strategy.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Idle Time a| Number | Configures the maximum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+| Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Max Idle Time* field. |  |
+|===
+
+[[SubscribeChannelAttributes]]
+=== Subscribe Channel Attributes
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Channel a| String |  |  |
+|===
+
+[[repeatable-in-memory-stream]]
+=== Repeatable In Memory Stream
+
+Configures the in-memory streaming strategy by which the request fails if the data exceeds the MAX buffer size. Always run performance tests to find the optimal buffer size for your specific use case.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Initial Buffer Size a| Number | Initial amount of memory to allocate to the data stream. If the streamed data exceeds this value, the buffer expands by *Buffer Size Increment*, with an upper limit of *Max In Memory Size value*. |  |
+| Buffer Size Increment a| Number | This is by how much the buffer size expands if it exceeds its initial size. Setting a value of zero or lower means that the buffer should not expand, meaning that a STREAM_MAXIMUM_SIZE_EXCEEDED error is raised when the buffer gets full. |  |
+| Max Buffer Size a| Number | Maximum size of the buffer. If the buffer size exceeds this value, Mule raises a `STREAM_MAXIMUM_SIZE_EXCEEDED` error. A value of less than or equal to `0` means no limit. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *Initial Buffer Size*, *Buffer Size Increment*, and *Buffer Unit* fields. |  |
+|===
+
+[[repeatable-file-store-stream]]
+=== Repeatable File Store Stream
+
+Configures the repeatable file-store streaming strategy by which Mule keeps a portion of the stream content in memory. If the stream content is larger than the configured buffer size, Mule backs up the buffer's content to disk and then clears the memory.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| In Memory Size a| Number | Maximum amount of memory that the stream can use for data. If the amount of memory exceeds this value, Mule buffers the content to disk. To optimize performance:
+
+* Configure a larger buffer size to avoid the number of times Mule needs to write the buffer on disk. This increases performance, but it also limits the number of concurrent requests your application can process, because it requires additional memory.
+
+* Configure a smaller buffer size to decrease memory load at the expense of response time. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *In Memory Size* field. |  |
+|===
+
+[[non-repeatable-stream]]
+=== Non-repeatable Stream
+
+Disables the repeatable stream functionality and use non-repeatable streams to have less performance overhead, memory use, and cost.
+
+[[RedeliveryPolicy]]
+=== Redelivery Policy
+
+Configures the redelivery policy for executing requests that generate errors. You can add a redelivery policy to any source in a flow.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Redelivery Count a| Number | Maximum number of times that a redelivered request can be processed unsuccessfully before returning a REDELIVERY_EXHAUSTED error. |  |
+| Message Digest Algorithm a| String | Secure hashing algorithm to use if the *Use Secure Hash* field is `true`. If the payload of the message is a Java object, Mule ignores this value and returns the value that the payload's `hashCode()` returned. |  |
+| Message Identifier a| <<RedeliveryPolicyMessageIdentifier>> | One or more expressions that determine if a message was redelivered. This property can be set only if the *Use Secure Hash* field is `false`. |  |
+| Object Store a| Object Store | Configures the object store that stores the redelivery counter for each message. |  |
+|===
+
+[[RedeliveryPolicyMessageIdentifier]]
+=== Redelivery Policy Message Identifier
+
+Configures how to identify a redelivered message and how to find out when the message was redelivered.
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Use Secure Hash a| Boolean | If `true`, Mule uses a secure hash algorithm to identify a redelivered message. |  |
+| Id Expression a| String | One or more expressions that determine when a message was redelivered. You can set this property only if the *Use Secure Hash* field is `false`. |  |
+|===
+
+[[ErrorMapping]]
+=== Error Mapping
+
+[%header%autowidth.spread]
+|===
+| Field | Type | Description | Default Value | Required
+| Source a| Enumeration, one of:
+
+** ANY
+** REDELIVERY_EXHAUSTED
+** TRANSFORMATION
+** EXPRESSION
+** SECURITY
+** CLIENT_SECURITY
+** SERVER_SECURITY
+** ROUTING
+** CONNECTIVITY
+** RETRY_EXHAUSTED
+** TIMEOUT |  |  |
+| Target a| String |  |  | x
+|===
+
+== See Also
+
+*  xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.salesforce.com[Salesforce Help]

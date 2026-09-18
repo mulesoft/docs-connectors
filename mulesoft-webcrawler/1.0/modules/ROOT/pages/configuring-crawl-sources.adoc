@@ -1,0 +1,224 @@
+= Configuring Crawl Sources
+
+Configure the *On Content Crawl* source.
+
+== Configure the On Content Crawl Source
+
+The *On Content Crawl* source crawls a website starting from a configured path, emitting each discovered page, image, or document as a Mule event. The source uses a VM queue for URL scheduling and an object store for URL deduplication, enabling distributed and resumable crawling.
+
+To configure the *On Content Crawl* source:
+
+* *Path*
++
+Relative path, resolved against the connection's base URL, where the crawl starts. When empty or `/`, the crawl starts at the base URL itself. Fully-qualified URLs are rejected with INVALID_PARAMETERS.
+
+* *Additional seed URLs*
++
+Comma-separated list of additional fully-qualified seed URLs to enqueue alongside the path. Each entry must be a fully-qualified URL, and relative paths are dropped. Off-host and off-path entries are dropped and a warning is logged.
+
+* *Maximum depth*
++
+The maximum depth to reach while crawling a website. Defaults to 0.
+
+* *Queue Name*
++
+VM queue used to schedule URLs for crawling. When omitted, defaults to `webcrawler-{configName}-source-queue`.
+
+* *Object Store*
++
+Object store used for crawl visit fingerprints (content hash, ETag, last-modified, and correlation ID) and the active crawl identity. Use a persistent store so that reconnection and app restart resume the same crawl.
+
+* *Output format*
++
+Format applied to each emitted page body. Select TEXT, HTML, or MARKDOWN. Default is TEXT.
+
+* *Number Of Consumers*
++
+Number of concurrent queue consumers used by this source. Defaults to 1.
+
+* *Hash route mode*
++
+How to treat URLs containing #fragments. IGNORE strips fragments before crawling (default, fits classic server-rendered sites). PATH rewrites SPA-style hash routes (for example, #/page) into real paths (/page). PRESERVE keeps the URL verbatim, fragment included.
+
+* *Crawl schedule*
++
+Periodic re-crawl mode. Select *No Schedule* to crawl once at start (default), or *Interval* to re-seed the crawl at a fixed frequency and time unit. Ticks that occur while a crawl is in progress are coalesced into one pending reseed, so consumers don't stack. The schedule is registered on all replicas, but the actual reseed runs on the primary node only.
+
+* *Encoding*
++
+Encoding for emitted page bodies. Overrides the configuration's encoding when set.
+
+* *Restrict crawl under URL*
++
+If true, only internal pages under the base URL are crawled. Defaults to false.
+
+* *Regex URLs filter logic*
++
+Type of filter logic to apply to regex URLs while crawling.
+
+* *Regex URLs List*
++
+List of regex patterns for URLs to include or exclude while crawling.
+
+=== Target Content Options
+
+By default, the source emits only page content. To also download and emit the images and documents referenced on each crawled page, enable the *Images* and *Documents* options. Use the *Max image number for each page* and *Max document number for each page* options to cap how many assets are fetched per page, and *Additional Allowed Base URLs* to control which hosts assets can be downloaded from.
+
+* *Pages*
++
+If true, page content of the crawled URL is emitted. Defaults to true.
+
+* *Images*
++
+If true, images referenced on the crawled URL are emitted. Defaults to false.
+
+* *Max image number for each page*
++
+Maximum number of images to fetch for each page. 0 means no limit.
+
+* *Documents*
++
+If true, documents referenced on the crawled URL are emitted. Defaults to false.
+
+* *Max document number for each page*
++
+Maximum number of documents to fetch for each page. 0 means no limit.
+
+* *Additional Allowed Base URLs*
++
+Optional comma-separated allowlist for image and document URLs. When set, assets must be under the base URL or one of these base URLs.
+
+* *Retrieve meta tags*
++
+If true, meta tags are retrieved from each crawled page. Defaults to false.
+
+* *Tag list*
++
+List of HTML tags for which content must be retrieved.
+
+=== Crawl Options
+
+* *Delay between pages*
++
+The delay introduced between each request, in the time unit selected below. Defaults to 0.
+
+* *Delay time unit*
++
+Time unit for the delay between pages.
+
+* *Enforce robots.txt*
++
+If true, enforce checks against the robots.txt file. Defaults to false.
+
+=== Page Load Options
+
+* *Wait on page load*
++
+The time to wait on page load, in the time unit selected below. On the HTTP connection, values greater than 0 fail with INVALID_PARAMETERS.
+
+* *Wait on page load unit*
++
+Time unit for the page-load wait.
+
+=== WebDriver Options (Remote WebDriver only)
+
+These options apply only when using the Remote WebDriver connection type:
+
+* *Wait for XPath*
++
+The XPath to wait for before proceeding with content extraction.
+
+* *Extract Shadow DOM*
++
+If true, extracts the Shadow DOM content.
+
+* *Shadow Host(s) XPath*
++
+Shadow host(s) to extract by XPath. If not set, the whole Shadow DOM is extracted.
+
+=== Timeout Options
+
+* *Response Timeout*
++
+Response timeout value. Overrides the configuration's timeout when set.
+
+* *Response Timeout Unit*
++
+Time unit for the response timeout.
+
+=== XML Configuration
+
+This is the XML for this source:
+
+[source,xml,linenums]
+----
+<flow name="crawl-content-flow">
+    <ms-webcrawler:crawl-content-listener
+        config-ref="MuleSoft_WebCrawler_Config"
+        doc:name="On Content Crawl"
+        doc:id="7a2b3c4d-5e6f-7890-abcd-ef1234567890"
+        maxDepth="3"
+        outputFormat="MARKDOWN"
+        restrictToPath="true"
+        path="/docs">
+        <ms-webcrawler:object-store>
+            <os:private-object-store
+                config-ref="ObjectStore_Config"
+                persistent="true"/>
+        </ms-webcrawler:object-store>
+    </ms-webcrawler:crawl-content-listener>
+
+    <logger level="INFO" message="#[attributes.url]"/>
+</flow>
+----
+
+=== Output Configuration
+
+Each emitted event contains the crawled page content in the configured output format. The response attributes include:
+
+* `cacheControl`
++
+The cache-control header value from the page response.
+* `contentType`
++
+The content type of the page response.
+* `depth`
++
+The crawl depth at which this page was discovered.
+* `etag`
++
+The ETag header value from the page response.
+* `eventType`
++
+The type of emitted event: PAGE, IMAGE, or DOCUMENT.
+* `fileName`
++
+The file name of the emitted image or document.
+* `lastModified`
++
+The last-modified timestamp from the page response.
+* `metaTags`
++
+The meta tags retrieved from the page.
+* `size`
++
+The size of the emitted content in bytes.
+* `statusCode`
++
+The HTTP status code of the page response.
+* `title`
++
+The page title.
+* `url`
++
+The page URL.
+* `otherAttributes`
++
+Additional metadata about the page.
+
+== See Also
+
+* xref:index.adoc[MuleSoft WebCrawler Connector Overview]
+* xref:configuring-crawl-operations.adoc[Configuring Crawl Operations]
+* xref:mulesoft-webcrawler-connector-reference.adoc[MuleSoft WebCrawler Connector Reference]
+* https://help.salesforce.com[Salesforce Help]
