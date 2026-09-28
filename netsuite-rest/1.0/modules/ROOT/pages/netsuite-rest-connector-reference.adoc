@@ -1,0 +1,2248 @@
+= NetSuite REST Connector 1.0 Reference
+
+Anypoint Connector for NetSuite REST (NetSuite REST Connector) uses the NetSuite REST Record Web Services API to create, read, update, delete, and query NetSuite records, run SuiteQL queries, manage batch and asynchronous jobs, and listen for record changes.
+
+== Configurations
+[[Config]]
+=== Config
+
+Default configuration. Timeout defaults set here are inherited by operations and sources unless you override them on the connection, operation, or source.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+|Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
+| Connection a| <<Config_Connection, OAuth 2.0 Client Credentials (JWT Bearer)>>
+ | The connection types to provide to this configuration. | | x
+| Read Timeout a| Number |  Default maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. You can override this value per connection, operation, or source. |  60 |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  SECONDS |
+| Connection Timeout a| Number |  Default maximum time to wait for a TCP connection to be established. Interpreted with *Connection Timeout Unit*. You can override this value per connection. |  60 |
+| Connection Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Connection Timeout* field. |  SECONDS |
+| Encoding a| String |  Charset for the record payloads the connector emits to the flow, including paginated and SuiteQL item explosion and the CDC sources. If blank, the connector falls back to the runtime encoding (UTF-8 by default). Wire traffic to NetSuite remains UTF-8. |  |
+| Name a| String |  ID used to reference this configuration. |  | x
+| Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+|===
+
+==== Connection Types
+[[Config_Connection]]
+===== OAuth 2.0 Client Credentials (JWT Bearer)
+
+Use OAuth 2.0 client credentials with a JWT bearer assertion, signed with a private key registered in NetSuite, to authenticate to NetSuite REST.
+
+====== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Token Object Store a| ObjectStore |  Object Store for OAuth token persistence across cluster nodes. When unset, a persistent, config-name-keyed store is created automatically. |  |
+| Account ID a| String |  NetSuite account ID (for example, TSTDRV1234567 or 1234567_SB1). |  | x
+| Client ID a| String |  OAuth 2.0 Client ID from the integration record in NetSuite. |  | x
+| Certificate ID a| String |  The certificate ID (kid) registered in NetSuite for JWT signing. |  | x
+| Private Key (PEM) a| String |  PKCS#8 PEM-encoded private key (BEGIN PRIVATE KEY; EC P-256 for ES256, EC P-384 for ES384, EC P-521 for ES512, or RSA for PS256, PS384, or PS512). SEC1 keys (BEGIN EC PRIVATE KEY) are not supported. |  | x
+| Signature Algorithm a| Enumeration, one of:
+
+** ES256
+** ES384
+** ES512
+** PS256
+** PS384
+** PS512 |  JWT signing algorithm: ES512 (recommended), ES256, ES384, PS256, PS384, or PS512. |  ES512 |
+| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+| Max Connections a| Number |  Maximum number of outbound HTTP connections. -1 means unlimited. |  -1 |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. |  60 |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Unit for the *Read Timeout* field. |  SECONDS |
+| Connection Timeout a| Number |  Maximum time to wait for a TCP connection to be established. Interpreted with *Connection Timeout Unit*. |  60 |
+| Connection Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Unit for the *Connection Timeout* field. |  SECONDS |
+| Proxy Configuration a| ProxyConfig |  HTTP proxy configuration for outbound connections to NetSuite. |  |
+| Concurrency Management Strategy a| One of:
+
+* <<RandomizedExponentialBackoff>> |  A strategy for dealing with HTTP 429 (Too Many Requests) and 503 (Service Unavailable) responses. Defaults to no retry when unspecified. |  |
+| TLS Configuration a| <<Tls>> | Optional TLS context (custom truststore or keystore) for connections to NetSuite, which always uses HTTPS. Defaults to the JVM default truststore when unspecified. |  |
+|===
+
+== Supported Operations
+* <<AddList>>
+* <<AttachRecord>>
+* <<CreateForm>>
+* <<CreateRecord>>
+* <<DeleteList>>
+* <<DeleteRecord>>
+* <<DetachRecord>>
+* <<EditForm>>
+* <<GetAllRecords>>
+* <<GetAsyncJobStatus>>
+* <<GetAsyncJobTaskList>>
+* <<GetAsyncJobTaskResult>>
+* <<GetGovernanceLimits>>
+* <<GetList>>
+* <<GetRecord>>
+* <<GetRecordMetadata>>
+* <<GetRecordTypesCatalog>>
+* <<GetSelectValue>>
+* <<GetServerTime>>
+* <<InitializeRecord>>
+* <<SuiteqlQuery>>
+* <<UpdateList>>
+* <<UpdateRecord>>
+* <<UpsertList>>
+* <<UpsertRecord>>
+
+== Associated Sources
+* <<DeletedObjectListener>>
+* <<ModifiedObjectListener>>
+* <<NewObjectListener>>
+
+== Operations
+
+[[AddList]]
+=== Add List
+`<ms-netsuite-rest:add-list>`
+
+Submits an asynchronous batch create request for up to 100 records. The operation returns immediately with a job ID. Record creation runs asynchronously on the NetSuite server. Use <<GetAsyncJobStatus>> to poll for completion and <<GetAsyncJobTaskResult>> to retrieve per-record results. This operation sends an HTTP `POST` to `/record/v1/{recordType}` with the `Prefer: respond-async` header.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type for every item in the batch. |  | x
+| Body a| Any |  Pre-formatted batch body as {"items": [..]} with at most 100 records. |  #[payload] |
+| Idempotency Key a| String |  Optional UUID (RFC 4122) for idempotent submission. Sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[AttachRecord]]
+=== Attach Record
+`<ms-netsuite-rest:attach-record>`
+
+Attaches a contact or file to another record. The NetSuite REST API officially supports attaching contacts and files. When attaching a contact, you can specify the role in the body. For files, omit the body or send an empty JSON object. Both return HTTP `204 No Content` on success. Both record IDs support the external ID format `eid:EXTERNAL_ID`. Endpoint: `POST /services/rest/record/v1/{recordType}/{recordId}/!attach/{attachRecordType}/{attachRecordId}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  Type of record to attach to (for example, customer, opportunity). |  | x
+| Record ID a| String |  Internal ID or external ID (use 'eid:EXTERNAL_ID' format) of record to attach to. |  | x
+| Attach Record Type a| String |  Type of record being attached. Supported values are `contact` and `file`. |  | x
+| Attach Record ID a| String |  Internal ID or external ID (use 'eid:EXTERNAL_ID' format) of record being attached. |  | x
+| Attach Body a| Any |  Optional JSON body for contact role (for example, `{"role":{"id":"-10"}}`). Omit for file attachments. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[CreateForm]]
+=== Create Form
+`<ms-netsuite-rest:create-form>`
+
+Retrieves a prefilled create form for a new record of the specified type, with NetSuite defaults applied. You can optionally seed the form with field values (for example, entity or subsidiary) to trigger server-side defaulting. The form is not submitted. Use the returned data as a template for a subsequent <<CreateRecord>> call. Endpoint: `POST /services/rest/record/v1/{recordType}` with `Accept: application/vnd.oracle.resource+json; type=create-form`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Record Body a| Any | Optional JSON body with seed field values (for example, `{"entity":{"id":107}}`). When omitted or null, an empty JSON object is sent, representing a blank new-record context. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Expand Sub-Resources a| Boolean |  If true, inline sublists and sub-records via `?expandSubResources=true`. |  false |
+| Expand a| String |  Comma-separated list of specific sublists or subrecords to expand inline (for example, addressBook,currency). |  |
+| Fields a| String |  Comma-separated list of field names to include. When set, only these fields are returned (for example, companyName,email). |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[CreateRecord]]
+=== Create Record
+`<ms-netsuite-rest:create-record>`
+
+Creates a new record of the specified type in NetSuite. This operation sends an HTTP `POST` to `/record/v1/{recordType}`. To help avoid duplicate records, consider using <<UpsertRecord>> with an external ID instead.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Record Body a| Any | JSON body containing the field values for the new record. |  #[payload] |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[DeleteList]]
+=== Delete List
+`<ms-netsuite-rest:delete-list>`
+
+Submits an asynchronous batch delete request for up to 100 records by ID. Accepts a comma-separated list of internal IDs or external IDs. For external IDs, use the `eid:` prefix (for example, `eid:CUST-EXT-001`). This operation sends an HTTP `DELETE` to `/record/v1/{recordType}?ids=...` with the `Prefer: respond-async` header.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type for every ID in the batch (single record type per batch). |  | x
+| IDs a| String |  Comma-separated internal IDs or external IDs with the `eid:` prefix (for example, 123,eid:ext1,456). External IDs that contain spaces must be quoted (for example, eid:'ext ID with spaces'). Maximum 100 IDs. |  | x
+| Idempotency Key a| String |  Optional UUID (RFC 4122) for idempotent submission. Sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[DeleteRecord]]
+=== Delete Record
+`<ms-netsuite-rest:delete-record>`
+
+Deletes a record by its internal ID. This operation sends an HTTP `DELETE` to `/record/v1/{recordType}/{id}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Internal ID a| String |  The internal ID of the record to delete. |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[DetachRecord]]
+=== Detach Record
+`<ms-netsuite-rest:detach-record>`
+
+Detaches a record (for example, a contact, employee, file, or invoice) from another record. Both record IDs support the external ID format `eid:EXTERNAL_ID`. Endpoint: `POST /services/rest/record/v1/{recordType}/{recordId}/!detach/{detachRecordType}/{detachRecordId}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  Type of record to detach from (for example, customer, opportunity). |  | x
+| Record ID a| String |  Internal ID or external ID (use 'eid:EXTERNAL_ID' format) of record to detach from. |  | x
+| Detach Record Type a| String |  Type of record being detached (for example, contact, employee, file, or invoice). |  | x
+| Detach Record ID a| String |  Internal ID or external ID (use 'eid:EXTERNAL_ID' format) of record being detached. |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[EditForm]]
+=== Edit Form
+`<ms-netsuite-rest:edit-form>`
+
+Retrieves a recalculated edit form for an existing record with proposed changes applied. The record is not modified. The response shows what the record would look like if the changes were saved. Use this to preview server-side calculations such as tax, totals, and dependent fields before you commit an update. Endpoint: `PATCH /services/rest/record/v1/{recordType}/{id}` with `Accept: application/vnd.oracle.resource+json; type=edit-form`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Internal ID a| String |  The internal ID of the record to preview changes on. |  | x
+| Record Body a| Any | JSON body of the record changes used to preview the update without committing it to NetSuite. |  #[payload] |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Expand Sub-Resources a| Boolean |  If true, inline sublists and sub-records via `?expandSubResources=true`. |  false |
+| Expand a| String |  Comma-separated list of specific sublists or subrecords to expand inline (for example, addressBook,currency). |  |
+| Fields a| String |  Comma-separated list of field names to include. When set, only these fields are returned (for example, companyName,email). |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetAllRecords]]
+=== Get All Records
+`<ms-netsuite-rest:get-all-records>`
+
+Retrieves a collection of records with automatic pagination and optional filtering. Returns ID stubs. Use <<GetRecord>> to fetch full record bodies. Use a For Each scope to process individual records. Pagination attributes such as `hasMore`, `offset`, and `links` are available on each item's message attributes. Endpoint: `GET /services/rest/record/v1/{recordType}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Filter Query a| String |  NetSuite filter expression (for example, 'email IS \john@example.com'). Uses the same endpoint as Record Collection Query; use SuiteQL for complex queries. |  |
+| Page Size a| Number |  Number of records per page (maps to REST API limit param; default: 100). |  100 |
+| Max Total Results a| Number |  Maximum total records to return across all pages (-1 = unlimited; default: -1). |  -1 |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryIterable>>
+* <<RepeatableFileStoreIterable>>
+* non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Array of Message of Binary payload and <<NetSuiteRestAttributes>> attributes
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetAsyncJobStatus]]
+=== Get Async Job Status
+`<ms-netsuite-rest:get-async-job-status>`
+
+Retrieves the current status of an asynchronous job. Poll this operation until `completed` is `true`. While the job is in progress, `progress` is `processing`. On success it becomes `succeeded`. `endTime` is absent until the job finishes. When `completed` is `true`, use <<GetAsyncJobTaskList>> to retrieve task IDs, then <<GetAsyncJobTaskResult>> for per-record results. This operation sends an HTTP `GET` to `/async/v1/job/{jobId}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Job ID a| String |  The async job ID returned by a batch operation (for example, *Add List*, *Update List*, or *Get List*). |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetAsyncJobTaskList]]
+=== Get Async Job Task List
+`<ms-netsuite-rest:get-async-job-task-list>`
+
+Retrieves the list of tasks for a completed asynchronous job. Call this after <<GetAsyncJobStatus>> reports `completed: true`. The response contains a `links` array. Extract task IDs from the last path segment of each `href` (for example, `/async/v1/job/{jobId}/task/{taskId}`). This operation sends an HTTP `GET` to `/async/v1/job/{jobId}/task/`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Job ID a| String |  The async job ID whose tasks should be listed. |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetAsyncJobTaskResult]]
+=== Get Async Job Task Result
+`<ms-netsuite-rest:get-async-job-task-result>`
+
+Retrieves the result of a single task within an asynchronous job. Call this for each task ID from <<GetAsyncJobTaskList>>. Successful tasks return an empty body `{}`. Failed tasks return a body that describes the failure. Check `attributes.statusCode` to distinguish success (`2xx`) from failure (`4xx`/`5xx`). This operation sends an HTTP `GET` to `/async/v1/job/{jobId}/task/{taskId}/result`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Job ID a| String |  The async job ID. |  | x
+| Task ID a| String |  The task ID whose result should be retrieved. Extract this ID from the <<GetAsyncJobTaskList>> response. |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetGovernanceLimits]]
+=== Get Governance Limits
+`<ms-netsuite-rest:get-governance-limits>`
+
+Retrieves governance concurrency limits for the current account and integration. Returns account-level limits (total and unallocated) and integration-level limits (allocated concurrency and limit type). Requires admin-level permissions. The `integrationConcurrencyLimit` field is present only when `integrationLimitType` is `integrationSpecific`. Endpoint: `GET /services/rest/system/v1/governanceLimits`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetList]]
+=== Get List
+`<ms-netsuite-rest:get-list>`
+
+Submits an asynchronous batch read request for up to 100 records by ID. Accepts a comma-separated list of internal IDs or external IDs. For external IDs, use the `eid:` prefix. Quote external IDs that contain spaces (for example, `eid:'ext ID with spaces'`). When Expand Records is `true`, full record bodies are included. Otherwise only metadata is returned. This operation sends an HTTP `GET` to `/record/v1/{recordType}?ids=...&expandRecords=...` with the `Prefer: respond-async` header.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type for every ID in the batch (single record type per batch). |  | x
+| IDs a| String |  Comma-separated internal IDs or external IDs with the `eid:` prefix (for example, 123,eid:ext1,456). External IDs that contain spaces must be quoted (for example, eid:'ext ID with spaces'). Maximum 100 IDs. |  | x
+| Idempotency Key a| String |  Optional UUID (RFC 4122) for idempotent submission. Sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Expand Sub-Resources a| Boolean |  If true, inline sublists and sub-records via `?expandSubResources=true`. |  false |
+| Expand a| String |  Comma-separated list of specific sublists or subrecords to expand inline (for example, addressBook,currency). |  |
+| Fields a| String |  Comma-separated list of field names to include. When set, only these fields are returned (for example, companyName,email). |  |
+| Expand Records a| Boolean |  Whether to include full record bodies in each task result. |  true |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetRecord]]
+=== Get Record
+`<ms-netsuite-rest:get-record>`
+
+Retrieves a record by internal ID or external ID. Provide exactly one of Internal ID or External ID. When Expand Sub-Resources is `true`, sublists and sub-records (for example, addressBook and contacts) are inlined in the response instead of returned as links. This operation sends an HTTP `GET` to `/record/v1/{recordType}/{id}` or `/record/v1/{recordType}/eid:{externalId}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Expand Sub-Resources a| Boolean |  If true, inline sublists and sub-records (addressBook, contacts, etc.) via `?expandSubResources=true`. If false (default), they are returned as links. |  false |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Internal ID a| String |  The internal ID of the record to retrieve. |  |
+| External ID a| String |  The external ID of the record to retrieve (alternative to Internal ID). |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetRecordMetadata]]
+=== Get Record Metadata
+`<ms-netsuite-rest:get-record-metadata>`
+
+Retrieves the OpenAPI metadata schema for a record type, including field definitions, data types, required fields, and valid select values. You can use this metadata for validation or documentation. This operation sends an HTTP `GET` to `/record/v1/metadata-catalog/{recordType}` with `Accept: application/swagger+json`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder). |  | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetRecordTypesCatalog]]
+=== Get Record Types Catalog
+`<ms-netsuite-rest:get-record-types-catalog>`
+
+Retrieves the list of available record types from the metadata catalog, including standard and custom types with their internal names and labels. When *Select* has a single value (for example, `customer`), the API returns a single record-type object instead of an `items` collection. For reliable results, use a single *Select* value. This operation sends an HTTP `GET` to `/record/v1/metadata-catalog/`, optionally with `?select=type`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Select a| String |  Optional comma-separated record type names to retrieve from the catalog (for example, `customer` or `assemblybuild,customer,journalEntry`). When omitted, all record types are returned as an items array. |  |
+| As Swagger Spec a| Boolean |  When `true`, sends `Accept: application/swagger+json` so NetSuite returns a combined OpenAPI 3.0 specification for all selected record types. Required for a multi-value Select to return the documented combined spec; without it, NetSuite returns a single HATEOAS link object regardless of how many types are listed. When `false` (default), the original JSON behavior is preserved. |  false |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetSelectValue]]
+=== Get Select Value
+`<ms-netsuite-rest:get-select-value>`
+
+Retrieves select-option metadata for one or more fields on a record type, with automatic pagination. Each For Each iteration yields one select-option object (for example, `{"id": 16, "refName": "Active"}`), with page attributes copied onto each item. Endpoint: `POST /services/rest/record/v1/{recordType}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Fields a| String |  Comma-separated list of field names to retrieve select options for, passed as the `fields` URL query parameter, not as a body field. Supports dot notation for sublist fields (for example, line.dueToFromSubsidiary). Multiple fields are supported (for example, entitystatus,category). |  | x
+| Page Size a| Number |  Number of select options per page (maps to REST API limit param; default: 100). |  100 |
+| Max Total Results a| Number |  Maximum total select options to return across all pages (-1 = unlimited; default: -1). |  -1 |
+| Record Body a| Any | Optional JSON body that provides record context used to filter the returned select options (for example, based on parent record state). |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryIterable>>
+* <<RepeatableFileStoreIterable>>
+* non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Array of Message of Binary payload and <<NetSuiteRestAttributes>> attributes
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[GetServerTime]]
+=== Get Server Time
+`<ms-netsuite-rest:get-server-time>`
+
+Retrieves the current NetSuite server time in UTC, regardless of the user's time zone. Useful for synchronization that must compare against server time rather than client time. Endpoint: `GET /services/rest/system/v1/serverTime`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[InitializeRecord]]
+=== Initialize Record (Transform)
+`<ms-netsuite-rest:initialize-record>`
+
+Transforms a source record into a target record type and pre-populates fields (for example, salesOrder to invoice). Returns a prefilled form that is not submitted. You can modify the form before you submit it with <<CreateRecord>>. Endpoint: `POST /services/rest/record/v1/{sourceType}/{id}/!transform/{targetType}` with `Accept: application/vnd.oracle.resource+json; type=create-form`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Source Record Type a| String |  The source record type (for example, salesOrder). |  | x
+| Source Internal ID a| String |  The internal ID of the source record. |  | x
+| Target Record Type a| String |  Target record type to transform into (for example, invoice). |  | x
+| Override Fields a| Any | Optional JSON body with field overrides to apply on top of the prefilled defaults. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Expand Sub-Resources a| Boolean |  If true, inline sublists and sub-records via `?expandSubResources=true`. |  false |
+| Expand a| String |  Comma-separated list of specific sublists or subrecords to expand inline (for example, addressBook,currency). |  |
+| Fields a| String |  Comma-separated list of field names to include. When set, only these fields are returned (for example, companyName,email). |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[SuiteqlQuery]]
+=== SuiteQL Query
+`<ms-netsuite-rest:suiteql-query>`
+
+Runs a SuiteQL query against NetSuite data with automatic pagination. SuiteQL is a SQL-like query language that provides direct access to NetSuite records without needing structured search criteria. This operation uses Mule's PagingProvider framework. Use a For Each scope to process individual rows (each page's items array is exploded). Pagination attributes are available on each item's message attributes. This is a REST-only operation with no direct SOAP equivalent. The closest SOAP analog is the search operation, but they use fundamentally different approaches: SOAP uses structured XML criteria with metadata resolution, while SuiteQL uses raw SQL-like query strings. Endpoint: `POST /services/rest/query/v1/suiteql`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Query a| String |  SuiteQL query string (for example, SELECT id, companyname FROM customer WHERE companyname LIKE 'A%'). |  | x
+| Page Size a| Number |  Number of rows per page (maps to REST API limit param; default: 100). |  100 |
+| Max Total Results a| Number |  Maximum total rows to return across all pages. The default of 100000 matches NetSuite's hard cap per query. Set to `-1` for unlimited, but NetSuite returns an error if the result set exceeds 100,000 rows. |  100000 |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryIterable>>
+* <<RepeatableFileStoreIterable>>
+* non-repeatable-iterable |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Array of Message of Binary payload and <<NetSuiteRestAttributes>> attributes
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[UpdateList]]
+=== Update List
+`<ms-netsuite-rest:update-list>`
+
+Submits an asynchronous batch update request for up to 100 records. Each item must include `id` or `externalId` to identify the record. Only fields included in each item are updated (merge-patch semantics). This operation sends an HTTP `PATCH` to `/record/v1/{recordType}` with the `Prefer: respond-async` header.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type for every item in the batch (single record type per batch). |  | x
+| Body a| Any |  Request body in NetSuite format: {"items": [..]}. Each item must have ID or externalId. Max 100 items per request. |  #[payload] |
+| Idempotency Key a| String |  Optional UUID (RFC 4122) for idempotent submission. Sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[UpdateRecord]]
+=== Update Record
+`<ms-netsuite-rest:update-record>`
+
+Updates an existing record with a partial update (merge-patch semantics). Only fields in the request body are updated. Omitted fields are left unchanged. This operation sends an HTTP `PATCH` to `/record/v1/{recordType}/{id}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| Internal ID a| String |  The internal ID of the record to update. |  | x
+| Record Body a| Any | JSON body of the record fields to update. Set a field to `null` to clear it. |  #[payload] |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[UpsertList]]
+=== Upsert List
+`<ms-netsuite-rest:upsert-list>`
+
+Submits an asynchronous batch upsert request for up to 100 records. Each item must have `externalId` or `id`. If both are provided, the internal ID takes precedence. If a matching record exists, it is updated. Otherwise a new record is created. This operation sends an HTTP `PUT` to `/record/v1/{recordType}` with the `Prefer: respond-async` header.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type for every item in the batch (single record type per batch). |  | x
+| Body a| Any |  Request body in NetSuite format: {"items": [..]}. Each item must have `externalId` or `id`. If both are present, the internal ID takes precedence. Max 100 items per request. |  #[payload] |
+| Idempotency Key a| String |  Optional UUID (RFC 4122) for idempotent submission. Sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409. |  |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+[[UpsertRecord]]
+=== Upsert Record
+`<ms-netsuite-rest:upsert-record>`
+
+Creates or updates a record by using its external ID. If a record with that external ID exists, it is updated. Otherwise a new record is created. This operation uses HTTP `PUT` semantics and requires all mandatory fields in the body. This operation sends an HTTP `PUT` to `/record/v1/{recordType}/eid:{externalId}`.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  The NetSuite record type (for example, customer, salesOrder, invoice). |  | x
+| External ID a| String |  The external ID of the record. Creates the record if it is not found and updates it if it exists. Because an external ID is required, upsert is supported only for record types that have an external ID field. |  | x
+| Record Body a| Any | JSON body containing field values. Must include all mandatory fields for creation. |  #[payload] |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
+| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+==== Throws
+
+* MS-NETSUITE-REST:BAD_REQUEST
+* MS-NETSUITE-REST:CONFLICT
+* MS-NETSUITE-REST:CONNECTIVITY
+* MS-NETSUITE-REST:FORBIDDEN
+* MS-NETSUITE-REST:INTERNAL_SERVER_ERROR
+* MS-NETSUITE-REST:NETSUITE_ERROR
+* MS-NETSUITE-REST:NOT_FOUND
+* MS-NETSUITE-REST:RETRY_EXHAUSTED
+* MS-NETSUITE-REST:SERVICE_UNAVAILABLE
+* MS-NETSUITE-REST:TOO_MANY_REQUESTS
+* MS-NETSUITE-REST:UNAUTHORIZED
+* MS-NETSUITE-REST:VALIDATION
+
+== Sources
+
+[[DeletedObjectListener]]
+=== On Deleted Object
+`<ms-netsuite-rest:deleted-object-listener>`
+
+Polls NetSuite for deleted-record metadata and emits an event for each deletion found. Queries the `deletedrecord` SuiteQL table filtered on `deleteddate` and the case-sensitive uppercase `type` column. Emitted rows are deletion metadata (for example, record ID, type, and deleted date), not the deleted record's full body. If the `deletedrecord` table is unavailable, the connector raises a typed connector error instead of a raw SuiteQL parse error.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  NetSuite record type to poll (for example, customer). For *On Deleted Object*, this is matched case-insensitively against the deletedrecord 'type' column. |  | x
+| Start Date a| String |  Calendar-day lower bound for the first poll when no watermark has been stored yet (for example, 2025-01-15). Only the date portion is used. If omitted, the source defaults to today in the configured *Start Timezone* (or UTC if that is also omitted). |  |
+| Start Timezone a| String |  IANA timezone used to compute today when neither a stored watermark nor a *Start Date* is present (for example, America/Los_Angeles). |  UTC |
+| Page Size a| Number |  Rows fetched per SuiteQL page (1-1000). The source paginates until a short/last page is reached. |  100 |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  true |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Scheduling Strategy a| SchedulingStrategy |  Configures the scheduler that triggers the polling. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Any
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+[[ModifiedObjectListener]]
+=== On Modified Object
+`<ms-netsuite-rest:modified-object-listener>`
+
+Polls NetSuite for records of a specified type that were created or updated since the last poll and emits an event for each one found. Filters on `lastmodifieddate`, which is set on insert and on update, so this source includes both new and later-modified records. Cluster and watermark behavior matches <<NewObjectListener, On New Object>>.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  NetSuite record type to poll (for example, customer). |  | x
+| Start Date a| String |  Calendar-day lower bound for the first poll when no watermark has been stored yet (for example, 2025-01-15). Only the date portion is used. If omitted, the source defaults to today in the configured *Start Timezone* (or UTC if that is also omitted). |  |
+| Start Timezone a| String |  IANA timezone used to compute today when neither a stored watermark nor a *Start Date* is present (for example, America/Los_Angeles). |  UTC |
+| Page Size a| Number |  Rows fetched per SuiteQL page (1-1000). The source paginates until a short/last page is reached. |  100 |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  true |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Scheduling Strategy a| SchedulingStrategy |  Configures the scheduler that triggers the polling. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Any
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+[[NewObjectListener]]
+=== On New Object
+`<ms-netsuite-rest:new-object-listener>`
+
+Polls NetSuite for records of a specified type that were created since the last poll and emits an event for each one found. Filters on `datecreated`. In a cluster, only the primary node polls by default. The watermark ObjectStore is shared so a failover can resume from the persisted boundary day with at-least-once delivery.
+
+==== Parameters
+
+[%header%autowidth.spread]
+|===
+| Name | Type | Description | Default Value | Required
+| Configuration | String | Name of the configuration to use. | | x
+| Record Type a| String |  NetSuite record type to poll (for example, customer). |  | x
+| Start Date a| String |  Calendar-day lower bound for the first poll when no watermark has been stored yet (for example, 2025-01-15). Only the date portion is used. If omitted, the source defaults to today in the configured *Start Timezone* (or UTC if that is also omitted). |  |
+| Start Timezone a| String |  IANA timezone used to compute today when neither a stored watermark nor a *Start Date* is present (for example, America/Los_Angeles). |  UTC |
+| Page Size a| Number |  Rows fetched per SuiteQL page (1-1000). The source paginates until a short/last page is reached. |  100 |
+| Output Mime Type a| String |  The MIME type of the payload that this operation outputs. |  |
+| Output Encoding a| String |  The encoding of the payload that this operation outputs. |  |
+| Primary Node Only a| Boolean |  Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  true |
+| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
+| Scheduling Strategy a| SchedulingStrategy |  Configures the scheduler that triggers the polling. |  | x
+| Streaming Strategy a| * <<RepeatableInMemoryStream>>
+* <<RepeatableFileStoreStream>>
+* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
+| Redelivery Policy a| <<RedeliveryPolicy>> |  Defines a policy for processing the redelivery of the same message. |  |
+| Read Timeout a| Number |  Maximum time to wait for a response from NetSuite. Interpreted with *Read Timeout Unit*. Overrides the config default when set. |  |
+| Read Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Read Timeout* field. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Any
+| Attributes Type a| <<NetSuiteRestAttributes>>
+|===
+
+==== For Configurations
+
+* <<Config>>
+
+== Types
+[[Reconnection]]
+=== Reconnection
+
+Configures a reconnection strategy for an operation.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Fails Deployment a| Boolean | When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+| Reconnection Strategy a| * <<Reconnect>>
+* <<ReconnectForever>> | Reconnection strategy to use. |  |
+|===
+
+[[Reconnect]]
+=== Reconnect
+
+Configures a standard reconnection strategy, which specifies how often to reconnect and how many reconnection attempts the connector source or operation can make.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency a| Number | How often to attempt to reconnect, in milliseconds. |  |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. |  |
+| Count a| Number | How many reconnection attempts the Mule app can make. |  |
+|===
+
+[[ReconnectForever]]
+=== Reconnect Forever
+
+Configures a forever reconnection strategy by which the connector source or operation attempts to reconnect at a specified frequency for as long as the Mule app runs.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Frequency a| Number | How often to attempt to reconnect, in milliseconds. |  |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. |  |
+|===
+
+[[Tls]]
+=== TLS
+
+Configures TLS to provide secure communications for the Mule app.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Enabled Protocols a| String | Comma-separated list of protocols enabled for this context. |  |
+| Enabled Cipher Suites a| String | Comma-separated list of cipher suites enabled for this context. |  |
+| Trust Store a| <<TrustStore>> | Configures the TLS truststore. |  |
+| Key Store a| <<KeyStore>> | Configures the TLS keystore. |  |
+| Revocation Check a| * <<StandardRevocationCheck>>
+* <<CustomOcspResponder>>
+* <<CrlFile>> | Configures a revocation checking mechanism. |  |
+|===
+
+[[TrustStore]]
+=== Truststore
+
+Configures the truststore for TLS.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the truststore. Mule resolves the path relative to the current classpath and file system. |  |
+| Password a| String | Password used to protect the truststore. |  |
+| Type a| String | Type of store. |  |
+| Algorithm a| String | Algorithm that the truststore uses. |  |
+| Insecure a| Boolean | If `true`, Mule stops performing certificate validations. Setting this to `true` can make connections vulnerable to attacks. |  |
+|===
+
+[[KeyStore]]
+=== Keystore
+
+Configures the keystore for the TLS protocol. The keystore you generate contains a private key and a public certificate.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the keystore. Mule resolves the path relative to the current classpath and file system. |  |
+| Type a| String | Type of store. |  |
+| Alias a| String | Alias of the key to use when the keystore contains multiple private keys. By default, Mule uses the first key in the file. |  |
+| Key Password a| String | Password used to protect the private key. |  |
+| Password a| String | Password used to protect the keystore. |  |
+| Algorithm a| String | Algorithm that the keystore uses. |  |
+|===
+
+[[StandardRevocationCheck]]
+=== Standard Revocation Check
+
+Configures standard revocation checks for TLS certificates.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Only End Entities a| Boolean | Which elements to verify in the certificate chain:
+
+* `true`
+
+Verify only the last element in the certificate chain.
+
+* `false`
+
+Verify all elements in the certificate chain. |  |
+| Prefer Crls a| Boolean | How to check certificate validity:
+
+* `true`
+
+Check the Certification Revocation List (CRL) for certificate validity.
+
+* `false`
+
+Use the Online Certificate Status Protocol (OCSP) to check certificate validity. |  |
+| No Fallback a| Boolean | Whether to use the secondary method to check certificate validity:
+
+* `true`
+
+Use the method that wasn't specified in the *Prefer Crls* field (the secondary method) to check certificate validity.
+
+* `false`
+
+Do not use the secondary method to check certificate validity. |  |
+| Soft Fail a| Boolean | What to do if the revocation server can't be reached or is busy:
+
+* `true`
+
+Avoid verification failure.
+
+* `false`
+
+Allow the verification to fail. |  |
+|===
+
+[[CustomOcspResponder]]
+=== Custom OCSP Responder
+
+Configures a custom OCSP responder for certification revocation checks.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Url a| String | URL of the OCSP responder. |  |
+| Cert Alias a| String | Alias of the signing certificate for the OCSP response. If specified, the alias must be in the truststore. |  |
+|===
+
+[[CrlFile]]
+=== CRL File
+
+Specifies the location of the certification revocation list (CRL) file.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Path a| String | Path to the CRL file. |  |
+|===
+
+[[ExpirationPolicy]]
+=== Expiration Policy
+
+Configures an expiration policy strategy.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Idle Time a| Number | Configures the maximum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
+| Time Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS | Time unit for the *Max Idle Time* field. |  |
+|===
+
+[[NetSuiteRestAttributes]]
+=== NetSuite REST Attributes
+
+Provides metadata about a NetSuite REST API response, such as pagination details, HATEOAS links, and the ID of the record that the operation acted on.
+
+For Create Record (`POST`), the `Location` header contains the new record's URL (for example, `/record/v1/customer/123`). The connector parses that value into *Record Id* when present.
+
+For collection, SuiteQL, and select-value operations, the pagination fields from the JSON envelope (`hasMore`, `offset`, `totalResults`, and the HATEOAS links map) are copied onto each exploded item so DataWeave can read `attributes.hasMore` and `attributes.links['next']` without re-parsing the payload. On singular-record, empty (`204`), non-paged, or non-JSON responses, *Has More* defaults to `false`, numeric fields are null, and *Links* is an empty map.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Has More a| Boolean | Whether more results are available beyond the current page. |  |
+| Headers a| Object | Map of HTTP headers in the message. |  |
+| Links a| Object | Map of HATEOAS links related to the record. |  |
+| Offset a| Number | Offset of the current page of results. |  |
+| Record Id a| String | Internal ID of the record that the operation acted on. |  |
+| Status Code a| Number | HTTP status code of the response. |  |
+| Total Results a| Number | Total number of results available across all pages. |  |
+|===
+
+[[RepeatableInMemoryStream]]
+=== Repeatable In Memory Stream
+
+Configures the in-memory streaming strategy by which the request fails if the data exceeds the MAX buffer size. Always run performance tests to find the optimal buffer size for your specific use case.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Initial Buffer Size a| Number | Initial amount of memory to allocate to the data stream. If the streamed data exceeds this value, the buffer expands by *Buffer Size Increment*, with an upper limit of *Max Buffer Size* value. |  |
+| Buffer Size Increment a| Number | This is by how much the buffer size expands if it exceeds its initial size. Setting a value of zero or lower means that the buffer should not expand, meaning that a STREAM_MAXIMUM_SIZE_EXCEEDED error is raised when the buffer gets full. |  |
+| Max Buffer Size a| Number | Maximum size of the buffer. If the buffer size exceeds this value, Mule raises a `STREAM_MAXIMUM_SIZE_EXCEEDED` error. A value of less than or equal to `0` means no limit. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *Initial Buffer Size*, *Buffer Size Increment*, and *Max Buffer Size* fields. |  |
+|===
+
+[[RepeatableFileStoreStream]]
+=== Repeatable File Store Stream
+
+Configures the repeatable file-store streaming strategy by which Mule keeps a portion of the stream content in memory. If the stream content is larger than the configured buffer size, Mule backs up the buffer's content to disk and then clears the memory.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| In Memory Size a| Number | Maximum amount of memory that the stream can use for data. If the amount of memory exceeds this value, Mule buffers the content to disk. To optimize performance:
+
+* Configure a larger buffer size to avoid the number of times Mule needs to write the buffer on disk. This increases performance, but it also limits the number of concurrent requests your application can process, because it requires additional memory.
+
+* Configure a smaller buffer size to decrease memory load at the expense of response time. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *In Memory Size* field. |  |
+|===
+
+[[RedeliveryPolicy]]
+=== Redelivery Policy
+
+Configures the redelivery policy for executing requests that generate errors. You can add a redelivery policy to any source in a flow.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Redelivery Count a| Number | Maximum number of times that a redelivered request can be processed unsuccessfully before returning a REDELIVERY_EXHAUSTED error. |  |
+| Message Digest Algorithm a| String | Secure hashing algorithm to use if the *Use Secure Hash* field is `true`. If the payload of the message is a Java object, Mule ignores this value and returns the value that the payload's `hashCode()` returned. If not set, the default is SHA-256. |  |
+| Message Identifier a| <<RedeliveryPolicyMessageIdentifier>> | One or more expressions that determine if a message was redelivered. This property can be set only if the *Use Secure Hash* field is `false`. |  |
+| Object Store a| ObjectStore | Configures the object store that stores the redelivery counter for each message. |  |
+|===
+
+[[RedeliveryPolicyMessageIdentifier]]
+=== Redelivery Policy Message Identifier
+
+Configures how to identify a redelivered message and how to find out when the message was redelivered.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Use Secure Hash a| Boolean | If `true`, Mule uses a secure hash algorithm to identify a redelivered message. |  |
+| Id Expression a| String | One or more expressions that determine when a message was redelivered. You can set this property only if the *Use Secure Hash* field is `false`. |  |
+|===
+
+[[ErrorMapping]]
+=== Error Mapping
+
+Maps an error type thrown by the operation to a different Mule error type that your app can catch.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Source a| Enumeration, one of:
+
+** ANY
+** REDELIVERY_EXHAUSTED
+** TRANSFORMATION
+** EXPRESSION
+** SECURITY
+** CLIENT_SECURITY
+** SERVER_SECURITY
+** ROUTING
+** CONNECTIVITY
+** RETRY_EXHAUSTED
+** TIMEOUT | Source of the error. |  |
+| Target a| String | The Mule error type to map to. |  | x
+|===
+
+[[RepeatableInMemoryIterable]]
+=== Repeatable In Memory Iterable
+
+Configures the in-memory iterable strategy by which Mule keeps a configured number of instances in memory to provide random access to the stream. Always run performance tests to find the optimal buffer size for your specific use case.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Initial Buffer Size a| Number | The amount of instances that is initially allowed to be kept in memory to consume the stream and provide random access to it. If the stream contains more data than can fit into this buffer, then the buffer expands according to the *Buffer Size Increment* attribute, with an upper limit of *Max Buffer Size*. Default value is 100 instances. |  |
+| Buffer Size Increment a| Number | This is by how much the buffer size expands if it exceeds its initial size. Setting a value of zero or lower means that the buffer should not expand, meaning that a STREAM_MAXIMUM_SIZE_EXCEEDED error is raised when the buffer gets full. Default value is 100 instances. |  |
+| Max Buffer Size a| Number | Maximum size of the buffer. If the buffer size exceeds this value, Mule raises a `STREAM_MAXIMUM_SIZE_EXCEEDED` error. A value of less than or equal to `0` means no limit. |  |
+|===
+
+[[RepeatableFileStoreIterable]]
+=== Repeatable File Store Iterable
+
+Configures the repeatable file-store iterable strategy by which Mule keeps a configured number of instances in memory. If the number of instances exceeds the configured limit, Mule buffers the remaining instances to disk.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| In Memory Objects a| Number | The maximum amount of instances to keep in memory. If more than that is required, content on the disk is buffered. |  |
+| Buffer Unit a| Enumeration, one of:
+
+** BYTE
+** KB
+** MB
+** GB | Unit for the *In Memory Objects* field. |  |
+|===
+
+[[RandomizedExponentialBackoff]]
+=== Randomized Exponential Backoff
+
+Configures a retry strategy that uses randomized exponential backoff (full jitter) for HTTP 429 (Too Many Requests) and 503 (Service Unavailable) responses. Only Max Retries and Max Retry Delay Timeout (with its unit) are user-configurable. Retry-After handling and related defaults are applied automatically.
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Max Retries a| Number | Maximum number of retry attempts for HTTP 429 and 503 responses. Values above 200 are clamped to 200; negative values are treated as 0. | 15 |
+| Max Retry Delay Timeout a| Number | Maximum delay between retries. Interpreted with *Max Retry Delay Timeout Unit*. | 64 |
+| Max Retry Delay Timeout Unit a| Enumeration, one of:
+
+** NANOSECONDS
+** MICROSECONDS
+** MILLISECONDS
+** SECONDS
+** MINUTES
+** HOURS
+** DAYS |  Time unit for the *Max Retry Delay Timeout* field. | SECONDS |
+|===

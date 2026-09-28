@@ -1,0 +1,151 @@
+= Publish Multiple Messages with Bulk Publish: Example
+
+The following example shows how to use the *Bulk Publish* operation (`<kafka:bulk-publish>`) of Kafka Connector to publish several messages to Apache Kafka with a single operation call.
+
+Imagine you receive a list of orders in your Mule app and want to publish each order as its own Kafka message, without calling *Publish* once per order. *Bulk Publish* takes an array of ready-made messages and sends all of them in one call.
+
+[[understand-the-kafkamessage-object]]
+== Understand the KafkaMessage Object
+
+*Publish* lets you set *Topic*, *Partition*, and *Key* directly as fields on the operation, because it only sends one message. *Bulk Publish* sends many messages at once, and each one can go to a different topic or partition, so instead of operation fields, you build an array where every entry carries its own routing information.
+
+Each entry of that array is a `KafkaMessage`, made of two parts:
+
+[%header,cols="20s,80a"]
+|===
+| Field | Description
+| `attributes` | Where this message goes: `topic` (required), `partition` (required, a number: `0` if you don't need to target a specific one), `key` (optional).
+| `payload` | The content of the message.
+|===
+
+[[build-the-array-of-kafkamessage-objects]]
+== Build the Array of KafkaMessage Objects with DataWeave
+
+`KafkaMessage` is a Java object, so a plain DataWeave object like `{topic: "orders"}` doesn't work on its own. Tell DataWeave which Java class to build by writing the object as usual and tagging it with `as Object {class: "..."}`.
+
+For example, if the incoming payload is an array of orders like this:
+
+[source,json,linenums]
+----
+[
+  { "orderId": "1001", "description": "2 units of SKU-42" },
+  { "orderId": "1002", "description": "1 unit of SKU-77" }
+]
+----
+
+The following DataWeave script turns that array into an array of `KafkaMessage` objects ready to publish:
+
+[source,dataweave,linenums]
+----
+%dw 2.0
+output application/java
+---
+payload map (order) -> {
+    attributes: {
+        topic: "orders",
+        partition: 0,
+        key: order.orderId
+    },
+    payload: order.description
+} as Object {
+    class: "com.mulesoft.connectors.kafka.api.operation.KafkaMessage"
+}
+----
+
+NOTE: Unlike *Publish*, *Bulk Publish* has no "let Kafka choose the partition" option. `partition` always takes a real partition number, and `0` means partition 0, not "unspecified." To spread messages across a target topic that has more than one partition, calculate the partition per message yourself (for example, hashing the key against the topic's partition count) instead of sending every message to `0`.
+
+Set the *Messages* field of *Bulk Publish* to this expression (or reference the variable that holds its result, if you built it in an earlier *Transform Message* step).
+
+[[configure-the-bulk-publish-operation]]
+== Configure the Bulk Publish Operation
+
+To configure the *Bulk Publish* operation in Anypoint Studio:
+
+. From the *Mule Palette* view, select *Apache Kafka* and drag the *Bulk Publish* operation onto the canvas.
+. In the properties window, click *+* next to the *Connector configuration* field to add a *Producer* global element, or select an existing one.
+. Set the *Messages* field to the DataWeave expression that builds the array of `KafkaMessage` objects, for example `#[payload]`.
+
+*Bulk Publish* returns an array with one `KafkaMessageMetadata` entry per message that was published successfully, with `topic`, `partition`, and `offset` for each one. Because every message is sent independently, this array isn't guaranteed to come back in the same order as the input array. Use the `topic`/`partition`/`offset` in each entry, not its position, to identify a message.
+
+== XML for This Example
+
+Paste this code into the Studio XML editor to load the flow for this example into your Mule app. A *Scheduler* triggers the flow periodically. In a real app, replace the fixed list of orders in *Set orders payload* with wherever your orders actually come from (a database query, an HTTP call, and so on):
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+    xmlns:kafka="http://www.mulesoft.org/schema/mule/kafka"
+    xmlns="http://www.mulesoft.org/schema/mule/core"
+    xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/kafka http://www.mulesoft.org/schema/mule/kafka/current/mule-kafka.xsd">
+
+    <kafka:producer-config name="Apache_Kafka_Producer_configuration" doc:name="Apache Kafka Producer configuration">
+        <kafka:producer-plaintext-connection>
+            <kafka:bootstrap-servers>
+                <kafka:bootstrap-server value="${config.basic.bootstrapServers}" />
+            </kafka:bootstrap-servers>
+        </kafka:producer-plaintext-connection>
+    </kafka:producer-config>
+
+    <flow name="Bulk-Publish-Producer-Flow">
+        <scheduler doc:name="Scheduler">
+            <scheduling-strategy>
+                <fixed-frequency frequency="3" timeUnit="MINUTES" />
+            </scheduling-strategy>
+        </scheduler>
+        <set-payload doc:name="Set orders payload"
+            value='#[[{"orderId": "1001", "description": "2 units of SKU-42"},{"orderId": "1002", "description": "1 unit of SKU-77"}]]'/>
+        <ee:transform doc:name="Build KafkaMessage array">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload map (order) -> {
+    attributes: {
+        topic: "orders",
+        partition: 0,
+        key: order.orderId
+    },
+    payload: order.description
+} as Object {
+    class: "com.mulesoft.connectors.kafka.api.operation.KafkaMessage"
+}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <kafka:bulk-publish doc:name="Bulk publish orders" config-ref="Apache_Kafka_Producer_configuration">
+            <kafka:messages>#[payload]</kafka:messages>
+        </kafka:bulk-publish>
+        <logger level="INFO" doc:name="Log published metadata"
+            message="#[payload map (m) -> 'topic: ' ++ m.topic ++ ', partition: ' ++ m.partition ++ ', offset: ' ++ m.offset]" />
+    </flow>
+</mule>
+----
+
+== Handle Publishing Errors
+
+Because *Bulk Publish* sends every message independently, some messages in the array can succeed while others fail in the same call. For example, one message might point to a topic that doesn't exist. Wrap the operation in a `try` to catch failures without losing the messages that went through:
+
+[source,xml,linenums]
+----
+<try doc:name="Try">
+    <kafka:bulk-publish doc:name="Bulk publish orders" config-ref="Apache_Kafka_Producer_configuration">
+        <kafka:messages>#[payload]</kafka:messages>
+    </kafka:bulk-publish>
+    <error-handler>
+        <on-error-continue type="KAFKA:INVALID_TOPIC_PARTITION" doc:name="Invalid topic or partition">
+            <logger level="ERROR" message="#['One of the messages targeted an invalid topic or partition: ' ++ error.description]" />
+        </on-error-continue>
+    </error-handler>
+</try>
+----
+
+== See Also
+
+* xref:kafka-connector-examples.adoc[Kafka Connector Examples]
+* xref:kafka-connector-reference.adoc#bulkPublish[Bulk Publish Reference]
+* https://help.salesforce.com[Salesforce Help]

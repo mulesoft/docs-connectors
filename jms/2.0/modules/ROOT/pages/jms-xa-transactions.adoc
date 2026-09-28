@@ -1,0 +1,133 @@
+= Configuring XA Transactions in JMS Connector
+
+Anypoint Connector for JMS (JMS Connector) provides the option to use Extended Architecture Transactions (XA Transactions) when you configure the *ActiveMQ XA Connection* connection type and the *Transaction Type* fields.
+
+From JMS Connector 2.0 onward, and requiring Mule runtime 4.10.0 or later, XA transactions are configured using a dedicated XA connection type instead of enabling XA on a standard connection. Depending on your broker implementation, select *ActiveMQ XA Connection* or *Generic XA Connection*. If you are upgrading from an earlier version of the connector, see xref:jms-connector-upgrade-migrate.adoc[Upgrading and Migrating JMS Connector].
+
+== Before You Begin
+Before getting started, ensure that you have an understanding of xref:mule-runtime::xa-transactions.adoc[].
+
+== Configure XA Transactions
+To configure XA transactions, follow these steps:
+
+. In your *JMS Config*, select the *ActiveMQ XA Connection* connection type, and configure the *XA Connection Pool* fields for *Max pool size* and *Max idle seconds*:
+
+[source,xml,linenums]
+----
+ <jms:config name="JMS_Config">
+        <jms:active-mq-xa-connection username="admin"
+                                  password="admin">
+            <jms:factory-configuration brokerUrl="tcp://localhost:61616"/>
+            <jms:xa-connection-pool maxPoolSize="32"
+                                    maxIdleSeconds="60"/>
+        </jms:active-mq-xa-connection>
+    </jms:config>
+----
+
+[start=2]
+. Configure the *JMS Listener* source *XA Transaction* field to `XA`:
+
+[source,xml,linenums]
+----
+</flow>
+    <flow name="JMS_Listener_Flow">
+        <jms:listener
+                destination="queue.in"
+                config-ref="JMS_Config"
+                transactionType="XA"
+                transactionalAction="ALWAYS_BEGIN">
+            <ee:transform>
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </jms:listener>
+        <vm:publish config-ref="VM_Config"
+                    queueName="queue"
+                    transactionType="XA"
+                    transactionalAction="ALWAYS_JOIN"/>
+    </flow>
+----
+
+In the *Configuration XML* editor window, the Mule app configuration looks like this:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+      xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+      xmlns:vm="http://www.mulesoft.org/schema/mule/vm"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/vm http://www.mulesoft.org/schema/mule/vm/current/mule-vm.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+    <vm:config name="VM_Config">
+        <vm:queues>
+            <vm:queue queueName="queue"/>
+        </vm:queues>
+    </vm:config>
+
+    <jms:config name="JMS_Config">
+        <jms:active-mq-xa-connection username="admin"
+                                  password="admin">
+            <jms:factory-configuration brokerUrl="tcp://localhost:61616"/>
+            <jms:xa-connection-pool maxPoolSize="32"
+                                    maxIdleSeconds="60"/>
+        </jms:active-mq-xa-connection>
+    </jms:config>
+
+    <http:listener-config name="HTTP_Listener_config">
+        <http:listener-connection host="0.0.0.0" port="8081"/>
+    </http:listener-config>
+
+    <flow name="JMS_Publish">
+        <http:listener config-ref="HTTP_Listener_config"
+                       path="/publish"/>
+        <jms:publish transactionalAction="ALWAYS_JOIN"
+                     destination="queue"/>
+    </flow>
+    <flow name="JMS_Listener_Flow">
+        <jms:listener
+                destination="queue.in"
+                config-ref="JMS_Config"
+                transactionType="XA"
+                transactionalAction="ALWAYS_BEGIN">
+            <ee:transform>
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </jms:listener>
+        <vm:publish config-ref="VM_Config"
+                    queueName="queue"
+                    transactionType="XA"
+                    transactionalAction="ALWAYS_JOIN"/>
+    </flow>
+
+    <flow name="VM_Listener_Flow">
+        <vm:listener config-ref="VM_Config"
+                     transactionalAction="NONE"
+                     transactionType="XA"
+                     queueName="queue">
+        </vm:listener>
+        <logger level="INFO"
+                message="Message Received from VM Queue: #[payload]"/>
+    </flow>
+</mule>
+----
+
+== See Also
+
+* xref:jms-examples.adoc[]
+* xref:jms-activemq-configuration.adoc[Configure an ActiveMQ Connection for JMS Connector]
+* xref:jms-connector-upgrade-migrate.adoc[Upgrading and Migrating JMS Connector]

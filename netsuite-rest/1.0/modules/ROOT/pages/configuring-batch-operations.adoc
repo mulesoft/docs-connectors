@@ -1,0 +1,290 @@
+= Configuring Batch and Asynchronous Operations
+
+Configure the batch operations that act on up to 100 records at a time (*Add List*, *Update List*, *Upsert List*, *Delete List*, and *Get List*) and the operations that track the resulting asynchronous jobs (*Get Async Job Status*, *Get Async Job Task List*, and *Get Async Job Task Result*).
+
+Batch operations run asynchronously. Each batch operation returns immediately with a job ID, and NetSuite processes the records on the server. Use *Get Async Job Status* to poll for completion, *Get Async Job Task List* to retrieve the task IDs, and *Get Async Job Task Result* to retrieve per-record results. Every item in a single batch must be the same record type, and each batch accepts a maximum of 100 records. For full parameter, output, and error details, see xref:netsuite-rest-connector-reference.adoc[NetSuite REST Connector Reference].
+
+== Configure the Add List Operation
+
+The *Add List* operation submits an asynchronous batch create request for up to 100 records by sending `POST /record/v1/{recordType}` with the `Prefer: respond-async` header.
+
+To configure the *Add List* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type for every item in the batch.
+
+* *Body*
++
+Pre-formatted batch body as `{"items": [..]}` with at most 100 records. Defaults to `#[payload]`.
+
+* *Idempotency Key*
++
+Optional UUID (RFC 4122) for idempotent submission, sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:add-list
+    config-ref="Config"
+    doc:name="Add List"
+    recordType="customer">
+    <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+</ms-netsuite-rest:add-list>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. The response contains the async job ID. Use *Get Async Job Status* to poll for completion.
+
+== Configure the Update List Operation
+
+The *Update List* operation submits an asynchronous batch update request for up to 100 records by sending `PATCH /record/v1/{recordType}` with the `Prefer: respond-async` header. Each item must include `id` or `externalId`, and only the fields included in each item are updated (merge-patch semantics).
+
+To configure the *Update List* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type for every item in the batch.
+
+* *Body*
++
+Request body as `{"items": [..]}`. Each item must have `id` or `externalId`. Maximum 100 items. Defaults to `#[payload]`.
+
+* *Idempotency Key*
++
+Optional UUID (RFC 4122) for idempotent submission, sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:update-list
+    config-ref="Config"
+    doc:name="Update List"
+    recordType="customer">
+    <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+</ms-netsuite-rest:update-list>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`, containing the async job ID.
+
+== Configure the Upsert List Operation
+
+The *Upsert List* operation submits an asynchronous batch upsert request for up to 100 records by sending `PUT /record/v1/{recordType}` with the `Prefer: respond-async` header. Each item must have `externalId` or `id`. If both are provided, the internal ID takes precedence. Matching records are updated, and others are created.
+
+To configure the *Upsert List* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type for every item in the batch.
+
+* *Body*
++
+Request body as `{"items": [..]}`. Each item must have `externalId` or `id`. Maximum 100 items. Defaults to `#[payload]`.
+
+* *Idempotency Key*
++
+Optional UUID (RFC 4122) for idempotent submission, sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:upsert-list
+    config-ref="Config"
+    doc:name="Upsert List"
+    recordType="customer">
+    <ms-netsuite-rest:body>#[payload]</ms-netsuite-rest:body>
+</ms-netsuite-rest:upsert-list>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`, containing the async job ID.
+
+== Configure the Delete List Operation
+
+The *Delete List* operation submits an asynchronous batch delete request for up to 100 records by ID, by sending `DELETE /record/v1/{recordType}?ids=...` with the `Prefer: respond-async` header. Accepts a comma-separated list of internal IDs or external IDs. For external IDs, use the `eid:` prefix.
+
+To configure the *Delete List* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type for every ID in the batch.
+
+* *IDs*
++
+Comma-separated internal IDs or external IDs with the `eid:` prefix (for example, `123,eid:ext1,456`). Quote external IDs that contain spaces (for example, `eid:'ext ID with spaces'`). Maximum 100 IDs.
+
+* *Idempotency Key*
++
+Optional UUID (RFC 4122) for idempotent submission, sent as the `X-NetSuite-Idempotency-Key` header. A duplicate UUID returns HTTP 409.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:delete-list
+    config-ref="Config"
+    doc:name="Delete List"
+    recordType="customer"
+    ids="123,eid:ext1,456"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`, containing the async job ID.
+
+== Configure the Get List Operation
+
+The *Get List* operation submits an asynchronous batch read request for up to 100 records by ID, by sending `GET /record/v1/{recordType}?ids=...&expandRecords=...` with the `Prefer: respond-async` header. When *Expand Records* is `true`, full record bodies are included. Otherwise, only metadata is returned.
+
+To configure the *Get List* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Record Type*
++
+The NetSuite record type for every ID in the batch.
+
+* *IDs*
++
+Comma-separated internal IDs or external IDs with the `eid:` prefix. Quote external IDs that contain spaces. Maximum 100 IDs.
+
+* *Expand Records*
++
+Whether to include full record bodies in each task result. Defaults to `true`.
+
+* *Expand Sub-Resources*, *Expand*, and *Fields*
++
+Optionally inline sublists and sub-records, expand specific sublists or subrecords, or limit the response to a comma-separated list of field names.
+
+* *Idempotency Key*
++
+Optional UUID (RFC 4122) for idempotent submission, sent as the `X-NetSuite-Idempotency-Key` header.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:get-list
+    config-ref="Config"
+    doc:name="Get List"
+    recordType="customer"
+    ids="123,456,789"
+    expandRecords="true"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`, containing the async job ID.
+
+== Configure the Get Async Job Status Operation
+
+The *Get Async Job Status* operation retrieves the current status of an asynchronous job by sending `GET /async/v1/job/{jobId}`. Poll this operation until `completed` is `true`. While the job is in progress, `progress` is `processing`. On success it becomes `succeeded`, and `endTime` is present.
+
+To configure the *Get Async Job Status* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Job ID*
++
+The async job ID returned by a batch operation (for example, *Add List*, *Update List*, or *Get List*).
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:get-async-job-status
+    config-ref="Config"
+    doc:name="Get Async Job Status"
+    jobId="#[vars.jobId]"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. When `completed` is `true`, use *Get Async Job Task List* to retrieve task IDs.
+
+== Configure the Get Async Job Task List Operation
+
+The *Get Async Job Task List* operation retrieves the list of tasks for a completed asynchronous job by sending `GET /async/v1/job/{jobId}/task/`. Call this operation after *Get Async Job Status* reports `completed: true`. The response contains a `links` array; extract each task ID from the last path segment of each `href`.
+
+To configure the *Get Async Job Task List* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Job ID*
++
+The async job ID whose tasks should be listed.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:get-async-job-task-list
+    config-ref="Config"
+    doc:name="Get Async Job Task List"
+    jobId="#[vars.jobId]"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. Extract task IDs from the `links` array for use with *Get Async Job Task Result*.
+
+== Configure the Get Async Job Task Result Operation
+
+The *Get Async Job Task Result* operation retrieves the result of a single task within an asynchronous job by sending `GET /async/v1/job/{jobId}/task/{taskId}/result`. Call this operation for each task ID from *Get Async Job Task List*. Successful tasks return an empty body `{}`, and failed tasks return a body that describes the failure. Check `attributes.statusCode` to distinguish success (`2xx`) from failure (`4xx`/`5xx`).
+
+To configure the *Get Async Job Task Result* operation:
+
+include::connectors::partial$t-configure-operations.adoc[]
+* *Job ID*
++
+The async job ID.
+
+* *Task ID*
++
+The task ID whose result should be retrieved. Extract this ID from the *Get Async Job Task List* response.
+
+=== XML Configuration
+
+This is the XML for this operation:
+
+[source,xml,linenums]
+----
+<ms-netsuite-rest:get-async-job-task-result
+    config-ref="Config"
+    doc:name="Get Async Job Task Result"
+    jobId="#[vars.jobId]"
+    taskId="#[vars.taskId]"/>
+----
+
+=== Output Configuration
+
+The operation outputs a Binary payload with `NetSuiteRestAttributes`. Check `attributes.statusCode` for per-record success or failure.
+
+== See Also
+
+* xref:index.adoc[NetSuite REST Connector Overview]
+* xref:configuring-record-operations.adoc[Configuring Record Operations]
+* xref:netsuite-rest-connector-reference.adoc[NetSuite REST Connector Reference]
+* https://help.salesforce.com[Salesforce Help]

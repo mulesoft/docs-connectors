@@ -1,0 +1,133 @@
+= Configure AWS IAM Authentication for Apache Kafka Connector
+
+Use AWS Identity and Access Management (IAM) authentication to connect Apache Kafka Connector to an Amazon MSK cluster.
+
+== Configure the AWS IAM Driver in the POM File
+
+In the Mule app `pom.xml` file, configure the `aws-msk-iam-auth` dependency required for SASL/AWS IAM authentication. Add the dependency to the `additionalPluginDependencies` section for `mule-kafka-connector`.
+
+[source,xml,linenums]
+----
+<plugin>
+  <groupId>org.mule.tools.maven</groupId>
+  <artifactId>mule-maven-plugin</artifactId>
+  <version>${mule.maven.plugin.version}</version>
+  <extensions>true</extensions>
+  <configuration>
+    <additionalPluginDependencies>
+      <plugin>
+        <groupId>com.mulesoft.connectors</groupId>
+        <artifactId>mule-kafka-connector</artifactId>
+        <additionalDependencies>
+          <dependency>
+            <groupId>software.amazon.msk</groupId>
+            <artifactId>aws-msk-iam-auth</artifactId>
+            <version>2.3.4</version>
+          </dependency>
+        </additionalDependencies>
+      </plugin>
+    </additionalPluginDependencies>
+  </configuration>
+</plugin>
+----
+
+Use version `2.3.4` or later.
+
+[IMPORTANT]
+====
+Don't add `aws-msk-iam-auth` as a `<dependency>` or `<sharedLibrary>`. The driver must resolve only through the connector's `additionalPluginDependencies`. Adding it as a shared library causes a `NoClassDefFoundError` for `org.apache.kafka.common.security.auth.AuthenticateCallbackHandler` during deployment. If Anypoint Studio rewrites this block into `<sharedLibraries>`, change it back to `additionalPluginDependencies`.
+====
+
+== Configure AWS IAM Authentication
+
+The SASL/AWS IAM connection supports two authentication modes, controlled by the *Try Default AWS Credentials Provider Chain* field.
+
+=== Configure Static Credentials with AssumeRole
+
+*Try Default AWS Credentials Provider Chain* is `false` by default. Provide *Access Key ID*, *Secret Access Key*, and *Role ARN*:
+
+[source,xml,linenums]
+----
+<kafka:producer-config name="producer-aws-iam-config">
+  <kafka:producer-sasl-aws-iam-connection
+      accessKeyId="${aws.accessKeyId}"
+      secretAccessKey="${aws.secretAccessKey}"
+      roleArn="arn:aws:iam::123456789012:role/my-msk-client-role"
+      roleSessionName="mule-producer-prod"
+      region="us-east-1">
+    <kafka:bootstrap-servers>
+      <kafka:bootstrap-server value="b-1.my-cluster.abcde.c2.kafka.us-east-1.amazonaws.com:9098" />
+    </kafka:bootstrap-servers>
+  </kafka:producer-sasl-aws-iam-connection>
+</kafka:producer-config>
+----
+
+If the caller credentials are temporary, such as federated credentials, AWS SSO credentials, or credentials from a prior STS call, add *Session Token*.
+
+[source,xml,linenums]
+----
+<kafka:consumer-config name="consumer-aws-iam-config">
+  <kafka:consumer-sasl-aws-iam-connection
+      accessKeyId="${aws.accessKeyId}"
+      secretAccessKey="${aws.secretAccessKey}"
+      sessionToken="${aws.sessionToken}"
+      roleArn="arn:aws:iam::123456789012:role/my-msk-client-role"
+      roleSessionName="mule-consumer-prod"
+      region="us-east-1"
+      groupId="my-consumer-group"
+      autoOffsetReset="EARLIEST">
+    <kafka:bootstrap-servers>
+      <kafka:bootstrap-server value="b-1.my-cluster.abcde.c2.kafka.us-east-1.amazonaws.com:9098" />
+    </kafka:bootstrap-servers>
+    <kafka:topic-patterns>
+      <kafka:topic-pattern value="my-topic" />
+    </kafka:topic-patterns>
+  </kafka:consumer-sasl-aws-iam-connection>
+</kafka:consumer-config>
+----
+
+=== Configure the Default Credentials Provider Chain
+
+Set *Try Default AWS Credentials Provider Chain* to `true` and leave *Access Key ID* and *Secret Access Key* empty. The identity is resolved from the runtime environment, such as system properties, environment variables, EKS IRSA, an ECS task role, an EC2 instance profile, or an `~/.aws` profile.
+
+For a roleless configuration, the resolved identity accesses the cluster directly:
+
+[source,xml,linenums]
+----
+<kafka:producer-config name="producer-aws-iam-default-chain">
+  <kafka:producer-sasl-aws-iam-connection
+      region="us-east-1"
+      tryDefaultAwsCredentialsProviderChain="true">
+    <kafka:bootstrap-servers>
+      <kafka:bootstrap-server value="b-1.my-cluster.abcde.c2.kafka.us-east-1.amazonaws.com:9098" />
+    </kafka:bootstrap-servers>
+  </kafka:producer-sasl-aws-iam-connection>
+</kafka:producer-config>
+----
+
+To use AssumeRole, specify *Role ARN* for the resolved identity. This is common for CloudHub 2.0 private spaces and Runtime Fabric on EKS:
+
+[source,xml,linenums]
+----
+<kafka:producer-config name="producer-aws-iam-assume-role">
+  <kafka:producer-sasl-aws-iam-connection
+      roleArn="arn:aws:iam::123456789012:role/my-msk-client-role"
+      region="us-east-1"
+      tryDefaultAwsCredentialsProviderChain="true">
+    <kafka:bootstrap-servers>
+      <kafka:bootstrap-server value="b-1.my-cluster.abcde.c2.kafka.us-east-1.amazonaws.com:9098" />
+    </kafka:bootstrap-servers>
+  </kafka:producer-sasl-aws-iam-connection>
+</kafka:producer-config>
+----
+
+[NOTE]
+====
+The default credentials provider chain works only on self-managed runtimes with an AWS identity attached to the environment, such as Runtime Fabric on EKS, standalone Mule on EC2, or CloudHub 2.0 private spaces. It doesn't apply to CloudHub 1.0. Use static credentials with AssumeRole instead.
+====
+
+== See Also
+
+* xref:kafka-connector-reference.adoc#consumer-sasl-aws-iam[Consumer SASL/AWS IAM Connection]
+* xref:kafka-connector-reference.adoc#producer-sasl-aws-iam[Producer SASL/AWS IAM Connection]
+* xref:kafka-connector-examples.adoc[Kafka Connector Examples]

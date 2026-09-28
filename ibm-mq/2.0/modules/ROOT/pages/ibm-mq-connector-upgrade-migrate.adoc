@@ -1,0 +1,185 @@
+= Upgrading and Migrating IBM MQ Connector to Version 2.x
+
+Upgrade Anypoint Connector for IBM MQ (IBM MQ Connector) to version 2.x.
+
+== Supported Upgrade Paths
+
+[%header,cols="50a,50a"]
+|===
+|From Version | To Version
+|1.x |2.x
+|===
+
+== Changes in This Release
+
+IBM MQ Connector 2.x contains the following changes:
+
+* This connector is now compatible with Java 17 only.
+* This connector uses the Jakarta Messaging (`jakarta.jms`) namespace, replacing `javax.jms`.
+* The recommended IBM MQ client library is now `com.ibm.mq.jakarta.client`, replacing `com.ibm.mq.allclient`.
+* The `enableXa` attribute is removed from the connection configuration.
+* IBM MQ Connector provides separate connection types for XA and non-XA transactions. You can now select the new *IBM MQ XA Connection* type in the *IBM MQ Config* window. This new connection type replaces the previous `enableXa` attribute on a single connection.
+* The existing *IBM MQ Connection* type is now used only for non-XA scenarios.
+* The connection element is renamed from `<ibm-mq:connection>` to `<ibm-mq:ibm-mq-connection>`.
+* The *XA connection pool* configuration (*Min Pool Size*, *Max Pool Size*, and *Max Idle Seconds*) applies only to the *IBM MQ XA Connection* type.
+* These libraries are upgraded:
+
+** The `jakarta.jms-api` library is upgraded to version 3.1.0, replacing `javax.jms-api`.
+** The IBM MQ client library is upgraded to `com.ibm.mq.jakarta.client` version 9.4.5.1.
+** The Spring framework is upgraded to version 6.2.19.
+** The Mule JMS client library is upgraded to version 2.0.1.
+
+In version 1.x, you configured the connection by using the `<ibm-mq:connection>` element, and you enabled XA transactions by setting the `enableXa` attribute on that same connection:
+
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+  <ibm-mq:connection enableXa="true">
+    <ibm-mq:connection-mode>
+      <ibm-mq:client host="0.0.0.0" port="1414" queueManager="QM1" channel="DEV.ADMIN.SVRCONN"/>
+    </ibm-mq:connection-mode>
+  </ibm-mq:connection>
+</ibm-mq:config>
+----
+
+In version 2.x, configure XA transactions using the new *IBM MQ XA Connection* connection type:
+
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+  <ibm-mq:ibm-mq-xa-connection>
+    <ibm-mq:connection-mode>
+      <ibm-mq:client host="0.0.0.0" port="1414" queueManager="QM1" channel="DEV.ADMIN.SVRCONN"/>
+    </ibm-mq:connection-mode>
+  </ibm-mq:ibm-mq-xa-connection>
+</ibm-mq:config>
+----
+
+Non-XA connections require the element rename only. Change `<ibm-mq:connection>` to `<ibm-mq:ibm-mq-connection>`:
+
+[source,xml,linenums]
+----
+<ibm-mq:config name="IBM_MQ_Config">
+  <ibm-mq:ibm-mq-connection>
+    <ibm-mq:connection-mode>
+      <ibm-mq:client host="0.0.0.0" port="1414" queueManager="QM1" channel="DEV.ADMIN.SVRCONN"/>
+    </ibm-mq:connection-mode>
+  </ibm-mq:ibm-mq-connection>
+</ibm-mq:config>
+----
+
+Both connection types accept the same connection parameters. The *IBM MQ XA Connection* type adds the *Min Pool Size* (`minPoolSize`), *Max Pool Size* (`maxPoolSize`), and *Max Idle Seconds* (`maxIdleSeconds`) XA connection pool parameters, which default to `4`, `32`, and `60`. For more information, see xref:ibm-mq-xml-ref.adoc#config_xa_connection[IBM MQ XA Connection].
+
+== Requirements
+
+Ensure your system meets the following compatibility requirements before you perform the upgrade:
+
+[%header%autowidth.spread]
+|===
+|Application/Service|Version
+|Mule runtime |4.10 and later
+|Java |17
+|Anypoint Studio |7.21 and later
+|===
+
+Mule versions 4.4, 4.6, and 4.9 are not supported. Applications on these versions must remain on IBM MQ Connector 1.x. Upgrade the Mule runtime and JDK in all environments before you upgrade the connector, because the connector doesn't load on earlier runtimes.
+
+== Upgrade Prerequisites
+
+Before you perform the upgrade, create a backup of your files, data, and configuration in case you need to restore to the previous version.
+
+== Upgrade Steps
+
+Follow these steps to perform the upgrade to version 2.x:
+
+. In Anypoint Studio, create a Mule project.
+. In the *Mule Palette* view, click *Search in Exchange*.
+. In *Add Dependencies to Project*, enter `ibm mq` in the search field.
+. In *Available modules*, select *IBM MQ Connector* and click *Add*.
+. Click *Finish*.
+. Verify that the IBM MQ Connector dependency version is `2.x` in the project's `pom.xml` file:
++
+[source,xml,linenums]
+----
+<dependency>
+  <groupId>com.mulesoft.connectors</groupId>
+  <artifactId>mule-ibm-mq-connector</artifactId>
+  <version>2.0.0</version>
+  <classifier>mule-plugin</classifier>
+</dependency>
+----
+
+Studio upgrades the connector automatically, but configuration changes are required.
+
+== Post-Upgrade Steps
+
+After you install the latest version of the connector, complete the following steps:
+
+. Replace the `com.ibm.mq.allclient` library with the Jakarta Messaging client library in the project's `pom.xml` file:
++
+[source,xml,linenums]
+----
+<dependency>
+    <groupId>com.ibm.mq</groupId>
+    <artifactId>com.ibm.mq.jakarta.client</artifactId>
+    <version>9.4.5.1</version>
+</dependency>
+----
++
+If you keep the `com.ibm.mq.allclient` library, the connector wraps it to expose a `jakarta.jms` connection factory. This backward compatibility support is best-effort only. For details and limitations, see xref:index.adoc#javax-client-library[Support for the Legacy javax.jms Client Library].
+. Rename each `<ibm-mq:connection>` element to `<ibm-mq:ibm-mq-connection>`.
+. In each *IBM MQ Config* global element that uses XA transactions, change the *Connection* field to *IBM MQ XA Connection*.
+. Remove any reference to the `enableXa` attribute, if present, because it no longer exists on the connection configuration.
+. Move any *XA connection pool* configuration (*Min Pool Size*, *Max Pool Size*, and *Max Idle Seconds*) to the new XA connection element.
+. Make sure all environments run on Mule 4.10 or later and use JDK 17, and update the Maven build configuration to use a JDK 17 toolchain.
+
+For more information, see xref:ibm-mq-transactions.adoc[Handling Transactions in IBM MQ].
+
+== Verify the Upgrade
+
+After you install the latest version of the connector, follow these steps to verify the upgrade:
+
+. In Studio, verify that there are no errors in the *Problems* or *Console* views.
+. Verify that there are no problems in the project `pom.xml` file.
+. Verify that no `enableXa` attributes and no `<ibm-mq:connection>` elements remain in your configurations.
+. Test the connection to verify that the operations work.
+. Verify that the application log doesn't contain a warning about the legacy `javax.jms` client library.
+. If your app uses XA transactions, verify that the corresponding XA connection type is configured and that transactions still commit and roll back as expected.
+
+== Revert the Upgrade
+
+If it is necessary to revert to the previous version of IBM MQ Connector, change the `mule-ibm-mq-connector` dependency version in the project's `pom.xml` file to the previous version, and revert any XA connection elements back to the `<ibm-mq:connection>` element with the `enableXa` attribute set. Restore the `com.ibm.mq.allclient` IBM MQ client library.
+
+You must update the project's `pom.xml` file in Anypoint Studio.
+
+Reverting requires an environment that is compatible with version 1.x requirements.
+
+== Troubleshooting
+
+If you encounter issues, perform these troubleshooting steps.
+
+=== Troubleshoot Startup Parse Failures
+
+If the application fails to start with an unknown-attribute or unknown-element error, follow these steps:
+
+. Replace the `enableXa="true"` attribute with the `<ibm-mq:ibm-mq-xa-connection>` element.
+. Rename `<ibm-mq:connection>` elements to `<ibm-mq:ibm-mq-connection>`.
+
+=== Troubleshoot Runtime Compatibility Issues
+
+If the application fails to deploy with a JDK or Mule runtime error, follow these steps:
+
+. Upgrade to Mule 4.10 or later. Earlier versions can't load this connector version.
+. Upgrade to JDK 17.
+
+=== Troubleshoot Connection Failures That Report shim:javax-fallback
+
+If connection failure messages end with `[shim:javax-fallback]`, the connector is using the legacy `com.ibm.mq.allclient` library through the backward compatibility wrapper. Replace that library with `com.ibm.mq.jakarta.client` 9.4.5.1.
+
+== See Also
+
+* xref:index.adoc[IBM MQ Connector Overview]
+* xref:ibm-mq-transactions.adoc[Handling Transactions in IBM MQ]
+* xref:ibm-mq-xml-ref.adoc[IBM MQ Connector Reference]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.salesforce.com[Salesforce Help]
