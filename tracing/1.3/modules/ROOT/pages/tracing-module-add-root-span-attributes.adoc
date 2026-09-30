@@ -62,6 +62,26 @@ http://www.mulesoft.org/schema/mule/tracing http://www.mulesoft.org/schema/mule/
 </mule>
 ----
 
+== Behavior and Limitations
+
+The root span is exported when the transaction ends, so attributes added anywhere on the synchronous path of the flow are included in it. However, a span cannot be modified after it has already been exported, which leads to the following limitations:
+
+* *Do not use this operation inside an `async` scope.* The `async` scope's span is a child of the flow (root) span, in the same local trace, so the root does not move to the async branch. The problem is timing: the main flow does not wait for the `async` block to finish, so the flow (root) span can be exported before or after the `async` block runs. Whether the attribute makes it onto the exported root span therefore depends on unpredictable thread scheduling:
++
+[source,text]
+----
+mule:flow                 <-- ROOT SPAN (root span attributes land here)
+├── mule:set-variable
+├── mule:async             <-- child span; runs on its own thread, same trace
+│   └── tracing:add-root-span-attributes   <-- may run after the root span is already exported
+└── mule:set-variable
+----
++
+Because the outcome is not deterministic, set root span attributes from the flow's synchronous path instead of from inside an `async` scope.
+* *A `flow-ref` shares the caller's trace.* A referenced flow runs within the same local trace as its caller, so attributes that this operation sets inside a referenced flow land on the caller's root span, not on a separate root for the referenced flow.
+* *Distributed traces are enriched locally.* When a request arrives with an inbound distributed trace context from a remote caller, this operation adds the attributes to this application's own local root span, which is a child of the remote span. The attributes are never propagated back to the upstream caller's span.
+* *Root span attributes survive sampling and low tracing levels.* Because the attributes are added to the root span rather than to a child span, they remain in the exported trace even when child spans are dropped by sampling, or when `mule.openTelemetry.tracer.level` is set to `OVERVIEW`, which exports only the root span.
+
 == See Also
 
 * xref:tracing-module-examples.adoc[Tracing Module Examples]
