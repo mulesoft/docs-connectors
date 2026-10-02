@@ -1,0 +1,81 @@
+= Add Custom Attributes to the Root Span with Tracing Module
+
+You might want to add custom attributes to the root span of a transaction if:
+
+* You want to attach transaction-level fields, such as a client ID or conversation ID, to the primary span instead of a child span.
+* You want the attributes to be present on the root span regardless of how deeply nested the flow that sets them is.
+
+For these scenarios, the Tracing module *Add Root Span Attributes* operation enables you to add key-value attributes to the current transaction's root span.
+
+This operation builds on Mule runtime's OpenTelemetry tracing support. Before using it, see xref:mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime] to understand traces and spans, and to configure trace export.
+
+NOTE: This operation requires Mule runtime engine 4.13 or later. On earlier runtimes, it is a no-op.
+
+== Configure the Add Root Span Attributes Operation
+
+In the following Mule app example, you configure the *Add Root Span Attributes* operation in Anypoint Code Builder:
+
+image::tracing-module-add-root-span-attributes-flow.png["A flow showing an Add Root Span Attributes operation"]
+
+. In the canvas UI, click the image:anypoint-code-builder::icon-plus.png["Add component icon",15,15] (*Add component*) icon, search for `Listener`, and select *Listener* from the *HTTP* results.
+. On the *General* tab, set *Path* to `/test`.
+. Add an HTTP Listener configuration (`<http:listener-config>`) that listens on port `8081`. See xref:tracing-module-config-acb.adoc#add-global-config[Add a Global Configuration].
+. Click the image:anypoint-code-builder::icon-plus.png["Add component icon",15,15] (*Add component*) icon after *Listener*, search for `Tracing`, and select *Add Root Span Attributes*.
+. On the *General* tab, set *Attributes* to `#[{'clientId': attributes.queryParams.clientId}]`:
++
+image::tracing-module-add-root-span-attributes.png["The Add Root Span Attributes General tab with the Attributes field set"]
+. Run your application.
+. In a terminal, run `curl "localhost:8081/test?clientId=example-client"`.
+
+The `clientId` attribute is added to the root span exported for this transaction when the transaction ends.
+
+== XML for Configuring Add Root Span Attributes
+
+Paste this code into the configuration XML file of your integration project to quickly load the flow for this example into your Mule app:
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tracing="http://www.mulesoft.org/schema/mule/tracing"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tracing http://www.mulesoft.org/schema/mule/tracing/current/mule-tracing.xsd">
+	<http:listener-config name="HTTP_Listener_config" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="tracingmodule3Flow"  >
+		<http:listener config-ref="HTTP_Listener_config" path="/test"/>
+		<tracing:add-root-span-attributes>
+			<tracing:attributes><![CDATA[#[{'clientId': attributes.queryParams.clientId}]]]></tracing:attributes>
+		</tracing:add-root-span-attributes>
+	</flow>
+</mule>
+----
+
+== Behavior and Limitations
+
+The root span is exported when the transaction ends, so attributes added anywhere on the synchronous path of the flow are included in it. However, a span cannot be modified after it has already been exported, which leads to the following limitations:
+
+* *Do not use this operation inside an `async` scope.* The `async` scope's span is a child of the flow (root) span, in the same local trace, so the root does not move to the async branch. The problem is timing: the main flow does not wait for the `async` block to finish, so the flow (root) span can be exported before or after the `async` block runs. Whether the attribute makes it onto the exported root span therefore depends on unpredictable thread scheduling:
++
+[source,text]
+----
+mule:flow                 <-- ROOT SPAN (root span attributes land here)
+├── mule:set-variable
+├── mule:async             <-- child span; runs on its own thread, same trace
+│   └── tracing:add-root-span-attributes   <-- may run after the root span is already exported
+└── mule:set-variable
+----
++
+Because the outcome is not deterministic, set root span attributes from the flow's synchronous path instead of from inside an `async` scope.
+* *A `flow-ref` shares the caller's trace.* A referenced flow runs within the same local trace as its caller, so attributes that this operation sets inside a referenced flow land on the caller's root span, not on a separate root for the referenced flow.
+* *Distributed traces are enriched locally.* When a request arrives with an inbound distributed trace context from a remote caller, this operation adds the attributes to this application's own local root span, which is a child of the remote span. The attributes are never propagated back to the upstream caller's span.
+* *Root span attributes survive sampling and low tracing levels.* Because the attributes are added to the root span rather than to a child span, they remain in the exported trace even when child spans are dropped by sampling, or when `mule.openTelemetry.tracer.level` is set to `OVERVIEW`, which exports only the root span.
+
+== See Also
+
+* xref:mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime]
+* xref:tracing-module-examples.adoc[Tracing Module Examples]
+* https://help.salesforce.com[Salesforce Help]
