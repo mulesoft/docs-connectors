@@ -1,0 +1,111 @@
+= OpenTelemetry Support in HTTP Connector
+
+Anypoint Connector for HTTP (HTTP Connector) contributes HTTP-specific information to Mule traces. The HTTP *Listener* source customizes the associated flow span, and the HTTP *Request* operation customizes its operation span.
+
+This article describes the attributes emitted by HTTP Connector 1.13. The connector uses a combination of newer and legacy OpenTelemetry HTTP semantic-convention names. The tables describe the actual emitted values and types.
+
+== Before You Begin
+
+* Use HTTP Connector 1.13.0 for the attributes described in this article. Earlier connector versions emit a different set of attributes.
+* Enable OpenTelemetry tracing and configure export as described in xref:4.13@mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime]. Trace generation and export require Mule runtime 4.11.0 or later and the Direct Telemetry Stream prerequisites described there.
+
+[[http-spans]]
+== HTTP Spans
+
+[%header,cols="1,2,1"]
+|===
+| Component | Span Name | Span Kind
+| HTTP *Listener* | Received method followed by the configured listener path, for example, `POST /api` | `SERVER`
+| HTTP *Request* | Uppercase request method, for example, `GET` | `CLIENT`
+|===
+
+APIKit routing can rename the listener flow span to a matched API resource route template.
+
+[[common-attributes]]
+== Common Attributes
+
+These attributes apply to both listener and requester spans. All values in this article are emitted as `String`, including ports and HTTP response status codes.
+
+[%header,cols="2,4"]
+|===
+| Attribute | Value and Condition
+| `http.request.method` | Uppercase method when it is `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`, or `QUERY`; otherwise, `_OTHER`.
+| `http.method` | Uppercase method, including methods normalized to `_OTHER` in `http.request.method`. Deprecated in HTTP Connector 1.13 but still emitted for compatibility.
+| `http.flavor` | HTTP protocol version when available. The listener takes the version from the received request, for example, `1.1`. The requester maps HTTP/0.9 to `0.9`, HTTP/1.0 to `1.0`, and other non-null protocol values to `1.1`.
+| `url.path` | Concrete request path. For the listener, this is the received request path; for the requester, it is the path from the target URI. This can differ from a configured listener path or route template.
+| `http.response.status_code` | Response status code, for example, `200`, when an HTTP response is available.
+|===
+
+[[listener-attributes]]
+== HTTP Listener Attributes
+
+In addition to the common attributes, listener spans include:
+
+[%header,cols="2,4"]
+|===
+| Attribute | Value and Condition
+| `server.port` | Configured listener port, as a string.
+| `url.scheme` | Scheme of the received request, for example, `http` or `https`.
+| `http.route` | Configured listener path.
+| `http.target` | Configured listener path. This legacy attribute remains emitted.
+| `net.host.name` | Configured listener host. This legacy attribute remains emitted.
+| `http.user_agent` | Received `User-Agent` header, when present. This legacy attribute remains emitted.
+| `url.query` | Nonempty query string, only when the query-string system property is enabled. See <<query-string,Include the Listener Query String>>.
+|===
+
+The listener uses `net.host.name` for its host; it does not emit the requester's `server.address` attribute.
+
+[[requester-attributes]]
+== HTTP Request Attributes
+
+In addition to the common attributes, requester spans include:
+
+[%header,cols="2,4"]
+|===
+| Attribute | Value and Condition
+| `url.full` | Full target URI as a string, including its query string when present.
+| `server.address` | Host from the target URI.
+| `server.port` | Explicit port from the target URI, or the scheme's default port when no port is specified, for example, `80` for HTTP or `443` for HTTPS. Emitted as a string.
+|===
+
+[[errors]]
+== Response Status and Errors
+
+The connector updates span status and adds `error.type` under these conditions:
+
+[%header,cols="1,2,2,1"]
+|===
+| Span Kind | Condition | `error.type` Value (String) | Span Status
+| `SERVER` | Response status from 500 through 599 | Status code, for example, `503` | `ERROR`
+| `CLIENT` | Response status of 400 or greater | Status code, for example, `404` | `ERROR`
+| `CLIENT` | Transport failure without an HTTP response | HTTP connector error name, for example, `CONNECTIVITY` or `TIMEOUT` | `ERROR`
+|===
+
+For other response status codes, the HTTP status update leaves the span status `UNSET` and does not add `error.type`. A transport failure without a response does not provide `http.response.status_code`. Other Mule error-handling behavior can also affect the span; see xref:4.13@mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime].
+
+[[query-string]]
+== Include the Listener Query String
+
+The listener's `url.query` attribute is disabled by default. To include a nonempty received query string, set this JVM system property before starting Mule:
+
+[source,text]
+----
+-Dmule.http.tracing.urlQuery.enabled=true
+----
+
+The connector records the received query string without redacting its parameter values. Enable this property only when those values are appropriate to export. The property controls the listener's `url.query` attribute; the requester's `url.full` already contains the target URI, including any query string.
+
+[[compatibility]]
+== Attribute Compatibility
+
+HTTP Connector 1.13 replaces `http.url` with `url.full` on requester spans, `net.peer.name` with `server.address` on requester spans, `net.host.port` with `server.port`, and `http.status_code` with `http.response.status_code`. Update queries and dashboards that use the replaced names.
+
+The connector continues to emit `http.method` alongside `http.request.method` for compatibility. It also retains `http.flavor` and the listener attributes `http.target`, `net.host.name`, and `http.user_agent`. It does not emit `http.request.method_original`, `network.protocol.version`, or `user_agent.original`.
+
+Use the string types shown here when filtering or processing telemetry. The numeric meaning of a port or status code does not make its emitted value an integer.
+
+== See Also
+
+* xref:4.13@mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime]
+* xref:http-listener-ref.adoc[Configure HTTP Listener Source]
+* xref:http-request-ref.adoc[Configure HTTP Request Operation]
