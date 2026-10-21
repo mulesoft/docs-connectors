@@ -56,6 +56,7 @@ Each persist operation consists of deleting the existing key and storing the new
 
 If you have multiple workers deployed in CloudHub, the *Replay topic listener* and *Replay channel listener* sources process each message on all Mule instances. To avoid this situation, you can deploy your application on a single worker and then use a shared queue to pass the messages to a different worker to process the message.
 
+[[resume-from-the-last-replay-id]]
 === Resume from the Last Replay ID
 
 To enable the resume from the last replay ID functionality for the *Replay topic listener* and *Replay channel listener* sources, the connector must store information about the events that were successfully processed by the flow in which the source is used. The connector uses an object store to store that information.
@@ -73,6 +74,7 @@ If the application stops and restarts, or if a connection issue triggers a recon
 To persist data so that the app continues processing events when restarted, create a persistent object store, as described in xref:mule-runtime::creating-and-managing-a-cluster-manually.adoc[Create and Manage a Cluster Manually].
 * If you use multiple workers when running the app in CloudHub, all of the workers receive and process the events.
 
+[[replay-sources-field-configurations]]
 === Replay Sources Field Configurations
 
 Learn how to handle the priority in the replay sources field setup by using different configurations:
@@ -181,6 +183,46 @@ payload=
  event={replayId=49544589}},
  channel=/event/Cloud_News__e}
 ----
+
+[[platform-event-listener-recovery]]
+=== Recover from Platform Event Listener Connection Issues
+
+Salesforce Connector receives platform events through the CometD-based Streaming API. Connection issues can interrupt event delivery even while the Mule app remains running.
+
+==== Recover from an Unknown Client Error
+
+The `403::Unknown client` error can occur after a network interruption causes the CometD server to time out the client and delete its connection state. This error can be expected during connection recovery and doesn't necessarily indicate an authentication or permissions problem.
+
+When Salesforce returns this error with `reconnect=handshake` advice, the connector attempts to reconnect and resubscribe. A replay listener can resume from a stored replay ID, depending on its replay configuration and whether the events are still within the Salesforce retention window.
+
+For more information about the error and handshake advice, see https://developer.salesforce.com/docs/platform/api-streaming/guide/streaming-handling-errors.html[Handling Streaming API Errors].
+
+[NOTE]
+====
+Earlier Salesforce Connector versions can stop receiving events after `403::Unknown client` errors. Salesforce Connector version 10.22.5 added recovery handling for this error with `reconnect=handshake` advice for *Subscribe Channel Listener*, *Subscribe Topic Listener*, *Replay Channel Listener*, and *Replay Topic Listener*. Salesforce Connector version 11.3.3 also fixed a *Replay Channel Listener* connection leak during `403` or `401` recovery that could cause duplicate event consumption.
+
+Use the latest supported version compatible with your Mule runtime to receive these and subsequent fixes. See xref:release-notes::connector/salesforce-connector-release-notes-mule-4.adoc[Salesforce Connector Release Notes] and xref:salesforce-connector-upgrade-migrate.adoc[Upgrading and Migrating Salesforce Connector].
+====
+
+==== Handle Persistent Errors and Event Limits
+
+The `403::Organization total events daily limit exceeded` error isn't a transient connection failure. It indicates that the Salesforce organization has exhausted its event delivery allocation. The listener can enter a continuous reconnect loop without quota-specific backoff while the limit remains exceeded. Reconnecting doesn't restore the allocation.
+
+If the listener repeatedly reconnects with this error, stop the affected listener or app to interrupt the loop. Check event usage with your Salesforce administrator and reduce unnecessary subscriptions or replay requests, or review whether your organization needs additional event delivery allocation. Wait until the allocation is available again before restarting the listener or app. Repeatedly restarting the app doesn't resolve the limit.
+
+To throw an exception during deployment when the daily limit is already exceeded, set *Throw Exception When Organization Daily Limit Exceeded* to `true` on *Replay Channel Listener*. This setting doesn't control retry delays. See xref:salesforce-connector-reference.adoc#replay-channel-listener[*Replay Channel Listener*].
+
+==== Configure Resilient Event Consumption
+
+To reduce event loss and unnecessary replay after a connection interruption:
+
+* Persist replay IDs across application restarts. See <<resume-from-the-last-replay-id,Resume from the Last Replay ID>> for object store requirements in your deployment environment.
+* Set *Replay Option* to `FROM_LAST_REPLAY_ID` (`replayOption="FROM_LAST_REPLAY_ID"`) to resume from the highest received replay ID stored in the object store. This option doesn't account for whether the flow successfully processed that event.
+* If you also need to replay failed events, enable *Replay Failed Events If Any or Resume from Last Replay Id*. This setting overrides *Replay Option* and can consume additional event quota. See <<replay-sources-field-configurations,Replay Sources Field Configurations>>.
+* Configure the source's *Reconnection Strategy* with an appropriate retry interval and retry count for connectivity errors reported to Mule. These settings don't restore event allocation or automatically wait until the allocation is available again. See xref:mule-runtime::reconnection-strategy-about.adoc[Reconnection Strategies].
+* Monitor event consumption, not just application status. If events stop arriving and don't resume after the connection issue is resolved, check the logs and restart the stopped listener or app as needed.
+
+As an alternative to CometD-based streaming, consider migrating to xref:salesforce-pubsub-connector::index.adoc[Salesforce Pub/Sub Connector], which uses the Pub/Sub API. Review its replay and recovery configuration before migrating. Salesforce event limits and retention requirements still apply.
 
 == Working with Change Data Capture Events
 
