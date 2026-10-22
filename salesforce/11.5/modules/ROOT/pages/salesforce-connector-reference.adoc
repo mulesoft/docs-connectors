@@ -42,7 +42,7 @@ Default Configuration for Salesforce Connector.
 [[sfdc-config_basic]]
 === Basic Authentication Connection Type (Supported by Salesforce API v64.0 and below)
 
-Uses a username and a password for authentication.
+Uses a username and a password for authentication. This connection calls the Salesforce SOAP API `login()` operation. Salesforce retires that operation in the Summer '27 release. To move an existing app to a supported OAuth connection, see <<migrate-deprecated-auth>>.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
@@ -258,7 +258,7 @@ Uses a client ID and client secret for authentication.
 [[sfdc-config_oauth-user-pass]]
 === OAuth Username Password Connection Type
 
-Uses OAuth 2.0 with a user and password for authentication.
+Uses OAuth 2.0 with a user and password for authentication. Salesforce retires this flow on February 20, 2027, and Salesforce Connector 12.x removes this connection type. To move an existing app to a supported OAuth connection, see <<migrate-deprecated-auth>>.
 
 [%header,cols="20s,25a,30a,15a,10a"]
 |===
@@ -359,6 +359,119 @@ Uses OAuth 2.0 with a signed SAML 2.0 assertion to request an access token.
 | Token Endpoint a| String |  URL pointing to the server that provides the authentication token. |  `\https://login.salesforce.com/services/oauth2/token` |
 | TLS configuration a| <<Tls>> |  Configures TLS. If using the HTTPS protocol, you must configure TLS.  |  |
 | Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
+|===
+
+[[migrate-deprecated-auth]]
+== Migrate from Deprecated Authentication
+
+Salesforce is retiring authentication methods that existing Mule apps use with Salesforce Connector. Move those apps to a supported OAuth connection before the retirement date so the integration keeps running.
+
+=== Retirement Dates
+
+* *OAuth 2.0 username-password flow.* Salesforce stops supporting this flow for connected apps on February 20, 2027. Salesforce first scheduled this retirement for the Winter '27 release, then moved enforcement to February 20, 2027. Orgs created in Summer '26 and later already block the flow. Salesforce Connector 11.x exposes this flow as the *OAuth Username Password* connection type. Salesforce Connector 12.x removes that connection type, and apps that still use it fail to deploy. For Salesforce's announcement, see https://help.salesforce.com/s/articleView?id=release-notes.rn_security_unpw_flow_retirement.htm&language=en_US&release=262&type=5[Retirement of OAuth 2.0 Username-Password Flow^].
+* *SOAP API `login()`.* Salesforce retires `login()` in API versions 31.0 through 64.0 in the Summer '27 release. API version 65.0 and later don't include `login()`. Salesforce Connector *Basic Authentication* calls this operation, and that connection remains available only for Salesforce API v64.0 and earlier. For Salesforce's announcement, see https://help.salesforce.com/s/articleView?id=005132110&language=en_US&type=1[Platform SOAP API login() Retirement^].
+
+Earlier SOAP `login()` restrictions can also cause failures before Summer '27. Starting December 1, 2026, `login()` succeeds only when the user has the *Use Any API Auth* permission. A broad login IP range also requires a security token. Treat those changes as interim controls. The durable fix is to migrate the connection to OAuth.
+
+=== Choose a Replacement Connection
+
+Use *OAuth JWT* for long-term, unattended Mule apps. The app signs a certificate instead of sending a user password or a client secret. Use *OAuth Client Credentials* when you want a simpler server-to-server setup with a client ID and client secret. Use *OAuth v2.0* when a person must sign in and approve access. That connection uses the authorization code grant.
+
+[%header,cols="40a,60a"]
+|===
+|Current connection | Replace it with
+|*OAuth Username Password* | *OAuth JWT* (recommended), *OAuth Client Credentials*, or *OAuth v2.0*
+|*Basic Authentication* (SOAP `login()`) | *OAuth JWT* (recommended) or *OAuth Client Credentials*
+|===
+
+You don't have to change Salesforce operations in the flow. Query, create, update, and the other operations keep the same configuration. Change only the connection type on the global element.
+
+=== Before You Begin
+
+. In Salesforce Setup, create an external client app or a connected app, and enable the OAuth flow you selected.
+. For *OAuth JWT*, create a keystore and upload the certificate to the app. The connector signs the token with the `SHA256withRSA` algorithm. See xref:salesforce-connector-config-topics.adoc#generate-keystore[Generate a Keystore File].
+. For *OAuth Client Credentials*, enable the client credentials flow and assign the integration user that the app runs as.
+. For *OAuth v2.0*, register the callback URL that matches the listener path in the Mule app.
+. Store the consumer key, client secret, and keystore password in a secure properties file.
+. Confirm that the integration user can access the Salesforce objects the flow uses.
+
+=== Migrate from OAuth Username Password
+
+Follow these steps in a Salesforce Connector 11.x project. Version 12.x no longer lists *OAuth Username Password*, so change the connection before you upgrade.
+
+. Open the Mule project in Anypoint Studio.
+. Select a Salesforce operation and open its global element.
+. On the *General* tab, change *Connection* from *OAuth Username Password* to *OAuth JWT*.
+. Enter *Consumer Key*, *Key Store*, *Store Password*, *Certificate Alias*, and *Principal*. *Principal* is the Salesforce username that the token acts for. For each field, see <<sfdc-config_jwt, OAuth JWT>>.
+. Set *Token Endpoint* to the OAuth token URL for the org, such as `\https://login.salesforce.com/services/oauth2/token` for production or `\https://test.salesforce.com/services/oauth2/token` for a sandbox.
+. Click *Test Connection*, and then redeploy the app.
+
+This example shows an *OAuth JWT* connection:
+
+[source,xml,linenums]
+----
+<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config">
+    <salesforce:jwt-connection
+        consumerKey="${salesforce.consumerKey}"
+        keyStore="${salesforce.keystore}"
+        storePassword="${salesforce.keystore.password}"
+        certificateAlias="${salesforce.certificate.alias}"
+        principal="${salesforce.username}"
+        tokenEndpoint="https://login.salesforce.com/services/oauth2/token"/>
+</salesforce:sfdc-config>
+----
+
+To use client credentials instead, select *OAuth Client Credentials* and provide the client ID, client secret, and token URL. Replace `mydomain` with your Salesforce My Domain name. For each field, see <<sfdc-config_oauth-client-credentials, OAuth Client Credentials>>.
+
+[source,xml,linenums]
+----
+<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config">
+    <salesforce:oauth-client-credentials-connection
+        clientId="${salesforce.clientId}"
+        clientSecret="${salesforce.clientSecret}"
+        tokenUrl="https://mydomain.my.salesforce.com/services/oauth2/token"/>
+</salesforce:sfdc-config>
+----
+
+When a user must sign in, select *OAuth v2.0* and configure the consumer key, consumer secret, and callback listener. For each field, see <<sfdc-config_config-with-oauth, OAuth v2.0>>.
+
+[source,xml,linenums]
+----
+<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config">
+    <http:listener-connection host="0.0.0.0" port="8081"/>
+</http:listener-config>
+<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config">
+    <salesforce:config-with-oauth-connection
+        consumerKey="${salesforce.consumerKey}"
+        consumerSecret="${salesforce.consumerSecret}">
+        <salesforce:oauth-callback-config
+            listenerConfig="HTTP_Listener_config"
+            callbackPath="/callback"
+            authorizePath="/authorize"/>
+    </salesforce:config-with-oauth-connection>
+</salesforce:sfdc-config>
+----
+
+After you deploy the app, open the authorize path in a browser and complete the sign-in. The connector stores the access token for later requests.
+
+=== Migrate from Basic Authentication (SOAP login())
+
+*Basic Authentication* sends the username and password to the SOAP `login()` endpoint. The *Authorization URL* points at that endpoint, for example `\https://login.salesforce.com/services/Soap/u/64.0`.
+
+. Open the Salesforce global element.
+. On the *General* tab, change *Connection* from *Basic Authentication* to *OAuth JWT*.
+. Enter the *OAuth JWT* fields described in <<sfdc-config_jwt, OAuth JWT>>.
+. Remove the username, password, and security token from the connection. Put the integration user's username in *Principal*. The signed certificate replaces the password.
+. If *Authorization URL* is set to a SOAP login URL, clear that value. *OAuth JWT* uses *Token Endpoint* instead.
+. Click *Test Connection*, and then redeploy the app.
+
+=== Connector Updates
+
+[%header,cols="20a,80a"]
+|===
+|Connector version | What to change
+|11.x a| Change *OAuth Username Password* or *Basic Authentication* to *OAuth JWT*, or to another supported OAuth connection, and test the app on 11.x. This version still includes the *OAuth Username Password* connection type.
+|12.x a| *OAuth Username Password* is removed. Migrate that connection before you upgrade to 12.x, or the app fails to deploy. *Basic Authentication* works only with Salesforce API v64.0 and earlier. Migrate it before the Summer '27 retirement.
 |===
 
 == Sources
