@@ -1,11 +1,8 @@
-= RosettaNet Connector Listener mode - Dedicated - Example
+= RosettaNet Connector Listener mode - Shared - Example
 
-This example consists of two apps:
+This example extends the Buyer app in the dedicated listener mode example to communicate with multiple partners. The Buyer app sends purchase order requests to Seller A, Seller B, and Seller C, each using a separate initiator configuration. The Buyer app also receives RosettaNet action messages from the sellers through one shared listener configuration. The *Action source* uses the partner identifiers in each incoming message to select the matching partner entry and send acknowledgment and exception signals to that seller.
 
-* The Buyer app sends a purchase order request message to a Seller App. 
-* The Seller app sends a purchase order confirmation message to the Buyer app when the order is fulfilled.
-
- The following section provide instructions for configuring the global element for external libraries and it needs to be done for each application.
+The following section provides instructions for configuring the global element for external libraries. Configure it once in each application.
 
 [[configure-external-libraries]]
 == Configure a Global Element for External Libraries
@@ -20,493 +17,559 @@ To configure the global element for RosettaNet Connector and add external librar
 . Name the configuration.
 . Click *Configure* > *Add recommended libraries*.
 . Click *OK* to include the libraries as dependencies and shared libraries in the Mule application `pom.xml` file.
-. Verify that your project has the required dependencies for your security mode. 
-+
-Add the dependencies via Maven if they aren't added automatically.
+. Verify that your project has the required dependencies for your security mode. Add the dependencies via Maven if they aren't added automatically.
 
 For configuration instructions for other security modes, see xref:rosettanet-connector::rosettanet-connector-upgrade-migrate.adoc#configure-external-libraries[Configure External Libraries].
-
-
-The following diagram shows the relationship between the two apps:
-
-image::rosettanet-state-diagram.png[Relationship between the Buyer and Seller apps]
 
 == Buyer App
 
 The Buyer app performs the following actions:
 
-. Receives an input purchase order request document via an `HTTP POST`.
-. Uses the RosettaNet *Send action* operation to send a purchase order request message to the Seller app.
-. Transforms the message ID from the purchase order request message to plain text for use in responding to the `HTTP POST`.
-. Receives an acknowledgment signal from the Seller app and logs information about the signal.
-. Receives a purchase order confirmation message from the seller and logs information about the confirmation message.
-. Receives the completion state from the Seller app and logs information about the completion state.
+. Sends purchase order requests to Partner A, Partner B, and Partner C, each through a separate *Send action* flow using a dedicated initiator configuration.
+. Receives RosettaNet action messages from the partners through one shared *Action source*.
+. Identifies the sending partner from the business identifier and location identifier in the incoming message.
+. Receives completion events for inbound messages and for purchase order requests sent to each partner.
 
-The following screenshot shows the Anypoint Studio app flows for the Buyer app:
-
-image::rosettanet-buyer-visual-flow.png[Studio flow for the Buyer app]
-
-NOTE: The keystore for the Buyer app, which includes the buyer private key, buyer certificate, and seller certificate is located in the project under `src/main/resources`.
+NOTE: Add the following JKS files to the Buyer app under `src/main/resources/crypto`: `hub.jks` for RosettaNet message signing, `hub-https.jks` for the HTTPS listener, and `partners-https-truststore.jks` to trust the HTTPS certificates presented by Seller A, Seller B, and Seller C.
 
 === Create the First Flow of the Buyer App
 
-The first flow of the Buyer app receives a purchase order request document via an `HTTP POST` and sends this as a RosettaNet action message to the Seller app. Configuring this flow involves creating a new Mule project, configuring the *HTTP Listener* source, adding a *Send action* operation, and adding a *Transform* component.
+The first flow of the Buyer app sends a purchase order request to each partner. Create a dedicated initiator configuration and a *Send action* flow for each partner. First, configure an HTTP request global element for each partner.
 
-==== Configure the HTTP Listener Source
+==== Add the Partner Initiator Global Elements
 
-Configure the *HTTP Listener* source to initiate a Mule flow when a call is made to the default path (`/`):
+The Buyer app sends a purchase order request to each partner using a separate *Send action* flow. Configure a dedicated initiator global element for each partner. The `Buyer_To_Partner_Initiator_Config` name identifies the Buyer app's initiator configuration and the partner it sends to. For example, `Buyer_To_PartnerA_Initiator_Config` sends to Partner A.
 
-. Create a new Mule project in Studio.
-. From the *Mule Palette* view, select *HTTP* and drag the *Listener* component to the canvas.
-. In the properties window, click *+* next to the *Connector configuration* field to add a global element.
-. In the *Name* field, enter `HTTP_InputListener` and accept the default values.
+In each *RosettaNet Config* window, use the corresponding partner values:
 
-==== Add the PO_InitiatorConfig_Buyer Global Element 
-
-Add the `PO_InitiatorConfig_Buyer` global element for the *Send action* operation:
-
-. In the properties window for the *Send action* operation, click *+* next to the *Module configuration* field to add a global element.
-. In the *RosettaNet Config* window, complete the following fields:
-+
 [%header%autowidth.spread]
 |===
-|Global HTTP Listener|HTTP_Listener-config
-|Service Endpoint Path|/partner1
-|Global HTTP Request|HTTP_Request_configuration
-|Request Endpoint Path|/partner2
-|Keystore Path |/partner1.jks
-|Keystore Access password |nosecret
-|Signing key password |partner1
-|Content transfer encoding |QUOTED_PRINTABLE
-|Service-Content Compression |NONE
-|Global usage code |Test
-|Mule DUNS identifier|123456789
-|Mule location identifier | partner1
-|Partner DUNS identifier | 123456788
-|Partner location identifier | partner2
-|Role in PIP | INITIATOR
-|PIP definition path | /PIP3A4/V02_02.xml
+|Field|Partner A|Partner B|Partner C
+|Name|Buyer_To_PartnerA_Initiator_Config|Buyer_To_PartnerB_Initiator_Config|Buyer_To_PartnerC_Initiator_Config
+|Global HTTP Listener|Buyer_Listener|Buyer_Listener|Buyer_Listener
+|Service Endpoint Path|/rosettanet/hub-signal-a|/rosettanet/hub-signal-b|/rosettanet/hub-signal-c
+|Global HTTP Request|Buyer_To_PartnerA_Request|Buyer_To_PartnerB_Request|Buyer_To_PartnerC_Request
+|Request Endpoint Path|/rosettanet/partnera|/rosettanet/partnerb|/rosettanet/partnerc
+|Keystore Path|crypto/hub.jks|crypto/hub.jks|crypto/hub.jks
+|Keystore Access password|nosecret|nosecret|nosecret
+|Signing key password|nosecret|nosecret|nosecret
+|Global usage code|Production|Production|Production
+|Mule DUNS identifier|999999999|999999999|999999999
+|Mule location identifier|hub|hub|hub
+|Partner DUNS identifier|111111111|222222222|333333333
+|Partner location identifier|partnera|partnerb|partnerc
+|Role in PIP|INITIATOR|INITIATOR|INITIATOR
+|PIP definition path|/PIP3A4/V02_02.xml|/PIP3A4/V02_02.xml|/PIP3A4/V02_02.xml
+|Listener mode|DEDICATED|DEDICATED|DEDICATED
+|Signing override|NEVER|NEVER|NEVER
 |===
-+
-. Click *OK*.
 
-==== Add the Send Action Operation
+==== Add the Send Action Operations
 
-Add the *Send action* operation to send the purchase order request message to the Seller app by using the configuration defined for the `PO_InitiatorConfig_Buyer` global element:
+Create one flow for each partner. In each flow, add the *Send action* operation and select the matching initiator configuration in *Module configuration*. Add a *Transform Message* component or other components needed to prepare the purchase order request.
 
-. From the *Mule Palette* view, select *RosettaNet* and drag the  *Send action* operation next to *Listener*.
-. In the properties window, complete the following fields:
-+
+The three flows have the same structure. Only the *Module configuration* changes: select `Buyer_To_PartnerA_Initiator_Config`, `Buyer_To_PartnerB_Initiator_Config`, or `Buyer_To_PartnerC_Initiator_Config` to send the purchase order request to the corresponding partner. Shared listener mode applies to the Buyer app's inbound *Action source*; each outbound destination uses its own dedicated configuration.
+
+==== Add the HTTP Request Global Elements
+
+Create an HTTP request configuration for each partner. In the *HTTP Request configuration* window, configure the following values:
+
+[%header%autowidth.spread]
+|===
+|Field|Partner A|Partner B|Partner C
+|Name|Buyer_To_PartnerA_Request|Buyer_To_PartnerB_Request|Buyer_To_PartnerC_Request
+|Host|localhost|localhost|localhost
+|Port|8490|8491|8492
+|Protocol|HTTPS|HTTPS|HTTPS
+|Trust store path|crypto/partners-https-truststore.jks|crypto/partners-https-truststore.jks|crypto/partners-https-truststore.jks
+|Trust store password|nosecret|nosecret|nosecret
+|===
+
+Use the partner's HTTP request configuration in its RosettaNet initiator configuration. The trust store contains the certificates for the partner HTTPS endpoints.
+
+==== Add the Shared Responder Global Element
+
+Add a RosettaNet configuration for the shared *Action source*. In the *RosettaNet Config* window, complete the following fields:
+
 [%header%autowidth.spread]
 |===
 |Field|Value
-|Display Name|Send action
-|Module configuration|PO_InitiatorConfig_Buyer
+|Name|Buyer_Hub_Shared_Responder_Config
+|Global HTTP Listener|Buyer_Listener
+|Service Endpoint Path|/rosettanet/hub-receive
+|Keystore Path|crypto/hub.jks
+|Keystore Access password|nosecret
+|Signing key password|nosecret
+|Global usage code|Production
+|Mule DUNS identifier|999999999
+|Mule location identifier|hub
+|Role in PIP|RESPONDER
+|PIP definition path|/PIP3A4/V02_02.xml
+|Listener mode|SHARED
+|Signing override|NEVER
 |===
 
-==== Add a Transform Message Component
+Add a partner entry for each partner. Each entry maps the partner's business and location identifiers to the HTTP request configuration and path used to send acknowledgment and exception signals to that partner:
 
-Add a *Transform Message* component to transform the message ID in the purchase order request message to plain text:
+[%header%autowidth.spread]
+|===
+|Partner name|Partner DUNS identifier|Partner location identifier|Global HTTP Request|Request Endpoint Path
+|Partner-A|111111111|partnera|Buyer_To_PartnerA_Request|/rosettanet/partnera
+|Partner-B|222222222|partnerb|Buyer_To_PartnerB_Request|/rosettanet/partnerb
+|Partner-C|333333333|partnerc|Buyer_To_PartnerC_Request|/rosettanet/partnerc
+|===
 
-. From the *Mule Palette* view, select *Core* and drag a *Transform Message* component next to *Send action*.
-. In the properties window, overlay the brackets in the *Output* section with this DataWeave code:
-+
-[source,dataweave,linenums]
-----
-%dw 2.0
-output text/plain
----
-"Buyer sent action message " ++ attributes.messageId ++ "\n"
-----
+Shared listener mode uses the partner identifiers in the incoming message to select the matching partner entry. Add a partner entry for each partner that sends messages to the Buyer app.
 
-=== Create the Second Flow of the Buyer App
+=== Create the a flow to Receive Action Messages in the Buyer App
 
-The second flow of the Buyer app receives an acknowledgment signal from the Seller app and logs information about the signal. It also receives the purchase order confirmation message from the Seller app and logs information about the message.
+Add a flow to the Buyer app to receives action messages from the partners. Configure one shared responder global element for all partners, then use it in the *Action source*.
+
 
 ==== Configure the Action Source
 
-Configure the *Action source* source to initiate a Mule flow when a call is made to the `/partner2` path:
+Configure the *Action source* source to receive messages from all partners:
 
-. From the *Mule Palette* view, select *Rosettanet* and drag the *Action source* source to the canvas.
-. In the *Module configuration* field, enter `PO_InitiatorConfig_Buyer`.
-
-==== Add a Logger Component
-
-Add a *Logger* component to log a message that includes information about the acknowledgment and purchase order confirmation message:
-
-. From the *Mule Palette* view, select *Core* and drag a *Logger* component next to *Action source* on the canvas.
-. In the *Message* field, enter the following text:
+. From the *Mule Palette* view, select *RosettaNet* and drag the *Action source* source to the canvas.
+. In the *Module configuration* field, select the shared responder configuration.
+. Add a *Logger* component next to *Action source* to log the partner name and message ID. In the *Message* field, enter:
 +
-`"Buyer received action message #[attributes.messageId]"`
+`Buyer received action message #[attributes.messageId] from #[attributes.partnerName]`
 
-=== Create the Third Flow of the Buyer App
+=== Create the Completion Flows of the Buyer App for each Partner
 
-The third flow of the Buyer app receives the completion state from the Seller app and logs information about the completion state.  
-
-==== Configure the Completion Source
-
-Configure the *Completion source* source to listen for a purchase order completion state message from the seller:
-
-. From the *Mule Palette* view, select *Rosettanet* and drag the *Completion source* source to the canvas.
-. In the *Module configuration* field, enter `PO_InitiatorConfig_Buyer`.
+Add a separate flow for each partner that the Buyer app receives completion events for messages sent to sellers.
+Add a *Completion source* for each dedicated initiator configuration to observe acknowledgment or exception signals for messages sent to that seller.
 
 ==== Add a Logger Component
 
-Add a *Logger* component to log information about the purchase order completion state:
-
-. From the *Mule Palette* view, select *Core* and drag a *Logger* component next to *Completion source* on the canvas.
-. In the *Message* field, enter the following text:
+Add a *Logger* component next to each *Completion source* to log the message ID and completion code. In the *Message* field, enter the following text in each flow:
 +
 `Buyer action message #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]`
 
+Select `Buyer_To_PartnerA_Initiator_Config`, `Buyer_To_PartnerB_Initiator_Config`, or `Buyer_To_PartnerC_Initiator_Config` as the *Module configuration* for the matching completion flow.
+
 ==== Save and Run the App
 
 To save the app, click *File > Save*.
 
-To run the app, click *Run > Run as > Mule Application*. 
+To run the app, click *Run > Run as > Mule Application*.
 
 ==== XML for the Buyer App
 
-Paste this code into the Studio XML editor to quickly load the flow for the Buyer app into your Mule app:
+Paste this code into the Studio XML editor to load the Buyer app flows and RosettaNet configurations. Add the recommended external libraries and configure TLS for the HTTP connections as required by your environment.
 
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:rosetta="http://www.mulesoft.org/schema/mule/rosetta"
+      xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/rosetta http://www.mulesoft.org/schema/mule/rosetta/current/mule-rosetta.xsd
+        http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
 
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-	xmlns:http="http://www.mulesoft.org/schema/mule/http"
-	xmlns:rosetta="http://www.mulesoft.org/schema/mule/rosetta"
-	xmlns="http://www.mulesoft.org/schema/mule/core"
-	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
-http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
-http://www.mulesoft.org/schema/mule/core
-http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/rosetta
-http://www.mulesoft.org/schema/mule/rosetta/current/mule-rosetta.xsd
-http://www.mulesoft.org/schema/mule/http
-http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/ee/core
-http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-	<http:listener-config name="HTTP_Listener_config"
-	doc:name="HTTP Listener config" >
-		<http:listener-connection host="localhost" port="8081" />
-	</http:listener-config>
-	<http:request-config name="HTTP_Request_configuration"
-	doc:name="HTTP Request configuration">
-		<http:request-connection host="localhost" port="8082" />
-	</http:request-config>
-	<rosetta:config name="PO_InitiatorConfig_Buyer"
-	pipRole="INITIATOR" doc:name="RosettaNet Config"
-	listenerConfigName="HTTP_Listener_config"
-	servicePath="/partner1"
-	requesterConfigName="HTTP_Request_configuration"
-	requestPath="/partner2"
-	keystorePath="/partner1.jks"
-	keystorePass="nosecret"
-	privatePass="partner1"
-	globalUsageCode="Test"
-	selfBusinessIdentifier="123456789"
-	selfLocationId="partner1"
-	partnerBusinessIdentifier="123456788"
-	partnerLocationId="partner2"
-	pipFile="/PIP3A4/V02_02.xml"/>
-	<http:listener-config name="HTTP_InputListener"
-	doc:name="HTTP Listener config" >
-		<http:listener-connection host="localhost" port="8801" />
-	</http:listener-config>
-	<flow name="Send-Purchase-Order-Request" >
-		<http:listener doc:name="Listener" config-ref="HTTP_InputListener"
-		path="/"
-		allowedMethods="POST"/>
-		<rosetta:send-action doc:name="Send action"
-		 config-ref="PO_InitiatorConfig_Buyer"/>
-		<ee:transform doc:name="Transform Message"  >
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output text/plain
----
-"Buyer sent action message " ++ attributes.messageId ++ "\n"]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
-	</flow>
-	<flow name="Receive-Purchase-Order-Confirmation"  >
-		<rosetta:action-source doc:name="Action source"
-		config-ref="PO_InitiatorConfig_Buyer"/>
-		<logger level="INFO" doc:name="Logger"
-		message="Buyer received action message #[attributes.messageId]"/>
-	</flow>
-	<flow name="Send-Purchase-Order-Completion" >
-		<rosetta:completion-source doc:name="Completion"
-		config-ref="PO_InitiatorConfig_Buyer"/>
-		<logger level="INFO" doc:name="Logger"
-		message="Buyer action message #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]"/>
-	</flow>
+    <http:listener-config name="Buyer_Listener">
+        <http:listener-connection host="0.0.0.0" port="8443" protocol="HTTPS">
+            <tls:context>
+                <tls:key-store path="crypto/hub-https.jks" password="nosecret" keyPassword="nosecret" type="jks" alias="demo-hub-https" />
+            </tls:context>
+        </http:listener-connection>
+    </http:listener-config>
+    <http:listener-config name="API_Listener">
+        <http:listener-connection host="0.0.0.0" port="8080" />
+    </http:listener-config>
+    <http:request-config name="Buyer_To_PartnerA_Request">
+        <http:request-connection host="localhost" port="8490" protocol="HTTPS">
+            <tls:context>
+                <tls:trust-store path="crypto/partners-https-truststore.jks" password="nosecret" type="jks" />
+            </tls:context>
+        </http:request-connection>
+    </http:request-config>
+    <http:request-config name="Buyer_To_PartnerB_Request">
+        <http:request-connection host="localhost" port="8491" protocol="HTTPS">
+            <tls:context>
+                <tls:trust-store path="crypto/partners-https-truststore.jks" password="nosecret" type="jks" />
+            </tls:context>
+        </http:request-connection>
+    </http:request-config>
+    <http:request-config name="Buyer_To_PartnerC_Request">
+        <http:request-connection host="localhost" port="8492" protocol="HTTPS">
+            <tls:context>
+                <tls:trust-store path="crypto/partners-https-truststore.jks" password="nosecret" type="jks" />
+            </tls:context>
+        </http:request-connection>
+    </http:request-config>
+
+    <rosetta:config name="Buyer_Hub_Shared_Responder_Config"
+        listenerConfigName="Buyer_Listener"
+        servicePath="/rosettanet/hub-receive"
+        globalUsageCode="Production" signingOverride="NEVER"
+        selfBusinessIdentifier="999999999"
+        selfLocationId="hub"
+        pipRole="RESPONDER"
+        pipFile="/PIP3A4/V02_02.xml"
+        listenerMode="SHARED"
+        keystorePath="crypto/hub.jks"
+        keystorePass="nosecret"
+        privatePass="nosecret">
+        <rosetta:partners>
+            <rosetta:partner partnerName="Partner-A"
+                businessIdentifier="111111111" locationId="partnera"
+                requesterConfigName="Buyer_To_PartnerA_Request" requestPath="/rosettanet/partnera" />
+            <rosetta:partner partnerName="Partner-B"
+                businessIdentifier="222222222" locationId="partnerb"
+                requesterConfigName="Buyer_To_PartnerB_Request" requestPath="/rosettanet/partnerb" />
+            <rosetta:partner partnerName="Partner-C"
+                businessIdentifier="333333333" locationId="partnerc"
+                requesterConfigName="Buyer_To_PartnerC_Request" requestPath="/rosettanet/partnerc" />
+        </rosetta:partners>
+    </rosetta:config>
+
+    <rosetta:config name="Buyer_To_PartnerA_Initiator_Config"
+        listenerConfigName="Buyer_Listener" servicePath="/rosettanet/hub-signal-a"
+        requesterConfigName="Buyer_To_PartnerA_Request" requestPath="/rosettanet/partnera"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="999999999" selfLocationId="hub"
+        partnerBusinessIdentifier="111111111" partnerLocationId="partnera"
+        pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret" />
+    <rosetta:config name="Buyer_To_PartnerB_Initiator_Config"
+        listenerConfigName="Buyer_Listener" servicePath="/rosettanet/hub-signal-b"
+        requesterConfigName="Buyer_To_PartnerB_Request" requestPath="/rosettanet/partnerb"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="999999999" selfLocationId="hub"
+        partnerBusinessIdentifier="222222222" partnerLocationId="partnerb"
+        pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret" />
+    <rosetta:config name="Buyer_To_PartnerC_Initiator_Config"
+        listenerConfigName="Buyer_Listener" servicePath="/rosettanet/hub-signal-c"
+        requesterConfigName="Buyer_To_PartnerC_Request" requestPath="/rosettanet/partnerc"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="999999999" selfLocationId="hub"
+        partnerBusinessIdentifier="333333333" partnerLocationId="partnerc"
+        pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret" />
+
+    <rosetta:external-libs-non-fips-config name="RosettaNet_External_Libs___Non_FIPS" />
+
+    <flow name="Send-Purchase-Order-Request-to-Partner-A">
+        <http:listener config-ref="API_Listener" path="/api/send-to-partner-a" />
+        <rosetta:send-action config-ref="Buyer_To_PartnerA_Initiator_Config" />
+    </flow>
+    <flow name="Send-Purchase-Order-Request-to-Partner-B">
+        <http:listener config-ref="API_Listener" path="/api/send-to-partner-b" />
+        <rosetta:send-action config-ref="Buyer_To_PartnerB_Initiator_Config" />
+    </flow>
+    <flow name="Send-Purchase-Order-Request-to-Partner-C">
+        <http:listener config-ref="API_Listener" path="/api/send-to-partner-c" />
+        <rosetta:send-action config-ref="Buyer_To_PartnerC_Initiator_Config" />
+    </flow>
+
+    <flow name="Receive-Partner-Action-Messages">
+        <rosetta:action-source config-ref="Buyer_Hub_Shared_Responder_Config" />
+        <logger level="INFO" message="Buyer received action message #[attributes.messageId] from #[attributes.partnerName]" />
+    </flow>
+    <flow name="Buyer-Partner-A-Completion">
+        <rosetta:completion-source config-ref="Buyer_To_PartnerA_Initiator_Config" />
+        <logger level="INFO" message="Buyer action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]" />
+    </flow>
+    <flow name="Buyer-Partner-B-Completion">
+        <rosetta:completion-source config-ref="Buyer_To_PartnerB_Initiator_Config" />
+        <logger level="INFO" message="Buyer action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]" />
+    </flow>
+    <flow name="Buyer-Partner-C-Completion">
+        <rosetta:completion-source config-ref="Buyer_To_PartnerC_Initiator_Config" />
+        <logger level="INFO" message="Buyer action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]" />
+    </flow>
 </mule>
 ----
 
-== Seller App
+== Seller Apps
 
 The Seller app performs the following actions:
 
-. Receives an input purchase order request confirmation document via an `HTTP POST`.
-. Uses a RosettaNet *Send action* operation to send a purchase order confirmation message to the buyer.
-. Transforms the RosettaNet message ID from the purchase order confirmation message to plain text for use in responding to the `HTTP POST`.
-. Receives a purchase order request message from the Buyer app and logs information about the request message.
-. Receives an acknowledgment signal from the Buyer app and logs information about the signal.
-. Receives a completion state message from the Buyer app and logs information about the completion state message. 
+. Sends purchase order acknowledgments to buyer, through a separate *Send action* flow using a dedicated Initiator configuration.
+. Receives RosettaNet action messages from the buyer through one dedicated Responder configuration used for *Action source*.
+. Receives completion events for inbound messages and for purchase order acknowledgments sent to the buyer.
 
-The following screenshot shows the Anypoint Studio app flows for the Seller app:
+NOTE: Add the JKS files for each seller to that app under `src/main/resources/crypto`. Seller A uses `partner-a.jks` for RosettaNet message signing and `partner-a-https.jks` for its HTTPS listener. Seller B uses `partner-b.jks` and `partner-b-https.jks`; Seller C uses `partner-c.jks` and `partner-c-https.jks`. Each seller also needs `hub-https-truststore.jks` to trust the Buyer app's HTTPS certificate.
 
-image::rosettanet-seller-visual-flow.png[Studio flow for the Seller app]
+The Partner A, Partner B, and Partner C can be hosted as seperate Seller apps each receive messages from the Buyer app and can send messages to the Buyer app. To simplify the example, the three Seller apps are combined into one app with three dedicated listener and initiator configurations. Configure each partner with its own identifiers, endpoint paths, and signing keystore. Set the partner DUNS identifier and location identifier in each seller configuration to the Buyer's values (`999999999` and `hub`).
 
-NOTE: The keystore in the Seller app, which includes the seller private key, seller certificate, and buyer certificate is located in the project under `src/main/resources`.
+NOTE: This example can be split up as separate apps, each with its own dedicated listener and initiator configuration in which case they will have the same structure; only the identifiers, endpoint paths, and signing keystore values differ by seller and they may need to run at same time.
 
-=== Create the First Flow of the Seller App
+=== Create First Flow for Each Seller
 
-The first flow of the Seller app receives a purchase order request confirmation document via `HTTP POST` and sends this as a RosettaNet action message to the Buyer app. Configuring this flow involves creating a new Mule project, configuring the *HTTP Listener* source, configuring the RosettaNet *Send action* operation, and adding a *Transform* component.
+Each seller app receives purchase order requests from the Buyer app. Configure a dedicated responder global element for each seller, using that seller's listener, service path, identifiers, and signing keystore. The request configuration sends acknowledgment and exception signals to the Buyer app.
 
-==== Configure the HTTP Listener Source
+In each *RosettaNet Config* window, use the corresponding seller values:
 
-Configure the *HTTP Listener* source to initiate a Mule flow when a call is made to the default path (`/`):
-
-. Create a new Mule project in Studio.
-. From the *Mule Palette* view, select *HTTP* and drag the Listener component to the canvas.
-. In the properties window, click *+* next to the Connector configuration field to add a global element.
-. In *Name*, enter `HTTP_InputListener`.
-. In *Port*, enter `8082`.
-. In *Read timeout*, enter `3000`. 
-
-==== Add a Global Element for the Send Action Operation 
-
-Create a global element named `PO_ResponderConfig_Seller` for the *Send action* operation.
-
-. In the properties window for the *Send action* operation, click *+* next to the *Module configuration* field to add a global element.
-. In the *RosettaNet Config* window, configure the following fields:
-+
 [%header%autowidth.spread]
 |===
-|Field|Value
-|Global HTTP Listener|HTTP_Listener-config
-|Service Endpoint Path|/partner2
-|Global HTTP Request|HTTP_Request_configuration
-|Request Endpoint Path|/partner1
-|Keystore Path |/partner2.jks
-|Keystore Access password |nosecret
-|Signing key password |partner2
-|Content transfer encoding |QUOTED_PRINTABLE
-|Service-Content Compression |NONE
-|Global usage code |Test
-|Mule DUNS identifier|123456788
-|Mule location identifier | partner2
-|Partner DUNS identifier | 123456789
-|Partner location identifier | partner1
-|Role in PIP | RESPONDER
-|PIP definition path | /PIP3A4/V02_02.xml
+|Field|Partner A|Partner B|Partner C
+|Name|PartnerA_Responder_Config|PartnerB_Responder_Config|PartnerC_Responder_Config
+|Global HTTP Listener|PartnerA_Listener|PartnerB_Listener|PartnerC_Listener
+|Service Endpoint Path|/rosettanet/partnera|/rosettanet/partnerb|/rosettanet/partnerc
+|Global HTTP Request|Partner_To_Hub_Request|Partner_To_Hub_Request|Partner_To_Hub_Request
+|Request Endpoint Path|/rosettanet/hub-signal-a|/rosettanet/hub-signal-b|/rosettanet/hub-signal-c
+|Keystore Path|crypto/partner-a.jks|crypto/partner-b.jks|crypto/partner-c.jks
+|Keystore Access password|nosecret|nosecret|nosecret
+|Signing key password|nosecret|nosecret|nosecret
+|Global usage code|Production|Production|Production
+|Mule DUNS identifier|111111111|222222222|333333333
+|Mule location identifier|partnera|partnerb|partnerc
+|Partner DUNS identifier|999999999|999999999|999999999
+|Partner location identifier|hub|hub|hub
+|Role in PIP|RESPONDER|RESPONDER|RESPONDER
+|PIP definition path|/PIP3A4/V02_02.xml|/PIP3A4/V02_02.xml|/PIP3A4/V02_02.xml
+|Listener mode|DEDICATED|DEDICATED|DEDICATED
+|Signing override|NEVER|NEVER|NEVER
 |===
-. Click *OK*.
+
+Create the responder configuration for each seller using the corresponding column in the table. The three configurations have the same structure; the listener, service path, identifiers, and keystore values differ by seller.
+
+==== Configure the Action Source
+
+Configure the *Action source* source to receive messages from the Buyer app:
+
+. From the *Mule Palette* view, select *RosettaNet* and drag the *Action source* source to the canvas.
+. In the *Module configuration* field, select the seller's responder configuration.
+. Add a *Logger* component next to *Action source* to log the received message ID. In the *Message* field, enter the corresponding value:
++
+* Seller A: `Seller A received action message #[attributes.messageId]`
+* Seller B: `Seller B received action message #[attributes.messageId]`
+* Seller C: `Seller C received action message #[attributes.messageId]`
+
+=== Create the Second Flow of Each Seller App
+
+The second flow of each seller app sends Purchase Order acknowledgments to the buyer after processing the Purchase Order request. Configure a dedicated initiator global element for each seller. In each *RosettaNet Config* window, use the corresponding seller values:
+
+[%header%autowidth.spread]
+|===
+|Field|Partner A|Partner B|Partner C
+|Name|PartnerA_Initiator_Config|PartnerB_Initiator_Config|PartnerC_Initiator_Config
+|Global HTTP Listener|PartnerA_Listener|PartnerB_Listener|PartnerC_Listener
+|Service Endpoint Path|/rosettanet/partnera-signal|/rosettanet/partnerb-signal|/rosettanet/partnerc-signal
+|Global HTTP Request|Partner_To_Hub_Request|Partner_To_Hub_Request|Partner_To_Hub_Request
+|Request Endpoint Path|/rosettanet/hub-receive|/rosettanet/hub-receive|/rosettanet/hub-receive
+|Keystore Path|crypto/partner-a.jks|crypto/partner-b.jks|crypto/partner-c.jks
+|Keystore Access password|nosecret|nosecret|nosecret
+|Signing key password|nosecret|nosecret|nosecret
+|Global usage code|Production|Production|Production
+|Mule DUNS identifier|111111111|222222222|333333333
+|Mule location identifier|partnera|partnerb|partnerc
+|Partner DUNS identifier|999999999|999999999|999999999
+|Partner location identifier|hub|hub|hub
+|Role in PIP|INITIATOR|INITIATOR|INITIATOR
+|PIP definition path|/PIP3A4/V02_02.xml|/PIP3A4/V02_02.xml|/PIP3A4/V02_02.xml
+|Listener mode|DEDICATED|DEDICATED|DEDICATED
+|Signing override|NEVER|NEVER|NEVER
+|===
+
+Each initiator configuration uses the seller's identifiers and sends to the Buyer app's shared listener endpoint (`/rosettanet/hub-receive`). The configurations have the same structure; the listener, service path, identifiers, and signing keystore values differ by seller.
 
 ==== Add the Send Action Operation
 
-Add the *Send action* operation to send a purchase order confirmation message to the Buyer app:
+Add a *Send action* operation to send a message to the Buyer app:
 
-. From the *Mule Palette* view, select *RosettaNet* and drag the *Send action* operation next to *Listener*.
-. In the properties window, configure the following fields:
-+
-[%header%autowidth.spread]
-|===
-|Field|Value
-|Display Name|Send action
-|Module configuration|PO_ResponderConfig_Seller
-|===
-+
-. Click *OK*.
+. From the *Mule Palette* view, select *RosettaNet* and drag the *Send action* operation to the canvas.
+. In the *Module configuration* field, select the seller's initiator configuration.
+. Add the components needed to prepare and send the action message.
 
-==== Add a Transform Message Component
+=== Create the Third Flow of Each Seller App
 
-Add a *Transform Message* component to transform the message ID from the purchase order confirmation message for use in responding to the `HTTP POST`.
+Add a *Completion source* for each seller's initiator configuration to observe signals returned by the Buyer app. Add a *Logger* component next to each source. In the *Message* field, enter the corresponding value:
 
-. From the *Mule Palette* view, select *Core* and drag a *Transform Message* component next to *Send action* on the canvas.
-. In the properties window, overlay the brackets in the *Output* section with this DataWeave code:
-+
-[source,dataweave,linenums]
-----
-%dw 2.0
-output text/plain
----
-"Seller sent action message " ++ attributes.messageId ++ "\n"
-----
+* Seller A: `Seller A action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]`
+* Seller B: `Seller B action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]`
+* Seller C: `Seller C action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]`
 
-=== Create the Second Flow of the Seller App
+==== Save and Run the Apps
 
-The second flow of the Seller app receives an acknowledgment signal from the Buyer app and logs information about the signal. It also receives a purchase order request message from the Buyer app and logs information about the request.
+To save each app, click *File > Save*.
 
-==== Configure the Action Source
+To run each app, click *Run > Run as > Mule Application*.
 
-Configure the *Action* source to initiate a Mule flow when a call is made to the default path (`/`): 
+=== XML for the Seller Apps
 
-. From the *Mule Palette* view, select *Rosettanet* and drag the *Action source* source to the canvas.
-. In the *Module configuration* field, enter `PO_ResponderConfig_Seller`.
-
-==== Add a Logger Component
-
-Add a *Logger* component to log information about the acknowledgment signal and purchase order request message:
-
-. From the *Mule Palette* view, select *Core* and drag a *Logger* component next to *Completion source* on the canvas.
-. In the *Message* field, enter the following text:
-+
-`Seller received action message #[attributes.messageId]`
-
-=== Create the Third Flow of the Seller App
-
-The third flow of the Seller app sends a purchase order completion state message to the Buyer app and logs information about the purchase order completion state message. Configuring this flow involves configuring the *Action* source and adding a *Logger* component.
-
-==== Configure the Action Source
-
-Configure the *Action* source to receive the completion state from the Buyer app. 
-
-==== Adding a Logger Component
-
-Add a *Logger* component to log information about the purchase order state completion message.
-
-. From the *Mule Palette* view, select *Core* and drag a *Logger* component next to *Action source* on the canvas.
-. In the *Message* field, enter the following text:
-+
-`Seller action message #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]`
-
-==== Save and Run the App
-
-To save the app, click *File > Save*.
-
-To run the app, click *Run > Run as > Mule Application*. 
-
-=== XML for the Seller App
-
-Paste this code into the Studio XML editor to quickly load the flow for the Seller app into your Mule app:
+The following XML shows the responder and initiator configurations for Partner A, Partner B, and Partner C, along with their *Action source* and *Completion source* flows. The HTTP listener and request configurations use the local demo ports. Configure TLS and the keystores for your environment.
 
 [source,xml,linenums]
 ----
 <?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:rosetta="http://www.mulesoft.org/schema/mule/rosetta"
+      xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+      xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="
+        http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/rosetta http://www.mulesoft.org/schema/mule/rosetta/current/mule-rosetta.xsd
+        http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
 
-<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-	xmlns:http="http://www.mulesoft.org/schema/mule/http"
-	xmlns:rosetta="http://www.mulesoft.org/schema/mule/rosetta"
-	xmlns="http://www.mulesoft.org/schema/mule/core"
-	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
-http://www.mulesoft.org/schema/mule/core
-http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-http://www.mulesoft.org/schema/mule/rosetta
-http://www.mulesoft.org/schema/mule/rosetta/current/mule-rosetta.xsd
-http://www.mulesoft.org/schema/mule/http
-http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/ee/core
-http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
-	<http:listener-config name="HTTP_Listener_config"
-	doc:name="HTTP Listener config" >
-		<http:listener-connection host="localhost" port="8082" />
-	</http:listener-config>
-	<http:request-config name="HTTP_Request_configuration"
-	doc:name="HTTP Request configuration" >
-		<http:request-connection host="localhost" port="8081" />
-	</http:request-config>
-	<rosetta:config name="PO_ResponderConfig_Seller"
-	pipRole="RESPONDER"
-	doc:name="RosettaNet Config"
-	listenerConfigName="HTTP_Listener_config"
-	servicePath="/partner2"
-	requesterConfigName="HTTP_Request_configuration"
-	requestPath="/partner1"
-	keystorePath="/partner2.jks"
-	keystorePass="nosecret"
-	privatePass="partner2"
-	globalUsageCode="Test"
-	partnerBusinessIdentifier="123456789"
-	partnerLocationId="partner1"
-	selfBusinessIdentifier="123456788"
-	selfLocationId="partner2" pipFile="/PIP3A4/V02_02.xml"/>
-	<http:listener-config name="HTTP_InputListener"
-	doc:name="HTTP Listener config" >
-		<http:listener-connection host="localhost" port="8802" />
-	</http:listener-config>
-	<flow name="Send-Purchase-Order-Confirmation">
-		<http:listener doc:name="Listener"
-		config-ref="HTTP_InputListener"
-		path="/" allowedMethods="POST"/>
-		<rosetta:send-action doc:name="Send action"
-		 config-ref="PO_ResponderConfig_Seller"/>
-		<ee:transform doc:name="Transform Message">
-			<ee:message >
-				<ee:set-payload ><![CDATA[%dw 2.0
-output text/plain
----
-"Seller sent action message " ++ attributes.messageId ++ "\n"]]></ee:set-payload>
-			</ee:message>
-		</ee:transform>
-	</flow>
-	<flow name="Receive-Purchase-Order-Request">
-		<rosetta:action-source doc:name="Action source"
-		config-ref="PO_ResponderConfig_Seller"/>
-		<logger level="INFO" doc:name="Logger"
-		 message="Seller received action message #[attributes.messageId]"/>
-	</flow>
-	<flow name="Send-Purchase-Order-Completion">
-		<rosetta:completion-source doc:name="Completion"
-		config-ref="PO_ResponderConfig_Seller"/>
-		<logger level="INFO" doc:name="Logger"
-		message="Seller action message #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]"/>
-	</flow>
+    <http:listener-config name="API_Listener">
+        <http:listener-connection host="0.0.0.0" port="8083" />
+    </http:listener-config>
+    <http:listener-config name="PartnerA_Listener">
+        <http:listener-connection host="0.0.0.0" port="8490" protocol="HTTPS">
+            <tls:context>
+                <tls:key-store path="crypto/partner-a-https.jks" password="nosecret" keyPassword="nosecret" type="jks" alias="demo-partner-a-https" />
+            </tls:context>
+        </http:listener-connection>
+    </http:listener-config>
+    <http:listener-config name="PartnerB_Listener">
+        <http:listener-connection host="0.0.0.0" port="8491" protocol="HTTPS">
+            <tls:context>
+                <tls:key-store path="crypto/partner-b-https.jks" password="nosecret" keyPassword="nosecret" type="jks" alias="demo-partner-b-https" />
+            </tls:context>
+        </http:listener-connection>
+    </http:listener-config>
+    <http:listener-config name="PartnerC_Listener">
+        <http:listener-connection host="0.0.0.0" port="8492" protocol="HTTPS">
+            <tls:context>
+                <tls:key-store path="crypto/partner-c-https.jks" password="nosecret" keyPassword="nosecret" type="jks" alias="demo-partner-c-https" />
+            </tls:context>
+        </http:listener-connection>
+    </http:listener-config>
+    <http:request-config name="Partner_To_Hub_Request">
+        <http:request-connection host="localhost" port="8443" protocol="HTTPS">
+            <tls:context>
+                <tls:trust-store path="crypto/hub-https-truststore.jks" password="nosecret" type="jks" />
+            </tls:context>
+        </http:request-connection>
+    </http:request-config>
+
+    <rosetta:config name="PartnerA_Responder_Config"
+        listenerConfigName="PartnerA_Listener" servicePath="/rosettanet/partnera"
+        requesterConfigName="Partner_To_Hub_Request" requestPath="/rosettanet/hub-signal-a"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="111111111" selfLocationId="partnera"
+        partnerBusinessIdentifier="999999999" partnerLocationId="hub"
+        pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/partner-a.jks" keystorePass="nosecret" privatePass="nosecret" />
+    <rosetta:config name="PartnerA_Initiator_Config"
+        listenerConfigName="PartnerA_Listener" servicePath="/rosettanet/partnera-signal"
+        requesterConfigName="Partner_To_Hub_Request" requestPath="/rosettanet/hub-receive"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="111111111" selfLocationId="partnera"
+        partnerBusinessIdentifier="999999999" partnerLocationId="hub"
+        pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/partner-a.jks" keystorePass="nosecret" privatePass="nosecret" />
+
+    <rosetta:config name="PartnerB_Responder_Config"
+        listenerConfigName="PartnerB_Listener" servicePath="/rosettanet/partnerb"
+        requesterConfigName="Partner_To_Hub_Request" requestPath="/rosettanet/hub-signal-b"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="222222222" selfLocationId="partnerb"
+        partnerBusinessIdentifier="999999999" partnerLocationId="hub"
+        pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/partner-b.jks" keystorePass="nosecret" privatePass="nosecret" />
+    <rosetta:config name="PartnerB_Initiator_Config"
+        listenerConfigName="PartnerB_Listener" servicePath="/rosettanet/partnerb-signal"
+        requesterConfigName="Partner_To_Hub_Request" requestPath="/rosettanet/hub-receive"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="222222222" selfLocationId="partnerb"
+        partnerBusinessIdentifier="999999999" partnerLocationId="hub"
+        pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/partner-b.jks" keystorePass="nosecret" privatePass="nosecret" />
+
+    <rosetta:config name="PartnerC_Responder_Config"
+        listenerConfigName="PartnerC_Listener" servicePath="/rosettanet/partnerc"
+        requesterConfigName="Partner_To_Hub_Request" requestPath="/rosettanet/hub-signal-c"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="333333333" selfLocationId="partnerc"
+        partnerBusinessIdentifier="999999999" partnerLocationId="hub"
+        pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/partner-c.jks" keystorePass="nosecret" privatePass="nosecret" />
+    <rosetta:config name="PartnerC_Initiator_Config"
+        listenerConfigName="PartnerC_Listener" servicePath="/rosettanet/partnerc-signal"
+        requesterConfigName="Partner_To_Hub_Request" requestPath="/rosettanet/hub-receive"
+        globalUsageCode="Production" signingOverride="NEVER" selfBusinessIdentifier="333333333" selfLocationId="partnerc"
+        partnerBusinessIdentifier="999999999" partnerLocationId="hub"
+        pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED"
+        keystorePath="crypto/partner-c.jks" keystorePass="nosecret" privatePass="nosecret" />
+
+    <rosetta:external-libs-non-fips-config name="RosettaNet_External_Libs___Non_FIPS" />
+
+    <flow name="Receive-From-Buyer-Seller-A">
+        <rosetta:action-source config-ref="PartnerA_Responder_Config" />
+        <logger level="INFO" message="Seller A received action message #[attributes.messageId]" />
+    </flow>
+    <flow name="Receive-From-Buyer-Seller-B">
+        <rosetta:action-source config-ref="PartnerB_Responder_Config" />
+        <logger level="INFO" message="Seller B received action message #[attributes.messageId]" />
+    </flow>
+    <flow name="Receive-From-Buyer-Seller-C">
+        <rosetta:action-source config-ref="PartnerC_Responder_Config" />
+        <logger level="INFO" message="Seller C received action message #[attributes.messageId]" />
+    </flow>
+
+    <flow name="Send-From-Seller-A-to-Buyer">
+        <http:listener config-ref="API_Listener" path="/api/partner-a/send-to-hub" />
+        <rosetta:send-action config-ref="PartnerA_Initiator_Config" />
+    </flow>
+    <flow name="Send-From-Seller-B-to-Buyer">
+        <http:listener config-ref="API_Listener" path="/api/partner-b/send-to-hub" />
+        <rosetta:send-action config-ref="PartnerB_Initiator_Config" />
+    </flow>
+    <flow name="Send-From-Seller-C-to-Buyer">
+        <http:listener config-ref="API_Listener" path="/api/partner-c/send-to-hub" />
+        <rosetta:send-action config-ref="PartnerC_Initiator_Config" />
+    </flow>
+    <flow name="Seller-A-Outbound-Completion">
+        <rosetta:completion-source config-ref="PartnerA_Initiator_Config" />
+        <logger level="INFO" message="Seller A action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]" />
+    </flow>
+    <flow name="Seller-B-Outbound-Completion">
+        <rosetta:completion-source config-ref="PartnerB_Initiator_Config" />
+        <logger level="INFO" message="Seller B action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]" />
+    </flow>
+    <flow name="Seller-C-Outbound-Completion">
+        <rosetta:completion-source config-ref="PartnerC_Initiator_Config" />
+        <logger level="INFO" message="Seller C action #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]" />
+    </flow>
 </mule>
 ----
 
 == Test the Examples
 
-To test the Buyer and Seller apps, do the following after you run the apps:
+Run the Buyer app and all Seller apps. The Buyer app listens for test requests on port `8080`; the Seller apps listen on port `8083`. Download a https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-request-content.xml[sample purchase order request] and https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-confirmation-content.xml[sample purchase order confirmation], or use equivalent documents for the configured PIP.
 
-. Provide the purchase order request to the Buyer app.
-. Provide the purchase order request response to the Seller app.
+=== Send Purchase Order Requests from the Buyer App
 
-=== Provide the Purchase Order Request Document
+Post a purchase order request to each Buyer app endpoint. Each endpoint selects the dedicated initiator configuration for its Seller app:
 
-Use an HTTP POST to the Buyer app `HTTP_InputListener` endpoint to provide the purchase order request to send to the seller.
+[source,bash,linenums]
+----
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-request-content.xml http://localhost:8080/api/send-to-partner-a
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-request-content.xml http://localhost:8080/api/send-to-partner-b
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-request-content.xml http://localhost:8080/api/send-to-partner-c
+----
 
-You can download a https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-request-content.xml[sample purchase order request]. You can then use any HTTP tool, such as a browser plugin, standalone tool such as PostMan, or console tool such as `curl` to POST the data to the Buyer app.
-
-For example, the following `curl` command posts a purchase order request:
-
-`+curl -v -H "Content-Type: application/xml" -XPOST --data-binary @sample-purchase-order-request-content.xml http://localhost:8801+`
-
-RosettaNet Connector generates a RosettaNet message based on the purchase order request and sends it to the seller, responding to the HTTP POST operation with a message identifier. In your console, your output should look like this:
+The Seller apps receive the requests through their dedicated *Action source* flows. Verify that the logs show the matching seller and message ID, followed by the Buyer app's completion message, for example:
 
 [source,java,linenums]
 ----
-INFO  ... Seller received action message pMAIhTBMsGzAf/NFx83KBO9nt+T+DV2RNLhwlpNqnXM=0
-INFO  ... Buyer action message pMAIhTBMsGzAf/NFx83KBO9nt+T+DV2RNLhwlpNqnXM=0 completed as SUCCESS
+INFO  ... Seller A received action message <message-id>
+INFO  ... Buyer action <message-id> completed as SUCCESS
 ----
 
-=== Provide the Purchase Order Confirmation Document
+=== Send Action Messages from the Seller Apps
 
-Use an HTTP POST to the Seller app `HTTP_InputListener` endpoint to provide the purchase order confirmation to send to the buyer.
+Post a purchase order confirmation to each Seller app endpoint to send an action message to the Buyer app's shared *Action source*:
 
-You can download a https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-confirmation-content.xml[sample purchase order confirmation] and then use any HTTP tool to post the data to the Seller app.
+[source,bash,linenums]
+----
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-confirmation-content.xml http://localhost:8083/api/partner-a/send-to-hub
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-confirmation-content.xml http://localhost:8083/api/partner-b/send-to-hub
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-confirmation-content.xml http://localhost:8083/api/partner-c/send-to-hub
+----
 
-For example, the following `curl` command posts a purchase order confirmation:
-
-`+curl -v -H "Content-Type: application/xml" -XPOST --data-binary @sample-purchase-order-confirmation-content.xml http://localhost:8802+`
-
-RosettaNet Connector generates a RosettaNet message based on the purchase order confirmation and sends it to the buyer, responding to the HTTP POST operation with a message identifier. In your console, your output should look like this:
+Verify that the Buyer app's shared *Action source* logs the message ID and the matching partner name (`Partner-A`, `Partner-B`, or `Partner-C`). The Seller app's completion flow should also log the message ID and completion code, for example:
 
 [source,java,linenums]
 ----
-INFO  ... Buyer received action message ng7+TalLLPTJZHok4tQSBi8RYZD8IsD9+iB85cubzM=1
-INFO  ... Seller action message sng7+TalLLPTJZHok4tQSBi8RYZD8IsD9+iB85cubzM=1 completed as SUCCESS
+INFO  ... Buyer received action message <message-id> from Partner-A
+INFO  ... Seller A action <message-id> completed as SUCCESS
 ----
 
-The purchase order confirmation action sent by this sample app is only an example. To send a real purchase order confirmation, you must configure the `replyAttributes` on the RosettaNet `send-action` operation with the information provided by when you received the corresponding purchase order request. These `replayAttributes` enable the RosettaNet protocol to distinguish between many concurrent requests.
-
-== See Also
-
-* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
-* https://help.salesforce.com[Salesforce Help]
+The sample purchase order confirmation is for demonstration. For a real purchase order confirmation, configure the `replyAttributes` on the RosettaNet *Send action* operation with the information from the corresponding purchase order request.
