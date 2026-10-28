@@ -40,7 +40,8 @@ RosettaNet connector 3.x for Mule 4 makes several changes to the configuration a
 * Configure external libraries for security modes (non-FIPS, FIPS 140-2, and FIPS 140-3).
 * Supports PIPs that have only XSD definitions (without DTDs).
 * Allow compression of Service-Content part of S/MIME messages.
-* Allow configuration of content transfer encoding for S/MIME messages. 
+* Allow configuration of content transfer encoding for S/MIME messages.
+* Supports shared listener mode for receiving messages from multiple partners on a single listener endpoint.
 
 == Install this Connector in Anypoint Studio 7
 
@@ -127,10 +128,12 @@ All configuration properties used by the RosettaNet connector are in the Studio 
 * INITIATOR
 * RESPONDER
 | PIP definition path |Absolute file path or classpath relative to the project `/src/main/resources` directory for the PIP definition XML file. For one of the standard PIP definitions included in the distribution this takes the form `/{pipId}/{version}.xml`, such as `/PIP3A4/V02_02.xml`.
-| Listener mode | Configuration mode to use for incoming messages:
+| Listener mode | Configuration modes to use for incoming messages.:
 
 * DEDICATED
 * SHARED
+
+For Listener mode as SHARED, the Role in PIP must be set to RESPONDER. 
 | Shared mode - Partners | Configuration for partners when using shared listener mode.
 |===
 
@@ -172,13 +175,13 @@ Example XML configuration for shared mode:
 
 [source,xml,linenums]
 ----
- <rosetta:config name="Buyer_Hub_Shared_Responder_Config" doc:name="Rosetta config" doc:id="ea591335-89aa-477f-81f8-11afbce399e5" listenerConfigName="Buyer_Listener" servicePath="/rosettanet/hub-receive" signingOverride="NEVER" selfBusinessIdentifier="999999999" selfLocationId="hub" pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="SHARED" keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret">
-        <rosetta:partners>
-            <rosetta:partner partnerName="Partner-A" businessIdentifier="111111111" locationId="partnera" requesterConfigName="Buyer_To_PartnerA_Request" requestPath="/rosettanet/partnera" />
-            <rosetta:partner partnerName="Partner-B" businessIdentifier="222222222" locationId="partnerb" requesterConfigName="Buyer_To_PartnerB_Request" requestPath="/rosettanet/partnerb" />
-            <rosetta:partner partnerName="Partner-C" businessIdentifier="333333333" locationId="partnerc" requesterConfigName="Buyer_To_PartnerC_Request" requestPath="/rosettanet/partnerc" />
-        </rosetta:partners>
-    </rosetta:config>
+<rosetta:config name="Buyer_Hub_Shared_Responder_Config" doc:name="Rosetta config" doc:id="ea591335-89aa-477f-81f8-11afbce399e5" listenerConfigName="Buyer_Listener" servicePath="/rosettanet/hub-receive" signingOverride="NEVER" selfBusinessIdentifier="999999999" selfLocationId="hub" pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="SHARED" keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret">
+    <rosetta:partners>
+        <rosetta:partner partnerName="Partner-A" businessIdentifier="111111111" locationId="partnera" requesterConfigName="Buyer_To_PartnerA_Request" requestPath="/rosettanet/partnera" certificateAlias="111111111:partnera"/>
+        <rosetta:partner partnerName="Partner-B" businessIdentifier="222222222" locationId="partnerb" requesterConfigName="Buyer_To_PartnerB_Request" requestPath="/rosettanet/partnerb" certificateAlias="222222222:partnerb"/>
+        <rosetta:partner partnerName="Partner-C" businessIdentifier="333333333" locationId="partnerc" requesterConfigName="Buyer_To_PartnerC_Request" requestPath="/rosettanet/partnerc" certificateAlias="333333333:partnerc"/>
+    </rosetta:partners>
+ </rosetta:config>
 ----
 
 [%header%autowidth.spread]
@@ -190,8 +193,7 @@ Example XML configuration for shared mode:
 |certificateAlias |Alias of the partner certificate in the keystore (if not specified, the alias is constructed from the partner DUNS and location identifiers)
 |requesterConfigName |Global HTTP Request for this partner
 |requestPath |Request Endpoint Path for this partner
-
-
+|===
 
 == Object Store
 
@@ -251,13 +253,173 @@ If you're interested in seeing the details of the RosettaNet protocol exchanges 
 </Loggers>
 ----
 
+== Common Errors with Configurations
+
+The errors fall into two categories: startup validation failures raised during `initialise()`, and partner resolution failures raised when helper methods are called with an unsupported mode or unknown alias.
+
+=== Startup Validation Errors
+
+==== Missing Mule DUNS Identifier
+
+Thrown when `selfBusinessIdentifier` is null or blank. This common validation applies to both `DEDICATED` and `SHARED` modes.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: 'Mule DUNS identifier' (selfBusinessIdentifier) is required
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateCommonConfig(RosettaNetConfig.java:429)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:411)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Missing HTTP Request Configuration in Dedicated Mode
+
+Thrown only in `DEDICATED` mode. The connector needs `requesterConfigName` to send outbound action and signal messages to the configured partner.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: DEDICATED mode requires 'Global HTTP Request' (requesterConfigName) to be configured
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateDedicatedModeConfig(RosettaNetConfig.java:447)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:414)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Missing Request Endpoint Path in Dedicated Mode
+
+Thrown only in `DEDICATED` mode. The connector requires `requestPath` to send messages directly to the configured partner endpoint.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: DEDICATED mode requires 'Request Endpoint Path' (requestPath) to be configured
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateDedicatedModeConfig(RosettaNetConfig.java:450)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:414)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Missing Partner DUNS Identifier in Dedicated Mode
+
+Thrown only in `DEDICATED` mode. The single-partner configuration requires this value to resolve or validate the inbound and outbound partner identity.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: DEDICATED mode requires 'Partner DUNS identifier' (partnerBusinessIdentifier) to be configured
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateDedicatedModeConfig(RosettaNetConfig.java:453)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:414)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Shared Mode Configured with Initiator Role
+
+Thrown when `listenerMode=SHARED` and `pipRole=INITIATOR`. Shared mode supports multi-partner inbound listener behavior; use `DEDICATED` mode for initiator flows.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: SHARED listener is supported only for RESPONDER pipRole. Use DEDICATED mode for initiator flows.
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateSharedModeConfig(RosettaNetConfig.java:478)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:418)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== No Partners Configured in Shared Mode
+
+Thrown when `listenerMode=SHARED` but `sharedModeConfig.partners` is empty. A shared listener needs at least one partner alias to register.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: SHARED mode requires at least one partner to be configured in the partners list
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateSharedModeConfig(RosettaNetConfig.java:485)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:418)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Duplicate Partner Name in Shared Mode
+
+Thrown when two shared partners reuse the same `partnerName`, case-insensitively. Partner names must be unique for flow routing through `attributes.partnerName`.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: Duplicate partner name 'Partner-A' in SHARED mode partners list
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateSharedModeConfig(RosettaNetConfig.java:493)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:418)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Duplicate Partner Alias in Shared Mode
+
+Thrown when two shared partners resolve to the same routing or certificate alias. This prevents ambiguous inbound partner matching.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: Duplicate partner alias '111111111:a' in SHARED mode partners list. Multiple partners cannot have the same business identifier and location ID combination.
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateSharedModeConfig(RosettaNetConfig.java:503)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(RosettaNetConfig.java:418)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Keystore Resource Not Found
+
+Thrown when the configured keystore cannot be loaded for certificate validation. For self-certificate validation, this fails startup.
+
+[source,text]
+----
+java.lang.RuntimeException: Keystore crypto/does-not-exist.jks not found
+    at com.mulesoft.connectors.rosettanet.extension.internal.rnif.MimeMessageBuilder.<init>(MimeMessageBuilder.java:137)
+    at com.mulesoft.connectors.rosettanet.extension.internal.rnif.MimeMessageBuilder.<init>(MimeMessageBuilder.java:76)
+    at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:402)
+----
+
+==== Certificate Alias Not Found
+
+Thrown when the expected alias is missing from the keystore. Partner alias failures are logged as warnings in `DEDICATED` mode and prevent startup in `SHARED` mode. Self-alias validation errors are propagated.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException:
+  Certificate alias '<selfDuns>:<selfLocation>' for self (Mule) not found in keystore: <keystorePath>.
+  Please verify the alias matches an entry in your keystore.
+  at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateCertificateAliasInKeystore(...)
+  at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateCommonConfig(...)
+  at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateConfiguration(...)
+  at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(...)
+----
+
+==== Keystore Alias Validation Read or Load Error
+
+Thrown when the keystore exists but cannot be read or validated. Common causes include an incorrect password, wrong keystore type, corrupt file, or provider/FIPS mismatch.
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: Error validating certificate alias '999999999:hub' for self (Mule) in keystore crypto-multipartner/hub.jks: keystore password was incorrect
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateCertificateAliasInKeystore(RosettaNetConfig.java:609)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.validateCommonConfig(RosettaNetConfig.java:436)
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:369)
+----
+
+==== Additional Startup Guards in RosettaNet Config
+
+Thrown when `privatePass` is set but `keystorePath` or `keystorePass` is missing:
+
+[source,text]
+----
+java.lang.IllegalArgumentException: Incomplete keystore configuration in RosettaNet configuration - null
+    at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:398)
+----
+
+Thrown after `validateConfiguration()` if `listenerConfigName` is null:
+
+[source,text]
+----
+com.mulesoft.connectors.rosettanet.extension.internal.exception.ConfigurationException: Missing required HTTP listener reference
+   at com.mulesoft.connectors.rosettanet.extension.internal.config.RosettaNetConfig.initialise(RosettaNetConfig.java:377)
+----
+
+=== Partner Resolution Errors
+
+Partner resolution failures throw `IllegalStateException` or `IllegalArgumentException` when helper methods are called in the wrong mode or with an unknown alias.
+
 == See Also
 
 * xref:release-notes::connector/rosettanet-connector-release-notes-mule-4.adoc[RosettaNet Connector Release Notes]
 * https://trailhead.salesforce.com/trailblazer-community/neighborhoods/mulesoft[MuleSoft Trailblazer Community]
-
-Example Files:
-
 * https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-request-content.xml[sample-purchase-order-request-content.xml]
 * https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-confirmation-content.xml[sample-purchase-order-confirmation-content.xml]
 * https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/partner1.jks[partner1.jks]
