@@ -1,0 +1,88 @@
+= OpenTelemetry Support in HTTP Connector
+
+Anypoint Connector for HTTP (HTTP Connector) contributes HTTP-specific information to Mule traces using OpenTelemetry semantic conventions for HTTP. The HTTP *Listener* source customizes the associated flow span, and the HTTP *Request* operation customizes its operation span.
+
+This article describes the HTTP semantic-convention attributes supported by the connector. For the conventions, see https://opentelemetry.io/docs/specs/semconv/http/http-spans/[Semantic Conventions for HTTP Spans].
+
+== Before You Begin
+
+Enable OpenTelemetry tracing and configure export as described in xref:4.13@mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime].
+
+[[http-spans]]
+== HTTP Spans
+
+[%header,cols="1,2,1"]
+|===
+| Component | Span Name | Span Kind
+| HTTP *Listener* | Received method followed by the configured listener path, for example, `POST /api` | `SERVER`
+| HTTP *Request* | Uppercase request method, for example, `GET` | `CLIENT`
+|===
+
+[[listener-attributes]]
+== HTTP Listener Attributes
+
+Listener spans include these HTTP semantic-convention attributes:
+
+[%header,cols="2,4"]
+|===
+| Attribute | Value and Condition
+| `http.request.method` | Uppercase method when it is `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`, or `QUERY`; otherwise, `_OTHER`.
+| `url.path` | Concrete path of the received request. This can differ from the configured listener path or route template.
+| `http.response.status_code` | Response status code, for example, `200`, when an HTTP response is available.
+| `server.port` | Configured listener port.
+| `url.scheme` | Scheme of the received request, for example, `http` or `https`.
+| `http.route` | Configured listener path.
+| `url.query` | Nonempty query string, only when the query-string system property is enabled. See <<query-string,Include the Listener Query String>>.
+|===
+
+[NOTE]
+When APIKit Router routes the request, it renames the HTTP flow span to the matched API resource route template, for example `GET /api/books/\{bookId}`, instead of the raw listener path. See xref:apikit::apikit-4-xml-reference.adoc#opentelemetry-route-on-the-http-span[OpenTelemetry Route on the HTTP Span] for more information.
+
+[[requester-attributes]]
+== HTTP Request Attributes
+
+Requester spans include these HTTP semantic-convention attributes:
+
+[%header,cols="2,4"]
+|===
+| Attribute | Value and Condition
+| `http.request.method` | Uppercase method when it is `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `CONNECT`, `OPTIONS`, `TRACE`, `PATCH`, or `QUERY`; otherwise, `_OTHER`.
+| `url.path` | Path from the target URI.
+| `http.response.status_code` | Response status code, for example, `200`, when an HTTP response is available.
+| `url.full` | Full target URI, including its query string when present.
+| `server.address` | Host from the target URI.
+| `server.port` | Explicit port from the target URI, or the scheme's default port when no port is specified, for example, `80` for HTTP or `443` for HTTPS.
+|===
+
+[[errors]]
+== Response Status and Errors
+
+The connector updates span status and adds `error.type` under these conditions:
+
+[%header,cols="1,2,2,1"]
+|===
+| Span Kind | Condition | `error.type` Value | Span Status
+| `SERVER` | Response status from 500 through 599 | Status code, for example, `503` | `ERROR`
+| `CLIENT` | Response status of 400 or greater | Status code, for example, `404` | `ERROR`
+| `CLIENT` | Transport failure without an HTTP response | HTTP connector error name, for example, `CONNECTIVITY` or `TIMEOUT` | `ERROR`
+|===
+
+For other response status codes, the HTTP status update leaves the span status `UNSET` and does not add `error.type`. A transport failure without a response does not provide `http.response.status_code`. Other Mule error-handling behavior can also affect the span; see xref:4.13@mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime].
+
+[[query-string]]
+== Include the Listener Query String
+
+The listener's `url.query` attribute is disabled by default because query parameter values can contain sensitive information that is exported with the trace. To include a nonempty received query string, set this JVM system property before starting Mule:
+
+[source,text]
+----
+-Dmule.http.tracing.urlQuery.enabled=true
+----
+
+The connector records the received query string without redacting its parameter values. Enable this property only when those values are appropriate to export. The property controls the listener's `url.query` attribute; the requester's `url.full` already contains the target URI, including any query string.
+
+== See Also
+
+* xref:4.13@mule-runtime::otel-support.adoc[OpenTelemetry Support in Mule Runtime]
+* xref:http-listener-ref.adoc[Configure HTTP Listener Source]
+* xref:http-request-ref.adoc[Configure HTTP Request Operation]
