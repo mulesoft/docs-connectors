@@ -1,6 +1,6 @@
 = Troubleshooting Web Service Consumer Connector 
 
-To troubleshoot Anypoint Connector for Web Service Consumer (Web Service Consumer Connector), become familiar with the information about enabling wire logging, troubleshooting access attachments, troubleshooting design-time WSDL issues, and interpreting commonly thrown messages.
+To troubleshoot Anypoint Connector for Web Service Consumer (Web Service Consumer Connector), become familiar with the information about enabling wire logging, troubleshooting access attachments, troubleshooting design-time WSDL issues, <<read-soap-fault-details,reading SOAP fault details>>, <<disable-xxe-protection,XML parsing>>, <<no-content-type,a missing Content-Type>>, and <<common-throws,commonly thrown messages>>.
 
 == Enable Wire Logging
 
@@ -140,9 +140,9 @@ Sometimes you need to add custom HTTP settings, such as OAuth settings or user/p
 
 == Troubleshooting Must Understand Error
 
-If your Mule Web Service Consumer app throws the error `WSC:CANNOT_DISPATCH`, and the third-party server returns in the HTTP response the `<faultcode>soap:MustUnderstand</faultcode>` as the exception for the connector caused error, this indicates that the Web Service Consumer connector configuration has the Security setting *Must Understand* field set to the default value of `true`.
+If your Mule Web Service Consumer app throws `WSC:SOAP_FAULT`, and the third-party server returns `<faultcode>soap:MustUnderstand</faultcode>` in the SOAP fault, the Web Service Consumer connector configuration has the Security setting *Must Understand* field set to the default value of `true`. On a custom HTTP transport, version 2.x raised `WSC:CANNOT_DISPATCH` for this fault. Version 3.0 raises `WSC:SOAP_FAULT`.
 
-To avoid this issue, set the *Must understand* field to `false`. The default value of this attribute to `true` is on the connector side, but on the SOAP protocol side the implicit value for the *Must Understand* attribute is `false` when is not present.
+To avoid this issue, set the *Must Understand* field to `false`. The default value of this attribute to `true` is on the connector side, but on the SOAP protocol side the implicit value for the *Must Understand* attribute is `false` when is not present.
 If you do not explicitly need to use the *Must Understand* attribute for SOAP request, set the value to `false`.
 
 image::wsc-must-understand.png[Web Service Consumer configuration setting Must Understand value to false]
@@ -220,14 +220,27 @@ In Web Service Consumer Connector 1.10.0 and earlier, you might see the `No Cont
 [[read-soap-fault-details]]
 == Read SOAP Fault Details
 
-When the Consume operation raises `WSC:SOAP_FAULT`, you can read the fault and the failed HTTP response from the error:
+When the Consume operation raises `WSC:SOAP_FAULT`, `error.errorMessage.payload` is the SOAP fault. It isn't the raw fault XML document.
 
-* `error.errorMessage.payload` contains the SOAP fault.
+* `error.errorMessage.payload.reason` is the fault text. For SOAP 1.1 this is the `faultstring`. For SOAP 1.2 this is the Reason text.
+* `error.errorMessage.payload.detail` is the fault detail.
 * `error.errorMessage.attributes.headers` contains the response protocol headers.
 * `error.errorMessage.attributes.statusCode` contains the HTTP status code.
 * `error.errorMessage.attributes.reasonPhrase` contains the HTTP reason phrase.
 
-One-way operations and WSDL or resource requests throw an error when the transport returns an HTTP error. They don't treat that response as a successful result. Request-response operations still raise `WSC:SOAP_FAULT` when the response contains a SOAP fault.
+`WSC:BAD_RESPONSE` and `WSC:EMPTY_RESPONSE` expose the same `headers`, `statusCode`, and `reasonPhrase` attributes. The payload of those two errors is empty.
+
+On a custom HTTP transport, a request-response operation that receives a non-empty HTTP error body is parsed by the connector. A SOAP fault in that body raises `WSC:SOAP_FAULT`. In 2.x the same response raised `WSC:CANNOT_DISPATCH`. These cases still raise `WSC:CANNOT_DISPATCH`:
+
+* A one-way operation
+* A WSDL or schema request
+* An operation whose one-way style can't be determined from the WSDL
+* An empty HTTP error body
+* An HTTP error body larger than `1048576` bytes
+
+The body limit is the `mule.wsc.maxReinjectedBodyBytes` system property. The default is `1048576`. To set this property, refer to https://help.salesforce.com/s/articleView?id=001115098&type=1[How can I set Mule and Java system properties at startup?].
+
+See xref:web-service-consumer-reference.adoc#wsc-soap-fault[SOAP fault error details].
 
 [[common-throws]]
 == Understand Common Throws
@@ -238,7 +251,7 @@ Here is a list of common throw messages and how to interpret them.
 
   Error matching the SOAP response with the format provided by the WSDL.
 
-  Every CXF SOAP fault error is wrapped in a `WSC:SOAP_FAULT`. For how to read the fault and the failed response, see xref:web-service-consumer-troubleshooting.adoc#read-soap-fault-details[Read SOAP Fault Details].
+  Every CXF SOAP fault error is wrapped in a `WSC:SOAP_FAULT`. For how to read the fault and the failed response, see <<read-soap-fault-details>>.
 
 * WSC:BAD_REQUEST
 
