@@ -49,31 +49,56 @@ Configuring the connector to use OAuth v2.0 Authorization Code authentication re
 * Callback Path: Path of the access token callback endpoint
 * Authorize Path: Path of the local HTTP endpoint that triggers the OAuth dance
 
-== OAuth Client Credentials 
+[[app-only-certificate-authentication]]
+== OAuth Client Credentials
 
-To configure OAuth Client Credentials, follow these steps:
+For app-only access to SharePoint Online, use certificate-based OAuth client credentials. App-only access runs without a signed-in user.
 
-. Create a keystore with a certificate (openssl).
-. Log in to https://portal.azure.com/#home[Microsoft Azure]. 
-. Go to *Azure Active Directory*.
-. Go to *App registrations*.
-. Add a new application and upload a certificate, or click on an existing application and click *Certificates & secrets > Certificates > Upload certificate* to upload a certificate.
-. Go to Anypoint Studio and create a new Mule project in which to add and configure the connector.
-. Add a dependency for SharePoint Connector in the `pom.xml` file.
-. Create the flow and add the keystore and the credentials file into the `resources` folder. Add the required fields for the connector configuration. Configuring the connector to use OAuth Client Credentials with Certificate authentication requires the following information:
+SharePoint Online doesn't accept a client secret for this access. Microsoft retired Azure Access Control Service (ACS), the previous app-only model that used a client ID and a client secret. A client secret can return `401 Unauthorized` or a token that expires immediately. The OAuth v2.0 authorization code flow depends on a user refresh token, which doesn't persist reliably for an unattended integration and can fail the same way.
 
-* Site Url: URL for the target SharePoint instance
-* Client ID: Client ID to use to call the API
-* Token URL: URL used to get an access token
-* Keystore alias: Alias used to get the correct certificate from the keystore 
-* Path to keystore: Path to the client's keystore with the private key and certificate 
-* Keystore password: Password used to access the private key from the keystore 
-* Keystore type: JCEKS, JKS, or PKCS12
+Use a certificate instead. Generate a self-signed certificate pair, upload the public certificate to the Microsoft Entra app registration, and configure the connector with the private key.
+
+=== Generate a Self-Signed Certificate Pair
+
+Run these OpenSSL commands where you prepare the Mule app. The first command creates a private key and a public certificate. Change `365` if you need a different validity period in days. The second command packages the private key and public certificate into a PKCS12 keystore. When prompted, enter a keystore password.
+
+[source,bash,linenums]
+----
+openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout private.key -out public.crt -subj "/CN=SharePointApp"
+openssl pkcs12 -export -out sharepoint-keystore.p12 -inkey private.key -in public.crt -name sharepoint
+----
+
+Keep `private.key` and `sharepoint-keystore.p12` private. Upload only `public.crt` to Microsoft Entra ID.
+
+=== Upload the Public Certificate
+
+. Log in to https://portal.azure.com/#home[Microsoft Azure].
+. Go to *Microsoft Entra ID* > *App registrations* and open the app you use for SharePoint, or register a new app.
+. Select *Certificates & secrets* > *Certificates* > *Upload certificate*.
+. Upload `public.crt`.
+. Copy the application (client) ID and the directory (tenant) ID. You use the client ID in the connector and the tenant ID in the token URL.
+. Grant the app the SharePoint application permissions it needs, and grant admin consent. A certificate doesn't authorize the app to call SharePoint by itself.
+
+=== Configure the Connector with the Private Key
+
+. In Anypoint Studio, create a Mule project and add the SharePoint Connector dependency to the `pom.xml` file.
+. Copy `sharepoint-keystore.p12` into `src/main/resources`. The keystore already contains the private key, so don't add `private.key` to the project.
+. Create a Microsoft SharePoint global element and select *OAuth Client Credentials*.
+. Set these fields:
++
+* Site Url: URL of the target SharePoint site
+* Client ID: Application (client) ID from the app registration
+* Token URL: Token endpoint for your tenant, for example `+https://login.microsoftonline.com/{tenant-id}/oauth2/v2.0/token+`
+* Keystore alias: `sharepoint`, the name you set with `-name` in the `openssl pkcs12` command
+* Path to keystore: `sharepoint-keystore.p12`
+* Keystore password: Password you set when you created the keystore
+* Keystore type: PKCS12
 * TLS Context: TLS configuration used when requesting the OAuth token. In Studio, this field appears on the *TLS* tab. Configure it when a TLS-inspecting proxy or the token endpoint presents a certificate that the JVM default truststore doesn't trust.
 +
 The connector sends OAuth token requests through the configured proxy (*Host*, *Port*, and related proxy fields). The *Disable SSL certificate validation* field applies to SharePoint API calls only. It doesn't apply to OAuth token requests. Use *TLS Context* to trust a proxy or token-endpoint certificate.
-. Click *Test Connection* to confirm that Mule can connect with the specified server.
-. Click *OK*.
+
+. Select *Test Connection* to confirm that Mule can connect to SharePoint.
+. Select *OK*.
 
 == Okta Authentication
 
@@ -248,7 +273,7 @@ The SharePoint connector supports SharePoint Online on-premises and SharePoint o
 +
 * What authentication schemes are supported by this connector?
 +
-SharePoint Online supports authentication using standard SharePoint Online user credentials is supported, secure authentication, and Okta authentication.
+The connector supports OAuth v2.0 authorization code, certificate-based OAuth client credentials, Okta authentication, and security token authentication. For SharePoint Online app-only access, use <<app-only-certificate-authentication,certificate-based OAuth client credentials>>. A client secret isn't supported for that access.
 +
 * What parts of the SharePoint object model are accessible by the connector?
 +
