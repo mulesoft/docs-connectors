@@ -28,6 +28,7 @@ Configuration for the CIRT REST-over-HTTPS surface of PeopleSoft REST Connector.
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for *Response Timeout*. |  SECONDS |
+| Encoding a| String | Charset for result payloads that the connector emits to the flow. If blank, the connector uses the runtime encoding. Wire traffic to PSIGW remains UTF-8 JSON. |  |
 | Name a| String |  ID used to reference this configuration. |  | x
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
 |===
@@ -48,6 +49,8 @@ Basic authentication connection provider for the PeopleSoft CIRT surface. HTTPS 
 | Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* parameter on xref:#InvokeCirtOperation[Invoke CIRT Operation]. If the list is empty, the connector falls back to the single-path probe. |  |
 | Username a| String |  PeopleSoft user ID used to authenticate CIRT requests. |  | x
 | Password a| String |  Password associated with *Username*. |  | x
+| Default Headers a| Array of <<DefaultHeader>> | Headers added to every CIRT request and connectivity test probe when the operation does not set the same header name. |  |
+| Query Parameters a| Array of <<DefaultQueryParam>> | Query parameters added to every CIRT request and connectivity test probe when the operation does not set the same parameter name. |  |
 | Max Connections a| Number |  Maximum number of outbound connections the client keeps open. `-1` means unbounded. |  -1 |
 | Connection Timeout a| Number |  Maximum time to establish the TCP connection to PSIGW. |  30 |
 | Connection Timeout Unit a| Enumeration, one of:
@@ -86,6 +89,8 @@ OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface
 | Base URI a| String |  Base URI of the CIRT REST endpoint, for example `\https://<host>:8443/PSIGW/RESTListeningConnector/PSFT_HR`. |  | x
 | Connectivity Test Path a| String |  Optional CIRT route that makes Test Connection stricter. If this field is blank, the connector performs a lenient check that requires HTTP 200 only. Set a path such as `/CIRT_USER_PROFILE_F_GET.V1` to require HTTP 200 with an XML or JSON body. |  |
 | Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* parameter on xref:#InvokeCirtOperation[Invoke CIRT Operation]. If the list is empty, the connector falls back to the single-path probe. |  |
+| Default Headers a| Array of <<DefaultHeader>> | Headers added to every CIRT request and connectivity test probe when the operation does not set the same header name. |  |
+| Query Parameters a| Array of <<DefaultQueryParam>> | Query parameters added to every CIRT request and connectivity test probe when the operation does not set the same parameter name. |  |
 | Max Connections a| Number |  Maximum number of outbound connections the client keeps open. `-1` means unbounded. |  -1 |
 | Connection Timeout a| Number |  Maximum time to establish the TCP connection to PSIGW. |  30 |
 | Connection Timeout Unit a| Enumeration, one of:
@@ -119,16 +124,17 @@ OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface
 
 == Supported Operations
 * <<InvokeCirtOperation>>
-* <<ReplaceUserProfileIdTypes>>
 * <<Unauthorize>>
 
 == Operations
 
 [[InvokeCirtOperation]]
 == Invoke CIRT Operation
-`<peoplesoft-rest:invoke-cirt-operation>`
+`<ms-peoplesoft-rest:invoke-cirt-operation>`
 
-Invokes a Component Interface method through the CIRT contract and returns the classified JSON response. CREATE and SAVE_NESTED automatically run a follow-up GET after the write so the operation can return the persisted graph. GET, FIND, and SAVE_SCALAR return the response from a single request. The connector buffers the full response. This release is tested with `CI_PERSONAL_DATA`, `CI_POSITION_DATA`, `LOCATION`, and `USER_PROFILE`. The Component Interface must be registered and REST-enabled on the target PeopleSoft instance.
+Invokes a Component Interface method through the standard CIRT `V1` contract and returns the classified response from a single request. The Component Interface must be registered and REST-enabled on a PeopleTools 8.58 or later target instance. Custom Component Interface methods, service or operation aliases, non-`V1` operation versions, and customized message contracts are not supported.
+
+For CREATE, SAVE_SCALAR, and SAVE_NESTED, provide an unwrapped Component Interface JSON body. The connector adds the CIRT request envelope and rejects a body that already contains one. GET and FIND do not send a request body. Successful responses retain the PeopleSoft response envelope. Write operations can return an acknowledgement instead of a complete record, so invoke GET explicitly when the application requires the resulting record.
 
 === Parameters
 
@@ -144,17 +150,16 @@ Invokes a Component Interface method through the CIRT contract and returns the c
 ** FIND
 ** SAVE_SCALAR
 ** SAVE_NESTED |  CIRT verb. SAVE_SCALAR is the scalar update (child rowsets unchanged). SAVE_NESTED is the nested updatedata write (full graph). |  | x
-| Path Keys a| Array of String |  Ordered path-key values. Leave this field empty for CREATE. This field is required for GET, FIND, SAVE_SCALAR, and SAVE_NESTED. |  |
-| Body a| Binary |  JSON body from the caller. This field is ignored for GET and FIND. |  #[payload] |
-| Follow-up GET Key Fields a| Array of String |  Primary-key field names used for the follow-up GET after CREATE or SAVE_NESTED. For SAVE_SCALAR and SAVE_NESTED, these values are also injected into the body and paired with *Path Keys*. If unset, the connector defaults to *Path Keys*. |  |
+| Path Keys a| Array of String | Ordered URL path-key values. Leave this field empty for CREATE. This field is required for GET, FIND, SAVE_SCALAR, and SAVE_NESTED. For SAVE operations, include the level-0 key names and values in the request body. |  |
+| Body a| Binary | Unwrapped Component Interface JSON for CREATE, SAVE_SCALAR, and SAVE_NESTED. This field is ignored for GET and FIND. |  #[payload] |
 | Output Mime Type a| String |  MIME type of the payload that this operation outputs. |  |
 | Output Encoding a| String |  Encoding of the payload that this operation outputs. |  |
 | Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
 | Streaming Strategy a| * <<RepeatableInMemoryStream>>
 * <<RepeatableFileStoreStream>>
 * non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
-| Custom Headers a| Object |  Custom HTTP headers in addition to the CIRT-standard Accept and Content-Type headers. |  |
-| Custom Query Parameters a| Object |  Custom query parameters to append to the CIRT request URL. |  |
+| Custom Headers a| Object | Custom HTTP headers. These headers override connection defaults with the same name. The connector requests `application/json` when neither the operation nor the connection sets an `Accept` header. |  |
+| Custom Query Parameters a| Object | Custom query parameters to append to the CIRT request URL. These parameters override connection defaults with the same name. |  |
 | Response Timeout a| Number |  Per-request response timeout. If unset, the operation inherits the configuration-level default of 30. |  |
 | Response Timeout Unit a| Enumeration, one of:
 
@@ -165,6 +170,7 @@ Invokes a Component Interface method through the CIRT contract and returns the c
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for *Response Timeout*. If unset, the operation inherits the configuration-level default of SECONDS. |  |
+| Encoding a| String | Charset for this invocation's result payload. If unset, the operation inherits the configuration-level *Encoding*. Wire traffic to PSIGW remains UTF-8 JSON. |  |
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  |
 | Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
@@ -186,80 +192,19 @@ Invokes a Component Interface method through the CIRT contract and returns the c
 
 === Throws
 
-* PEOPLESOFT-REST:CONNECTIVITY
-* PEOPLESOFT-REST:EXECUTION
-* PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE
-* PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE_ID
-* PEOPLESOFT-REST:INVALID_OPERATION_PARAMETER
-* PEOPLESOFT-REST:MAPPING_EXCEPTION
-* PEOPLESOFT-REST:REQUEST_FAILED
-* PEOPLESOFT-REST:RETRY_EXHAUSTED
-
-[[ReplaceUserProfileIdTypes]]
-== Replace User Profile ID Types
-`<peoplesoft-rest:replace-user-profile-id-types>`
-
-Replaces the IDTypes collection on an existing USER_PROFILE. The operation gets the current graph, overwrites its IDTypes array with the sorted caller list, and posts the mutated graph with Updatedata. The operation returns the classified Updatedata acknowledgment and does not run a follow-up GET after the write.
-
-=== Parameters
-
-[%header%autowidth.spread]
-|===
-| Name | Type | Description | Default Value | Required
-| Configuration | String | Name of the configuration to use. | | x
-| User ID a| String |  User ID whose IDTypes are being replaced. |  | x
-| ID Types Replacement a| Array of <<IdType>> |  ID types to write. The connector sorts the list internally before the write. The list must contain at least one entry. |  #[payload] |
-| Output Mime Type a| String |  MIME type of the payload that this operation outputs. |  |
-| Output Encoding a| String |  Encoding of the payload that this operation outputs. |  |
-| Config Ref a| ConfigurationProvider |  Name of the configuration to use to execute this component. |  | x
-| Streaming Strategy a| * <<RepeatableInMemoryStream>>
-* <<RepeatableFileStoreStream>>
-* non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
-| Custom Headers a| Object |  Custom HTTP headers in addition to the CIRT-standard Accept and Content-Type headers. |  |
-| Custom Query Parameters a| Object |  Custom query parameters to append to the CIRT request URL. |  |
-| Response Timeout a| Number |  Per-request response timeout. If unset, the operation inherits the configuration-level default of 30. |  |
-| Response Timeout Unit a| Enumeration, one of:
-
-** NANOSECONDS
-** MICROSECONDS
-** MILLISECONDS
-** SECONDS
-** MINUTES
-** HOURS
-** DAYS |  Time unit for *Response Timeout*. If unset, the operation inherits the configuration-level default of SECONDS. |  |
-| Target Variable a| String |  Name of the variable that stores the operation's output. |  |
-| Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
-| Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
-| Reconnection Strategy a| * <<Reconnect>>
-* <<ReconnectForever>> |  Retry strategy in case of connectivity errors. |  |
-|===
-
-=== Output
-
-[%autowidth.spread]
-|===
-|Type |Binary
-| Attributes Type a| <<PeoplesoftAttributes>>
-|===
-
-=== For Configurations
-
-* <<Config>>
-
-=== Throws
-
-* PEOPLESOFT-REST:CONNECTIVITY
-* PEOPLESOFT-REST:EXECUTION
-* PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE
-* PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE_ID
-* PEOPLESOFT-REST:INVALID_OPERATION_PARAMETER
-* PEOPLESOFT-REST:MAPPING_EXCEPTION
-* PEOPLESOFT-REST:REQUEST_FAILED
-* PEOPLESOFT-REST:RETRY_EXHAUSTED
+* MS-PEOPLESOFT-REST:CONNECTIVITY
+* MS-PEOPLESOFT-REST:FORBIDDEN
+* MS-PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE
+* MS-PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE_ID
+* MS-PEOPLESOFT-REST:INVALID_OPERATION_PARAMETER
+* MS-PEOPLESOFT-REST:MAPPING_EXCEPTION
+* MS-PEOPLESOFT-REST:REQUEST_FAILED
+* MS-PEOPLESOFT-REST:RETRY_EXHAUSTED
+* MS-PEOPLESOFT-REST:UNAUTHORIZED
 
 [[Unauthorize]]
 == Unauthorize
-`<peoplesoft-rest:unauthorize>`
+`<ms-peoplesoft-rest:unauthorize>`
 
 Deletes all access token information for a given resource owner ID so that no operation can run for that user until authorization is completed again.
 
@@ -277,6 +222,26 @@ Deletes all access token information for a given resource owner ID so that no op
 * <<Config>>
 
 == Types
+[[DefaultHeader]]
+=== Default Header
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Key a| String | Header name. |  | x
+| Value a| String | Header value. |  | x
+|===
+
+[[DefaultQueryParam]]
+=== Default Query Parameter
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Key a| String | Query parameter name. |  | x
+| Value a| String | Query parameter value. |  | x
+|===
+
 [[PeoplesoftProxyConfig]]
 === PeopleSoft Proxy Config
 
@@ -537,28 +502,4 @@ Configures the repeatable file-store streaming strategy by which Mule keeps a po
 ** RETRY_EXHAUSTED
 ** TIMEOUT |  |  |
 | Target a| String |  |  | x
-|===
-
-[[IdType]]
-=== ID Type
-
-A PeopleSoft USER_PROFILE ID-type entry that includes the ID type and its attribute list. Use this type as input to the USER_PROFILE replace operation.
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Id Type a| String |  ID type. |  |
-| Attributes a| Array of <<Attribute>> |  Attributes for this ID type. |  |
-|===
-
-[[Attribute]]
-=== Attribute
-
-[%header,cols="20s,25a,30a,15a,10a"]
-|===
-| Field | Type | Description | Default Value | Required
-| Fieldname a| String |  Field name. |  |
-| Recname a| String |  Record name. |  |
-| Attribute Name a| String |  Attribute name. |  |
-| Attribute Value a| String |  Attribute value. |  |
 |===
