@@ -28,8 +28,7 @@ Configuration for the CIRT REST-over-HTTPS surface of Oracle PeopleSoft REST Con
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for *Response Timeout*. |  SECONDS |
-| Encoding a| String | Charset for result payloads that the connector emits to the flow. If blank, the connector uses the runtime encoding. Wire traffic to PSIGW remains UTF-8 JSON. |  |
-| Name a| String |  ID used to reference this configuration. |  | x
+| Encoding a| String | Charset for result payloads that the connector emits to the flow. If blank, the connector uses the runtime encoding. Request bodies sent to PSIGW are UTF-8 JSON. The response media type follows the PSIGW `Content-Type`. |  |
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
 |===
 
@@ -37,7 +36,7 @@ Configuration for the CIRT REST-over-HTTPS surface of Oracle PeopleSoft REST Con
 [[Config_BasicAuthConnection]]
 ===== Basic Auth Connection
 
-Basic authentication connection provider for the PeopleSoft CIRT surface. HTTPS is strongly recommended because CIRT carries credentials and PII. The scheme comes from *Base URI*. Wrong credentials cause the connectivity test to fail.
+Basic authentication connection provider for the PeopleSoft CIRT surface. HTTPS is strongly recommended because CIRT carries credentials and PII. The scheme comes from *Base URI*. Wrong credentials cause the connectivity test to fail. An HTTP 401 is returned as `UNAUTHORIZED`.
 
 ====== Parameters
 
@@ -45,12 +44,12 @@ Basic authentication connection provider for the PeopleSoft CIRT surface. HTTPS 
 |===
 | Name | Type | Description | Default Value | Required
 | Base URI a| String |  Base URI of the CIRT REST endpoint, for example `\https://<host>:8443/PSIGW/RESTListeningConnector/PSFT_HR`. |  | x
-| Connectivity Test Path a| String |  Optional CIRT route that makes Test Connection stricter. If this field is blank, the connector performs a lenient check that requires HTTP 200 only. Set a path such as `/CIRT_USER_PROFILE_F_GET.V1` to require HTTP 200 with an XML or JSON body. |  |
+| Connectivity Test Path a| String |  CIRT route used by Test Connection. If this field is blank, the connector probes `GET /CIRT_USER_PROFILE_F_GET.V1`, the default route, and accepts any HTTP 200 response, including an HTML routing-error page. Set a path to require HTTP 200 with an XML or JSON body. |  |
 | Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* parameter on xref:#InvokeCirtOperation[*Invoke CIRT Operation*]. If the list is empty, the connector falls back to the single-path probe. |  |
 | Username a| String |  PeopleSoft user ID used to authenticate CIRT requests. |  | x
 | Password a| String |  Password associated with *Username*. |  | x
 | Default Headers a| Array of <<DefaultHeader>> | Headers added to every CIRT request and connectivity test probe when the operation doesn't set the same header name. |  |
-| Query Parameters a| Array of <<DefaultQueryParam>> | Query parameters added to every CIRT request and connectivity test probe when the operation doesn't set the same parameter name. |  |
+| Query Parameters a| Array of <<DefaultQueryParam>> | Query parameters added to every CIRT request and connectivity test probe when the operation doesn't set the same parameter name. On some PeopleTools gateways, query parameters on CIRT routes are treated as path keys, so prefer headers for CIRT traffic. |  |
 | Max Connections a| Number |  Maximum number of outbound connections the client keeps open. `-1` means unbounded. |  -1 |
 | Connection Timeout a| Number |  Maximum time to establish the TCP connection to PSIGW. |  30 |
 | Connection Timeout Unit a| Enumeration, one of:
@@ -74,12 +73,12 @@ Basic authentication connection provider for the PeopleSoft CIRT surface. HTTPS 
 ** DAYS |  Time unit for *Connection Idle Timeout*. |  SECONDS |
 | Proxy Configuration a| <<PeoplesoftProxyConfig>> |  Optional HTTP proxy through which PSIGW calls are routed. If omitted, no proxy is used. |  |
 | TLS Configuration a| <<Tls>> |  TLS context used for HTTPS connections to PSIGW. If omitted, the connector uses the JVM trust configuration. |  |
-| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+| Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
 |===
 [[Config_ClientCredentialsConnection]]
 ===== OAuth 2.0 Client Credentials Connection
 
-OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface. Use this connection when the Integration Broker REST listener is fronted by an OAuth-secured gateway. Each PeopleSoft installation is self-hosted, so you must override the token URL, client ID, client secret, and scopes in the configuration. For example, on Microsoft Entra ID, the client credentials grant requires the resource default scope `api://<client-id>/.default`. A delegated scope such as `readwrite` is rejected with an invalid_scope error. Other identity providers use their own scope syntax.
+OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface. Use this connection when the Integration Broker REST listener is fronted by an OAuth-secured gateway. Each PeopleSoft installation is self-hosted, so you must override the token URL, client ID, client secret, and scopes in the configuration. For example, on Microsoft Entra ID, the client credentials grant requires the resource default scope `api://<client-id>/.default`. A delegated scope such as `readwrite` is rejected with an invalid_scope error. Other identity providers use their own scope syntax. An HTTP 401 requests a new token and retries once.
 
 ====== Parameters
 
@@ -87,10 +86,10 @@ OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface
 |===
 | Name | Type | Description | Default Value | Required
 | Base URI a| String |  Base URI of the CIRT REST endpoint, for example `\https://<host>:8443/PSIGW/RESTListeningConnector/PSFT_HR`. |  | x
-| Connectivity Test Path a| String |  Optional CIRT route that makes Test Connection stricter. If this field is blank, the connector performs a lenient check that requires HTTP 200 only. Set a path such as `/CIRT_USER_PROFILE_F_GET.V1` to require HTTP 200 with an XML or JSON body. |  |
+| Connectivity Test Path a| String |  CIRT route used by Test Connection. If this field is blank, the connector probes `GET /CIRT_USER_PROFILE_F_GET.V1`, the default route, and accepts any HTTP 200 response, including an HTML routing-error page. Set a path to require HTTP 200 with an XML or JSON body. |  |
 | Component Interface List a| Array of String |  Optional Component Interface names that the connector validates at connect time. Each name is probed through its FIND route and must return HTTP 200 with an XML or JSON body. The list also supplies values for the *Component Interface* parameter on xref:#InvokeCirtOperation[*Invoke CIRT Operation*]. If the list is empty, the connector falls back to the single-path probe. |  |
 | Default Headers a| Array of <<DefaultHeader>> | Headers added to every CIRT request and connectivity test probe when the operation doesn't set the same header name. |  |
-| Query Parameters a| Array of <<DefaultQueryParam>> | Query parameters added to every CIRT request and connectivity test probe when the operation doesn't set the same parameter name. |  |
+| Query Parameters a| Array of <<DefaultQueryParam>> | Query parameters added to every CIRT request and connectivity test probe when the operation doesn't set the same parameter name. On some PeopleTools gateways, query parameters on CIRT routes are treated as path keys, so prefer headers for CIRT traffic. |  |
 | Max Connections a| Number |  Maximum number of outbound connections the client keeps open. `-1` means unbounded. |  -1 |
 | Connection Timeout a| Number |  Maximum time to establish the TCP connection to PSIGW. |  30 |
 | Connection Timeout Unit a| Enumeration, one of:
@@ -114,11 +113,11 @@ OAuth 2.0 client credentials connection provider for the PeopleSoft CIRT surface
 ** DAYS |  Time unit for *Connection Idle Timeout*. |  SECONDS |
 | Proxy Configuration a| <<PeoplesoftProxyConfig>> |  Optional HTTP proxy through which PSIGW calls are routed. If omitted, no proxy is used. |  |
 | TLS Configuration a| <<Tls>> |  TLS context used for HTTPS connections to PSIGW. If omitted, the connector uses the JVM trust configuration. |  |
-| Reconnection a| <<Reconnection>> |  When the application is deployed, a connectivity test is performed on all connectors. If set to true, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. |  |
+| Reconnection a| <<Reconnection>> |  Configures a reconnection strategy to use when a connector operation fails to connect to an external server. |  |
 | Client Id a| String |  OAuth client ID as registered with the service provider. |  | x
 | Client Secret a| String |  OAuth client secret as registered with the service provider. |  | x
 | Token Url a| String |  Token endpoint URL of the service provider. |  `\https://your-idp-host/oauth2/v2.0/token` |
-| Scopes a| String |  OAuth scopes to request during the OAuth dance. This value defaults to the scopes in the annotation. |  readwrite |
+| Scopes a| String |  OAuth scopes to request. The default is `readwrite`, the PeopleTools OAuth access level. Override this value for your identity provider. |  readwrite |
 | Object Store a| String |  Configures the object store that stores data for each resource owner. If not configured, Mule uses the default object store. |  |
 |===
 
@@ -149,7 +148,7 @@ For CREATE, SAVE_SCALAR, and SAVE_NESTED, provide an unwrapped Component Interfa
 ** GET
 ** FIND
 ** SAVE_SCALAR
-** SAVE_NESTED |  CIRT verb. SAVE_SCALAR is the scalar update (child rowsets unchanged). SAVE_NESTED is the nested updatedata write (full graph). |  | x
+** SAVE_NESTED |  CIRT verb. SAVE_SCALAR is the scalar update (child rowsets unchanged). SAVE_NESTED is the nested Update Data write of the full graph. Omitted child collections can delete rows on Update Data. |  | x
 | Path Keys a| Array of String | Ordered URL path-key values. Leave this field empty for CREATE. This field is required for GET, FIND, SAVE_SCALAR, and SAVE_NESTED. For SAVE operations, include the level-0 key names and values in the request body. |  |
 | Body a| Binary | Unwrapped Component Interface JSON for CREATE, SAVE_SCALAR, and SAVE_NESTED. This field is ignored for GET and FIND. |  #[payload] |
 | Output Mime Type a| String |  MIME type of the payload that this operation outputs. |  |
@@ -159,7 +158,7 @@ For CREATE, SAVE_SCALAR, and SAVE_NESTED, provide an unwrapped Component Interfa
 * <<RepeatableFileStoreStream>>
 * non-repeatable-stream |  Configures how Mule processes streams. Repeatable streams are the default behavior. |  |
 | Custom Headers a| Object | Custom HTTP headers. These headers override connection defaults with the same name. The connector requests `application/json` when neither the operation nor the connection sets an `Accept` header. |  |
-| Custom Query Parameters a| Object | Custom query parameters to append to the CIRT request URL. These parameters override connection defaults with the same name. |  |
+| Custom Query Parameters a| Object | Custom query parameters to append to the CIRT request URL. These parameters override connection defaults with the same name. On some PeopleTools gateways, query parameters on CIRT routes are treated as path keys, so prefer headers for CIRT traffic. |  |
 | Response Timeout a| Number |  Per-request response timeout. If unset, the operation inherits the configuration-level default of 30. |  |
 | Response Timeout Unit a| Enumeration, one of:
 
@@ -170,7 +169,7 @@ For CREATE, SAVE_SCALAR, and SAVE_NESTED, provide an unwrapped Component Interfa
 ** MINUTES
 ** HOURS
 ** DAYS |  Time unit for *Response Timeout*. If unset, the operation inherits the configuration-level default of SECONDS. |  |
-| Encoding a| String | Charset for this invocation's result payload. If unset, the operation inherits the configuration-level *Encoding*. Wire traffic to PSIGW remains UTF-8 JSON. |  |
+| Encoding a| String | Charset for this invocation's result payload. If unset, the operation inherits the configuration-level *Encoding*. Request bodies sent to PSIGW are UTF-8 JSON. The response media type follows the PSIGW `Content-Type`. |  |
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  |
 | Target Value a| String |  An expression to evaluate against the operation's output and store the expression outcome in the target variable. |  #[payload] |
 | Error Mappings a| Array of <<ErrorMapping>> |  Set of error mappings. |  |
@@ -192,15 +191,18 @@ For CREATE, SAVE_SCALAR, and SAVE_NESTED, provide an unwrapped Component Interfa
 
 === Throws
 
-* MS-PEOPLESOFT-REST:CONNECTIVITY
-* MS-PEOPLESOFT-REST:FORBIDDEN
-* MS-PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE
-* MS-PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE_ID
-* MS-PEOPLESOFT-REST:INVALID_OPERATION_PARAMETER
-* MS-PEOPLESOFT-REST:MAPPING_EXCEPTION
-* MS-PEOPLESOFT-REST:REQUEST_FAILED
-* MS-PEOPLESOFT-REST:RETRY_EXHAUSTED
-* MS-PEOPLESOFT-REST:UNAUTHORIZED
+[%header%autowidth.spread]
+|===
+| Error | Description
+| `MS-PEOPLESOFT-REST:CONNECTIVITY` | The connector can't reach PSIGW, or the connectivity test fails.
+| `MS-PEOPLESOFT-REST:UNAUTHORIZED` | Authentication failed. A Basic authentication HTTP 401 raises this error. An OAuth HTTP 401 requests a new token and retries once before this error is raised.
+| `MS-PEOPLESOFT-REST:FORBIDDEN` | PSIGW returned HTTP 403.
+| `MS-PEOPLESOFT-REST:REQUEST_FAILED` | The CIRT request failed. This includes PeopleSoft Require SSL (158,551).
+| `MS-PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE` | The Component Interface name is missing or isn't valid for a published CIRT service.
+| `MS-PEOPLESOFT-REST:INVALID_COMPONENT_INTERFACE_ID` | A Component Interface ID or required path key is missing or isn't valid.
+| `MS-PEOPLESOFT-REST:INVALID_OPERATION_PARAMETER` | An operation parameter is missing or isn't valid.
+| `MS-PEOPLESOFT-REST:MAPPING_EXCEPTION` | The connector can't map the request or response.
+|===
 
 [[Unauthorize]]
 == Unauthorize
