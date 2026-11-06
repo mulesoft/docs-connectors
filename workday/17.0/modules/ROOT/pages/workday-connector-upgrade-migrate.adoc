@@ -1,66 +1,174 @@
 = Upgrading and Migrating Workday Connector to 17.x
 :page-aliases: connectors::workday/workday-connector-upgrade-migrate.adoc
 
-Upgrade Anypoint Connector for Workday (Workday Connector) to version 16.x.x.
+Upgrade Anypoint Connector for Workday (Workday Connector) from version 16.x to version 17.x.
 
 == Supported Upgrade Paths
 
 [%header,cols="50a,50a"]
 |===
-|From Version | To Version
-|15.x |16.x
+|From Version |To Version
+|16.x |17.x
 |===
 
-== What's Changed
+== Changes in This Release
 
-=== 16.x
+=== 17.0
 
-* The connector is upgraded to Workday API version 40.0.
-* The connector now supports the *ACA Partner Integrations* and *Student Transfer Credit* operations.
-* The connector now throws the new `WORKDAY:BAD_REQUEST` error.
-* The com.fasterxml.jackson.core library is upgraded to version 2.15.0-rc1 to address reported security vulnerabilities. 
-* The mule-soap-engine library is upgraded to version 1.7.2 to address reported security vulnerabilities. 
-* The org-springframework library is upgraded to version 5.3.27 to address reported security vulnerabilities.
+* This connector is now compatible with Java 17 only.
+* The connector now uses Workday API v47.0 instead of v46.0. Workday removes three operation choices from the *Financial Management* and *Compensation* services. Service-specific connector operations remain available. Review the required migrations in <<removed-workday-operations,Removed Workday Operations>>. For more information, see xref:workday-reference.adoc#financialManagement[*Financial Management*] and xref:workday-reference.adoc#compensation[*Compensation*].
+* The SOAP engine is upgraded to version 3.0.3. Test SOAP requests, response mappings, and authentication before deploying to production.
+* Timeout unit XML attributes are renamed: `responseTimeoutUnit` is now `responseTimeoutTimeUnit`, `connectionTimeoutUnit` is now `connectionTimeoutTimeUnit`, and `connectionIdleTimeoutUnit` is now `connectionIdleTimeoutTimeUnit`. The *Response Timeout* default remains 60 seconds, and the *Connection Timeout* and *Connection Idle Timeout* defaults remain 30 seconds. For migration steps, see <<configuration-migration,Configuration Migration>>. For more information, see xref:workday-reference.adoc#config[Configuration] and xref:workday-reference.adoc#config_basic-authentication-api[Workday Basic Authentication Connection Type].
+* The *Signature Algorithm* for X.509 authentication now supports only `RSA_SHA256`, which replaces the previous `RSA_SHA1` default. Custom SOAP headers are now sent and included in the signed envelope. The header input must have a `headers` root element. For more information, see xref:workday-reference.adoc#config_x509-authentication[X.509 Authentication Connection Type].
+* The OAuth *State* field is now labeled *OAuth State*. The X.509 *Type*, *Password*, and *Alias* fields are now labeled *Key Store Type*, *Key Store Password*, and *Key Alias*. Their XML attribute names are unchanged. For more information, see xref:workday-reference.adoc#Config_WorkdayOauthAuthentication[Workday OAuth Code Authentication Connection Type] and xref:workday-reference.adoc#config_x509-authentication[X.509 Authentication Connection Type].
+* *Host name* now accepts only a hostname with an optional port. Values containing a URL scheme, user information, path, query, fragment, or spaces are rejected. Tenant names are URL-encoded in service addresses, and user and tenant values are XML-escaped in SOAP requests. For more information, see xref:workday-reference.adoc#config_basic-authentication-api[Workday Basic Authentication Connection Type], xref:workday-reference.adoc#Config_WorkdayOauthAuthentication[Workday OAuth Code Authentication Connection Type], and xref:workday-reference.adoc#config_x509-authentication[X.509 Authentication Connection Type].
+* *Content* and *Headers* for SOAP operations now use the Any type, instead of Binary. Operations also expose *Encoding* to override the configuration encoding and *Error Mappings* to map connector errors. For more information, see xref:workday-reference.adoc#humanResources[*Human Resources*] and xref:workday-reference.adoc#ErrorMapping[Error Mapping].
+* Authentication faults on Basic and X.509 connections now raise `WORKDAY:UNAUTHORIZED`. Authorization and invalid-ID validation faults can raise `WORKDAY:INSUFFICIENT_PRIVILEGES` and `WORKDAY:NOT_FOUND`. Transport failures raise `WORKDAY:CONNECTIVITY`, and request timeouts raise `WORKDAY:TIMEOUT`. Review error handlers and reconnection behavior in xref:workday-connector-troubleshoot.adoc#understand-commonly-thrown-exceptions[Understand Commonly Thrown Exceptions].
+* The new `WORKDAY:SERVICE_UNAVAILABLE` error is a child of `WORKDAY:CONNECTIVITY`. HTTP 429 and 503 responses map to this error internally and can surface as `WORKDAY:CONNECTIVITY` after runtime retries. For more information, see xref:workday-connector-troubleshoot.adoc#understand-commonly-thrown-exceptions[Understand Commonly Thrown Exceptions].
+* *Object Type* on the *On Modified Objects* source is now an enumeration instead of a string. The supported object types are unchanged. For more information, see xref:workday-reference.adoc#modified-objects-listener[*On Modified Objects*].
+* *Watermark Enabled* on the *On Modified Objects* source now defaults to `true`. After a restart, a stored watermark takes precedence over *Updated From*. Watermarks now represent the end of the polling window instead of the time a record was emitted. For more information, see xref:workday-reference.adoc#modified-objects-listener[*On Modified Objects*].
+* The *On Modified Objects* source now uses the same time bounds for every page in a poll. With watermarks enabled, a window limited by `maxItemsPerPoll` is fetched again on subsequent polls so Mule can filter previously emitted records. Invalid *Updated From* or *Time Zone* values now fail at source startup with `WORKDAY:VALIDATION_ERROR`. Review replay and restart considerations in <<polling-migration,Polling Migration>>. For more information, see xref:workday-reference.adoc#modified-objects-listener[*On Modified Objects*].
+* The `SoapAttributes` class moves from `com.mulesoft.connector.workday.extension.api` to `com.mulesoft.connector.workday.extension.api.attributes`. The class is now immutable and adds *Status Code* and *Reason Phrase*. Algorithm and keystore parameter classes move to `com.mulesoft.connector.workday.extension.api.parameter`. Update custom Java imports and DataWeave references. For more information, see xref:workday-reference.adoc#SoapAttributes[SOAP Attributes].
+* *Transport Headers* in SOAP response attributes now preserve case-insensitive header lookup. For more information, see xref:workday-reference.adoc#SoapAttributes[SOAP Attributes].
+* SOAP debug logging now redacts password, binary security token, and signature values. Other payload data and custom headers can still contain sensitive information. Enable debug logging only when necessary and restrict access to the logs.
+* The connector no longer depends on the REST SDK commons library.
+* These libraries are updated:
+
+** The `jackson-core` and `jackson-databind` libraries now use version 3.2.4 and the `tools.jackson.core` group. The `jackson-annotations` dependency remains on the 2.x line.
+** The `asm` library is upgraded to version 9.11.1.
+** The `commons-collections4` library is upgraded to version 4.6.0.
+** The `guava` library is upgraded to version 33.8.0-jre.
+** The `commons-lang3` library is upgraded to version 3.21.0.
+** The connector now uses the `commons-text` library version 1.15.0.
+** The `mule-wsdl-parser` library is upgraded to version 1.4.14.
+
+== Requirements
+
+Ensure your system meets these requirements before upgrading:
+
+[%header%autowidth.spread]
+|===
+|Application/Service |Version
+|Mule runtime |4.9.0 and later
+|Workday API |v47.0
+|OpenJDK |17
+|===
+
+X.509 authentication isn't supported in FIPS mode.
 
 == Upgrade Prerequisites
 
-Before you upgrade Workday Connector from version 15.x to version 16.x, you must:
+Before you upgrade:
 
-. Create a backup of your files, data, and configuration in case you need to restore the connector to the previous version.
-. Install Workday Connector 16.x to replace the Workday operations that were previously included in Workday Connector 15.x.
+. Back up your application, configuration, mappings, and source object stores.
+. Upgrade the application's Mule runtime to 4.9.0 or later and use Java 17.
+. Inventory the Workday service operations and source configurations in your flows, including operation names supplied dynamically through properties or expressions.
+. Review the removed Workday operations, timeout XML attributes, X.509 signing algorithm, custom Java references, error handlers, and polling behavior described in this guide.
+. Confirm that your Workday integration user has the required domain-security permissions for the v47 replacement operations.
+
+[[removed-workday-operations]]
+== Removed Workday Operations
+
+Workday API v47.0 removes these operation choices. The *Financial Management* and *Compensation* connector components remain available.
+
+[%header,cols="20a,35a,45a"]
+|===
+|Service |Removed Operation |Migration
+|Financial Management |`Get_Receivables_Overpayment_Reasons` |Use `Get_Receivables_Reasons`. Review filtering because the replacement also returns on-account, write-off, collection, and dispute reasons.
+|Financial Management |`Put_Receivables_Overpayment_Reason` |Use `Put_Receivables_Reason`. Update request and response mappings to use the `Receivables_Reason_*` structures and provide `Receivables_Reason_Type_Reference` as required by the v47 schema.
+|Compensation |`Retrieve_Severance_Worksheet` |No confirmed equivalent replacement exists. Consult your Workday administrator or Workday support before redesigning the integration.
+|===
+
+For example, change the *Operation* field on *Financial Management*:
+
+[source,xml]
+----
+<!-- Before: removed from Workday API v47.0 -->
+<workday:financial-management config-ref="Workday_Config"
+    operation="Get_Receivables_Overpayment_Reasons" />
+
+<!-- After: review the request and response mappings against v47 metadata -->
+<workday:financial-management config-ref="Workday_Config"
+    operation="Get_Receivables_Reasons" />
+----
+
+Use your application's existing configuration reference and regenerate metadata for the replacement operation. An operation-name change alone isn't sufficient for `Put_Receivables_Reason`.
+
+`Create_Severance_Worksheet` starts a business process. It doesn't retrieve an existing worksheet and isn't an equivalent replacement for `Retrieve_Severance_Worksheet`.
+
+Workday-deprecated operation choices that remain in the v47 contract aren't removed by this release. Review the https://community.workday.com/sites/default/files/file-hosting/productionapi/versions/v47.0/index.html[Workday v47.0 service directory] when planning new integrations.
+
+[[configuration-migration]]
+== Configuration Migration
+
+Replace the old timeout unit attributes wherever they're configured. For example:
+
+[source,xml]
+----
+<workday:config name="Workday_Config"
+    responseTimeout="60" responseTimeoutTimeUnit="SECONDS">
+    <workday:basic-authentication-api-connection
+        hostName="${workday.host}" tenantName="${workday.tenant}"
+        userName="${workday.username}" password="${workday.password}"
+        connectionTimeout="30" connectionTimeoutTimeUnit="SECONDS"
+        connectionIdleTimeout="30" connectionIdleTimeoutTimeUnit="SECONDS" />
+</workday:config>
+----
+
+Don't rename `timeUnit` on a scheduling strategy. Timeout duration values and Studio display labels are unchanged.
+
+For X.509 connections, replace `signatureAlgorithm="RSA_SHA1"` with `signatureAlgorithm="RSA_SHA256"` and verify that the tenant accepts the signed request. Test custom SOAP headers because they're now included in the signature.
+
+Update custom code that imports `SoapAttributes`, `C14nAlgorithm`, `DigestAlgorithm`, `KeyStoreType`, or `SignatureAlgorithm` from their previous packages. Replace mutation of `SoapAttributes` with construction of a new attributes object.
+
+[[polling-migration]]
+== Polling Migration
+
+With *Watermark Enabled* set to `true`, the source resumes at its stored polling-window end after a restart, even if *Updated From* is configured. Without *Updated From* or a stored watermark, polling starts 15 seconds before source startup.
+
+To replay records, stop the source, back up and clear its object store, and set *Updated From* to the required earlier time before restarting. Disabling watermarks ignores the stored watermark, but also disables recovery of records beyond `maxItemsPerPoll`.
+
+*Updated From* accepts a date and time with seconds and an optional fraction of up to nine digits, such as `2026-11-06T09:00:00` or `2026-11-06T09:00:00.123`. Don't include an offset. The configuration's *Time Zone* supplies the offset.
+
+Review these considerations:
+
+* `maxItemsPerPoll` limits emitted records, not the number of HTTP requests or records fetched.
+* With watermarks enabled, a limit-hit window is fetched again with the same bounds on subsequent polls, and Mule filters already emitted records.
+* A restart during that repeated window can resume at the stored window end and skip records that weren't emitted. Don't rely on this behavior for exactly-once delivery across restarts.
+* A stored 16.x emission-time watermark can be later than the previous polling-window end. If recovery is required, clear the store and choose an earlier *Updated From* value. Make downstream processing tolerate duplicates when replaying.
 
 == Upgrade Steps
 
-Follow these steps to perform the upgrade from Workday Connector 15.x to Workday Connector 16.x:
-
-. In Studio, create a Mule project.
+. In Studio, open the existing Mule project.
 . In the *Mule Palette* view, click *Search in Exchange*.
-. In the *Add Dependencies to Project* window, enter `workday` in the search field.
-. In the *Available modules* section, select *Workday Connector - Mule 4* and click *Add*.
-. Click *Finish*.
-. Verify that the `workday-connector` dependency version is `16.0.0` in the `pom.xml` file.
-
-Studio upgrades the connector automatically.
+. In *Add Dependencies to Project*, search for `Workday`.
+. Select *Workday Connector - Mule 4*, click *Add*, and click *Finish*.
+. Verify that the `com.mulesoft.connectors:mule-workday-connector` dependency in `pom.xml` uses version `17.0.0`.
+. Apply the configuration, operation, mapping, error-handling, and source changes described in this guide.
 
 == Verify the Upgrade
 
-After you install the latest version of the connector, follow these steps to verify the upgrade:
-
-. In Studio, verify that there are no errors in the *Problems* or *Console* views.
-. Check the project `pom.xml` file and verify that there are no problems.
-. Test the connection and verify that the operations work.
+. Verify that Studio shows no errors in the *Problems* or *Console* views and that `pom.xml` resolves successfully.
+. Test each connection type used by your app, including TLS and proxy configurations.
+. Refresh v47 metadata and test request and response mappings for migrated operations with representative data.
+. Test authentication faults, insufficient privileges, invalid IDs, connectivity failures, and timeouts. A timeout doesn't trigger reconnection retries because Workday might already have applied the request.
+. Test source startup, restart, watermark recovery, and limit-hit polling windows. Check downstream duplicate handling during replay.
+. Validate the upgraded application in a non-production Workday tenant before production deployment.
 
 == Troubleshooting
 
-If there are problems with caching the parameters and caching the metadata, try restarting Studio.
+If metadata isn't refreshed after upgrading, restart Studio and regenerate the operation metadata. If a removed Workday operation can't be resolved, update its *Operation* value and mappings as described in <<removed-workday-operations,Removed Workday Operations>>.
+
+For startup validation, authentication, and timeout errors, see xref:workday-connector-troubleshoot.adoc[Troubleshooting Workday Connector].
 
 == Revert the Upgrade
 
-If you must revert to the previous version of Workday Connector, change the `workday-connector` dependency version `16.x.x` in the project's `pom.xml` file to the previous version.
+To revert, restore the backed-up application and its previous `mule-workday-connector` version, such as `16.7.1`, in `pom.xml`.
 
-You must update the project's `pom.xml` file in Studio.
+Restore the previous timeout XML attributes, X.509 settings, Workday operation choices, mappings, custom Java imports, and source configuration. Review source state before restarting because 17.x watermarks represent polling-window ends, not 16.x emission times.
 
 == See Also
 
+* xref:workday-reference.adoc[Workday Connector Reference]
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
 * https://help.salesforce.com[Salesforce Help]
