@@ -1,0 +1,410 @@
+= Spiff Connector 1.0 Reference - Mule 4
+:toc:
+:toclevels: 3
+
+Anypoint Connector for Spiff (Spiff Connector) connects Mule applications to the Salesforce Spiff Webhook API.
+
+[[configuration]]
+== Configuration
+
+XML element: `<spiff:config>`
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Name |String |The name for this configuration. Connectors reference the configuration with this name. | |x
+|Connection |<<Connection Types>> |The connection type for this configuration. | |x
+|Response Timeout |Number |Maximum time to wait for a Spiff response. Operations can override it. Must be at least 1 millisecond: a negative or zero value makes the app fail at startup. |`60` |
+|Response Timeout Unit |Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` |Time unit for Response Timeout. |`SECONDS` |
+|Expiration Policy |<<ExpirationPolicy>> |Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. | |
+|===
+
+[[connection-types]]
+== Connection Types
+
+Spiff Connector has one connection type.
+
+[[hmac-signed-webhook-connection]]
+=== HMAC Signed Webhook Connection
+
+XML element: `<spiff:hmac-connection>`
+
+Spiff authenticates each request with an HMAC-SHA256 signature computed from the webhook secret. There is no token or
+session to manage.
+
+==== General
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Subdomain |String a|Spiff environment. For example, `us1` resolves to `https://us1.spiff.com` and `eu1` to `https://eu1.spiff.com`. Any other bare label resolves to `https://<label>.spiff.com`. A full base URL starting with `https://` (or `http://`) is used as is, for Salesforce-hosted and non-production environments. | |x
+|Connector ID |String |Raw integer id of the Spiff webhook connector. Only digits are accepted, up to the largest 64-bit integer (`9223372036854775807`). | |x
+|Webhook Secret |String |Spiff webhook secret, used as the HMAC-SHA256 signing key. It can't be empty. It is never sent on the wire or logged. | |x
+|Company UUID |String |Spiff company UUID, sent as the `company_uuid` query parameter on every signed mutation. Must be a UUID in `8-4-4-4-12` hexadecimal form. | |x
+|===
+
+==== Advanced
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Default Headers |Array of <<DefaultHeader>> |Headers added to every request. The headers `signature`, `Content-Type`, `Content-Length`, `Host` and `Transfer-Encoding` are managed by the connector and are ignored if set. | |
+|Default Query Parameters |Array of <<DefaultQueryParam>> |Query parameters added to every request. On signed mutations, `company_uuid` always comes from the connection. | |
+|Connection Timeout |Number |Time to wait for a TCP connection to be established. It is also the response timeout of Test Connection. Must be at least 1 millisecond: a negative or zero value makes the connection fail to start. |`30` |
+|Connection Timeout Unit |Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` |Time unit for Connection Timeout. |`SECONDS` |
+|Use Persistent Connections |Boolean |Whether to reuse TCP connections across requests. |`true` |
+|Max Connections |Number |Maximum number of simultaneous outbound connections. `-1` means unlimited. |`-1` |
+|Connection Idle Timeout |Number |Time a connection can stay idle before it is closed. Applies only when persistent connections are enabled. |`30` |
+|Connection Idle Timeout Unit |Enumeration, one of: `NANOSECONDS`, `MICROSECONDS`, `MILLISECONDS`, `SECONDS`, `MINUTES`, `HOURS`, `DAYS` |Time unit for Connection Idle Timeout. |`SECONDS` |
+|Stream Response |Boolean |If enabled, processing starts as soon as the response headers are parsed. The response body must be fully consumed. |`false` |
+|Response Buffer Size |Number |Size in bytes of the buffer that stores the HTTP response. `-1` uses the runtime default. |`-1` |
+|Reconnection |<<Reconnection>> |When the application is deployed, a connectivity test is performed on all connectors. If set to `true`, deployment fails if the test doesn't pass after exhausting the associated reconnection strategy. | |
+|===
+
+==== Proxy
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Proxy Configuration |One of: <<Default>>, <<NTLM>> |Outbound HTTP proxy used to reach Spiff. All traffic, including Test Connection and metadata, uses the proxy. | |
+|===
+
+==== Security
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|TLS Configuration |<<Tls>> |TLS context for HTTPS connections to Spiff. If omitted, the JVM default trust store is used. | |
+|===
+
+
+Test Connection behavior and its messages are described in
+xref:spiff-connector-studio.adoc#test-connection-behavior[Test Connection Behavior].
+
+== Operations
+
+All operations:
+
+* Return the Spiff JSON response as the payload (`application/json`) and <<HttpResponseAttributes>> as the attributes.
+* Accept *Custom Headers* and *Custom Query Parameters* (Advanced tab). They are sent in addition to the connection
+  defaults, with the same reserved-name rules.
+* Accept *Response Timeout* and *Response Timeout Unit* (Advanced tab). If not set, they default to the values in the
+  connector configuration (60 seconds).
+* Can raise `SPIFF:RETRY_EXHAUSTED` in addition to the errors listed for each operation.
+* Are non-blocking: the signed request is sent asynchronously and the flow's thread is released while the connector
+  waits for Spiff.
+
+The connector fetches the webhook connector's mappings (`GET /_webhook/connector/{Connector ID}/mappings`) and each
+mapping's translator fields (`GET /_webhook/mapping/{Mapping ID}/fields`) internally, at design time only, to populate
+the *Mapping ID* dropdown and the record and identity input types of the record operations. These lookups aren't
+available as operations.
+
+[[put-single-record]]
+=== Put Single Record
+
+`<spiff:put-single-record>`
+
+Upserts (creates or updates) one record through a Spiff mapping. Spiff matches the record on the mapping's identity
+field, usually `external_id`. Request: `PUT /_webhook/mapping/{Mapping ID}?company_uuid=...`.
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Configuration |String |Name of the configuration to use. | |x
+|Mapping ID |String |Spiff mapping that receives the record. The integer id of the mapping, digits only. Select it from the list to get typed input metadata. | |x
+|Record |Binary (JSON object) |JSON object with the record's translator-field values, keyed by field name. Must be a non-empty object of at most 5 MiB. |`#[payload]` |
+|Custom Query Parameters |Object |Additional query parameters for this request. A `company_uuid` entry is ignored: the value from the connection is used. | |
+|Custom Headers |Object |Additional headers for this request. The connector-managed headers listed for Default Headers are ignored. | |
+|Response Timeout |Number |Maximum time to wait for the response. If not set, the value from the configuration is used. Must be at least 1 millisecond, otherwise the operation fails with `SPIFF:INVALID_INPUT`. | |
+|Response Timeout Unit |Enumeration |Time unit for Response Timeout. If not set, the unit from the configuration is used. | |
+|Output Mime Type |String |MIME type of the payload this operation outputs. | |
+|Output Encoding |String |Encoding of the payload this operation outputs. | |
+|Streaming Strategy |* <<RepeatableInMemoryStream>> * <<RepeatableFileStoreStream>> * non-repeatable-stream |Configures how Mule processes streams. | |
+|Target Variable |String |Name of the variable that stores the operation's output. | |
+|Target Value |String |Expression that evaluates the operation's output. The outcome of the expression is stored in the target variable. |`#[payload]` |
+|Error Mappings |Array of <<ErrorMapping>> |Set of error mappings. | |
+|Reconnection Strategy |* <<Reconnect>> * <<ReconnectForever>> |Retry strategy in case of connectivity errors. | |
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary (JSON `{"ok": true}`)
+|Attributes Type |<<HttpResponseAttributes>>
+|===
+
+==== Associated Configurations
+
+* <<Configuration>>
+
+==== Throws
+
+* SPIFF:BAD_REQUEST
+* SPIFF:UNAUTHORIZED
+* SPIFF:FORBIDDEN
+* SPIFF:NOT_FOUND
+* SPIFF:PAYLOAD_TOO_LARGE
+* SPIFF:UNPROCESSABLE_ENTITY
+* SPIFF:RATE_LIMITED
+* SPIFF:TIMEOUT
+* SPIFF:CLIENT_ERROR
+* SPIFF:SERVICE_ERROR
+* SPIFF:BAD_GATEWAY
+* SPIFF:SERVICE_UNAVAILABLE
+* SPIFF:GATEWAY_TIMEOUT
+* SPIFF:SERVER_ERROR
+* SPIFF:CONNECTIVITY
+* SPIFF:INVALID_INPUT
+* SPIFF:RETRY_EXHAUSTED
+
+[[put-multiple-records]]
+=== Put Multiple Records
+
+`<spiff:put-multiple-records>`
+
+Upserts multiple records through a Spiff mapping in one request. Request: `PUT /_webhook/mapping/{Mapping ID}/bulk?company_uuid=...`.
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Configuration |String |Name of the configuration to use. | |x
+|Mapping ID |String |Spiff mapping that receives the records. Digits only. | |x
+|Records |Binary (JSON array) |JSON array of record objects. The array and every element must be non-empty, and the whole body must be at most 5 MiB. Split larger data sets into batches. |`#[payload]` |
+5+|Plus the common parameters listed for <<put-single-record>> (custom query parameters and headers, response timeout, output, streaming, target, error mappings, reconnection).
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary (JSON `{"ok": true}`)
+|Attributes Type |<<HttpResponseAttributes>>
+|===
+
+==== Throws
+
+Same as <<put-single-record>>.
+
+[[delete-single-record]]
+=== Delete Single Record
+
+`<spiff:delete-single-record>`
+
+Deletes one record from a Spiff mapping. Identify the record with the mapping's identity field or fields: `external_id`
+if the mapping has it, otherwise its required fields, otherwise all of its fields. Request:
+`DELETE /_webhook/mapping/{Mapping ID}?company_uuid=...` with a JSON body.
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Configuration |String |Name of the configuration to use. | |x
+|Mapping ID |String |Spiff mapping that holds the record to delete. Digits only. | |x
+|Record Identity |Binary (JSON object) |JSON object with the identity field or fields of the record to delete, for example `{"external_id": "006A000001"}`. |`#[payload]` |
+5+|Plus the common parameters listed for <<put-single-record>>.
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary (JSON `{"ok": true}`)
+|Attributes Type |<<HttpResponseAttributes>>
+|===
+
+==== Throws
+
+Same as <<put-single-record>>. `SPIFF:NOT_FOUND` means the mapping doesn't exist. Deleting a record that doesn't exist succeeds: Spiff deletes are idempotent.
+
+[[delete-multiple-records]]
+=== Delete Multiple Records
+
+`<spiff:delete-multiple-records>`
+
+Deletes multiple records from a Spiff mapping in one request. Request:
+`DELETE /_webhook/mapping/{Mapping ID}/bulk?company_uuid=...` with a JSON body.
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Configuration |String |Name of the configuration to use. | |x
+|Mapping ID |String |Spiff mapping that holds the records to delete. Digits only. | |x
+|Record Identities |Binary (JSON array) |JSON array of identity objects, one for each record to delete. |`#[payload]` |
+5+|Plus the common parameters listed for <<put-single-record>>.
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary (JSON `{"ok": true}`)
+|Attributes Type |<<HttpResponseAttributes>>
+|===
+
+==== Throws
+
+Same as <<put-single-record>>.
+
+[[test-webhook]]
+=== Test Webhook
+
+`<spiff:test-webhook>`
+
+Verifies that Spiff accepts the connection's signature for the configured connector and company. Spiff doesn't store
+the test record. Request: `PUT /_webhook/connector/{Connector ID}/test?company_uuid=...`.
+
+[%header%autowidth.spread]
+|===
+|Name |Type |Description |Default Value |Required
+|Configuration |String |Name of the configuration to use. | |x
+|Test Record |Binary (JSON object) |Sample JSON object (at most 5 MiB) to sign and send, for example `{"external_id": "12345", "name": "Jane Doe", "email": "jane.doe@company.com"}`. An empty object `{}` is allowed. |`#[payload]` |
+5+|Plus the common parameters listed for <<put-single-record>>.
+|===
+
+==== Output
+
+[%autowidth.spread]
+|===
+|Type |Binary (JSON `{"ok": true}`)
+|Attributes Type |<<HttpResponseAttributes>>
+|===
+
+==== Throws
+
+Same as <<put-single-record>>.
+
+== Types
+
+[[HttpResponseAttributes]]
+=== HTTP Response Attributes
+
+[%header%autowidth.spread]
+|===
+|Field |Type |Description
+|Status Code |Number |HTTP status code of the Spiff response.
+|Reason Phrase |String |HTTP reason phrase.
+|Headers |Object |Response headers (immutable, multi-valued).
+|===
+
+[[DefaultHeader]]
+=== Default Header
+
+[%header%autowidth.spread]
+|===
+|Field |Type |Description |Default Value |Required
+|Key |String |Header name, for example `X-Correlation-Id`. | |x
+|Value |String |Header value. | |x
+|===
+
+[[DefaultQueryParam]]
+=== Default Query Parameter
+
+[%header%autowidth.spread]
+|===
+|Field |Type |Description |Default Value |Required
+|Key |String |Query parameter name. | |x
+|Value |String |Query parameter value. | |x
+|===
+
+[[Default]]
+=== Default Proxy
+
+[%header%autowidth.spread]
+|===
+|Field |Type |Description |Default Value |Required
+|Host |String |Host where the proxy requests are sent, for example `proxy.mycompany.com`. | |x
+|Port |Number |Port where the proxy requests are sent, for example `8080`. | |x
+|Username |String |Username to authenticate against the proxy, for example `proxyUser`. | |
+|Password |String |Password to authenticate against the proxy. | |
+|Non Proxy Hosts |String |Comma-separated list of hosts that must not be reached through the proxy, for example `localhost,*.internal.mycompany.com`. | |
+|===
+
+[[NTLM]]
+=== NTLM Proxy
+
+All fields of <<Default>>, plus:
+
+[%header%autowidth.spread]
+|===
+|Field |Type |Description |Default Value |Required
+|NTLM Domain |String |NTLM domain used to authenticate against the proxy, for example `MYDOMAIN`. | |x
+|===
+
+[[Tls]]
+=== TLS
+
+Standard Mule TLS context (`<tls:context>`) with trust store, key store and revocation check settings. See
+xref:mule-runtime::tls-configuration.adoc[Configure TLS with Keystores and Truststores].
+
+[[Reconnection]]
+=== Reconnection
+
+Standard Mule reconnection configuration: *Fails Deployment* plus a <<Reconnect>> or <<ReconnectForever>> strategy.
+
+[[Reconnect]]
+=== Reconnect
+
+Retries a configured number of times (default `2`) at a fixed frequency (default `2000` ms).
+
+[[ReconnectForever]]
+=== Reconnect Forever
+
+Retries indefinitely at a fixed frequency (default `2000` ms).
+
+[[ExpirationPolicy]]
+=== Expiration Policy
+
+Maximum idle time and time unit after which a dynamic configuration instance becomes eligible for expiration.
+
+[[RepeatableInMemoryStream]]
+=== Repeatable In Memory Stream
+
+Buffers the stream in memory so it can be read more than once.
+
+[[RepeatableFileStoreStream]]
+=== Repeatable File Store Stream
+
+Buffers the stream in memory up to a limit and then on disk.
+
+[[ErrorMapping]]
+=== Error Mapping
+
+Maps a connector error type (`SPIFF:*`) to a custom error type.
+
+[[error-types]]
+== Error Types
+
+[%header,cols="1,1,3"]
+|===
+|Error |Parent |Raised when
+|SPIFF:CLIENT_ERROR | |Spiff returns a 4xx status that has no more specific type, or a 3xx redirect (the connector doesn't follow redirects).
+|SPIFF:BAD_REQUEST |SPIFF:CLIENT_ERROR |HTTP 400. Spiff rejected the request as malformed. Spiff validates record bodies asynchronously, so a body that doesn't fit the mapping usually still returns HTTP 200.
+|SPIFF:UNAUTHORIZED |MULE:CLIENT_SECURITY |HTTP 401 `Could not validate HMAC Signature`. The webhook secret is wrong or was refreshed.
+|SPIFF:FORBIDDEN |MULE:CLIENT_SECURITY |HTTP 403.
+|SPIFF:NOT_FOUND |SPIFF:CLIENT_ERROR |HTTP 404. The connector or mapping doesn't exist. Deleting a missing record succeeds.
+|SPIFF:PAYLOAD_TOO_LARGE |SPIFF:CLIENT_ERROR |HTTP 413, or the request body exceeds 5 MiB (5,242,880 bytes). The connector checks the size before it sends anything.
+|SPIFF:UNPROCESSABLE_ENTITY |SPIFF:CLIENT_ERROR |HTTP 422. Spiff rejected the record values.
+|SPIFF:RATE_LIMITED |SPIFF:CLIENT_ERROR |HTTP 429.
+|SPIFF:TIMEOUT |MULE:CONNECTIVITY |HTTP 408, or no response within the Response Timeout.
+|SPIFF:SERVER_ERROR | |Spiff returns a 5xx status that has no more specific type.
+|SPIFF:SERVICE_ERROR |SPIFF:SERVER_ERROR |HTTP 500.
+|SPIFF:BAD_GATEWAY |SPIFF:SERVER_ERROR |HTTP 502.
+|SPIFF:SERVICE_UNAVAILABLE |SPIFF:SERVER_ERROR |HTTP 503.
+|SPIFF:GATEWAY_TIMEOUT |SPIFF:SERVER_ERROR |HTTP 504.
+|SPIFF:CONNECTIVITY |MULE:CONNECTIVITY |Network failure, such as DNS, connection refused or TLS handshake, or any other failure while the connector starts the request. Reconnection strategies apply to network failures.
+|SPIFF:RETRY_EXHAUSTED |MULE:RETRY_EXHAUSTED |The reconnection strategy was exhausted.
+|SPIFF:INVALID_INPUT |MULE:VALIDATION |Operation input failed validation before any request was sent. Causes: a blank Mapping ID or one that is not digits only or is out of range, a body that isn't valid UTF-8 or JSON, a body of the wrong shape (for example an empty array or a non-object element), or a Response Timeout that is negative or less than 1 millisecond.
+|===
+
+The error description includes the HTTP method, the path and Spiff's response body, for example
+`Spiff API request failed: PUT /_webhook/mapping/3559 returned 422: {"error":"..."}`. The response body in the description is truncated at 2,048 bytes.
+
+== Next Step
+
+For problems with the connection, signatures or payloads, see xref:spiff-connector-troubleshooting.adoc[Troubleshooting Spiff Connector].
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:spiff-connector-examples.adoc[Spiff Connector Examples]
+* https://help.salesforce.com/s/[Salesforce Help]

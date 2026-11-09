@@ -1,0 +1,175 @@
+= Using Anypoint Studio to Configure Spiff Connector 1.0 - Mule 4
+
+Anypoint Studio (Studio) editors help you design and update your Mule applications, properties, and configuration files.
+
+To add and configure a connector in Studio:
+
+. <<create-mule-project,Create a Mule project>>.
+. <<add-connector-to-project,Add the connector to your Mule project>>.
+. <<configure-source,Configure a source>> for the connector's flow.
+. <<add-connector-operation,Add a connector operation>> to the flow.
+. <<configure-global-element,Configure a global element for the connector>>.
+. <<run-app,Run a basic test of the app>>.
+
+When you run the connector, you can view the app log to check for problems, as described in
+<<view-app-log,View the App Log>>.
+
+If you are new to configuring connectors in Studio, see
+xref:connectors::introduction/intro-config-use-studio.adoc[Using Anypoint Studio to Configure a Connector]. If, after
+reading this topic, you need additional information about the connector fields, see the
+xref:spiff-connector-reference.adoc[Spiff Connector Reference].
+
+[[create-mule-project]]
+== Create a Mule Project
+
+In Studio, create a new Mule project in which to add and configure the connector:
+
+. In Studio, select *File > New > Mule Project*.
+. Enter a name for your Mule project and click *Finish*.
+
+[[add-connector-to-project]]
+== Add the Connector to Your Mule Project
+
+Add Spiff Connector to your Mule project to automatically populate the XML code with the connector's namespace and
+schema location and add the required dependencies to the project's `pom.xml` file:
+
+. In the *Mule Palette* view, click *(X) Search in Exchange*.
+. In the *Add Dependencies to Project* window, type `spiff` in the search field.
+. Click *Spiff Connector* in *Available modules*.
+. Click *Add*.
+. Click *Finish*.
+
+Adding a connector to a Mule project in Studio does not make that connector available to other projects in your Studio
+workspace.
+
+[[configure-source]]
+== Configure a Source
+
+A source initiates a flow when a specified condition is met. You can configure one of these sources to use with Spiff
+Connector:
+
+* *HTTP > Listener*, which initiates a flow each time it receives a request on the configured host and port, for
+  example a source system that posts closed-won deals.
+* *Scheduler*, which initiates a flow when a time-based condition is met, for example a nightly backfill or an hourly
+  Test Webhook health check.
+
+For example, to configure an *HTTP > Listener* source:
+
+. In the *Mule Palette* view, select *HTTP > Listener*.
+. Drag *Listener* to the Studio canvas.
+. On the *Listener* configuration screen, optionally change the value of the *Display Name* field.
+. Specify a value for the *Path* field, for example `/deals`.
+. Click the plus sign (*+*) next to the *Connector configuration* field to configure a global element that all
+  instances of the HTTP Listener in the app can use.
+. On the *General* tab, set *Host* to `0.0.0.0` and *Port* to `${http.port}` so the app can also run on CloudHub and
+  Runtime Fabric, then click *OK*.
+
+[[add-connector-operation]]
+== Add a Connector Operation to the Flow
+
+When you add a connector operation to your flow, you specify an action for that connector to perform.
+
+To add an operation for Spiff Connector:
+
+. In the *Mule Palette* view, select *Spiff Connector* and then select the operation to add, for example *Put Single
+  Record*.
+. Drag the operation onto the Studio canvas, next to the source.
+. Select the *Mapping ID* from the dropdown after you configure the connection. DataSense then shows the mapping's
+  translator fields as the input type of the record. DataSense needs a fixed Mapping ID value: if you set the
+  Mapping ID with an expression such as `#[vars.mappingId]`, Studio can't resolve the input metadata.
+
+[[configure-global-element]]
+== Configure a Global Element for the Connector
+
+When you configure a connector, configure a global element that all instances of that connector in the app can use.
+Configuring a global element requires you to provide the authentication credentials that the connector requires to
+access Spiff.
+
+To configure the global element for Spiff Connector:
+
+. Select the operation in the Studio canvas.
+. In the configuration screen for the operation, click the plus sign (*+*) next to the *Connector configuration* field
+  to access the global element configuration fields.
+. On the *General* tab, in *Connection*, select *HMAC Signed Webhook Connection* and enter these values:
++
+[%header,cols="1,2,2"]
+|===
+|Value |Where to find it |Notes
+|Subdomain
+|The host of your Spiff URL, for example `us1` in `https://us1.spiff.com`
+|Use `us1` for US and `eu1` for EU. For Salesforce-hosted or non-production tenants, use the full base URL.
+|Connector ID
+|Spiff Admin > Connectors (> Synced Objects & Fields > Webhook), or Admin > Settings > Webhook Settings
+|The *raw integer* id, for example `1164`. The base64 id that some Spiff pages show (for example `Q29ubmVjdG9yOjExNjQ=`) is rejected.
+|Webhook Secret
+|Shown once when you create the webhook in Spiff Admin. You can refresh it there.
+|The HMAC signing key. Store it as a secure property.
+|Company UUID
+|Spiff Admin > Settings > Company Settings
+|A UUID such as `123e4567-e89b-12d3-a456-426614174000`.
+|===
++
+Store the webhook secret as a secure property, for example `${secure::spiff.webhookSecret}`. See
+xref:mule-runtime::secure-configuration-properties.adoc[Secure Configuration Properties].
+. On the *Advanced* tab, optionally specify the default response timeout, default headers and query parameters, the
+  connection timeout and the HTTP client settings. The response timeout and the connection timeout must be at least 1
+  millisecond.
+. On the *Proxy* tab, optionally configure a *Default* or *NTLM* proxy, for example host `proxy.mycompany.com`, port
+  `8080`, username `proxyUser` and non-proxy hosts `localhost,*.internal.mycompany.com`.
+. On the *Security* tab, optionally configure a TLS context.
+. Click *Test Connection* to confirm that Mule can connect with the specified server.
+. Click *OK*.
+
+[[test-connection-behavior]]
+=== Test Connection Behavior
+
+Test Connection sends a signed sample record to `PUT /_webhook/connector/{Connector ID}/test?company_uuid={Company UUID}`.
+Spiff verifies the signature and does not store the sample record. The *Connection Timeout* is the response timeout of Test Connection. Test Connection succeeds only if Spiff answers HTTP 200,
+which means it accepted the signature and recognized both the Connector ID and the Company UUID. Any other status fails,
+including a 404 for an unknown Connector ID or Company UUID.
+
+[%header,cols="1,3"]
+|===
+|Message |What to check
+|Spiff rejected the request signature (HTTP 401): the webhook secret is invalid |Copy the current webhook secret from Spiff Admin. If it was refreshed, update the secure property.
+|Spiff refused access (HTTP 403) |The webhook secret belongs to a different connector.
+|Spiff connector not found (HTTP 404) |The Connector ID or Company UUID is wrong, or the Subdomain points at a different environment.
+|Spiff rejected the request (HTTP 400) |The Connector ID is the base64 id instead of the raw integer.
+|Unable to reach Spiff |DNS, firewall, proxy or TLS settings, or a wrong Subdomain.
+|Connector ID must be the raw integer id ... |The Connector ID contains non-digit characters or is out of range.
+|Company UUID must be a UUID ... |The Company UUID is not in `8-4-4-4-12` hexadecimal form.
+|Webhook Secret is required |The Webhook Secret field is empty.
+|Spiff Test Connection failed: expected HTTP 200 but got HTTP ... |Spiff answered with a status other than 200, including another 2xx status. Only HTTP 200 passes Test Connection. Check that Subdomain points at a Spiff host.
+|===
+
+[[run-app]]
+== Run the App
+
+To run your app:
+
+. Right-click your project in *Package Explorer*.
+. Select *Run As > Mule Application*.
+
+Call the HTTP Listener, for example with `curl -X POST http://localhost:8081/deals -H 'Content-Type: application/json' -d '{"external_id":"12345","name":"Jane Doe"}'`.
+
+[[view-app-log]]
+== View the App Log
+
+To check for problems, you can view the app log as follows:
+
+* If you're running the app from Anypoint Platform, the output is visible in the Anypoint Studio console window.
+* If you're running the app using Mule from the command line, the app log is visible in your OS console.
+
+Unless the log file path is customized in the app's log file (`log4j2.xml`), you can also view the app log in the
+default location `MULE_HOME/logs/<app-name>.log`. To enable DEBUG logging for the connector, see
+xref:spiff-connector-troubleshooting.adoc[Troubleshooting Spiff Connector].
+
+== Next Step
+
+After configuring the connector in Studio, see xref:spiff-connector-examples.adoc[Spiff Connector Examples] for more configuration ideas.
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:spiff-connector-reference.adoc[Spiff Connector Reference]
+* https://help.salesforce.com/s/[Salesforce Help]
