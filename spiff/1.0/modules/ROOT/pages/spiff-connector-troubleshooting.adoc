@@ -28,63 +28,80 @@ connector-managed header, an ignored `company_uuid` query parameter, or an error
 <AsyncLogger name="com.mulesoft.connectors.spiff" level="DEBUG"/>
 ----
 
-To check which cryptographic provider the connector uses, for example on a FIPS 140 runtime, enable DEBUG for this
-logger:
+To check which cryptographic provider the connector uses, for example on a FIPS 140 runtime, enable DEBUG for this logger:
 
 [source,xml]
 ----
 <AsyncLogger name="com.mulesoft.connectors.spiff.internal.connection.SpiffSignatureGenerator" level="DEBUG"/>
 ----
 
-`SpiffSignatureGenerator` logs the JCA provider of `HmacSHA256`, for example the Bouncy Castle FIPS provider on a FIPS
-140 runtime.
+`SpiffSignatureGenerator` logs the JCA provider of `HmacSHA256`, for example the Bouncy Castle FIPS provider on a FIPS 140 runtime.
 
 The connector runs the input checks and starts each request on a Mule I/O scheduler named
 `spiff.<configuration name>.operations`. Look for that name in thread dumps.
 
-== Test Connection Messages
+== Test Connection Errors
 
 [%header,cols="1,3"]
 |===
-|Message |What to check
-|Spiff rejected the request signature (HTTP 401): the webhook secret is invalid |Copy the current webhook secret from Spiff Admin. If it was refreshed, update the secure property.
-|Spiff refused access (HTTP 403) |The webhook secret belongs to a different connector.
-|Spiff connector not found (HTTP 404) |The Connector ID or Company UUID is wrong, or the Subdomain points at a different environment.
-|Spiff rejected the request (HTTP 400) |The Connector ID is the base64 id instead of the raw integer.
-|Unable to reach Spiff |DNS, firewall, proxy or TLS settings, or a wrong Subdomain.
-|Connector ID must be the raw integer id ... |The Connector ID contains non-digit characters or is out of range.
-|Company UUID must be a UUID ... |The Company UUID is not in `8-4-4-4-12` hexadecimal form.
-|Webhook Secret is required |The Webhook Secret field is empty.
-|Spiff Test Connection failed: expected HTTP 200 but got HTTP ... |Spiff answered with a status other than 200, including another 2xx status. Only HTTP 200 passes Test Connection. Check that Subdomain points at a Spiff host.
+| Error | Description
+| `Spiff rejected the request signature (HTTP 401): the webhook secret is invalid` | Copy the current webhook secret from Spiff Admin. If it was refreshed, update the secure property.
+| `Spiff refused access (HTTP 403)` | The webhook secret belongs to a different connector.
+| `Spiff connector not found (HTTP 404)` | The Connector ID or Company UUID is wrong, or the Subdomain points at a different environment.
+| `Spiff rejected the request (HTTP 400)` | The Connector ID is the base64 ID instead of the raw integer.
+| `Unable to reach Spiff` | Check DNS, firewall, proxy, TLS settings, and the Subdomain value.
+| `Connector ID must be the raw integer ID ...` | The Connector ID contains non-digit characters or is out of range.
+| `Company UUID must be a UUID ...` | The Company UUID isn't in `8-4-4-4-12` hexadecimal form.
+| `Webhook Secret is required` | The Webhook Secret field is empty.
+| `Spiff Test Connection failed: expected HTTP 200 but got HTTP ...` | Spiff answered with a status other than 200, including another 2xx status. Only HTTP 200 passes Test Connection. Check that Subdomain points at a Spiff host.
 |===
+
+== Understand Commonly Thrown Exceptions
+
+Here is a list of commonly thrown exception messages and how to interpret them:
+
+* `SPIFF:UNAUTHORIZED`
+
+  The webhook secret is wrong or was refreshed in Spiff Admin. Update the secure property and redeploy. If the error occurs only on some hosts, verify that every host uses the same secret and that each host clock is synchronized with NTP.
+
+* `MULE:CONNECTIVITY`
+
+  Test Connection raises this error when the Connector ID isn't digits only, for example when it is the base64 Relay ID, or when it is larger than the largest 64-bit integer. Use the raw integer from *Spiff Admin* > *Connectors*. The connector rejects it before sending any request.
+
+* `SPIFF:NOT_FOUND`
+
+  Verify that the Connector ID, Company UUID, and Mapping ID belong to the same Spiff tenant, and that Subdomain points at that tenant's environment (`us1` versus `eu1` versus a Salesforce-hosted URL). Deleting a record that doesn't exist succeeds, so this error indicates an unknown Mapping ID or Connector ID, not a missing record.
+
+* `SPIFF:PAYLOAD_TOO_LARGE`
+
+  Reduce the batch size. The limit is 5 MiB (5,242,880 bytes) of JSON per request. The connector rejects a larger body before it sends the request; Spiff can also answer HTTP 413.
+
+* `SPIFF:UNPROCESSABLE_ENTITY`
+
+  Spiff answered HTTP 422 because it rejected the record values. Check the expected fields in the record operation's DataSense input type for the Mapping ID, or in *Spiff Admin* > *Synced Objects & Fields*.
+
+* `SPIFF:INVALID_INPUT`
+
+  An array element must be a non-empty JSON object, the Mapping ID must be the integer ID of a Spiff mapping, and the payload must be valid JSON. Filter out empty records, select the Mapping ID from the dropdown or use the integer ID from Spiff Admin, and use `output application/json` in the DataWeave expression that builds the body.
+
+* `SPIFF:CLIENT_ERROR`
+
+  A 3xx status indicates that Subdomain points at a host that redirects. The error message names the redirect `Location`; use that final Spiff host. The connector doesn't follow redirects, so a signed request is never re-sent to another host.
 
 == Common Problems
 
 [%header,cols="1,2"]
 |===
-|Symptom |Resolution
-|`SPIFF:UNAUTHORIZED` (`Could not validate HMAC Signature`) on every request |The webhook secret is wrong or was refreshed in Spiff Admin. Update the secure property and redeploy. Check that the property value has no stray whitespace or quotes.
-|`SPIFF:UNAUTHORIZED` only on some hosts |Check that every host uses the same webhook secret. The signature also includes the Mule host's current Unix time in seconds, so keep the host clock in sync with NTP.
-|`MULE:CONNECTIVITY`: `Connector ID must be the raw integer id ...` on Test Connection |The Connector ID isn't digits only, for example it is the base64 Relay id, or it is larger than the largest 64-bit integer. Use the raw integer from Spiff Admin > Connectors. The connector rejects it before sending any request.
-|`SPIFF:NOT_FOUND` |Check that the Connector ID, Company UUID and Mapping ID belong to the same Spiff tenant, and that Subdomain points at that tenant's environment (`us1` versus `eu1` versus a Salesforce-hosted URL). Deleting a record that doesn't exist succeeds, so `SPIFF:NOT_FOUND` means an unknown Mapping ID or Connector ID, not a missing record.
-|`SPIFF:PAYLOAD_TOO_LARGE` |Reduce the batch size. The limit is 5 MiB (5,242,880 bytes) of JSON per request. The connector rejects a larger body before it sends the request; Spiff can also answer HTTP 413.
-|`SPIFF:UNPROCESSABLE_ENTITY` |Spiff answered HTTP 422 because it rejected the record values. Check the expected fields in the record operation's DataSense input type for the Mapping ID, or in Spiff Admin > Synced Objects & Fields.
-|An operation succeeds but the record doesn't appear in Spiff |Spiff validates record bodies asynchronously. A success response only means that Spiff accepted the signature and the IDs, not that the record was written. For example, a record without its identity field (usually `external_id`) or with an unparseable date still gets HTTP 200. Check the record values against the mapping's translator fields.
-|`SPIFF:INVALID_INPUT: ... element at index N must be a non-empty JSON object` |An element of the array is `{}`, `null` or not an object. Filter out empty records before you call the operation.
-|`SPIFF:INVALID_INPUT: Mapping ID must be the integer id of a Spiff mapping ...` |The Mapping ID isn't digits only. Select it from the Mapping ID dropdown or use the integer id from Spiff Admin > Synced Objects & Fields.
-|`SPIFF:INVALID_INPUT: ... is not valid JSON` |The payload isn't JSON. Use `output application/json` in the DataWeave expression that builds the body.
-|`SPIFF:CLIENT_ERROR` with a 3xx status |The Subdomain points at a host that redirects. The error message names the redirect `Location`; use that final Spiff host. The connector doesn't follow redirects, so a signed request is never re-sent to another host.
-|No input metadata when the Mapping ID is an expression |DataSense needs a fixed Mapping ID value. With an expression such as `#[vars.mappingId]`, Studio can't resolve the input metadata. The operation still works at runtime.
-|No mappings in the Mapping ID dropdown |Test Connection first. A connector without mappings returns an empty list. Configure mappings in Spiff Admin > Synced Objects & Fields.
-|The Mapping ID dropdown shows mappings but the input metadata has no fields |The mapping has no translator fields yet. Configure them in Spiff Admin, then refresh metadata.
+| Symptom | Resolution
+| An operation succeeds but the record doesn't appear in Spiff | Spiff validates record bodies asynchronously. A success response only means that Spiff accepted the signature and the IDs, not that the record was written. For example, a record without its identity field (usually `external_id`) or with an unparseable date still gets HTTP 200. Check the record values against the mapping's translator fields.
+| No input metadata when the Mapping ID is an expression | DataSense needs a fixed Mapping ID value. With an expression such as `#[vars.mappingId]`, Studio can't resolve the input metadata. The operation still works at runtime.
+| No mappings in the Mapping ID dropdown | Test Connection first. A connector without mappings returns an empty list. Configure mappings in *Spiff Admin* > *Synced Objects & Fields*.
+| The Mapping ID dropdown shows mappings but the input metadata has no fields | The mapping has no translator fields yet. Configure them in *Spiff Admin*, then refresh metadata.
 |===
-
-== Next Step
-
-If the problem persists, see xref:spiff-connector-reference.adoc[Spiff Connector Reference] or contact MuleSoft Support.
 
 == See Also
 
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
 * xref:spiff-connector-reference.adoc[Spiff Connector Reference]
 * https://help.salesforce.com/s/[Salesforce Help]
+include::release-notes::partial$release-notes/rn-known-issues.adoc[tag=knownIssuesSeeAlsoLink]
