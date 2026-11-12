@@ -1,0 +1,116 @@
+= Configuring Change-Tracking Sources
+
+Configure the polling sources that emit an event when NetSuite records change: *On New Object*, *On Modified Object*, and *On Deleted Object*.
+
+Each source polls NetSuite on a schedule, maintains a watermark in an object store, and emits an event for each record found since the last poll. In a cluster, only the primary node polls by default, and the shared watermark lets a failover resume from the persisted boundary day with at-least-once delivery. The three sources filter on different NetSuite date columns (datecreated, lastmodifieddate, deleteddate). On Deleted Object also queries the deletedrecord table, filters on record type, and returns deletion metadata. For full parameter, output, and error details, see xref:netsuite-rest-connector-reference.adoc[NetSuite REST Connector Reference].
+
+== Shared Source Parameters
+
+The following parameters apply to all three sources:
+
+* *Record Type*
++
+The NetSuite record type to poll (for example, `customer`). For *On Deleted Object*, this value is matched case-insensitively against the `deletedrecord` `type` column.
+
+* *Start Date*
++
+Calendar-day lower bound for the first poll when no watermark has been stored yet (for example, `2025-01-15`). Only the date portion is used. If omitted, the source defaults to today in the configured *Start Timezone* (or UTC if that is also omitted).
+
+* *Start Timezone*
++
+IANA timezone used to compute today when neither a stored watermark nor a *Start Date* is present (for example, `America/Los_Angeles`). Defaults to `UTC`.
+
+* *Page Size*
++
+Rows fetched per SuiteQL page (1–1000). The source paginates until a short or last page is reached. Defaults to 100.
+
+* *Primary Node Only*
++
+Determines whether to run this source on only the primary node when running Mule in a cluster. Defaults to `true`.
+
+* *Scheduling Strategy*
++
+Configures the scheduler that triggers the polling.
+
+* *Redelivery Policy*
++
+Defines a policy for processing the redelivery of the same message.
+
+== Configure the On New Object Source
+
+The *On New Object* source polls NetSuite for records of a specified type that were created since the last poll, filtering on `datecreated`, and emits an event for each one found.
+
+=== XML Configuration
+
+This is the XML for this source:
+
+[source,xml,linenums]
+----
+<flow name="on-new-object-flow">
+    <ms-netsuite-rest:new-object-listener config-ref="Config" doc:name="On New Object" recordType="customer">
+        <scheduling-strategy>
+            <fixed-frequency frequency="5" timeUnit="MINUTES"/>
+        </scheduling-strategy>
+    </ms-netsuite-rest:new-object-listener>
+    <logger level="INFO" message="#[payload]"/>
+</flow>
+----
+
+=== Output Configuration
+
+Each emitted event contains a newly created record and `NetSuiteRestAttributes`.
+
+== Configure the On Modified Object Source
+
+The *On Modified Object* source polls NetSuite for records of a specified type that were created or updated since the last poll, filtering on `lastmodifieddate`. Because `lastmodifieddate` is set on both insert and update, this source includes both new and later-modified records.
+
+=== XML Configuration
+
+This is the XML for this source:
+
+[source,xml,linenums]
+----
+<flow name="on-modified-object-flow">
+    <ms-netsuite-rest:modified-object-listener config-ref="Config" doc:name="On Modified Object" recordType="customer">
+        <scheduling-strategy>
+            <fixed-frequency frequency="5" timeUnit="MINUTES"/>
+        </scheduling-strategy>
+    </ms-netsuite-rest:modified-object-listener>
+    <logger level="INFO" message="#[payload]"/>
+</flow>
+----
+
+=== Output Configuration
+
+Each emitted event contains a created or modified record and `NetSuiteRestAttributes`.
+
+== Configure the On Deleted Object Source
+
+The *On Deleted Object* source polls NetSuite for deleted-record metadata and emits an event for each deletion found. It queries the `deletedrecord` SuiteQL table filtered on `deleteddate` and the record type column. Emitted rows are deletion metadata (for example, record ID, type, and deleted date), not the deleted record's full body.
+
+=== XML Configuration
+
+This is the XML for this source:
+
+[source,xml,linenums]
+----
+<flow name="on-deleted-object-flow">
+    <ms-netsuite-rest:deleted-object-listener config-ref="Config" doc:name="On Deleted Object" recordType="customer">
+        <scheduling-strategy>
+            <fixed-frequency frequency="5" timeUnit="MINUTES"/>
+        </scheduling-strategy>
+    </ms-netsuite-rest:deleted-object-listener>
+    <logger level="INFO" message="#[payload]"/>
+</flow>
+----
+
+=== Output Configuration
+
+Each emitted event contains deletion metadata and `NetSuiteRestAttributes`.
+
+== See Also
+
+* xref:index.adoc[NetSuite REST Connector Overview]
+* xref:configuring-record-operations.adoc[Configuring Record Operations]
+* xref:netsuite-rest-connector-reference.adoc[NetSuite REST Connector Reference]
+* https://help.salesforce.com[Salesforce Help]
