@@ -1,0 +1,140 @@
+= Upgrading and Migrating FTP Connector to Version 3.0
+
+Upgrade Anypoint Connector for FTP (FTP Connector) to version 3.x.
+
+== Supported Upgrade Paths
+
+[%header,cols="50a,50a"]
+|===
+|From Version | To Version
+|2.x |3.0.x
+|===
+
+== Changes in This Release
+
+This release contains the following changes.
+
+=== Runtime and Java Requirements
+
+* FTP Connector 3.0 requires Mule 4.9.0 or later and Java 17. Apps that run on Mule 4.8 or earlier, or on Java 8 or 11, must stay on FTP Connector 2.x.
+
+=== Renamed Parameters
+
+The time unit parameters are renamed. The old names are no longer accepted, and an app that uses them fails to deploy with an XML validation error.
+
+[%header%autowidth.spread]
+|===
+|2.x Parameter |3.0 Parameter |Used In
+|`connectionTimeoutUnit` |`connectionTimeoutTimeUnit` |`ftp:connection`
+|`responseTimeoutUnit` |`responseTimeoutTimeUnit` |`ftp:connection`
+|`timeBetweenSizeCheckUnit` |`timeBetweenSizeCheckTimeUnit` |`ftp:config`, `ftp:read`, `ftp:listener`
+|===
+
+=== Changed Default Value
+
+* The default value of *Time Between Size Check Time Unit* (`timeBetweenSizeCheckTimeUnit`) in the connector configuration is now `SECONDS`. In 2.x, the default was `MILLISECONDS`. For example, `timeBetweenSizeCheck="2"` without a unit now waits 2 seconds instead of 2 milliseconds.
+* The *Read* operation and the *On New or Updated File* source use the configuration values of *Time Between Size Check* and *Time Between Size Check Time Unit* unless you set them on the operation or source.
+
+=== Error Type Changes
+
+* The `FTP:FILE_NOT_FOUND` error type is removed. The connector never raised it. An app with an error handler that references `FTP:FILE_NOT_FOUND` fails to deploy. Use `FTP:ILLEGAL_PATH` instead.
+* When the FTP server rejects a file action with reply code 450, 550, or 553, the connector now classifies the error by the reply text:
+** A reply that indicates missing permission (for example, `Permission denied`, `Access denied`, `Not authorized`, or `Forbidden`) raises `FTP:ACCESS_DENIED`.
+** A reply that indicates a missing file (for example, `No such file`, `Not found`, or `Does not exist`) raises `FTP:ILLEGAL_PATH`, the same error the connector raises when it detects a missing path itself.
+** A reply the connector cannot classify, such as `550 Failed to open file.`, raises the same generic error as in 2.x.
++
+In 2.x, these server rejections surfaced as `MULE:UNKNOWN`. Error handlers that catch `MULE:UNKNOWN` to handle permission failures no longer catch them. Catch `FTP:ACCESS_DENIED` instead. Handlers that catch `ANY` are not affected. The error message text is unchanged.
+* When the server reply starts with the path followed by a colon, for example `550 /a.txt: Permission denied`, the connector classifies the error using only the text after the path. A relative path that contains spaces is not recognized as a path, so the whole reply text is used.
+* A *Write* operation that the server denies now fails immediately with `FTP:ACCESS_DENIED`, instead of failing after the response timeout.
+* If the directory configured in the *On New or Updated File* source does not exist when the source starts, the source fails with `FTP:ILLEGAL_PATH`.
+* When the HTTPS tunnel proxy presents an untrusted certificate, the connection fails with `FTP:CONNECTIVITY`. FTP Connector does not define a TLS handshake error type.
+* When the server replies 421, 426, or 451 while the connector opens a connection, the connector raises `FTP:SERVICE_NOT_AVAILABLE`. When one of these replies is received during an operation, the connector invalidates the connection so that the next operation uses a new one.
+
+=== Proxy Changes
+
+* *Proxy host* (`host`) is now required in `ftp:http-tunnel-proxy` and `ftp:https-tunnel-proxy`. In 2.x, it was optional with an empty default.
+* *Proxy port* (`port`) now defaults to `3128`.
+* In Anypoint Studio and Anypoint Code Builder, the proxy settings are now in the *Proxy* tab of the connection configuration.
+
+=== Listener Changes
+
+* When the matcher rejects a file, only that file is skipped and the remaining files of the poll are processed.
+* The source returns the polling connection before it dispatches files. Each file stream and each post action (*Auto delete*, *Move to directory*, *Rename to*) uses its own connection.
+* When a poll fails because of a connection problem, the connection is invalidated, and the next poll reconnects.
+* Watermark resolution is one minute, the same as in 2.x. When watermarking is enabled and the server does not return a modification timestamp for a file, the watermark is ignored for that file and a `WARN` message is logged.
+
+=== Java API and Classloading Changes
+
+These changes affect only custom Java code or DataWeave code that references connector classes directly.
+
+* FTP Connector 3.0 exports only the `org.mule.extension.ftp.api`, `org.mule.extension.ftp.api.ftp`, `org.mule.extension.ftp.api.matchers`, and `org.mule.extension.ftp.api.proxy` packages. It no longer shares internal packages with other plugins.
+* These 2.x classes are removed from the exported API: `org.mule.extension.ftp.api.FileError`, `PredicateType`, `UriUtils`, `FTPConnectionException`, `FileAlreadyExistsException`, `FileBeingModifiedException`, `DeletedFileWhileReadException`, `IllegalPathException`, `org.mule.extension.ftp.api.matchers.NullFilePayloadPredicate`, and `PathMatcherPredicate`.
+* `FtpFileAttributes` is immutable and no longer has setter methods. Its fields (`name`, `path`, `size`, `timestamp`, `directory`, `regularFile`, and `symbolicLink`) and its `serialVersionUID` are unchanged, so DataWeave expressions on `attributes` keep working, and attributes that FTP Connector 2.x persisted, for example in an object store or a VM queue, can be read by version 3.0.
+
+=== FTP and FTPS Connectors in the Same App
+
+FTPS Connector 2.x depends on internal FTP Connector packages that version 3.0 no longer shares. Using FTP Connector 3.0 with FTPS Connector 2.x in the same app is not supported. Upgrade both connectors to 3.0 together.
+
+=== Unchanged Behavior
+
+These defaults are the same as in 2.x: *Connection Timeout* and *Response Timeout* are `10` `SECONDS`, *Port* is `21`, *Transfer Mode* is `BINARY`, *Control Encoding* is `ISO-8859-1`, and *Passive* is `true`. The XML namespace (`ftp`) and the Maven coordinates (`org.mule.connectors:mule-ftp-connector`) are unchanged.
+
+== Requirements
+
+Ensure that you meet these requirements before you perform the upgrade:
+
+[%header%autowidth.spread]
+|===
+|Application/Service|Version
+|Mule |4.9.0 and later
+|Java |17
+|===
+
+== Upgrade Prerequisites
+
+Before you perform the upgrade, create a backup of your files, data, and configuration in case you need to restore to the previous version.
+
+== Upgrade Steps
+
+Follow these steps to perform the upgrade:
+
+. In Anypoint Studio, create a Mule project.
+. In *Mule Palette*, click *Search in Exchange*.
+. In *Add Dependencies to Project*, enter `ftp` in the search field.
+. In *Available modules*, select *FTP* and click *Add*.
+. Click *Finish*.
+. Verify that the FTP Connector dependency version is 3.0 in the `pom.xml` file in the Mule project.
+. If the app also uses FTPS Connector, upgrade it to version 3.0.
+
+Studio upgrades the connector automatically.
+
+== Post-Upgrade Steps
+
+After you install the latest version of the connector, update your app:
+
+. Rename `connectionTimeoutUnit`, `responseTimeoutUnit`, and `timeBetweenSizeCheckUnit` to `connectionTimeoutTimeUnit`, `responseTimeoutTimeUnit`, and `timeBetweenSizeCheckTimeUnit`.
+. If the connector configuration sets *Time Between Size Check* without a unit, set `timeBetweenSizeCheckTimeUnit="MILLISECONDS"` to keep the 2.x timing.
+. Replace error handlers for `FTP:FILE_NOT_FOUND` with `FTP:ILLEGAL_PATH`.
+. Replace error handlers that catch `MULE:UNKNOWN` for permission failures with handlers for `FTP:ACCESS_DENIED`.
+. Set *Proxy host* in every HTTP or HTTPS tunnel proxy configuration.
+. Update custom Java code that uses the removed classes or the `FtpFileAttributes` setter methods.
+
+== Verify the Upgrade
+
+After you install the latest version of the connector, follow these steps to verify the upgrade:
+
+. In Studio, verify that there are no errors in the *Problems* or *Console* views.
+. Verify that there are no problems in the project `pom.xml` file.
+. Test the connection to verify that the operations work.
+
+== Revert the Upgrade
+
+If it is necessary to revert to the previous version of FTP Connector, change the `mule-ftp-connector` dependency version in the project's `pom.xml` file to the previous version, and restore the 2.x parameter names in the app's XML. If the app uses FTPS Connector, revert it to 2.x as well.
+
+You must update the project's `pom.xml` file in Anypoint Studio.
+
+== See Also
+
+* xref:ftp-documentation.adoc[FTP Connector Reference]
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* https://help.salesforce.com[Salesforce Help]
