@@ -48,6 +48,9 @@ In 2.x, these server rejections surfaced as `MULE:UNKNOWN`. Error handlers that 
 * A *Write* operation that the server denies now fails immediately with `FTP:ACCESS_DENIED`, instead of failing after the response timeout.
 * If the directory configured in the *On New or Updated File* source does not exist when the source starts, the source fails with `FTP:ILLEGAL_PATH`.
 * When the HTTPS tunnel proxy presents an untrusted certificate, the connection fails with `FTP:CONNECTIVITY`. FTP Connector does not define a TLS handshake error type.
+* If the configured *Working Directory* (`workingDir`) does not exist, the connection now fails when it is established with `FTP:FILE_DOESNT_EXIST`. If it is a file, the connection fails with `FTP:FILE_IS_NOT_DIRECTORY`. Both are children of `FTP:CONNECTIVITY`, so *Test Connection* and connection validation report the problem, and reconnection strategies apply. In 2.x, the connection succeeded and operations that use relative paths failed later with `FTP:ILLEGAL_PATH`.
+* When the server refuses to create a directory with reply code 450, 550, or 553 and a reply text that does not explain the cause, for example `550 Create directory operation failed.`, the connector raises `FTP:ACCESS_DENIED`. This applies to *Create Directory* and to parent directories that *Write*, *Copy*, and *Move* create.
+* The *Delete* operation now declares `FTP:FILE_LOCK`. It raises this error when the file is locked by another operation in the app, for example a *Read* operation with *Lock* set to `true`.
 * When the server replies 421, 426, or 451 while the connector opens a connection, the connector raises `FTP:SERVICE_NOT_AVAILABLE`. When one of these replies is received during an operation, the connector invalidates the connection so that the next operation uses a new one.
 
 === Proxy Changes
@@ -58,6 +61,8 @@ In 2.x, these server rejections surfaced as `MULE:UNKNOWN`. Error handlers that 
 
 === Listener Changes
 
+* *Primary Node Only* (`primaryNodeOnly`) now defaults to `true`. In a cluster, only the primary node polls the directory. To poll on every node as before, set `primaryNodeOnly="false"`.
+* *Time Between Size Check* and *Time Between Size Check Time Unit* are now in the *Advanced* tab of the source in Anypoint Studio and Anypoint Code Builder.
 * When the matcher rejects a file, only that file is skipped and the remaining files of the poll are processed.
 * The source returns the polling connection before it dispatches files. Each file stream and each post action (*Auto delete*, *Move to directory*, *Rename to*) uses its own connection.
 * When a poll fails because of a connection problem, the connection is invalidated, and the next poll reconnects.
@@ -77,7 +82,7 @@ FTPS Connector 2.x depends on internal FTP Connector packages that version 3.0 n
 
 === Unchanged Behavior
 
-These defaults are the same as in 2.x: *Connection Timeout* and *Response Timeout* are `10` `SECONDS`, *Port* is `21`, *Transfer Mode* is `BINARY`, *Control Encoding* is `ISO-8859-1`, and *Passive* is `true`. The XML namespace (`ftp`) and the Maven coordinates (`org.mule.connectors:mule-ftp-connector`) are unchanged.
+These defaults are the same as in 2.x: *Connection Timeout* and *Response Timeout* are `10` `SECONDS`, *Port* is `21`, *Transfer Mode* is `BINARY`, *Control Encoding* is `ISO-8859-1`, and *Passive* is `true`. The XML namespace (`ftp`) and the Maven coordinates (`org.mule.connectors:mule-ftp-connector`) are unchanged. In Anypoint Exchange, the connector is named *FTP Connector - Mule 4*.
 
 == Requirements
 
@@ -101,7 +106,7 @@ Follow these steps to perform the upgrade:
 . In Anypoint Studio, create a Mule project.
 . In *Mule Palette*, click *Search in Exchange*.
 . In *Add Dependencies to Project*, enter `ftp` in the search field.
-. In *Available modules*, select *FTP* and click *Add*.
+. In *Available modules*, select *FTP Connector - Mule 4* and click *Add*.
 . Click *Finish*.
 . Verify that the FTP Connector dependency version is 3.0 in the `pom.xml` file in the Mule project.
 . If the app also uses FTPS Connector, upgrade it to version 3.0.
@@ -117,6 +122,8 @@ After you install the latest version of the connector, update your app:
 . Replace error handlers for `FTP:FILE_NOT_FOUND` with `FTP:ILLEGAL_PATH`.
 . Replace error handlers that catch `MULE:UNKNOWN` for permission failures with handlers for `FTP:ACCESS_DENIED`.
 . Set *Proxy host* in every HTTP or HTTPS tunnel proxy configuration.
+. Verify that the *Working Directory* of every connection exists on the server and is a directory.
+. In clustered apps, set `primaryNodeOnly="false"` on each *On New or Updated File* source that must poll on every node.
 . Update custom Java code that uses the removed classes or the `FtpFileAttributes` setter methods.
 
 == Verify the Upgrade
