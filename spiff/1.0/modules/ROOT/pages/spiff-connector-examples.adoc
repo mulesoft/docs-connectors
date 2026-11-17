@@ -1,0 +1,208 @@
+:connector-name: Spiff
+:lc-connector-name: spiff
+:version: 1.0
+
+= {connector-name} Connector {version} Examples
+
+These examples show how to use Spiff Connector. They use the namespace and dependency described in xref:spiff-connector-xml-maven.adoc[Spiff Connector XML and Maven Support], and properties such as `${spiff.mappingId}` that you define in a configuration properties file.
+
+== Configure the Connection
+
+Store the webhook secret in a secure properties file:
+
+[source,xml,linenums]
+----
+<secure-properties:config name="Secure_Props" file="spiff-${env}.yaml" key="${secure.key}"/>
+
+<spiff:config name="Spiff_Config">
+    <spiff:hmac-connection subdomain="${spiff.subdomain}"
+                           connectorId="${spiff.connectorId}"
+                           webhookSecret="${secure::spiff.webhookSecret}"
+                           companyUuid="${spiff.companyUuid}">
+        <reconnection>
+            <reconnect frequency="5000" count="3"/>
+        </reconnection>
+    </spiff:hmac-connection>
+</spiff:config>
+----
+
+For a Salesforce-hosted tenant, set the full base URL:
+
+[source,xml]
+----
+<spiff:hmac-connection subdomain="https://<your-spiff-host>" ... />
+----
+
+== Upsert One Record
+
+Use *Put Single Record* to create or update one record in a Spiff mapping.
+
+[source,xml,linenums]
+----
+<flow name="sync-opportunity-to-spiff">
+    <!-- payload: one opportunity from the source system -->
+    <spiff:put-single-record config-ref="Spiff_Config" mappingId="${spiff.mappingId}">
+        <spiff:record><![CDATA[#[output application/json --- {
+            external_id: payload.Id,
+            name: payload.Name,
+            amount: payload.Amount,
+            close_date: payload.CloseDate as String {format: "yyyy-MM-dd"}
+        }]]]></spiff:record>
+    </spiff:put-single-record>
+    <logger level="INFO" message="#['Spiff responded ' ++ attributes.statusCode]"/>
+</flow>
+----
+
+== Upsert Records in Batches
+
+The connector rejects request bodies over 5 MiB with `SPIFF:PAYLOAD_TOO_LARGE` before it sends them. Send large data sets in
+batches:
+
+[source,xml,linenums]
+----
+<foreach collection="#[payload]" batchSize="500">
+    <spiff:put-multiple-records config-ref="Spiff_Config" mappingId="${spiff.mappingId}">
+        <spiff:records><![CDATA[#[output application/json --- payload map {
+            external_id: $.Id,
+            name: $.Name,
+            amount: $.Amount
+        }]]]></spiff:records>
+    </spiff:put-multiple-records>
+</foreach>
+----
+
+== Delete Records
+
+Use *Delete Multiple Records* to remove records by their identity fields.
+
+[source,xml,linenums]
+----
+<spiff:delete-multiple-records config-ref="Spiff_Config" mappingId="${spiff.mappingId}">
+    <spiff:record-identities><![CDATA[#[output application/json --- payload map { external_id: $ }]]]></spiff:record-identities>
+</spiff:delete-multiple-records>
+----
+
+== Retry Transient Failures
+
+Wrap an operation in `until-successful` to retry transient Spiff errors and handle rejected records separately.
+
+[source,xml,linenums]
+----
+<until-successful maxRetries="3" millisBetweenRetries="2000">
+    <try>
+        <spiff:put-multiple-records config-ref="Spiff_Config" mappingId="${spiff.mappingId}"/>
+        <error-handler>
+            <on-error-propagate type="SPIFF:RATE_LIMITED, SPIFF:SERVER_ERROR, SPIFF:TIMEOUT, SPIFF:CONNECTIVITY"/>
+            <on-error-continue type="SPIFF:UNPROCESSABLE_ENTITY">
+                <logger level="WARN" message="#['Spiff rejected the batch: ' ++ error.description]"/>
+            </on-error-continue>
+        </error-handler>
+    </try>
+</until-successful>
+----
+
+== Health Check
+
+Run *Test Webhook* on a schedule to verify that Spiff accepts the configured webhook signature.
+
+[source,xml,linenums]
+----
+<flow name="spiff-health-check">
+    <scheduler>
+        <scheduling-strategy><fixed-frequency frequency="1" timeUnit="HOURS"/></scheduling-strategy>
+    </scheduler>
+    <spiff:test-webhook config-ref="Spiff_Config">
+        <spiff:test-record><![CDATA[#[output application/json --- {}]]]></spiff:test-record>
+    </spiff:test-webhook>
+    <error-handler>
+        <on-error-continue type="SPIFF:UNAUTHORIZED">
+            <logger level="ERROR" message="Spiff webhook secret rejected. Was it refreshed in Spiff Admin?"/>
+        </on-error-continue>
+    </error-handler>
+</flow>
+----
+
+== Add Default and Per-Request Headers
+
+Add default headers to the connection and custom headers to an individual operation when requests need additional context.
+
+[source,xml,linenums]
+----
+<spiff:config name="Spiff_Config">
+    <spiff:hmac-connection subdomain="us1" connectorId="${spiff.connectorId}"
+                           webhookSecret="${secure::spiff.webhookSecret}" companyUuid="${spiff.companyUuid}">
+        <spiff:headers>
+            <spiff:default-header key="X-Source-System" value="mule-crm-sync"/>
+        </spiff:headers>
+    </spiff:hmac-connection>
+</spiff:config>
+
+<spiff:put-single-record config-ref="Spiff_Config" mappingId="3559">
+    <spiff:custom-headers><![CDATA[#[{ 'X-Correlation-Id': correlationId }]]]></spiff:custom-headers>
+</spiff:put-single-record>
+----
+
+== Connect Through a Proxy
+
+Configure an outbound proxy when the Mule app must route requests through a corporate network proxy.
+
+[source,xml,linenums]
+----
+<spiff:hmac-connection subdomain="us1" connectorId="${spiff.connectorId}"
+                       webhookSecret="${secure::spiff.webhookSecret}" companyUuid="${spiff.companyUuid}">
+    <spiff:proxy-config>
+        <spiff:default host="proxy.example.com" port="3128" nonProxyHosts="localhost"/>
+    </spiff:proxy-config>
+</spiff:hmac-connection>
+----
+
+== Complete Example: Sync Deals from an HTTP Endpoint
+
+This app receives a deal over HTTP, upserts it into a Spiff mapping, and returns Spiff's response. It listens on `0.0.0.0` and `${http.port}`, so the same app can run locally, on CloudHub, and on Runtime Fabric. It reads `http.port` and the `spiff.*` values from `config.properties`, and the webhook secret from an encrypted `secure.yaml` (add the Secure Properties module dependency to the app's `pom.xml` and pass `-Dsecure.key=...` at deploy time).
+
+[source,xml,linenums]
+----
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:spiff="http://www.mulesoft.org/schema/mule/spiff"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http"
+      xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+        http://www.mulesoft.org/schema/mule/spiff http://www.mulesoft.org/schema/mule/spiff/current/mule-spiff.xsd
+        http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+        http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+
+    <configuration-properties file="config.properties"/>
+    <secure-properties:config name="Secure_Props" file="secure.yaml" key="${secure.key}"/>
+
+    <http:listener-config name="HTTP_Listener_config">
+        <http:listener-connection host="0.0.0.0" port="${http.port}"/>
+    </http:listener-config>
+
+    <spiff:config name="Spiff_Config">
+        <spiff:hmac-connection subdomain="${spiff.subdomain}" connectorId="${spiff.connectorId}"
+                               webhookSecret="${secure::spiff.webhookSecret}" companyUuid="${spiff.companyUuid}"/>
+    </spiff:config>
+
+    <flow name="sync-deal">
+        <http:listener config-ref="HTTP_Listener_config" path="/deals"/>
+        <spiff:put-single-record config-ref="Spiff_Config" mappingId="${spiff.mappingId}"/>
+        <error-handler>
+            <on-error-propagate type="SPIFF:INVALID_INPUT, SPIFF:UNPROCESSABLE_ENTITY">
+                <set-payload value="#[error.description]"/>
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+</mule>
+----
+
+== Next Step
+
+For the complete list of connector fields, operations, and error types, see xref:spiff-connector-reference.adoc[Spiff Connector Reference].
+
+== See Also
+
+* xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
+* xref:spiff-connector-reference.adoc[Spiff Connector Reference]
+* https://help.salesforce.com/s/[Salesforce Help]
