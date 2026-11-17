@@ -1,6 +1,6 @@
-= Troubleshoot FTPS Connector 
+= Troubleshoot FTPS Connector
 
-To troubleshoot Anypoint Connector for FTPs (FTPS Connector), become familiar with the information about troubleshooting Mule application issues.
+To troubleshoot Anypoint Connector for FTPS (FTPS Connector), become familiar with the information about troubleshooting Mule application issues.
 
 == Troubleshoot Mule Application Issues
 
@@ -12,19 +12,22 @@ To resolve this error:
 
 * Try to replicate the issue using an FTPS client, for example, Cyberduck or Filezilla. If the issue also occurs with these clients, then it is likely that the issue is not related to the Mule app.
 
-* Get better and more detailed logs on the Mule app side by enabling verbose logging for FTPS Connector and for the JSCH driver:
+* Get better and more detailed logs on the Mule app side by enabling verbose logging for FTPS Connector, for its FTP engine library, and for the Apache Commons Net library:
 +
 . Access Anypoint Studio and navigate to the *Package Explorer* view.
 . Open your application's project name.
 . Open the `src/main/resources` path folder.
 . Open the `log4j2.xml` file inside the folder.
-. If the following line is already in the `log4j2.xml` file, uncomment it to enable it; otherwise, add it:
+. If the following lines are already in the `log4j2.xml` file, uncomment them to enable them; otherwise, add them:
 +
 [source,xml,linenums]
 ----
-  <AsyncLogger name=“org.mule.extension.ftp” level=“TRACE”/>
-  <AsyncLogger name=“org.apache.commons.net” level=“DEBUG”/>
+  <AsyncLogger name="com.mulesoft.connectors.ftps" level="TRACE"/>
+  <AsyncLogger name="com.mulesoft.connectors.ftp.commons" level="TRACE"/>
+  <AsyncLogger name="org.apache.commons.net" level="DEBUG"/>
 ----
++
+FTPS Connector 3.0 no longer includes FTP Connector, so the `org.mule.extension.ftp` logger used with 2.x doesn't log FTPS Connector activity. Update existing `log4j2.xml` files when you upgrade.
 [start=6]
 . Add the following argument to your run configuration:
 +
@@ -33,6 +36,16 @@ To resolve this error:
 * Try to minimize or remove unnecessary DataWeave data transformations (you could even use hard coded data) to minimize the app's complexity and determine whether the issue is with the interaction between the app and the FTPS server.
 
 For additional information about enabling verbose logging for SDK components in your Mule application, see the xref:mule-sdk::troubleshooting.adoc[troubleshoot SDK components] documentation.
+
+== Handle TLS and Data Channel Errors
+
+* In explicit mode, the connector sends `PBSZ 0` and `PROT P` after login by default. If the server rejects `PROT P`, the connection fails. If the server can't encrypt the data channel and a clear data channel is acceptable, set *PROT Settings* to `CLEAR`. The connector then logs a warning once per configuration.
+* In implicit mode, if the server rejects `PROT P`, the connection fails with the message `There was an error while trying to encrypt the data channel (PROT P)`. Implicit mode has no clear fallback, so fix the server configuration.
+* When the TLS handshake with the FTPS server or with an HTTPS tunnel proxy fails, the connector raises `FTPS:TLS_HANDSHAKE_FAILED`. Check that the server certificate is trusted by the TLS context, that the host name matches the certificate, that the certificate isn't expired, and that the client and server share a TLS protocol and cipher suite.
+* *Test Connection* checks only the control channel. TLS session reuse problems appear on the first file transfer, for example as a `522 SSL connection failed: session reuse required` server reply. With servers that don't support `MLST`, such as vsftpd, a data channel failure can be raised as `FTPS:ILLEGAL_PATH` instead of `FTPS:CONNECTIVITY`.
+* FTPS servers that require session reuse, such as vsftpd with `require_ssl_reuse=YES` or ProFTPD, reject the data channel when TLS 1.3 is negotiated, because TLS 1.3 sessions can't be reused on data channels. Mule 4.10 and later enables TLS 1.2 and TLS 1.3 by default, so set *Enabled Protocols* to `TLSv1.2` in the TLS context when you connect to these servers.
+* Servers that don't support Extended Master Secret, for example servers that use OpenSSL 1.0.2, reject session reuse with a `522` reply.
+* The INFO log names the security provider the connector uses to reuse TLS sessions. When the connector uses the JDK provider, Bouncy Castle isn't registered, so `bcfks` keystores in the TLS context work only if Bouncy Castle is registered by other means. Use `jks` or `pkcs12` keystores instead.
 
 == Handle FTPS Session Reuse Errors
 When you use FTPS Connector, connection issues can occur during session reuse, such as a `SocketTimeoutException` error during data connection. To resolve this, include this JVM system property in your runtime configuration:
@@ -51,11 +64,23 @@ Here is a list of common throws messages and how to interpret them.
 
 * FTPS:ACCESS_DENIED
 
-An FTPS Connector operation attempted to access an FTPS server path and performed an action for which the user has not been granted permission.
+An FTPS Connector operation attempted to access an FTPS server path and performed an action for which the user does not have permission. The connector raises this error when the server rejects the action with reply code 450, 550, or 553 and the reply text indicates missing permission, for example `Permission denied`. When the server refuses to create a directory with reply code 450, 550, or 553 and a reply text that does not explain the cause, for example `550 Create directory operation failed.`, the connector also raises this error. This applies to *Create Directory* and to operations that create parent directories.
 
 * FTPS:CONNECTIVITY
 
 The connection to the FTPS server was interrupted.
+
+* FTPS:TLS_HANDSHAKE_FAILED
+
+The TLS handshake with the FTPS server or with an HTTPS tunnel proxy failed, for example because the server certificate is not trusted, the host name does not match, the certificate is expired, or no protocol or cipher suite can be agreed. This error is a child of `FTPS:CONNECTIVITY`. In FTPS Connector 2.x, these failures raised `FTPS:INVALID_CREDENTIALS`.
+
+* FTPS:FILE_DOESNT_EXIST
+
+The configured *Working Directory* (`workingDir`) does not exist on the FTPS server. The connection fails when it is established. This error is a child of `FTPS:CONNECTIVITY`.
+
+* FTPS:FILE_IS_NOT_DIRECTORY
+
+The configured *Working Directory* (`workingDir`) is a file, not a directory. The connection fails when it is established. This error is a child of `FTPS:CONNECTIVITY`.
 
 * FTPS:FILE_ALREADY_EXISTS
 
@@ -63,7 +88,7 @@ An attempt was made to create a file with the same location and name as an exist
 
 * FTPS:FILE_LOCK
 
-An operation made an unsuccessful attempt to acquire a lock over a file.
+An operation made an unsuccessful attempt to acquire a lock over a file. The *Delete* operation also raises this error when the file is locked by another operation in the app, for example a *Read* operation that is still in progress.
 
 * FTPS:ILLEGAL_CONTENT
 
@@ -71,13 +96,18 @@ The *Write* operation received invalid content to write.
 
 * FTPS:ILLEGAL_PATH
 
-The specified path is invalid because, for example, it does not exist.
+The specified path is invalid because, for example, it does not exist. The connector also raises this error when the server rejects the action with reply code 450, 550, or 553 and the reply text indicates a missing file, for example `No such file or directory`, and when the directory of the *On New or Updated File* source does not exist.
+
+If the server reply text does not indicate either missing permission or a missing file, the connector raises a generic error instead of `FTPS:ACCESS_DENIED` or `FTPS:ILLEGAL_PATH`.
 
 * FTPS:RETRY_EXHAUSTED
 
 Retries of a certain execution block are exhausted.
 
+The `FTPS:FILE_NOT_FOUND` error type is removed in FTPS Connector 3.0. Use `FTPS:ILLEGAL_PATH` instead.
+
 
 == See Also
-* https://help.mulesoft.com[MuleSoft Help Center]
 * xref:ftps-documentation.adoc[FTPS Connector Reference]
+* xref:ftps-connector-upgrade-guide.adoc[Upgrading and Migrating FTPS Connector to Version 3.0]
+* https://help.salesforce.com[Salesforce Help]

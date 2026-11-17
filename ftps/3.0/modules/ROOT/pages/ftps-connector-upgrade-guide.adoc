@@ -1,52 +1,132 @@
-= Upgrading and Migrating FTPS Connector to Version 2.1   
+= Upgrading and Migrating FTPS Connector to Version 3.0
 
-Upgrade Anypoint Connector for FTPS (FTPS Connector) to version 2.x.
+Upgrade Anypoint Connector for FTPS (FTPS Connector) to version 3.x.
 
 == Supported Upgrade Paths
 
 [%header,cols="50a,50a"]
 |===
 |From Version | To Version
-|1.8.x |2.1.x
+|2.x |3.0.x
 |===
 
 == Changes in This Release
 
-This release contains the following changes:
+This release contains the following changes.
 
-* This connector is now compatible with Java 17.
-* This connector is now FIPS 140-2 compliant.
-* This connector no longer uses reflection to reuse the SSL session from the command channel to data channels. Instead, it now supports SSL session resumption between the client and host by using externally provided Bouncy Castle libraries which are to be set as top security providers. You can add these libraries with the new *Required Libraries* field in the connection type. For more information, refer to xref:ftps-studio-configuration.adoc#configure-java[Configure Java JDK for Session Reuse] and xref:ftps-studio-configuration.adoc#bouncycastle[Configure Bouncy Castle Libraries and Security Provider]. Because Bouncy Castle security providers are required for running FTPS on Java 17, all Mule applications within the same JVM must adhere to its stricter cryptographic policies. This includes enforcing modern key sizes, secure algorithms, and updated TLS configurations—affecting keystores, truststores, and all TLS-based connectors.
+=== Runtime and Java Requirements
 
-* The `mule-file-commons` module dependency is removed.
-* The *List* operation now returns the file path instead of the file content.
+* FTPS Connector 3.0 requires Mule 4.9.0 or later and Java 17. Apps that run on Mule 4.8 or earlier, or on Java 8 or 11, must stay on FTPS Connector 2.x.
 
+=== Standalone Connector
+
+* FTPS Connector is now a standalone connector. It runs on a shared FTP engine library that FTP Connector 3.0 also uses, and it no longer includes FTP Connector.
+* If the app uses `ftp:*` operations or configurations and depends only on FTPS Connector, add FTP Connector to the app explicitly. Otherwise, the app fails to deploy with an unknown namespace error.
+* An FTP configuration that uses an FTPS connection (`ftps:connection` inside `ftp:config`) is no longer supported and fails to deploy. Use `ftps:config` instead.
+
+=== Renamed Parameters
+
+The time unit parameters are renamed. The old names are no longer accepted, and an app that uses them fails to deploy with an XML validation error. In Anypoint Studio, the old names are flagged after you update the connector version.
+
+[%header%autowidth.spread]
+|===
+|2.x Parameter |3.0 Parameter |Used In
+|`connectionTimeoutUnit` |`connectionTimeoutTimeUnit` |`ftps:connection`
+|`responseTimeoutUnit` |`responseTimeoutTimeUnit` |`ftps:connection`
+|`timeBetweenSizeCheckUnit` |`timeBetweenSizeCheckTimeUnit` |`ftps:config`, `ftps:read`, `ftps:listener`
+|===
+
+[[changed-defaults]]
+=== Changed Default Values
+
+* The default value of *Time Between Size Check Time Unit* (`timeBetweenSizeCheckTimeUnit`) in the connector configuration is now `SECONDS`. In 2.x, the default was `MILLISECONDS`. For example, `timeBetweenSizeCheck="2"` without a unit now waits 2 seconds instead of 2 milliseconds. To keep the 2.x timing, set `timeBetweenSizeCheckTimeUnit="MILLISECONDS"`.
+* The *Read* operation and the *On New or Updated File* source use the configuration values of *Time Between Size Check* and *Time Between Size Check Time Unit* unless you set them on the operation or source.
+* In explicit TLS mode, *PROT Settings* (`protSetting`) now defaults to `PRIVATE`. The connector sends `PBSZ 0` and `PROT P` after login and encrypts the data channel. In 2.x, when *PROT Settings* was not set, the data channel stayed clear. If the FTPS server rejects `PROT P`, the connection fails. To keep the 2.x behavior, set `protSetting="CLEAR"` on `ftps:ftps-explicit-mode`. When the data channel is clear, the connector logs a warning once per configuration.
+* *Primary Node Only* (`primaryNodeOnly`) on the *On New or Updated File* source now defaults to `true`. In a cluster, only the primary node polls the directory. To poll on every node as in 2.x, set `primaryNodeOnly="false"` on the source.
+
+=== Connection Changes
+
+* In implicit TLS mode, if the server rejects `PROT P`, the connection now fails with the message `There was an error while trying to encrypt the data channel (PROT P)`. In 2.x, the connector logged a warning and continued with a clear data channel. Implicit mode has no clear fallback.
+* If the configured *Working Directory* (`workingDir`) does not exist, the connection now fails when it is established with `FTPS:FILE_DOESNT_EXIST`. If it is a file, the connection fails with `FTPS:FILE_IS_NOT_DIRECTORY`. Both are children of `FTPS:CONNECTIVITY`, so *Test Connection* and connection validation report the problem, and reconnection strategies apply. In 2.x, an invalid working directory was ignored and later operations ran in the wrong directory.
+
+=== Error Type Changes
+
+* The new `FTPS:TLS_HANDSHAKE_FAILED` error type is raised when the TLS handshake with the FTPS server or with an HTTPS tunnel proxy fails, for example because the server certificate is not trusted, the host name does not match, the certificate is expired, or no protocol or cipher suite can be agreed. `FTPS:TLS_HANDSHAKE_FAILED` is a child of `FTPS:CONNECTIVITY`. In 2.x, TLS handshake failures raised `FTPS:INVALID_CREDENTIALS`. Error handlers that catch only `FTPS:INVALID_CREDENTIALS` no longer catch TLS failures. Catch `FTPS:TLS_HANDSHAKE_FAILED` or `FTPS:CONNECTIVITY` instead.
+* The `FTPS:FILE_NOT_FOUND` error type is removed. The connector never raised it. An app with an error handler that references `FTPS:FILE_NOT_FOUND` fails to deploy. Use `FTPS:ILLEGAL_PATH` instead.
+* When the FTPS server rejects a file action with reply code 450, 550, or 553, the connector now classifies the error by the reply text:
+** A reply that indicates missing permission (for example, `Permission denied`, `Access denied`, `Not authorized`, or `Forbidden`) raises `FTPS:ACCESS_DENIED`.
+** A reply that indicates a missing file (for example, `No such file`, `Not found`, or `Does not exist`) raises `FTPS:ILLEGAL_PATH`, the same error the connector raises when it detects a missing path itself.
+** A reply the connector cannot classify keeps the same generic error as in 2.x.
++
+In 2.x, these server rejections surfaced as `MULE:UNKNOWN`. Error handlers that catch `MULE:UNKNOWN` to handle permission failures no longer catch them. Catch `FTPS:ACCESS_DENIED` instead. Handlers that catch `ANY` are not affected.
+* When the server refuses to create a directory with reply code 450, 550, or 553 and a reply text that does not explain the cause, for example `550 Create directory operation failed.`, the connector raises `FTPS:ACCESS_DENIED`. This applies to *Create Directory* and to operations that create parent directories.
+* The *Delete* operation now declares `FTPS:FILE_LOCK`. It raises this error when the file is locked by another operation in the app, for example a *Read* operation that is still in progress.
+* If the directory configured in the *On New or Updated File* source does not exist, the source fails with `FTPS:ILLEGAL_PATH` instead of a generic runtime error.
+
+=== Proxy Changes
+
+* *Proxy host* (`host`) is now required in `ftps:http-tunnel-proxy` and `ftps:https-tunnel-proxy`. In 2.x, it was optional with an empty default, and configurations that omit it now fail validation.
+* *Proxy port* (`port`) defaults to `3128`.
+* In Anypoint Studio and Anypoint Code Builder, the proxy settings are now in the *Proxy* tab of the connection configuration.
+
+=== Listener Changes
+
+* *Primary Node Only* now defaults to `true`, as described in <<changed-defaults>>.
+* Watermark resolution is one minute, the same as in 2.x. When watermarking is enabled and the server does not return a modification timestamp for a file, the watermark is ignored for that file and a `WARN` message is logged.
+
+=== TLS Session Reuse
+
+* On Mule 4.13.0 and later, the connector can reuse the control-channel TLS session on data channels through the Java (JDK) security provider, so it does not need to register the Bouncy Castle security providers for the whole JVM. This mode is opt-in. For the conditions and how to enable it, see xref:ftps-studio-configuration.adoc#configure-java[Configure Java JDK for Session Reuse]. In every other case, the connector reuses TLS sessions through Bouncy Castle, as in 2.x.
+* When an app is undeployed, the connector now removes the Bouncy Castle security providers that it registered. Providers registered by the runtime or by other apps are kept.
+* In FIPS mode, the connector uses the runtime FIPS security providers and reuses TLS sessions through Bouncy Castle, as in 2.x.
+
+=== File Attributes
+
+* File attributes are now of type `com.mulesoft.connectors.ftps.api.ftp.FtpsFileAttributes`. DataWeave expressions that read attribute fields, such as `attributes.name`, `attributes.path`, `attributes.size`, and `attributes.timestamp`, work unchanged.
+* File attributes that FTPS Connector 2.x serialized, for example into an object store, a VM queue, or a persistent queue, cannot be read by version 3.0. Process or clear that data before you upgrade.
+
+=== Java API and Classloading Changes
+
+These changes affect only custom Java code or DataWeave code that references connector classes directly.
+
+* The connector packages move from `com.mulesoft.extension.ftps.api` to `com.mulesoft.connectors.ftps.api`. The exported packages are `com.mulesoft.connectors.ftps.api.ftp`, `com.mulesoft.connectors.ftps.api.matchers`, `com.mulesoft.connectors.ftps.api.mode`, and `com.mulesoft.connectors.ftps.api.proxy`.
+* FTP Connector types in the `org.mule.extension.ftp.api` packages are no longer available through FTPS Connector.
+* `FtpsFileAttributes` is immutable and has no setter methods.
+
+=== FTP and FTPS Connectors in the Same App
+
+FTPS Connector 3.0 can be used in the same app as FTP Connector 2.0.4 or 3.0. Using FTP Connector 3.x with FTPS Connector 2.x in the same app is not supported. If the app uses both connectors, upgrade both to 3.0 together.
+
+=== Unchanged Behavior
+
+These defaults are the same as in 2.x: *Connection Timeout* and *Response Timeout* are `10` `SECONDS`, *Port* is `21`, *Transfer Mode* is `BINARY`, *Control Encoding* is `ISO-8859-1`, *Passive* is `true`, and *Ftps Mode* is explicit mode. The XML namespace (`ftps`), the configuration name (`ftps:config`), the operations, and the Maven coordinates (`com.mulesoft.connectors:mule-ftps-connector`) are unchanged. In Anypoint Exchange, the connector is named *FTPS Connector - Mule 4*.
 
 == Requirements
 
 Ensure that you meet these requirements before you perform the upgrade:
 
-[%header,cols="50a,50a"]
+[%header%autowidth.spread]
 |===
-|Application/Service| Version
-|Mule |4.3.0 and later
+|Application/Service|Version
+|Mule |4.9.0 and later
+|Java |17
 |===
 
 == Limitations
 
 Before you perform the upgrade, be aware of these known limitations:
 
-* Session reuse doesn't work well with TLS 1.3 in CloudHub (same as with previous versions of FTPS Connector).
-* The security providers are hardcoded, which means all Mule applications running on the same Java Virtual Machine (JVM) will share these security settings.
-+
-Bouncy Castle security providers enforce stricter cryptographic policies and reject weak keystores, including those using weak algorithms (such as `SHA1withRSA`) or self-signed certificates. This affects all keystores in the JVM, even those not directly used by FTPS Connector. Ensure all keystores in your Mule applications meet modern security standards before upgrading.
+* The connection test checks only the control channel. TLS session reuse problems appear on the first file transfer, for example as a `522 SSL connection failed: session reuse required` server reply. With servers that do not support `MLST`, such as vsftpd, a data channel failure can be raised as `FTPS:ILLEGAL_PATH` instead of `FTPS:CONNECTIVITY`.
+* TLS 1.3 sessions cannot be reused on data channels with either security provider. FTPS servers that require session reuse, such as vsftpd with `require_ssl_reuse=YES` or ProFTPD, reject the data channel when TLS 1.3 is negotiated. Mule 4.10 and later enables TLS 1.2 and TLS 1.3 by default, so set *Enabled Protocols* to `TLSv1.2` in the TLS context when you connect to these servers.
+* Servers that do not support Extended Master Secret, for example servers that use OpenSSL 1.0.2, reject session reuse with a `522` reply on both security providers.
+* When the connector uses the JDK provider, Bouncy Castle is not registered, so `bcfks` keystores in the TLS context work only if Bouncy Castle is registered by other means. Use `jks` or `pkcs12` keystores instead.
 
 == Upgrade Prerequisites
 
 Before you perform the upgrade, complete these tasks:
 
-* Create a backup of your files, data, and configurations in case you need to restore them.
-* Validate all keystores across Mule applications on the same JVM. Replace any keystores using weak algorithms, such as `SHA1withRSA`, because Bouncy Castle rejects them.
+* Create a backup of your files, data, and configuration in case you need to restore to the previous version.
+* Process or clear any FTPS Connector 2.x file attributes stored in object stores, VM queues, or persistent queues.
 
 == Upgrade Steps
 
@@ -54,27 +134,47 @@ Follow these steps to perform the upgrade:
 
 . In Anypoint Studio, create a Mule project.
 . In *Mule Palette*, click *Search in Exchange*.
-. In *Add Dependencies to Project*, enter `FTPS` in the search field.
-. In *Available modules*, select *FTPS Connector* and click *Add*.
+. In *Add Dependencies to Project*, enter `ftps` in the search field.
+. In *Available modules*, select *FTPS Connector - Mule 4* and click *Add*.
 . Click *Finish*.
-. Verify that the FTPS Connector `mule-ftps-connector` dependency version is the one you are upgrading to in the `pom.xml` file in the Mule project.
+. Verify that the `mule-ftps-connector` dependency version is 3.0 in the `pom.xml` file in the Mule project.
+. If the app also uses FTP Connector, upgrade it to version 3.0.
 
 Studio upgrades the connector automatically.
 
-=== Verify the Upgrade
+== Post-Upgrade Steps
+
+After you install the latest version of the connector, update your app:
+
+. Rename `connectionTimeoutUnit`, `responseTimeoutUnit`, and `timeBetweenSizeCheckUnit` to `connectionTimeoutTimeUnit`, `responseTimeoutTimeUnit`, and `timeBetweenSizeCheckTimeUnit`.
+. If the connector configuration sets *Time Between Size Check* without a unit, set `timeBetweenSizeCheckTimeUnit="MILLISECONDS"` to keep the 2.x timing.
+. If the FTPS server does not accept `PROT P` in explicit mode, set `protSetting="CLEAR"`. In implicit mode, fix the server configuration, because the connection fails.
+. Replace error handlers for `FTPS:FILE_NOT_FOUND` with `FTPS:ILLEGAL_PATH`.
+. Replace error handlers that catch only `FTPS:INVALID_CREDENTIALS` for TLS failures with handlers for `FTPS:TLS_HANDSHAKE_FAILED` or `FTPS:CONNECTIVITY`.
+. Replace error handlers that catch `MULE:UNKNOWN` for permission failures with handlers for `FTPS:ACCESS_DENIED`.
+. Set *Proxy host* in every HTTP or HTTPS tunnel proxy configuration.
+. Verify that the *Working Directory* of every connection exists on the server and is a directory.
+. In clustered apps, set `primaryNodeOnly="false"` on each *On New or Updated File* source that must poll on every node.
+. If the app uses `ftp:*` operations or configurations, add FTP Connector to the app and replace any `ftps:connection` inside `ftp:config` with `ftps:config`.
+. Update custom Java code that uses the `com.mulesoft.extension.ftps.api` packages, the `org.mule.extension.ftp.api` packages, or the file attributes setter methods.
+
+== Verify the Upgrade
 
 After you install the latest version of the connector, follow these steps to verify the upgrade:
 
 . In Studio, verify that there are no errors in the *Problems* or *Console* views.
 . Verify that there are no problems in the project `pom.xml` file.
 . Test the connection to verify that the operations work.
+. Run a file transfer, because *Test Connection* checks only the control channel.
 
-=== Reverting the Upgrade
+== Revert the Upgrade
 
-If it is necessary to revert to the previous version of FTPS Connector, change the `mule-ftps-connector` dependency version in the project's `pom.xml` file to the previous version.
+If it is necessary to revert to the previous version of FTPS Connector, change the `mule-ftps-connector` dependency version in the project's `pom.xml` file to the previous version, for example 2.1.3, and restore the original XML, including the 2.x parameter names. If the app uses FTP Connector 3.0, revert it to 2.x as well.
+
 You must update the project's `pom.xml` file in Anypoint Studio.
 
 == See Also
 
+* xref:ftps-documentation.adoc[FTPS Connector Reference]
 * xref:connectors::introduction/introduction-to-anypoint-connectors.adoc[Introduction to Anypoint Connectors]
-* https://help.mulesoft.com[MuleSoft Help Center]
+* https://help.salesforce.com[Salesforce Help]
