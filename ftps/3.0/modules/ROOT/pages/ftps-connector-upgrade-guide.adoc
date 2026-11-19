@@ -35,22 +35,25 @@ The time unit parameters are renamed. The old names are no longer accepted, and 
 [%header%autowidth.spread]
 |===
 |2.x Parameter |3.0 Parameter |Used In
-|`connectionTimeoutUnit` |`connectionTimeoutTimeUnit` |`ftps:connection`
-|`responseTimeoutUnit` |`responseTimeoutTimeUnit` |`ftps:connection`
-|`timeBetweenSizeCheckUnit` |`timeBetweenSizeCheckTimeUnit` |`ftps:config`, `ftps:read`, `ftps:listener`
+|*Connection Timeout Unit* (`connectionTimeoutUnit`) |*Connection Timeout Time Unit* (`connectionTimeoutTimeUnit`) |`ftps:connection`
+|*Response Timeout Unit* (`responseTimeoutUnit`) |*Response Timeout Time Unit* (`responseTimeoutTimeUnit`) |`ftps:connection`
+|*Time Between Size Check Unit* (`timeBetweenSizeCheckUnit`) |*Time Between Size Check Time Unit* (`timeBetweenSizeCheckTimeUnit`) |`ftps:config`, `ftps:read`, `ftps:listener`
+|*Time Unit* (`timeUnit`) |*Not Updated In The Last Time Unit* (`notUpdatedInTheLastTimeUnit`) and *Updated In The Last Time Unit* (`updatedInTheLastTimeUnit`) |`ftps:matcher`
 |===
+
+*Time Unit* (`timeUnit`) on `ftps:matcher` is replaced by two fields. *Not Updated In The Last Time Unit* (`notUpdatedInTheLastTimeUnit`) qualifies *Not Updated In The Last*, and *Updated In The Last Time Unit* (`updatedInTheLastTimeUnit`) qualifies *Updated In The Last*. Both default to `SECONDS`, which is the same default *Time Unit* had in 2.x. An app that still sets `timeUnit` fails XML validation.
 
 [[changed-defaults]]
 === Changed Default Values
 
 * The default value of *Time Between Size Check Time Unit* (`timeBetweenSizeCheckTimeUnit`) in the connector configuration is now `SECONDS`. In 2.x, the default was `MILLISECONDS`. For example, `timeBetweenSizeCheck="2"` without a unit now waits 2 seconds instead of 2 milliseconds. To keep the 2.x timing, set `timeBetweenSizeCheckTimeUnit="MILLISECONDS"`.
 * The *Read* operation and the *On New or Updated File* source use the configuration values of *Time Between Size Check* and *Time Between Size Check Time Unit* unless you set them on the operation or source.
-* In explicit TLS mode, *PROT Settings* (`protSetting`) now defaults to `PRIVATE`. The connector sends `PBSZ 0` and `PROT P` after login and encrypts the data channel. In 2.x, when *PROT Settings* was not set, the data channel stayed clear. If the FTPS server rejects `PROT P`, the connection fails. To keep the 2.x behavior, set `protSetting="CLEAR"` on `ftps:ftps-explicit-mode`. When the data channel is clear, the connector logs a warning once per configuration.
+* In *Ftps explicit mode*, *PROT Settings* (`protSetting`) now defaults to `PRIVATE`. The connector sends `PBSZ 0` and `PROT P` after login and encrypts the data channel. In 2.x, when *PROT Settings* was not set, the data channel stayed clear. If the FTPS server rejects `PROT P`, the connection fails. To keep the 2.x behavior, set `protSetting="CLEAR"` on `ftps:ftps-explicit-mode`. When the data channel is clear, the connector logs a warning once per configuration.
 * *Primary Node Only* (`primaryNodeOnly`) on the *On New or Updated File* source now defaults to `true`. In a cluster, only the primary node polls the directory. To poll on every node as in 2.x, set `primaryNodeOnly="false"` on the source.
 
 === Connection Changes
 
-* In implicit TLS mode, if the server rejects `PROT P`, the connection now fails with the message `There was an error while trying to encrypt the data channel (PROT P)`. In 2.x, the connector logged a warning and continued with a clear data channel. Implicit mode has no clear fallback.
+* In *Ftps implicit mode*, if the server rejects `PROT P`, the connection now fails with the message `There was an error while trying to encrypt the data channel (PROT P)`. In 2.x, the connector logged a warning and continued with a clear data channel. *Ftps implicit mode* has no clear fallback.
 * If the configured *Working Directory* (`workingDir`) does not exist, the connection now fails when it is established with `FTPS:FILE_DOESNT_EXIST`. If it is a file, the connection fails with `FTPS:FILE_IS_NOT_DIRECTORY`. Both are children of `FTPS:CONNECTIVITY`, so *Test Connection* and connection validation report the problem, and reconnection strategies apply. In 2.x, an invalid working directory was ignored and later operations ran in the wrong directory.
 
 === Error Type Changes
@@ -63,9 +66,9 @@ The time unit parameters are renamed. The old names are no longer accepted, and 
 ** A reply the connector cannot classify keeps the same generic error as in 2.x.
 +
 In 2.x, these server rejections surfaced as `MULE:UNKNOWN`. Error handlers that catch `MULE:UNKNOWN` to handle permission failures no longer catch them. Catch `FTPS:ACCESS_DENIED` instead. Handlers that catch `ANY` are not affected.
-* When the server refuses to create a directory with reply code 450, 550, or 553 and a reply text that does not explain the cause, for example `550 Create directory operation failed.`, the connector raises `FTPS:ACCESS_DENIED`. This applies to *Create Directory* and to operations that create parent directories.
+* When the server refuses to create a directory with reply code 450, 550, or 553 and a reply text that does not explain the cause, for example `550 Create directory operation failed.`, the connector raises `FTPS:ACCESS_DENIED`. This applies to *Create Directory* and to operations with *Create Parent Directories* set to true.
 * The *Delete* operation now declares `FTPS:FILE_LOCK`. It raises this error when the file is locked by another operation in the app, for example a *Read* operation that is still in progress.
-* If the directory configured in the *On New or Updated File* source does not exist, the source fails with `FTPS:ILLEGAL_PATH` instead of a generic runtime error.
+* If the *Directory* configured in the *On New or Updated File* source does not exist, the source fails with `FTPS:ILLEGAL_PATH` instead of a generic runtime error.
 
 === Proxy Changes
 
@@ -76,7 +79,7 @@ In 2.x, these server rejections surfaced as `MULE:UNKNOWN`. Error handlers that 
 === Listener Changes
 
 * *Primary Node Only* now defaults to `true`, as described in <<changed-defaults>>.
-* Watermark resolution is one minute, the same as in 2.x. When watermarking is enabled and the server does not return a modification timestamp for a file, the watermark is ignored for that file and a `WARN` message is logged.
+* Watermark resolution is one minute, the same as in 2.x. When *Watermark Enabled* is true and the server does not return a modification timestamp for a file, the watermark is ignored for that file and a `WARN` message is logged.
 
 === TLS Session Reuse
 
@@ -139,6 +142,7 @@ Studio upgrades the connector automatically.
 After you install the latest version of the connector, update your app:
 
 . Rename `connectionTimeoutUnit`, `responseTimeoutUnit`, and `timeBetweenSizeCheckUnit` to `connectionTimeoutTimeUnit`, `responseTimeoutTimeUnit`, and `timeBetweenSizeCheckTimeUnit`.
+. On each `ftps:matcher`, replace `timeUnit` with `notUpdatedInTheLastTimeUnit`, `updatedInTheLastTimeUnit`, or both.
 . If the connector configuration sets *Time Between Size Check* without a unit, set `timeBetweenSizeCheckTimeUnit="MILLISECONDS"` to keep the 2.x timing.
 . If the FTPS server does not accept `PROT P` in explicit mode, set `protSetting="CLEAR"`. In implicit mode, fix the server configuration, because the connection fails.
 . Replace error handlers for `FTPS:FILE_NOT_FOUND` with `FTPS:ILLEGAL_PATH`.
