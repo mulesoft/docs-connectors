@@ -16,9 +16,9 @@ Upgrade Anypoint Connector for Snowflake (Snowflake Connector) from version 1.x 
 === 2.0
 
 * Snowflake Connector 2.0 requires Snowflake JDBC driver 4.4.1. Use the full `snowflake-jdbc` jar, or `snowflake-jdbc-fips` in a FIPS environment. JDBC 3.x drivers and the `snowflake-jdbc-thin` jar aren't supported. Replace the shared JDBC driver library in your application. For more information, see xref:snowflake-connector-studio.adoc#configure-source[Using Anypoint Studio to Configure Snowflake Connector].
-* Key-pair authentication can resolve the private key file from an absolute path, a path relative to the Mule runtime working directory, or the application classpath. A missing private key file causes key-pair authentication to fail with a `PrivateKeyLoadException` error. For more information, see xref:snowflake-connector-reference.adoc#key-pair-connection[Key-pair Connection].
-* If you set the JDBC driver system property `net.snowflake.jdbc.enableBouncyCastle`, use `net.snowflake.jdbc.useBundledBouncyCastleForPrivateKeyDecryption` instead.
-* The pooling profile *Max Wait* value is now applied as the pool checkout timeout. Previously, a non-zero *Max Wait* was ignored, so an exhausted pool waited indefinitely. A non-zero *Max Wait* now fails the checkout with `SNOWFLAKE:CONNECTIVITY` after the wait elapses. A *Max Wait* of `0` still waits indefinitely. For more information, see xref:snowflake-connector-reference.adoc#SnowflakeDbPoolingProfile[Snowflake Db Pooling Profile].
+* Key-pair authentication resolves *Private Key File Path* from an absolute path, a path relative to the Mule runtime working directory, or the application classpath. A classpath resource inside a jar is copied to an owner-only temporary file. A missing file fails connection initialization. If *Private Key Password* is set, the connector throws `PrivateKeyLoadException`. If *Private Key Password* isn't set, the connector throws `IllegalStateException` with the message `Unable to resolve private key file`. For more information, see xref:snowflake-connector-reference.adoc#key-pair-connection[Key-pair Connection].
+* If you set the JDBC driver system property `net.snowflake.jdbc.enableBouncyCastle`, use `net.snowflake.jdbc.useBundledBouncyCastleForPrivateKeyDecryption` instead. JDBC 4.x ignores the old property. The new property defaults to `true`. The connector decrypts an encrypted private key itself and doesn't read this property.
+* The pooling profile *Max Wait* value is now applied as the pool checkout timeout, in milliseconds. Previously, a non-zero *Max Wait* was ignored, so an exhausted pool waited indefinitely. A non-zero *Max Wait* now fails the checkout with `SNOWFLAKE:CONNECTIVITY` after the wait elapses. A *Max Wait* of `0` still waits indefinitely. A wait longer than 2,147,483,647 milliseconds is capped at that limit. For more information, see xref:snowflake-connector-reference.adoc#SnowflakeDbPoolingProfile[Snowflake Db Pooling Profile].
 * The *On Table Row* source skips a row when the watermark column is null, instead of failing the poll with a `NullPointerException`. A watermark value that isn't serializable is logged and skipped, and the poll continues with the remaining rows. For more information, see xref:snowflake-connector-reference.adoc#Listener[On Table Row].
 * These libraries are upgraded to address reported security vulnerabilities:
 ** The Guava library is upgraded to version 33.8.0-jre.
@@ -47,7 +47,7 @@ Before you perform the upgrade, you must:
 . Create a backup of your files, data, and configuration in case you need to restore to the previous version.
 . Ensure that your environment meets the version 2.x requirements, including Mule runtime 4.3.0 or later and Snowflake JDBC driver 4.4.1.
 . Replace the Snowflake JDBC 3.x shared library with the full 4.4.1 jar. Don't use the `snowflake-jdbc-thin` jar.
-. If your application sets `net.snowflake.jdbc.enableBouncyCastle`, change it to `net.snowflake.jdbc.useBundledBouncyCastleForPrivateKeyDecryption`.
+. If your application sets `net.snowflake.jdbc.enableBouncyCastle`, change it to `net.snowflake.jdbc.useBundledBouncyCastleForPrivateKeyDecryption`. JDBC 4.x ignores the old property, and the new property defaults to `true`.
 . If your pooling profile sets a non-zero *Max Wait*, plan for checkout failures after that wait. A *Max Wait* of `0` still waits indefinitely.
 
 == Upgrade Steps
@@ -76,9 +76,11 @@ After you install the latest version of the connector, follow these steps to ver
 
 == Troubleshooting
 
-If Studio reports that the required driver class is missing, replace a JDBC 3.x jar or the `snowflake-jdbc-thin` jar with the full Snowflake JDBC 4.4.1 driver.
+If Studio reports that the required driver class is missing, the jar doesn't contain `net.snowflake.client.api.connection.SnowflakeConnection`. Replace a JDBC 3.x jar or the `snowflake-jdbc-thin` jar with the full Snowflake JDBC 4.4.1 driver.
 
 If a non-zero *Max Wait* now returns `SNOWFLAKE:CONNECTIVITY`, the pool checkout is timing out. Increase *Max Wait* or set it to `0` to wait indefinitely.
+
+If key-pair authentication can't find the private key file, check *Private Key File Path*. An encrypted key, with *Private Key Password* set, fails with `PrivateKeyLoadException`. An unencrypted key fails with `IllegalStateException`.
 
 If there are problems with caching the parameters and caching the metadata, try restarting Studio.
 
