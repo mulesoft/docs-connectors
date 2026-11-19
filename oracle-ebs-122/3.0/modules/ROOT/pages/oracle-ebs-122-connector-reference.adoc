@@ -22,6 +22,7 @@ Default configuration for Oracle EBS 12.2 operations.
 | Name | String | Name for this configuration. Connectors reference the configuration with this name. | | x
 | Connection a| <<config_plsql, Plsql>>
  | Connection types for this configuration. | | x
+| Name a| String | Identifier for this element when other components reference it. | | x
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
 |===
 
@@ -67,6 +68,7 @@ Default configuration for Oracle EBS 12.2 operations.
 * <<jms-config_jms-url, Jms Url>>
  | Connection types for this configuration. | | x
 | Read Receive Timeout a| Number | Read timeout, in milliseconds. |  30000 |
+| Name a| String | Identifier for this element when other components reference it. | | x
 | Expiration Policy a| <<ExpirationPolicy>> |  Configures the minimum amount of time that a dynamic configuration instance can remain idle before Mule considers it eligible for expiration. |  |
 |===
 
@@ -121,7 +123,8 @@ Default configuration for Oracle EBS 12.2 operations.
 |===
 | Name | Type | Description | Default Value | Required
 | Configuration | String | Name of the configuration to use. | | x
-| Input a| Binary |  |  #[payload] |
+| Input a| Any |  |  #[payload] |
+| Config Ref a| ConfigurationProvider | Name of the configuration to use to execute this operation. | | x
 | Streaming Strategy a| * <<repeatable-in-memory-stream>>
 * <<repeatable-file-store-stream>>
 * non-repeatable-stream |  Configures how Mule processes streams. The default is to use repeatable streams. |  |
@@ -129,6 +132,7 @@ Default configuration for Oracle EBS 12.2 operations.
 | Operation a| String |  Operation to execute. |  | x
 | Target Variable a| String |  Name of the variable that stores the operation's output. |  |
 | Target Value a| String |  Expression that evaluates the operation's output. The outcome of the expression is stored in the *Target Variable* field. |  #[payload] |
+| Error Mappings a| Array of <<ErrorMapping>> | Error mappings to apply to this operation. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
 |===
@@ -137,13 +141,14 @@ Default configuration for Oracle EBS 12.2 operations.
 [%autowidth.spread]
 |===
 |Type |Binary
+|Attributes Type |<<EbsResponseAttributes>>
 |===
 
 === For Configurations
 * <<config, Default Configuration>>
 
 ==== Throws
-* ORACLE-EBS122:UNKNOWN
+* ORACLE-EBS122:UNEXPECTED
 * ORACLE-EBS122:BAD_REQUEST
 * ORACLE-EBS122:METADATA_ERROR
 * ORACLE-EBS122:RETRY_EXHAUSTED
@@ -166,7 +171,6 @@ Default configuration for Oracle EBS 12.2 operations.
 The *Business Events Source* does not filter the incoming events. The user must filter the events after they arrive at the source. +
 The *Consume* operation in Oracle’s Advanced Queuing API library, which the connector uses to connect with EBS, may override the `AQ$_WF_BPEL_QTAB_S` field in the subscriber table. The *Business Events Source* calls the *Consume* operation internally.
 
-
 ==== Parameters
 
 [%header%autowidth.spread]
@@ -176,7 +180,10 @@ The *Consume* operation in Oracle’s Advanced Queuing API library, which the co
 | Durable Subscription a| Boolean |  Set this value to `true` to create a durable subscription for the topic. |  false |
 | Subscription Name a| String |  Name of the durable subscription that already exists in the EBS instance.  |  `muleBusinessEvents` |
 | Filter message criteria a| String | Filters messages based on SQL like criteria. |  | 
-| Primary Node Only a| Boolean | Determines whether to execute this source on only the primary node when running Mule instances in a cluster. |  |
+| Queue owner a| String | Oracle DB user that owns the Business Events queue or agent to subscribe to. | `APPS` |
+| Queue name a| String | Name of the AQ queue or agent that receives Business Events. Custom queues must use the `APPS_NE.WF_EVENT_T` payload type. | `WF_BPEL_Q` |
+| Primary Node Only a| Boolean | Determines whether to execute this source on only the primary node when running Mule instances in a cluster to prevent competing dequeues. | true |
+| Config Ref a| ConfigurationProvider | Name of the configuration to use to execute this source. | | x
 | Redelivery Policy a| <<RedeliveryPolicy>> | Configures the redelivery policy for executing requests that generate errors. You can add a redelivery policy to any source in a flow. |  |
 | Reconnection Strategy a| * <<reconnect>>
 * <<reconnect-forever>> |  A retry strategy in case of connectivity errors. |  |
@@ -379,6 +386,7 @@ Configures a standard reconnection strategy, which specifies how often to reconn
 |===
 | Field | Type | Description | Default Value | Required
 | Frequency a| Number | How often to attempt to reconnect, in milliseconds. |  |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. |  |
 | Count a| Number | How many reconnection attempts the Mule app can make. |  |
 |===
 
@@ -391,6 +399,7 @@ Configures a forever reconnection strategy by which the connector operation sour
 |===
 | Field | Type | Description | Default Value | Required
 | Frequency a| Number | How often the Mule app attempts to reconnect to the remote service or API, in milliseconds. |  |
+| Blocking a| Boolean | If `false`, the reconnection strategy runs in a separate, non-blocking thread. |  |
 |===
 
 [[ExpirationPolicy]]
@@ -455,6 +464,28 @@ Maximum amount of memory that the stream can use for data. If the amount of memo
 ** GB | Unit for the *In Memory Size* field. |  |
 |===
 
+[[ErrorMapping]]
+=== Error Mapping
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Source a| Enumeration, one of:
+
+** ANY
+** REDELIVERY_EXHAUSTED
+** TRANSFORMATION
+** EXPRESSION
+** SECURITY
+** CLIENT_SECURITY
+** SERVER_SECURITY
+** ROUTING
+** CONNECTIVITY
+** RETRY_EXHAUSTED
+** TIMEOUT | Source error type to map. |  |
+| Target a| String | Target error type to use when the source error occurs. | | x
+|===
+
 [[Event]]
 === Event
 
@@ -476,6 +507,17 @@ Maximum amount of memory that the stream can use for data. If the amount of memo
 | To Agent a| <<Agent>> | Agent to which the event is sent. |  |
 |===
 
+[[EbsResponseAttributes]]
+=== EBS Response Attributes
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Headers a| Object | HTTP response headers returned by the PL/SQL REST service. |  |
+| Reason Phrase a| String | HTTP response reason phrase returned by the PL/SQL REST service. |  |
+| Status Code a| Number | HTTP response status code returned by the PL/SQL REST service. |  |
+|===
+
 [[Agent]]
 === Agent
 
@@ -495,8 +537,17 @@ Configures the redelivery policy for executing requests that generate errors. Yo
 |===
 | Field | Type | Description | Default Value | Required
 | Max Redelivery Count a| Number | Maximum number of times that a delivered request can be processed unsuccessfully before returning a REDELIVERY_EXHAUSTED error. |  |
-| Use Secure Hash a| Boolean | If `true`, Mule uses a secure hash algorithm to identify a redelivered message. |  |
 | Message Digest Algorithm a| String | Secure hashing algorithm to use if the *Use Secure Hash* field is `true`. If the payload of the message is a Java object, Mule ignores this value and returns the value that the payload’s `hashCode()` returned. |  |
-| Id Expression a| String | One or more expressions that determine when a message was redelivered. This property can be set only if the *Use Secure Hash* field is `false`. |  |
+| Message Identifier a| <<RedeliveryPolicyMessageIdentifier>> | Strategy to use to identify redelivered messages. |  |
 | Object Store a| Object Store | Configures the object store that stores the redelivery counter for each message. |  |
+|===
+
+[[RedeliveryPolicyMessageIdentifier]]
+=== Redelivery Policy Message Identifier
+
+[%header,cols="20s,25a,30a,15a,10a"]
+|===
+| Field | Type | Description | Default Value | Required
+| Use Secure Hash a| Boolean | Whether to use a secure hash algorithm to identify a redelivered message. |  |
+| Id Expression a| String | One or more expressions that determine when a message was redelivered. Set this property only when *Use Secure Hash* is `false`. |  |
 |===
