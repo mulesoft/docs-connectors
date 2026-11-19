@@ -12,85 +12,40 @@ Upgrade Anypoint Connector for FTP (FTP Connector) to version 3.x.
 
 == Changes in This Release
 
-This release contains the following changes.
-
-=== Runtime and Java Requirements
-
-* FTP Connector 3.0 requires Mule 4.9.0 or later and Java 17. Apps that run on Mule 4.8 or earlier, or on Java 8 or 11, must stay on FTP Connector 2.x.
-
-=== Renamed Parameters
-
-The time unit parameters are renamed. The old names are no longer accepted, and an app that uses them fails to deploy with an XML validation error.
-
-[%header%autowidth.spread]
-|===
-|2.x Parameter |3.0 Parameter |Used In
-|`connectionTimeoutUnit` |`connectionTimeoutTimeUnit` |`ftp:connection`
-|`responseTimeoutUnit` |`responseTimeoutTimeUnit` |`ftp:connection`
-|`timeBetweenSizeCheckUnit` |`timeBetweenSizeCheckTimeUnit` |`ftp:config`, `ftp:read`, `ftp:listener`
-|`timeUnit` |`notUpdatedInTheLastTimeUnit` and `updatedInTheLastTimeUnit` |`ftp:matcher`
-|===
-
-`timeUnit` on `ftp:matcher` is replaced by two attributes. `notUpdatedInTheLastTimeUnit` qualifies *Not Updated In The Last*, and `updatedInTheLastTimeUnit` qualifies *Updated In The Last*. Both default to `SECONDS`, which is the same default `timeUnit` had in 2.x. An app that still sets `timeUnit` fails XML validation.
-
-=== Changed Default Value
-
-* The default value of *Time Between Size Check Time Unit* (`timeBetweenSizeCheckTimeUnit`) in the connector configuration is now `SECONDS`. In 2.x, the default was `MILLISECONDS`. For example, `timeBetweenSizeCheck="2"` without a unit now waits 2 seconds instead of 2 milliseconds.
-* The *Read* operation and the *On New or Updated File* source use the configuration values of *Time Between Size Check* and *Time Between Size Check Time Unit* unless you set them on the operation or source.
-
-=== Error Type Changes
-
+* This connector is now compatible with Java 17 only.
+* The connector runs on a shared FTP engine that FTPS Connector 3.0.0 also uses. FTP Connector no longer shares its internal packages with other connectors. Only types in the `org.mule.extension.ftp.api`, `org.mule.extension.ftp.api.ftp`, `org.mule.extension.ftp.api.matchers`, and `org.mule.extension.ftp.api.
+proxy` packages are available to your app. FTP Connector 3.x and FTPS Connector 2.x can't run in the same app. Upgrade both connectors to 3.0.0 together.
+* These time unit parameters are renamed. The old names fail deployment with an XML validation error.
+** In `ftp:connection`, *Connection Timeout Unit* (`connectionTimeoutUnit`) is now *Connection Timeout Time Unit* (`connectionTimeoutTimeUnit`), and *Response Timeout Unit* (`responseTimeoutUnit`) is now *Response Timeout Time Unit* (`responseTimeoutTimeUnit`).
+** In `ftp:config`, the *Read* operation, and the *On New or Updated File* source, *Time Between Size Check Unit* (`timeBetweenSizeCheckUnit`) is now *Time Between Size Check Time Unit* (`timeBetweenSizeCheckTimeUnit`).
+** `timeUnit` on `ftp:matcher` is replaced by two attributes. `notUpdatedInTheLastTimeUnit` qualifies *Not Updated In The Last*, and `updatedInTheLastTimeUnit` qualifies *Updated In The Last*. Both default to `SECONDS`, which is the same default `timeUnit` had in 2.x. An app that still sets `timeUnit` fails XML validation.
+* The default value of *Time Between Size Check Time Unit* (`timeBetweenSizeCheckTimeUnit`) in the connector configuration is now `SECONDS`. The *Read* operation and the *On New or Updated File* source use the configuration values unless you set them on the operation or source.
 * The `FTP:FILE_NOT_FOUND` error type is removed. The connector never raised it. An app with an error handler that references `FTP:FILE_NOT_FOUND` fails to deploy. Use `FTP:ILLEGAL_PATH` instead.
 * When the FTP server rejects *Read*, *Write*, *Delete*, *List*, *Rename*, or *Create Directory* with reply code 450, 550, or 553, the connector now classifies the error by the reply text:
-** A reply that indicates missing permission (for example, `Permission denied`, `Access denied`, `Not authorized`, or `Forbidden`) raises `FTP:ACCESS_DENIED`.
-** A reply that indicates a missing file (for example, `No such file`, `Not found`, or `Does not exist`) raises `FTP:ILLEGAL_PATH`, the same error the connector raises when it detects a missing path itself.
-** A reply the connector can't classify, such as `550 Failed to open file.`, raises the same generic error as in 2.x.
+** A reply that indicates missing permission raises `FTP:ACCESS_DENIED`.
+** A reply that indicates a missing file raises `FTP:ILLEGAL_PATH`, the same error the connector raises when it detects a missing path itself.
+** A reply the connector can't classify raises the same generic error from 2.x.
 +
-In 2.x, these server rejections surfaced as `MULE:UNKNOWN`. Error handlers that catch `MULE:UNKNOWN` to handle permission failures no longer catch them. Catch `FTP:ACCESS_DENIED` instead. Handlers that catch `ANY` aren't affected. The error message text is unchanged.
+In 2.x, these server rejections were `MULE:UNKNOWN`. Error handlers that catch `MULE:UNKNOWN` for permission failures no longer catch them. Catch `FTP:ACCESS_DENIED` instead. Handlers that catch `ANY` aren't affected. The error message text is unchanged.
 * When the server reply starts with the path followed by a colon, for example `550 /a.txt: Permission denied`, the connector classifies the error using only the text after the path. A relative path that contains spaces isn't recognized as a path, so the whole reply text is used. If that text contains words the connector uses as hints, the error type can be wrong.
-* A *Write* operation that the server denies now fails immediately with `FTP:ACCESS_DENIED`, instead of failing after the response timeout.
-* If the directory configured in the *On New or Updated File* source does not exist when the source starts, the source fails with `FTP:ILLEGAL_PATH`.
-* When the HTTPS tunnel proxy presents an untrusted certificate, the connection fails with `FTP:CONNECTIVITY`. FTP Connector does not define a TLS handshake error type.
-* If the configured *Working Directory* (`workingDir`) does not exist, the connection now fails when it is established with `FTP:FILE_DOESNT_EXIST`. If it is a file, the connection fails with `FTP:FILE_IS_NOT_DIRECTORY`. Both are children of `FTP:CONNECTIVITY`, so *Test Connection* and connection validation report the problem, and reconnection strategies apply. If the directory exists and the server refuses to change to it, the connection fails with `FTP:CONNECTIVITY`. In 2.x, an invalid working directory was ignored and operations that use relative paths failed later with `FTP:ILLEGAL_PATH`.
-* When the server refuses to create a directory with reply code 450, 550, or 553 and a reply text that does not explain the cause, for example `550 Create directory operation failed.`, the connector raises `FTP:ACCESS_DENIED`. This applies to *Create Directory* and to parent directories that *Write*, *Copy*, and *Move* create.
-* The *Delete* operation now declares `FTP:FILE_LOCK`. It raises this error when the file is locked by another operation in the app, for example a *Read* operation with *Lock* set to `true`. In 2.x, this failure was `MULE:UNKNOWN`.
-
-=== Proxy Changes
-
-* *Proxy host* (`host`) is now required in `ftp:http-tunnel-proxy` and `ftp:https-tunnel-proxy`. In 2.x, it was optional with an empty default.
-* *Proxy port* (`port`) now defaults to `3128`.
-* In Anypoint Studio and Anypoint Code Builder, the proxy settings are now in the *Proxy* tab of the connection configuration.
-
-=== Listener Changes
-
-* *Primary Node Only* (`primaryNodeOnly`) now defaults to `true`. In a cluster, including CloudHub 2.0, only the primary node polls the directory. In 2.x, every worker polled. To poll on every node, set `primaryNodeOnly="false"`.
-* *Time Between Size Check* and *Time Between Size Check Time Unit* are now in the *Advanced* tab of the source in Anypoint Studio and Anypoint Code Builder.
-* When the matcher rejects a file, only that file is skipped and the remaining files of the poll are processed.
-* The source returns the polling connection before it dispatches files. Each file stream and each post action (*Auto delete*, *Move to directory*, *Rename to*) uses its own connection.
-* When a poll fails because of a connection problem, the connection is invalidated, and the next poll reconnects.
-* Watermark resolution is one minute, the same as in 2.x. When watermarking is enabled and the server does not return a modification timestamp for a file, the watermark is ignored for that file and a `WARN` message is logged.
-
-=== Java API and Classloading Changes
-
-These changes affect only custom Java code or DataWeave code that references connector classes directly.
-
-* FTP Connector 3.0 exports only the `org.mule.extension.ftp.api`, `org.mule.extension.ftp.api.ftp`, `org.mule.extension.ftp.api.matchers`, and `org.mule.extension.ftp.api.proxy` packages. It no longer shares internal packages with other plugins.
-* These 2.x classes are removed from the exported API: `org.mule.extension.ftp.api.FileError`, `PredicateType`, `UriUtils`, `FTPConnectionException`, `FileAlreadyExistsException`, `FileBeingModifiedException`, `DeletedFileWhileReadException`, `IllegalPathException`, `org.mule.extension.ftp.api.matchers.NullFilePayloadPredicate`, and `PathMatcherPredicate`.
-* `FtpFileAttributes` is immutable and no longer has setter methods. Its fields (`name`, `path`, `size`, `timestamp`, `directory`, `regularFile`, and `symbolicLink`) and its `serialVersionUID` are unchanged, so DataWeave expressions on `attributes` keep working, and attributes that FTP Connector 2.x persisted, for example in an object store or a VM queue, can be read by version 3.0.
-* `FileMatcher` no longer has a `build()` method.
-
-=== FTP and FTPS Connectors in the Same App
-
-FTPS Connector 2.x depends on internal FTP Connector packages that version 3.0 no longer shares. Using FTP Connector 3.0 with FTPS Connector 2.x in the same app isn't supported. Upgrade both connectors to 3.0 together.
-
-=== Studio and Exchange
-
+* A *Write* operation that the server denies now fails immediately with `FTP:ACCESS_DENIED`, instead of after *Response Timeout*.
+* If the directory configured in the *On New or Updated File* source doesn't exist when the source starts, the source fails with `FTP:ILLEGAL_PATH`.
+* When the HTTPS tunnel proxy presents an untrusted certificate, the connection fails with `FTP:CONNECTIVITY`. FTP Connector doesn't  define a TLS handshake error type.
+* If the configured *Working Directory* (`workingDir`) doesn't exist, the connection fails when it's established with `FTP:FILE_DOESNT_EXIST`. If the path is a file, the connection fails with `FTP:FILE_IS_NOT_DIRECTORY`. Both are children of `FTP:CONNECTIVITY`, so *Test Connection* and reconnection strategies apply. In 2.x, the connection succeeded and operations that use relative paths failed later with `FTP:ILLEGAL_PATH`.
+* When the server refuses to create a directory with reply code 450, 550, or 553 and the reply text doesn't explain the cause, the connector raises `FTP:ACCESS_DENIED`. This applies to *Create Directory* and to parent directories that *Write*, *Copy*, and *Move* create.
+* The *Delete* operation now raises `FTP:FILE_LOCK` when the file is locked by another operation in the app, for example a *Read* operation with *Lock* set to `true`. In 2.x, this failure was `MULE:UNKNOWN`.
+* *Proxy host* (`host`) is now required in `ftp:http-tunnel-proxy` and `ftp:https-tunnel-proxy`. *Proxy port* (`port`) now defaults to `3128`. In Anypoint Studio and Anypoint Code Builder, the proxy settings are in the *Proxy* tab.
+* *Primary Node Only* (`primaryNodeOnly`) now defaults to `true`. In a cluster, including CloudHub 2.0, only the primary node polls the directory. In 2.x, every worker polled. To poll on every node, set `primaryNodeOnly="false"`. *Time Between Size Check* and *Time Between Size Check Time Unit* are on the *Advanced* tab. When *Matcher* rejects a file, only that file is skipped. The source returns the polling connection before it dispatches files. Each file stream and each post action (*Auto delete*, *Move to directory*, and *Rename to*) uses its own connection.
 * In Anypoint Studio and Anypoint Code Builder, the connector is named *FTP Connector - Mule 4*, the same name used in Anypoint Exchange.
 * Operations, the *On New or Updated File* source, and their parameters include summaries and examples.
+* These changes affect only custom Java code or DataWeave code that references connector classes directly. `FtpFileAttributes` is immutable and no longer has setter methods. Its fields (`name`, `path`, `size`, `timestamp`, `directory`, `regularFile`, and `symbolicLink`) and its `serialVersionUID` are unchanged, so attributes that FTP Connector 2.x stored can be read by 3.0.0. `FileMatcher` no longer has a `build()` method. These classes are removed from the exported API: `FileError`, `PredicateType`, `UriUtils`, `FTPConnectionException`, `FileAlreadyExistsException`, `FileBeingModifiedException`, `DeletedFileWhileReadException`, `IllegalPathException`, `NullFilePayloadPredicate`, and `PathMatcherPredicate`.
+* The *On New or Updated File* source now returns its connection to the pool before it dispatches files, and reads each file and runs each post action (*Auto delete*, *Move to directory*, and *Rename to*) on its own connection. Previously, a flow under back pressure or a small connection pool could leave the source waiting for a connection that the source itself held.
+* When *Matcher* rejects a file during a poll, the *On New or Updated File* source now skips only that file. Previously, the source stopped processing the remaining files of that poll.
+* These libraries are upgraded:
 
-=== Unchanged Behavior
-
-These defaults are the same as in 2.x: *Connection Timeout* and *Response Timeout* are `10` `SECONDS`, *Port* is `21`, *Transfer Mode* is `BINARY`, *Control Encoding* is `ISO-8859-1`, and *Passive* is `true`. The XML namespace (`ftp`), the configuration name (`ftp:config`), and the Maven coordinates (`org.mule.connectors:mule-ftp-connector`) are unchanged. Reply codes 421, 426, and 451 still raise `FTP:SERVICE_NOT_AVAILABLE` and invalidate the connection, the same as in FTP Connector 2.0.4.
+** The `commons-net` library is upgraded to version 3.13.0.
+** The `commons-lang3` library is upgraded to version 3.21.0.
+** The `commons-io` library is upgraded to version 2.22.0. 
 
 == Requirements
 
