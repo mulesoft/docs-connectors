@@ -1,0 +1,365 @@
+= RosettaNet Connector Listener Mode - Shared - Example
+
+This example uses two Mule applications. Three Buyers send purchase orders to one Seller. The Seller receives those purchase orders through one RosettaNet configuration in `SHARED` listener mode.
+
+* `demo-multiple-buyers` hosts Buyer A, Buyer B, and Buyer C.
+* `demo-shared-mode-seller` hosts the shared Seller hub.
+
+The shared configuration is inbound-only. Every *Send action* in this example uses a `DEDICATED` listener mode configuration.
+
+[[configure-external-libraries]]
+== Configure a Global Element for External Libraries
+
+Mule applications using RosettaNet Connector must contain only one global element configuration to provide the external libraries required for the selected security mode.
+
+To configure the global element for RosettaNet Connector and add external libraries, follow these steps:
+
+. In Anypoint Studio, open the Mule project.
+. Click *Global Elements*, then click *Create*.
+. Search for and select *RosettaNet External Libs - Non FIPS*.
+. Click *Configure* > *Add recommended libraries*.
+. Click *OK* to add the required dependencies and shared libraries to the application `pom.xml` file.
+
+For other security modes, see xref:rosettanet-connector::rosettanet-connector-upgrade-migrate.adoc#configure-external-libraries[Configure External Libraries].
+
+== Buyer App
+
+Each Buyer uses `DEDICATED` listener mode configurations. One sends the Purchase Order request and receives its receipt acknowledgment. A second receives the Purchase Order Confirmation and automatically returns its receipt acknowledgment to the Seller.
+
+The Buyer app performs the following actions:
+
+. Receives a purchase order document through one of the Buyer API endpoints.
+. Uses a dedicated initiator configuration to send the Purchase Order request to the Seller shared listener.
+. Receives the receipt acknowledgment for the outbound purchase order and reports its completion through the matching *Completion source*.
+. Receives the Purchase Order Confirmation through a dedicated initiator configuration and *Action source*.
+. Automatically sends the Purchase Order Confirmation receipt acknowledgment to the Seller's matching dedicated confirmation configuration.
+
+NOTE: The demonstration certificate aliases use the location identifiers `partnera`, `partnerb`, and `partnerc`. These are protocol identifiers only; the applications, flows, and endpoints refer to Buyer A, Buyer B, and Buyer C.
+
+=== Configure the Buyer HTTP Global Elements
+
+Configure one HTTPS listener for each Buyer and one HTTPS request configuration for the Seller:
+
+[%header%autowidth.spread]
+|===
+|Field|Buyer A|Buyer B|Buyer C
+|Global HTTP Listener|`buyer-a-listener`|`buyer-b-listener`|`buyer-c-listener`
+|Host|0.0.0.0|0.0.0.0|0.0.0.0
+|Port|8490|8491|8492
+|Protocol|HTTPS|HTTPS|HTTPS
+|HTTPS key store path|`crypto/partner-a-https.jks`|`crypto/partner-b-https.jks`|`crypto/partner-c-https.jks`
+|HTTPS key store password|nosecret|nosecret|nosecret
+|HTTPS key alias|`demo-partner-a-https`|`demo-partner-b-https`|`demo-partner-c-https`
+|===
+
+Configure `buyers-api-listener` with host `0.0.0.0` and port `8083`. Configure `buyer-to-seller-request` with these values:
+
+[%header%autowidth.spread]
+|===
+|Field|Value
+|Global HTTP Request|`buyer-to-seller-request`
+|Host|localhost
+|Port|8443
+|Protocol|HTTPS
+|Trust store path|`crypto/hub-https-truststore.jks`
+|Trust store password|nosecret
+|Trust store type|jks
+|===
+
+=== Add the Purchase Order Initiator Configurations
+
+Create one dedicated initiator configuration per Buyer. Use it in the corresponding *Send action* and *Completion source* flow.
+
+[%header%autowidth.spread]
+|===
+|Field|Buyer A|Buyer B|Buyer C
+|Name|`buyer-a-purchase-order-initiator-config`|`buyer-b-purchase-order-initiator-config`|`buyer-c-purchase-order-initiator-config`
+|Global HTTP Listener|`buyer-a-listener`|`buyer-b-listener`|`buyer-c-listener`
+|Service Endpoint Path|`/rosettanet/buyers/a/purchase-order-signals`|`/rosettanet/buyers/b/purchase-order-signals`|`/rosettanet/buyers/c/purchase-order-signals`
+|Global HTTP Request|`buyer-to-seller-request`|`buyer-to-seller-request`|`buyer-to-seller-request`
+|Request Endpoint Path|`/rosettanet/seller/purchase-orders`|`/rosettanet/seller/purchase-orders`|`/rosettanet/seller/purchase-orders`
+|Keystore access password|nosecret|nosecret|nosecret
+|Signing key password|nosecret|nosecret|nosecret
+|Global usage code|Production|Production|Production
+|Mule DUNS identifier|111111111|222222222|333333333
+|Mule location identifier|partnera|partnerb|partnerc
+|Partner DUNS identifier|999999999|999999999|999999999
+|Partner location identifier|hub|hub|hub
+|Role in PIP|INITIATOR|INITIATOR|INITIATOR
+|Listener mode|DEDICATED|DEDICATED|DEDICATED
+|Signing override|NEVER|NEVER|NEVER
+|PIP definition path|`/PIP3A4/V02_02.xml`|`/PIP3A4/V02_02.xml`|`/PIP3A4/V02_02.xml`
+|Keystore path|`crypto/partner-a.jks`|`crypto/partner-b.jks`|`crypto/partner-c.jks`
+|===
+
+=== Add the Confirmation Receiver Configurations
+
+Create a second dedicated initiator configuration per Buyer. Its *Action source* receives the responder action, Purchase Order Confirmation. The connector sends the receipt acknowledgment using this configuration's requester configuration and request endpoint path.
+
+[%header%autowidth.spread]
+|===
+|Field|Buyer A|Buyer B|Buyer C
+|Name|`buyer-a-confirmation-receiver-config`|`buyer-b-confirmation-receiver-config`|`buyer-c-confirmation-receiver-config`
+|Global HTTP Listener|`buyer-a-listener`|`buyer-b-listener`|`buyer-c-listener`
+|Service Endpoint Path|`/rosettanet/buyers/a/purchase-order-confirmations`|`/rosettanet/buyers/b/purchase-order-confirmations`|`/rosettanet/buyers/c/purchase-order-confirmations`
+|Global HTTP Request|`buyer-to-seller-request`|`buyer-to-seller-request`|`buyer-to-seller-request`
+|Request Endpoint Path|`/rosettanet/seller/buyer-a-confirmation-signals`|`/rosettanet/seller/buyer-b-confirmation-signals`|`/rosettanet/seller/buyer-c-confirmation-signals`
+|Keystore path|`crypto/partner-a.jks`|`crypto/partner-b.jks`|`crypto/partner-c.jks`
+|Keystore access password|nosecret|nosecret|nosecret
+|Signing key password|nosecret|nosecret|nosecret
+|Global usage code|Production|Production|Production
+|Mule DUNS identifier|111111111|222222222|333333333
+|Mule location identifier|partnera|partnerb|partnerc
+|Partner DUNS identifier|999999999|999999999|999999999
+|Partner location identifier|hub|hub|hub
+|Role in PIP|INITIATOR|INITIATOR|INITIATOR
+|Listener mode|DEDICATED|DEDICATED|DEDICATED
+|PIP definition path|`/PIP3A4/V02_02.xml`|`/PIP3A4/V02_02.xml`|`/PIP3A4/V02_02.xml`
+|Signing override|NEVER|NEVER|NEVER
+|===
+
+=== Create the Buyer Flows
+
+For each Buyer, create these flows:
+
+. An *HTTP Listener* and *Send action* flow for a purchase order request. The endpoints are `POST /api/buyers/a/purchase-orders`, `POST /api/buyers/b/purchase-orders`, and `POST /api/buyers/c/purchase-orders`.
+. An *Action source* flow with the matching confirmation receiver configuration. Log `#[attributes.messageId]` and the confirmation payload.
+. A *Completion source* flow with the matching purchase-order initiator configuration. Log `#[attributes.replyAttributes.messageId]` and `#[payload.completionCode]`.
+
+==== XML for the Buyer App
+
+Paste this XML into the Studio XML editor, then add the recommended external libraries:
+
+[source,xml,linenums]
+----
+<rosetta:config name="buyer-a-purchase-order-initiator-config" listenerConfigName="buyer-a-listener" servicePath="/rosettanet/buyers/a/purchase-order-signals" requesterConfigName="buyer-to-seller-request" requestPath="/rosettanet/seller/purchase-orders" selfBusinessIdentifier="111111111" selfLocationId="partnera" partnerBusinessIdentifier="999999999" partnerLocationId="hub" pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/partner-a.jks" keystorePass="nosecret" privatePass="nosecret"/>
+<rosetta:config name="buyer-b-purchase-order-initiator-config" listenerConfigName="buyer-b-listener" servicePath="/rosettanet/buyers/b/purchase-order-signals" requesterConfigName="buyer-to-seller-request" requestPath="/rosettanet/seller/purchase-orders" selfBusinessIdentifier="222222222" selfLocationId="partnerb" partnerBusinessIdentifier="999999999" partnerLocationId="hub" pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/partner-b.jks" keystorePass="nosecret" privatePass="nosecret"/>
+<rosetta:config name="buyer-c-purchase-order-initiator-config" listenerConfigName="buyer-c-listener" servicePath="/rosettanet/buyers/c/purchase-order-signals" requesterConfigName="buyer-to-seller-request" requestPath="/rosettanet/seller/purchase-orders" selfBusinessIdentifier="333333333" selfLocationId="partnerc" partnerBusinessIdentifier="999999999" partnerLocationId="hub" pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/partner-c.jks" keystorePass="nosecret" privatePass="nosecret"/>
+
+<rosetta:config name="buyer-a-confirmation-receiver-config" listenerConfigName="buyer-a-listener" servicePath="/rosettanet/buyers/a/purchase-order-confirmations" requesterConfigName="buyer-to-seller-request" requestPath="/rosettanet/seller/buyer-a-confirmation-signals" selfBusinessIdentifier="111111111" selfLocationId="partnera" partnerBusinessIdentifier="999999999" partnerLocationId="hub" pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/partner-a.jks" keystorePass="nosecret" privatePass="nosecret"/>
+<rosetta:config name="buyer-b-confirmation-receiver-config" listenerConfigName="buyer-b-listener" servicePath="/rosettanet/buyers/b/purchase-order-confirmations" requesterConfigName="buyer-to-seller-request" requestPath="/rosettanet/seller/buyer-b-confirmation-signals" selfBusinessIdentifier="222222222" selfLocationId="partnerb" partnerBusinessIdentifier="999999999" partnerLocationId="hub" pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/partner-b.jks" keystorePass="nosecret" privatePass="nosecret"/>
+<rosetta:config name="buyer-c-confirmation-receiver-config" listenerConfigName="buyer-c-listener" servicePath="/rosettanet/buyers/c/purchase-order-confirmations" requesterConfigName="buyer-to-seller-request" requestPath="/rosettanet/seller/buyer-c-confirmation-signals" selfBusinessIdentifier="333333333" selfLocationId="partnerc" partnerBusinessIdentifier="999999999" partnerLocationId="hub" pipRole="INITIATOR" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/partner-c.jks" keystorePass="nosecret" privatePass="nosecret"/>
+
+<flow name="buyer-a-send-purchase-order">
+  <http:listener config-ref="buyers-api-listener" path="/api/buyers/a/purchase-orders"/>
+  <rosetta:send-action config-ref="buyer-a-purchase-order-initiator-config"/>
+</flow>
+<flow name="buyer-a-receive-purchase-order-confirmation">
+  <rosetta:action-source config-ref="buyer-a-confirmation-receiver-config"/>
+  <logger level="INFO" message="Buyer A received purchase order confirmation #[attributes.messageId] from Seller: #[payload]"/>
+</flow>
+<flow name="buyer-a-purchase-order-completion">
+  <rosetta:completion-source config-ref="buyer-a-purchase-order-initiator-config"/>
+  <logger level="INFO" message="Buyer A purchase order #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]"/>
+</flow>
+<flow name="buyer-b-send-purchase-order"><http:listener config-ref="buyers-api-listener" path="/api/buyers/b/purchase-orders"/><rosetta:send-action config-ref="buyer-b-purchase-order-initiator-config"/></flow>
+<flow name="buyer-c-send-purchase-order"><http:listener config-ref="buyers-api-listener" path="/api/buyers/c/purchase-orders"/><rosetta:send-action config-ref="buyer-c-purchase-order-initiator-config"/></flow>
+<flow name="buyer-b-receive-purchase-order-confirmation"><rosetta:action-source config-ref="buyer-b-confirmation-receiver-config"/><logger level="INFO" message="Buyer B received purchase order confirmation #[attributes.messageId] from Seller: #[payload]"/></flow>
+<flow name="buyer-c-receive-purchase-order-confirmation"><rosetta:action-source config-ref="buyer-c-confirmation-receiver-config"/><logger level="INFO" message="Buyer C received purchase order confirmation #[attributes.messageId] from Seller: #[payload]"/></flow>
+<flow name="buyer-b-purchase-order-completion"><rosetta:completion-source config-ref="buyer-b-purchase-order-initiator-config"/><logger level="INFO" message="Buyer B purchase order #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]"/></flow>
+<flow name="buyer-c-purchase-order-completion"><rosetta:completion-source config-ref="buyer-c-purchase-order-initiator-config"/><logger level="INFO" message="Buyer C purchase order #[attributes.replyAttributes.messageId] completed as #[payload.completionCode]"/></flow>
+----
+
+== Seller App
+
+The Seller receives all purchase orders through a single shared responder configuration. It stores the reply attributes separately for each Buyer, then sends each confirmation through a dedicated responder configuration.
+
+The Seller app performs the following actions:
+
+. Receives Purchase Order requests from Buyer A, Buyer B, and Buyer C through one shared responder *Action source*.
+. Identifies the sending Buyer from the business identifier, location identifier, and certificate alias in the incoming delivery header.
+. Sends the receipt acknowledgment or exception signal to the matching Buyer by using that Buyer's shared-listener partner entry.
+. Stores the reply attributes for each received Purchase Order under a Buyer-specific Object Store key.
+. Uses a dedicated responder configuration to send each Purchase Order Confirmation to its Buyer.
+. Receives the receipt acknowledgment or exception signal for each confirmation through the matching dedicated *Completion source*.
+
+=== Configure Seller HTTP Global Elements
+
+Configure `seller-listener` with host `0.0.0.0`, port `8443`, protocol `HTTPS`, key store `crypto/hub-https.jks`, key store password `nosecret`, key password `nosecret`, and key alias `demo-hub-https`. Configure `seller-api-listener` with host `0.0.0.0` and port `8080`.
+
+Create the following HTTPS request configurations. Each uses trust store `crypto/partners-https-truststore.jks`.
+
+[%header%autowidth.spread]
+|===
+|Field|Buyer A|Buyer B|Buyer C
+|Name|`seller-to-buyer-a-request`|`seller-to-buyer-b-request`|`seller-to-buyer-c-request`
+|Host|localhost|localhost|localhost
+|Port|8490|8491|8492
+|Protocol|HTTPS|HTTPS|HTTPS
+|Trust store path|`crypto/partners-https-truststore.jks`|`crypto/partners-https-truststore.jks`|`crypto/partners-https-truststore.jks`
+|Trust store password|nosecret|nosecret|nosecret
+|Trust store type|jks|jks|jks
+|===
+
+=== Add the Shared Seller Responder Configuration
+
+Configure the shared configuration as follows:
+
+[%header%autowidth.spread]
+|===
+|Field|Value
+|Name|`seller-buyers-shared-responder-config`
+|Global HTTP Listener|`seller-listener`
+|Service Endpoint Path|`/rosettanet/seller/purchase-orders`
+|Keystore path|`crypto/hub.jks`
+|Keystore access password|nosecret
+|Signing key password|nosecret
+|Global usage code|Production
+|Mule DUNS identifier|999999999
+|Mule location identifier|hub
+|Role in PIP|RESPONDER
+|PIP definition path|`/PIP3A4/V02_02.xml`
+|Listener mode|SHARED
+|Signing override|NEVER
+|===
+
+Add the Buyer partner entries:
+
+[%header%autowidth.spread]
+|===
+|Partner name|Business identifier|Location identifier|Requester configuration|Request path|Certificate alias
+|Buyer-A|111111111|partnera|`seller-to-buyer-a-request`|`/rosettanet/buyers/a/purchase-order-signals`|`111111111:partnera`
+|Buyer-B|222222222|partnerb|`seller-to-buyer-b-request`|`/rosettanet/buyers/b/purchase-order-signals`|`222222222:partnerb`
+|Buyer-C|333333333|partnerc|`seller-to-buyer-c-request`|`/rosettanet/buyers/c/purchase-order-signals`|`333333333:partnerc`
+|===
+
+The shared *Action source* matches the incoming delivery header to one of these entries. It verifies the sender business ID, location ID, and certificate alias before accepting the message. The matching entry supplies the requester and path used for the automatic receipt acknowledgment.
+
+=== Add Dedicated Seller Confirmation Configurations
+
+Use a dedicated responder configuration for every confirmation sent by the Seller:
+
+[%header%autowidth.spread]
+|===
+|Field|Buyer A|Buyer B|Buyer C
+|Name|`seller-to-buyer-a-confirmation-responder-config`|`seller-to-buyer-b-confirmation-responder-config`|`seller-to-buyer-c-confirmation-responder-config`
+|Global HTTP Listener|`seller-listener`|`seller-listener`|`seller-listener`
+|Service Endpoint Path|`/rosettanet/seller/buyer-a-confirmation-signals`|`/rosettanet/seller/buyer-b-confirmation-signals`|`/rosettanet/seller/buyer-c-confirmation-signals`
+|Global HTTP Request|`seller-to-buyer-a-request`|`seller-to-buyer-b-request`|`seller-to-buyer-c-request`
+|Request Endpoint Path|`/rosettanet/buyers/a/purchase-order-confirmations`|`/rosettanet/buyers/b/purchase-order-confirmations`|`/rosettanet/buyers/c/purchase-order-confirmations`
+|Keystore path|`crypto/hub.jks`|`crypto/hub.jks`|`crypto/hub.jks`
+|Keystore access password|nosecret|nosecret|nosecret
+|Signing key password|nosecret|nosecret|nosecret
+|Global usage code|Production|Production|Production
+|Mule DUNS identifier|999999999|999999999|999999999
+|Mule location identifier|hub|hub|hub
+|Partner DUNS identifier|111111111|222222222|333333333
+|Partner location identifier|partnera|partnerb|partnerc
+|Role in PIP|RESPONDER|RESPONDER|RESPONDER
+|Listener mode|DEDICATED|DEDICATED|DEDICATED
+|PIP definition path|`/PIP3A4/V02_02.xml`|`/PIP3A4/V02_02.xml`|`/PIP3A4/V02_02.xml`
+|Signing override|NEVER|NEVER|NEVER
+|===
+
+=== Create the Seller Flows
+
+. Add one *Action source* flow using `seller-buyers-shared-responder-config`. Store `attributes.replyAttributes.messageId`, `actionId`, and `pipInstanceId` under a Buyer-specific Object Store key.
+. Add one *HTTP Listener* and *Send action* flow for each Buyer. Retrieve the matching Object Store value and set the *Reply to* values on *Send action*.
+. Add one *Completion source* flow for each dedicated Seller confirmation configuration.
+
+The Seller endpoints are:
+
+* `POST /api/buyers/a/purchase-order-confirmations`
+* `POST /api/buyers/b/purchase-order-confirmations`
+* `POST /api/buyers/c/purchase-order-confirmations`
+* `GET /api/status`
+
+==== XML for the Seller App
+
+[source,xml,linenums]
+----
+<rosetta:config name="seller-buyers-shared-responder-config" listenerConfigName="seller-listener" servicePath="/rosettanet/seller/purchase-orders" selfBusinessIdentifier="999999999" selfLocationId="hub" pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="SHARED" keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret">
+  <rosetta:partners>
+    <rosetta:partner partnerName="Buyer-A" businessIdentifier="111111111" locationId="partnera" requesterConfigName="seller-to-buyer-a-request" requestPath="/rosettanet/buyers/a/purchase-order-signals" certificateAlias="111111111:partnera"/>
+    <rosetta:partner partnerName="Buyer-B" businessIdentifier="222222222" locationId="partnerb" requesterConfigName="seller-to-buyer-b-request" requestPath="/rosettanet/buyers/b/purchase-order-signals" certificateAlias="222222222:partnerb"/>
+    <rosetta:partner partnerName="Buyer-C" businessIdentifier="333333333" locationId="partnerc" requesterConfigName="seller-to-buyer-c-request" requestPath="/rosettanet/buyers/c/purchase-order-signals" certificateAlias="333333333:partnerc"/>
+  </rosetta:partners>
+</rosetta:config>
+
+<rosetta:config name="seller-to-buyer-a-confirmation-responder-config" listenerConfigName="seller-listener" servicePath="/rosettanet/seller/buyer-a-confirmation-signals" requesterConfigName="seller-to-buyer-a-request" requestPath="/rosettanet/buyers/a/purchase-order-confirmations" selfBusinessIdentifier="999999999" selfLocationId="hub" partnerBusinessIdentifier="111111111" partnerLocationId="partnera" pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret"/>
+<rosetta:config name="seller-to-buyer-b-confirmation-responder-config" listenerConfigName="seller-listener" servicePath="/rosettanet/seller/buyer-b-confirmation-signals" requesterConfigName="seller-to-buyer-b-request" requestPath="/rosettanet/buyers/b/purchase-order-confirmations" selfBusinessIdentifier="999999999" selfLocationId="hub" partnerBusinessIdentifier="222222222" partnerLocationId="partnerb" pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret"/>
+<rosetta:config name="seller-to-buyer-c-confirmation-responder-config" listenerConfigName="seller-listener" servicePath="/rosettanet/seller/buyer-c-confirmation-signals" requesterConfigName="seller-to-buyer-c-request" requestPath="/rosettanet/buyers/c/purchase-order-confirmations" selfBusinessIdentifier="999999999" selfLocationId="hub" partnerBusinessIdentifier="333333333" partnerLocationId="partnerc" pipRole="RESPONDER" pipFile="/PIP3A4/V02_02.xml" listenerMode="DEDICATED" keystorePath="crypto/hub.jks" keystorePass="nosecret" privatePass="nosecret"/>
+
+<flow name="seller-receive-buyer-purchase-orders">
+  <rosetta:action-source config-ref="seller-buyers-shared-responder-config"/>
+  <logger level="INFO" message="Seller received purchase order #[attributes.messageId] from #[attributes.partnerName]"/>
+  <os:store key="buyer-a-purchase-order-reply-to" objectStore="seller-purchase-order-reply-attributes">
+    <os:value>#[{ messageId: attributes.replyAttributes.messageId, actionId: attributes.replyAttributes.actionId, pipInstanceId: attributes.replyAttributes.pipInstanceId }]</os:value>
+  </os:store>
+</flow>
+<flow name="seller-send-purchase-order-confirmation-to-buyer-a">
+  <http:listener config-ref="seller-api-listener" path="/api/buyers/a/purchase-order-confirmations"/>
+  <os:retrieve key="buyer-a-purchase-order-reply-to" objectStore="seller-purchase-order-reply-attributes" target="replyTo"/>
+  <rosetta:send-action config-ref="seller-to-buyer-a-confirmation-responder-config">
+    <rosetta:reply-to messageId="#[vars.replyTo.messageId]" actionId="#[vars.replyTo.actionId]" pipInstanceId="#[vars.replyTo.pipInstanceId]"/>
+  </rosetta:send-action>
+</flow>
+<flow name="seller-buyer-a-confirmation-completion">
+  <rosetta:completion-source config-ref="seller-to-buyer-a-confirmation-responder-config"/>
+  <logger level="INFO" message="Seller confirmation #[attributes.replyAttributes.messageId] to Buyer A completed as #[payload.completionCode]"/>
+</flow>
+<flow name="seller-send-purchase-order-confirmation-to-buyer-b"><http:listener config-ref="seller-api-listener" path="/api/buyers/b/purchase-order-confirmations"/><os:retrieve key="buyer-b-purchase-order-reply-to" objectStore="seller-purchase-order-reply-attributes" target="replyTo"/><rosetta:send-action config-ref="seller-to-buyer-b-confirmation-responder-config"><rosetta:reply-to messageId="#[vars.replyTo.messageId]" actionId="#[vars.replyTo.actionId]" pipInstanceId="#[vars.replyTo.pipInstanceId]"/></rosetta:send-action></flow>
+<flow name="seller-send-purchase-order-confirmation-to-buyer-c"><http:listener config-ref="seller-api-listener" path="/api/buyers/c/purchase-order-confirmations"/><os:retrieve key="buyer-c-purchase-order-reply-to" objectStore="seller-purchase-order-reply-attributes" target="replyTo"/><rosetta:send-action config-ref="seller-to-buyer-c-confirmation-responder-config"><rosetta:reply-to messageId="#[vars.replyTo.messageId]" actionId="#[vars.replyTo.actionId]" pipInstanceId="#[vars.replyTo.pipInstanceId]"/></rosetta:send-action></flow>
+<flow name="seller-buyer-b-confirmation-completion"><rosetta:completion-source config-ref="seller-to-buyer-b-confirmation-responder-config"/><logger level="INFO" message="Seller confirmation #[attributes.replyAttributes.messageId] to Buyer B completed as #[payload.completionCode]"/></flow>
+<flow name="seller-buyer-c-confirmation-completion"><rosetta:completion-source config-ref="seller-to-buyer-c-confirmation-responder-config"/><logger level="INFO" message="Seller confirmation #[attributes.replyAttributes.messageId] to Buyer C completed as #[payload.completionCode]"/></flow>
+----
+
+The shared action flow chooses the Object Store key from `attributes.partnerName`.
+
+== Test the Examples
+
+Start `demo-multiple-buyers` and `demo-shared-mode-seller` before testing. The Buyer API listens on port `8083` and the Seller API listens on port `8080`. Download a https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-request-content.xml[sample purchase order request] and a https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-confirmation-content.xml[sample purchase order confirmation], or use equivalent documents for the configured PIP.
+
+=== Send a Purchase Order
+
+. Send a purchase order from each Buyer to the Seller `SHARED` listener mode:
++
+[source,bash,linenums]
+----
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-request-content.xml http://localhost:8083/api/buyers/a/purchase-orders
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-request-content.xml http://localhost:8083/api/buyers/b/purchase-orders
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-request-content.xml http://localhost:8083/api/buyers/c/purchase-orders
+----
+
+The Seller receives each request through the shared *Action source*. Verify that the logs show the matching Buyer name and message ID, followed by the Buyer's completion message. For example:
++
+[source,java,linenums]
+----
+INFO  ... Seller received purchase order <message-id> from Buyer-A
+INFO  ... Buyer A purchase order <message-id> completed as SUCCESS
+----
+
+=== Send a Purchase Order Confirmation
+
+. After a Buyer sends a purchase order, send the correlated Purchase Order Confirmation to that Buyer:
++
+[source,bash,linenums]
+----
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-confirmation-content.xml http://localhost:8080/api/buyers/a/purchase-order-confirmations
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-confirmation-content.xml http://localhost:8080/api/buyers/b/purchase-order-confirmations
+curl -v -H "Content-Type: application/xml" -X POST --data-binary @sample-purchase-order-confirmation-content.xml http://localhost:8080/api/buyers/c/purchase-order-confirmations
+----
+
+Verify that each Buyer receives its confirmation and that the Seller completion flow logs the message ID and completion code. For example:
++
+[source,java,linenums]
+----
+INFO  ... Buyer A received purchase order confirmation <message-id> from Seller
+INFO  ... Seller confirmation <message-id> to Buyer A completed as SUCCESS
+----
+
+IMPORTANT: Send a purchase order before sending that Buyer's confirmation. The Seller confirmation flow needs the correlated reply attributes stored by the shared purchase-order action flow.
+
+== Shared Listener Mode Constraints
+
+* Use a `SHARED` listener mode configuration for inbound fan-in from multiple partner identities.
+* Do not use *Send action* on a `SHARED` listener mode configuration. Use a `DEDICATED` listener mode configuration for every outbound action.
+* The configuration that sends an outbound message must receive its acknowledgment or exception signal because it owns the pending-message state used by *Completion source*.
+* A `SHARED` listener mode selects a partner from the incoming delivery header and validates the configured business identifier, location identifier, and certificate alias.
+
+== See Also
+
+* https://anypoint.mulesoft.com/exchange/68e53915-e89b-4e82-b794-12d37982db4c/rosettanet-multiple-buyers[RosettaNet Connector - Shared Listener Mode - Multiple Buyers Example]
+* https://anypoint.mulesoft.com/exchange/68e53915-e89b-4e82-b794-12d37982db4c/rosettanet-shared-seller[RosettaNet Connector - Shared Listener Mode - Seller Example]
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-request-content.xml[sample-purchase-order-request-content.xml]
+* https://s3-us-west-2.amazonaws.com/mulesoft-sites-vendorcontent/public-assets/sample-purchase-order-confirmation-content.xml[sample-purchase-order-confirmation-content.xml]
