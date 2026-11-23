@@ -1,0 +1,115 @@
+= Troubleshoot FTPS Connector
+
+To troubleshoot Anypoint Connector for FTPS (FTPS Connector), become familiar with the information about troubleshooting Mule application issues. For the error types the connector raises, see <<common-throws>>.
+
+== Troubleshoot Mule Application Issues
+
+Sometimes you are not sure why the application is failing and you require a better understanding of what is going on in the app's interaction with the FTPS server.
+
+To resolve this error:
+
+* Use the configuration file to increase the logging level on the server side.
+
+* Try to replicate the issue using an FTPS client, for example, Cyberduck or Filezilla. If the issue also occurs with these clients, then it is likely that the issue is not related to the Mule app.
+
+* Get better and more detailed logs on the Mule app side by enabling verbose logging for FTPS Connector, for its FTP engine library, and for the Apache Commons Net library:
++
+. Access Anypoint Studio and navigate to the *Package Explorer* view.
+. Open your application's project name.
+. Open the `src/main/resources` path folder.
+. Open the `log4j2.xml` file inside the folder.
+. If the following lines are already in the `log4j2.xml` file, uncomment them to enable them; otherwise, add them:
++
+[source,xml,linenums]
+----
+  <AsyncLogger name="com.mulesoft.connectors.ftps" level="TRACE"/>
+  <AsyncLogger name="com.mulesoft.connectors.ftp.commons" level="TRACE"/>
+  <AsyncLogger name="org.apache.commons.net" level="DEBUG"/>
+----
++
+FTPS Connector 3.0 no longer includes FTP Connector, so the `org.mule.extension.ftp` logger used with 2.x doesn't log FTPS Connector activity. Update existing `log4j2.xml` files when you upgrade.
+[start=6]
+. Add the following argument to your run configuration:
++
+ `-M-Djavax.net.debug=ssl,handshake`
+
+* Try to minimize or remove unnecessary DataWeave data transformations (you could even use hard coded data) to minimize the app's complexity and determine whether the issue is with the interaction between the app and the FTPS server.
+
+For additional information about enabling verbose logging for SDK components in your Mule application, see the xref:mule-sdk::troubleshooting.adoc[troubleshoot SDK components] documentation.
+
+== Handle TLS and Data Channel Errors
+
+* In explicit mode, the connector sends `PBSZ 0` and `PROT P` after login by default. If the server rejects `PROT P`, the connection fails. If the server can't encrypt the data channel and a clear data channel is acceptable, set *PROT Settings* to `CLEAR`. The connector then logs a warning once per configuration.
+* In implicit mode, if the server rejects `PROT P`, the connection fails with the message `There was an error while trying to encrypt the data channel (PROT P)`. Implicit mode has no clear fallback, so fix the server configuration.
+* When the TLS handshake with the FTPS server or with an HTTPS tunnel proxy fails, the connector raises `FTPS:TLS_HANDSHAKE_FAILED`. Check that the server certificate is trusted by the TLS context, that the host name matches the certificate, that the certificate isn't expired, and that the client and server share a TLS protocol and cipher suite.
+* FTPS servers that require session reuse, such as vsftpd with `require_ssl_reuse=YES` or ProFTPD, reject the data channel when TLS 1.3 is negotiated, because TLS 1.3 sessions can't be reused on data channels. Mule 4.10 and later enables TLS 1.2 and TLS 1.3 by default, so set *Enabled Protocols* to `TLSv1.2` in the TLS context when you connect to these servers.
+* Servers that don't support Extended Master Secret, for example servers that use OpenSSL 1.0.2, reject session reuse with a `522` reply.
+* When a data connection resumes the control-channel session, the connector logs `Resuming SSL/TLS Session through the JDK provider` or `Resuming SSL/TLS Session through BC provider` at INFO. Provider selection and Bouncy Castle registration are logged at DEBUG on `com.mulesoft.connectors.ftps`.
+* *Test Connection* checks only the control channel, so session reuse failures appear on the first file transfer or listing. Watch for `522 SSL connection failed: session reuse required`, `SSLHandshakeException`, or `FTPConnectionClosedException: Connection closed without indication` during `PASV` or `LIST`.
+* On servers that don't support `MLST`, for example vsftpd, the connector lists the parent directory to read file attributes, so a data channel failure can surface as `FTPS:ILLEGAL_PATH` instead of `FTPS:CONNECTIVITY`.
+* When the connector uses the Java (JDK) security provider and the runtime can't reuse the session, the transfer fails with `Failed to resume SSL/TLS session through the JDK provider` if the control socket is a JDK socket. This is an untyped runtime exception, not an `FTPS:` error. If Bouncy Castle created the sockets, the connector logs `SSL/TLS Session can't be resumed through the JDK provider, falling back to Bouncy Castle` at DEBUG and reuses the session through Bouncy Castle. To reuse sessions through Bouncy Castle instead, remove the `jdk.tls.client.enableSessionTicketExtension=false` system property and add the Bouncy Castle libraries, as described in xref:ftps-studio-configuration.adoc#bouncycastle[Configure Bouncy Castle Libraries and Security Provider].
+
+== Handle FTPS Session Reuse Errors
+When you use FTPS Connector, connection issues can occur during session reuse, such as a `SocketTimeoutException` error during data connection. To resolve this, include this JVM system property in your runtime configuration:
+
+`-Dorg.apache.commons.net.ftp.ipAddressFromPasvResponse=true`
+
+[NOTE]
+====
+This setting ensures the IP address from the PASV response is used during data transfer. However, enabling this flag exposes your application to potential security vulnerabilities if the PASV response is spoofed or manipulated. Use this setting with caution, especially in untrusted network environments.
+====
+
+[[common-throws]]
+== Understand Common Throws
+
+Here is a list of common throws messages and how to interpret them.
+
+* FTPS:ACCESS_DENIED
+
+An FTPS Connector operation attempted to access an FTPS server path and performed an action for which the user does not have permission. `FTPS:ACCESS_DENIED` is not a child of `FTPS:CONNECTIVITY`. An error handler that catches only `FTPS:CONNECTIVITY` does not catch this error. The connector raises this error when the server rejects the action with reply code 450, 550, or 553 and the reply text indicates missing permission, for example `Permission denied`. In FTPS Connector 2.x, these server rejections surfaced as `MULE:UNKNOWN`. When the server refuses to create a directory with reply code 450, 550, or 553 and a reply text that does not explain the cause, for example `550 Create directory operation failed.`, the connector also raises this error. This applies to *Create Directory* and to operations that create parent directories.
+
+* FTPS:CONNECTIVITY
+
+The connection to the FTPS server was interrupted.
+
+* FTPS:TLS_HANDSHAKE_FAILED
+
+The TLS handshake with the FTPS server or with an HTTPS tunnel proxy failed, for example because the server certificate is not trusted, the host name does not match, the certificate is expired, or no protocol or cipher suite can be agreed. This error is a child of `FTPS:CONNECTIVITY`. In FTPS Connector 2.x, these failures raised `FTPS:INVALID_CREDENTIALS`.
+
+* FTPS:FILE_DOESNT_EXIST
+
+The configured *Working Directory* (`workingDir`) does not exist on the FTPS server. The connection fails when it is established with the message `The configured workingDir '<path>' doesn't exist`. This error is a child of `FTPS:CONNECTIVITY`. If the path is a directory the user cannot enter, the connection fails with `FTPS:CONNECTIVITY` and the message `Access denied to the configured workingDir '<path>'`.
+
+* FTPS:FILE_IS_NOT_DIRECTORY
+
+The configured *Working Directory* (`workingDir`) is a file, not a directory. The connection fails when it is established with the message `The configured workingDir '<path>' is not a directory`. This error is a child of `FTPS:CONNECTIVITY`.
+
+* FTPS:FILE_ALREADY_EXISTS
+
+An attempt was made to create a file with the same location and name as an existing file.
+
+* FTPS:FILE_LOCK
+
+*Read* and *Write* raise this error when *Lock* is true and the file is already locked. *Delete* raises it when the file is locked by another operation in the app, for example a *Read* that is still in progress. The message is `File '<path>' is locked by another process` or `Could not lock file '<path>' because it's already owned by another process`.
+
+* FTPS:ILLEGAL_CONTENT
+
+The *Write* operation received invalid content to write.
+
+* FTPS:ILLEGAL_PATH
+
+The specified path is invalid because, for example, it does not exist. The connector also raises this error when the server rejects the action with reply code 450, 550, or 553 and the reply text indicates a missing file, for example `No such file or directory`, when *Create Directory* finds a file where the new directory should be, and when the *Directory* of the *On New or Updated File* source does not exist or cannot be entered. The listener message is `Path '<directory>' doesn't exist`.
+
+If the server reply text does not indicate either missing permission or a missing file, the connector raises a generic error instead of `FTPS:ACCESS_DENIED` or `FTPS:ILLEGAL_PATH`.
+
+* FTPS:RETRY_EXHAUSTED
+
+Retries of a certain execution block are exhausted.
+
+The `FTPS:FILE_NOT_FOUND` error type is removed in FTPS Connector 3.0. Use `FTPS:ILLEGAL_PATH` instead.
+
+
+== See Also
+* xref:ftps-documentation.adoc[FTPS Connector Reference]
+* xref:ftps-connector-upgrade-guide.adoc[]
+* https://help.salesforce.com[Salesforce Help]
